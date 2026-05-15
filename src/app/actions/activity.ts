@@ -34,6 +34,25 @@ export async function createActivity(
 
   if (error) return { error: error.message }
 
+  // Salva campos de links (update direto, sem RLS issue pois usa a mesma sessão)
+  const drive_folder_url = formData.get('drive_folder_url') as string
+  const redacao_url = formData.get('redacao_url') as string
+  const layout_url = formData.get('layout_url') as string
+  const finalizacao_url = formData.get('finalizacao_url') as string
+  const orcamento = formData.get('orcamento') as string
+
+  if (drive_folder_url || redacao_url || layout_url || finalizacao_url || orcamento) {
+    await supabase.rpc('update_activity_links', {
+      p_user_id: user.id,
+      p_activity_id: activityId,
+      p_drive_folder_url: drive_folder_url || null,
+      p_redacao_url: redacao_url || null,
+      p_layout_url: layout_url || null,
+      p_finalizacao_url: finalizacao_url || null,
+      p_orcamento: orcamento || null,
+    })
+  }
+
   redirect(`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}/activities/${activityId}`)
 }
 

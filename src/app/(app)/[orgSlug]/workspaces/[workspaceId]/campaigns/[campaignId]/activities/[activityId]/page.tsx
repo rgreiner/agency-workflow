@@ -2,10 +2,24 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { STATUS_CONFIG, PRIORITY_CONFIG, COMPLEXITY_CONFIG } from '@/types'
 import { cn, formatDate, isOverdue } from '@/lib/utils'
-import { AlertCircle, Clock, Zap, ArrowLeft } from 'lucide-react'
+import { AlertCircle, Clock, Zap, FolderOpen, FileText, Layers, CheckSquare, DollarSign, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 import { StatusChanger } from './StatusChanger'
 import { CommentBox } from './CommentBox'
+
+function LinkRow({ icon, label, url }: { icon: React.ReactNode; label: string; url: string }) {
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer"
+      className="flex items-center gap-2 text-sm group hover:bg-gray-50 rounded-lg -mx-1 px-1 py-1 transition">
+      <span className="text-gray-400 shrink-0">{icon}</span>
+      <span className="text-gray-500 text-xs w-20 shrink-0">{label}</span>
+      <span className="text-indigo-600 text-xs truncate group-hover:underline flex items-center gap-1">
+        {url.replace(/^https?:\/\//, '').slice(0, 30)}…
+        <ExternalLink className="w-3 h-3 shrink-0" />
+      </span>
+    </a>
+  )
+}
 
 export default async function ActivityPage({
   params,
@@ -232,6 +246,33 @@ export default async function ActivityPage({
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Criado em</p>
             <span className="text-sm text-gray-600">{formatDate(activity.created_at)}</span>
           </div>
+
+          {/* Links do Drive */}
+          {(activity.drive_folder_url || activity.redacao_url || activity.layout_url || activity.finalizacao_url || activity.orcamento) && (
+            <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Arquivos</p>
+
+              {activity.drive_folder_url && (
+                <LinkRow icon={<FolderOpen className="w-3.5 h-3.5" />} label="Pasta Drive" url={activity.drive_folder_url} />
+              )}
+              {activity.redacao_url && (
+                <LinkRow icon={<FileText className="w-3.5 h-3.5" />} label="Redação" url={activity.redacao_url} />
+              )}
+              {activity.layout_url && (
+                <LinkRow icon={<Layers className="w-3.5 h-3.5" />} label="Layout" url={activity.layout_url} />
+              )}
+              {activity.finalizacao_url && (
+                <LinkRow icon={<CheckSquare className="w-3.5 h-3.5" />} label="Finalização" url={activity.finalizacao_url} />
+              )}
+              {activity.orcamento && (
+                <div className="flex items-center gap-2 text-sm">
+                  <DollarSign className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  <span className="text-gray-500 text-xs w-20 shrink-0">Orçamento</span>
+                  <span className="text-gray-700 text-xs truncate">{activity.orcamento}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

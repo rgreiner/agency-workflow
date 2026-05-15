@@ -107,6 +107,11 @@ export type Database = {
           description: string | null
           due_date: string | null
           estimated_hours: number | null
+          drive_folder_url: string | null
+          redacao_url: string | null
+          layout_url: string | null
+          finalizacao_url: string | null
+          orcamento: string | null
           id: string
           priority: Database["public"]["Enums"]["activity_priority"]
           sort_order: number
@@ -122,6 +127,11 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           estimated_hours?: number | null
+          drive_folder_url?: string | null
+          redacao_url?: string | null
+          layout_url?: string | null
+          finalizacao_url?: string | null
+          orcamento?: string | null
           id?: string
           priority?: Database["public"]["Enums"]["activity_priority"]
           sort_order?: number
@@ -137,6 +147,11 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           estimated_hours?: number | null
+          drive_folder_url?: string | null
+          redacao_url?: string | null
+          layout_url?: string | null
+          finalizacao_url?: string | null
+          orcamento?: string | null
           id?: string
           priority?: Database["public"]["Enums"]["activity_priority"]
           sort_order?: number
@@ -448,6 +463,18 @@ export type Database = {
           p_content: string
         }
         Returns: string
+      }
+      update_activity_links: {
+        Args: {
+          p_user_id: string
+          p_activity_id: string
+          p_drive_folder_url: string | null
+          p_redacao_url: string | null
+          p_layout_url: string | null
+          p_finalizacao_url: string | null
+          p_orcamento: string | null
+        }
+        Returns: void
       }
     }
     Enums: {
