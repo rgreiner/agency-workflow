@@ -265,6 +265,9 @@ export type Database = {
           slug: string
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
+          company_type: string | null
+          company_size: string | null
+          segment: string | null
           updated_at: string
         }
         Insert: {
@@ -277,6 +280,9 @@ export type Database = {
           slug: string
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
+          company_type?: string | null
+          company_size?: string | null
+          segment?: string | null
           updated_at?: string
         }
         Update: {
@@ -289,6 +295,9 @@ export type Database = {
           slug?: string
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
+          company_type?: string | null
+          company_size?: string | null
+          segment?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -300,6 +309,8 @@ export type Database = {
           email: string
           full_name: string | null
           id: string
+          role_title: string | null
+          phone: string | null
           updated_at: string
         }
         Insert: {
@@ -308,6 +319,8 @@ export type Database = {
           email: string
           full_name?: string | null
           id: string
+          role_title?: string | null
+          phone?: string | null
           updated_at?: string
         }
         Update: {
@@ -316,6 +329,8 @@ export type Database = {
           email?: string
           full_name?: string | null
           id?: string
+          role_title?: string | null
+          phone?: string | null
           updated_at?: string
         }
         Relationships: []
