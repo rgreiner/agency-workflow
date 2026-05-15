@@ -397,6 +397,27 @@ export type Database = {
         }
         Returns: string
       }
+      create_workspace: {
+        Args: {
+          p_user_id: string
+          p_org_id: string
+          p_name: string
+          p_description: string
+          p_color: string
+        }
+        Returns: string
+      }
+      create_campaign: {
+        Args: {
+          p_user_id: string
+          p_workspace_id: string
+          p_name: string
+          p_description: string
+          p_start_date: string | null
+          p_end_date: string | null
+        }
+        Returns: string
+      }
     }
     Enums: {
       activity_complexity: "simple" | "medium" | "complex"
