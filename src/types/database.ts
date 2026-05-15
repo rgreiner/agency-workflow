@@ -386,6 +386,17 @@ export type Database = {
         Args: { org: string }
         Returns: Database["public"]["Enums"]["member_role"]
       }
+      create_org_for_user: {
+        Args: {
+          p_user_id: string
+          p_name: string
+          p_slug: string
+          p_type: string
+          p_size: string
+          p_segment: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       activity_complexity: "simple" | "medium" | "complex"

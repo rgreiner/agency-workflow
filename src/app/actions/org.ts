@@ -3,39 +3,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
-export async function createOrganization(formData: FormData) {
-  const name = formData.get('name') as string
-  if (!name?.trim()) return { error: 'Nome obrigatório' }
-
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Não autenticado' }
-
-  const slug = (formData.get('slug') as string) || name.toLowerCase().replace(/\s+/g, '-')
-
-  const { data: org, error: orgError } = await supabase
-    .from('organizations')
-    .insert({ name: name.trim(), slug, plan: 'free', max_members: 5 })
-    .select()
-    .single()
-
-  if (orgError) {
-    return {
-      error: orgError.message.includes('unique')
-        ? 'Esse nome já está em uso. Tente outro.'
-        : orgError.message,
-    }
-  }
-
-  await supabase.from('organization_members').insert({
-    org_id: org.id,
-    user_id: user.id,
-    role: 'owner',
-  })
-
-  redirect(`/${org.slug}/dashboard`)
-}
-
 export async function createOrganizationWithProfile(formData: FormData) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -53,35 +20,23 @@ export async function createOrganizationWithProfile(formData: FormData) {
   if (!name?.trim() || !slug?.trim()) return { error: 'Dados da empresa incompletos' }
   if (!full_name?.trim()) return { error: 'Nome obrigatório' }
 
-  // Cria a organização
-  const { data: org, error: orgError } = await supabase
-    .from('organizations')
-    .insert({
-      name: name.trim(),
-      slug: slug.trim(),
-      plan: 'free',
-      max_members: 5,
-      company_type,
-      company_size,
-      segment,
-    })
-    .select()
-    .single()
+  // Cria org + membro via função no banco (SECURITY DEFINER, bypassa RLS)
+  const { data: orgId, error: fnError } = await supabase.rpc('create_org_for_user', {
+    p_user_id: user.id,
+    p_name: name.trim(),
+    p_slug: slug.trim(),
+    p_type: company_type,
+    p_size: company_size,
+    p_segment: segment,
+  })
 
-  if (orgError) {
+  if (fnError) {
     return {
-      error: orgError.message.includes('unique')
+      error: fnError.message.includes('unique')
         ? 'Esse nome de empresa já está em uso. Volte e tente outro.'
-        : orgError.message,
+        : fnError.message,
     }
   }
-
-  // Adiciona como owner
-  await supabase.from('organization_members').insert({
-    org_id: org.id,
-    user_id: user.id,
-    role: 'owner',
-  })
 
   // Atualiza o perfil do usuário
   await supabase
@@ -89,5 +44,12 @@ export async function createOrganizationWithProfile(formData: FormData) {
     .update({ full_name: full_name.trim(), role_title, phone: phone || null })
     .eq('id', user.id)
 
-  redirect(`/${org.slug}/dashboard`)
+  // Busca o slug para redirecionar
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('slug')
+    .eq('id', orgId)
+    .single()
+
+  redirect(`/${org?.slug ?? slug}/dashboard`)
 }

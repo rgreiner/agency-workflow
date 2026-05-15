@@ -4,6 +4,14 @@ import { useState, useTransition } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { createOrganizationWithProfile } from '@/app/actions/org'
 
+function maskPhone(value: string) {
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+  if (digits.length <= 2) return digits.replace(/^(\d{0,2})/, '($1')
+  if (digits.length <= 6) return digits.replace(/^(\d{2})(\d{0,4})/, '($1) $2')
+  if (digits.length <= 10) return digits.replace(/^(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3')
+  return digits.replace(/^(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3')
+}
+
 export default function OnboardingStep2() {
   const params = useSearchParams()
   const router = useRouter()
@@ -102,7 +110,7 @@ export default function OnboardingStep2() {
             <input
               type="tel"
               value={form.phone}
-              onChange={(e) => set('phone', e.target.value)}
+              onChange={(e) => set('phone', maskPhone(e.target.value))}
               placeholder="(00) 00000-0000"
               className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             />
