@@ -418,6 +418,37 @@ export type Database = {
         }
         Returns: string
       }
+      create_activity: {
+        Args: {
+          p_user_id: string
+          p_campaign_id: string
+          p_title: string
+          p_description: string
+          p_status: string
+          p_priority: string
+          p_complexity: string
+          p_due_date: string | null
+          p_estimated_hours: number | null
+        }
+        Returns: string
+      }
+      update_activity_status: {
+        Args: {
+          p_user_id: string
+          p_activity_id: string
+          p_new_status: string
+          p_comment: string
+        }
+        Returns: void
+      }
+      add_activity_comment: {
+        Args: {
+          p_user_id: string
+          p_activity_id: string
+          p_content: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       activity_complexity: "simple" | "medium" | "complex"
