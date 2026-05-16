@@ -6,6 +6,7 @@ import { createActivity } from '@/app/actions/activity'
 import { STATUS_CONFIG, PRIORITY_CONFIG, COMPLEXITY_CONFIG } from '@/types'
 import { ArrowLeft, FolderOpen, ExternalLink, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { DatePicker } from '@/components/ui/DatePicker'
 
 const VEICULOS = [
   'Meta', 'Instagram', 'Facebook', 'WhatsApp', 'TikTok',
@@ -277,17 +278,23 @@ export default function NewActivityPage() {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Data de início</label>
-            <input type="datetime-local" name="start_date" value={form.start_date}
-              onChange={(e) => setF('start_date', e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+            <DatePicker
+              label="Data de início"
+              value={form.start_date}
+              onChange={(v) => setF('start_date', v)}
+              placeholder="Selecionar início"
+            />
+            <input type="hidden" name="start_date" value={form.start_date} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Prazo de entrega</label>
-            <input type="datetime-local" name="due_date" value={form.due_date}
-              min={form.start_date || undefined}
-              onChange={(e) => setF('due_date', e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+            <DatePicker
+              label="Prazo de entrega"
+              value={form.due_date}
+              onChange={(v) => setF('due_date', v)}
+              placeholder="Selecionar prazo"
+              minDate={form.start_date || undefined}
+            />
+            <input type="hidden" name="due_date" value={form.due_date} />
           </div>
         </div>
 
