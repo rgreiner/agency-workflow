@@ -33,9 +33,9 @@ export function Sidebar({ orgSlug, orgName, userEmail, userAvatar }: SidebarProp
   const navItems = [
     { href: `${base}/dashboard`, label: 'Dashboard', icon: LayoutDashboard },
     { href: `${base}/workspaces`, label: 'Clientes', icon: FolderKanban },
-    { href: `${base}/views/list`, label: 'Minhas tarefas', icon: List },
+    { href: `${base}/views/lista`, label: 'Lista geral', icon: List },
+    { href: `${base}/views/atendimento`, label: 'Atendimento', icon: Users },
     { href: `${base}/views/gantt`, label: 'Gantt', icon: GanttChart },
-    { href: `${base}/views/board`, label: 'Painel atendimento', icon: Users },
   ]
 
   async function signOut() {
