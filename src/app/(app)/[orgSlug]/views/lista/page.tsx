@@ -23,13 +23,31 @@ export default async function ListaPage({
     : { data: [] }
   const campIds = campaigns?.map(c => c.id) ?? []
 
+  // Query activities sem join — evita falha total se schema cache estiver desatualizado
   const { data: rawActivities } = campIds.length
     ? await supabase.from('activities')
-        .select('id, title, status, priority, complexity, due_date, start_date, layout_url, campaign_id, activity_assignees(user_id, profiles(full_name, avatar_url))')
+        .select('id, title, status, priority, complexity, due_date, start_date, layout_url, campaign_id')
         .in('campaign_id', campIds)
         .neq('status', 'concluido')
         .order('due_date', { ascending: true, nullsFirst: false })
     : { data: [] }
+
+  // Query de responsáveis separada — se falhar, atividades continuam aparecendo
+  const actIds = (rawActivities ?? []).map(a => a.id)
+  const { data: assigneesData } = actIds.length
+    ? await supabase
+        .from('activity_assignees')
+        .select('activity_id, profiles(full_name, avatar_url)')
+        .in('activity_id', actIds)
+    : { data: [] }
+
+  // Agrupa responsáveis por atividade
+  const assigneeMap = (assigneesData ?? []).reduce((acc, a) => {
+    const profile = a.profiles as unknown as { full_name: string | null; avatar_url: string | null } | null
+    if (!acc[a.activity_id]) acc[a.activity_id] = []
+    if (profile) acc[a.activity_id].push(profile)
+    return acc
+  }, {} as Record<string, { full_name: string | null; avatar_url: string | null }[]>)
 
   const campMap = Object.fromEntries(
     (campaigns ?? []).map(c => [c.id, {
@@ -41,8 +59,7 @@ export default async function ListaPage({
 
   const activities = (rawActivities ?? []).map(a => ({
     ...a,
-    assignees: (a.activity_assignees as unknown as { profiles: { full_name: string | null; avatar_url: string | null } }[])
-      ?.map(x => x.profiles) ?? [],
+    assignees: assigneeMap[a.id] ?? [],
   }))
 
   const grouped = STATUS_CONFIG.reduce((acc, s) => {
