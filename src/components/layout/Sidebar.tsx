@@ -181,13 +181,14 @@ export function Sidebar({
                         isOpen && 'rotate-90'
                       )} />
                     </button>
-                    {/* Nome — navega para as tarefas do workspace */}
+                    {/* Nome — navega E expande */}
                     <Link
                       href={`${base}/workspaces/${ws.id}`}
+                      onClick={() => !isOpen && toggle(ws.id)}
                       className={cn(
                         'flex items-center gap-1.5 flex-1 min-w-0 px-1.5 py-1.5 rounded-lg text-xs font-medium transition-colors',
                         isWsActive && !pathname.includes('/campaigns/')
-                          ? 'text-gray-100'
+                          ? 'bg-gray-800/60 text-gray-100'
                           : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
                       )}
                     >

@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useTransition, useRef, useEffect } from 'react'
-import { setActivityAssignees } from '@/app/actions/activity'
-import { UserPlus, Check, X } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { UserPlus, X, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface Member {
@@ -14,13 +14,12 @@ interface Member {
 
 interface Props {
   activityId: string
-  currentStatus: string
   assignedIds: string[]
   members: Member[]
   path: string
 }
 
-function Avatar({ member, size = 'sm' }: { member: Member; size?: 'sm' | 'md' }) {
+function MemberAvatar({ member, size = 'sm' }: { member: Member; size?: 'sm' | 'md' }) {
   const initials = (member.fullName ?? member.email).charAt(0).toUpperCase()
   const dim = size === 'sm' ? 'w-6 h-6 text-[10px]' : 'w-7 h-7 text-xs'
   return member.avatarUrl ? (
@@ -34,13 +33,13 @@ function Avatar({ member, size = 'sm' }: { member: Member; size?: 'sm' | 'md' })
   )
 }
 
-export function AssigneeSelector({ activityId, currentStatus, assignedIds, members, path }: Props) {
+export function AssigneeSelector({ activityId, assignedIds, members, path }: Props) {
   const [selected, setSelected] = useState<string[]>(assignedIds)
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const ref = useRef<HTMLDivElement>(null)
+  const supabase = createClient()
 
-  // Close dropdown on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
@@ -49,14 +48,22 @@ export function AssigneeSelector({ activityId, currentStatus, assignedIds, membe
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  function toggle(userId: string) {
-    const next = selected.includes(userId)
-      ? selected.filter(id => id !== userId)
-      : [...selected, userId]
+  async function toggle(userId: string) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
 
-    setSelected(next)
     startTransition(async () => {
-      await setActivityAssignees(path, activityId, currentStatus, next)
+      const { data: isNowAssigned } = await supabase.rpc('toggle_activity_assignee', {
+        p_user_id: user.id,
+        p_activity_id: activityId,
+        p_assignee_id: userId,
+      })
+
+      setSelected(prev =>
+        isNowAssigned
+          ? [...prev, userId]
+          : prev.filter(id => id !== userId)
+      )
     })
   }
 
@@ -68,42 +75,40 @@ export function AssigneeSelector({ activityId, currentStatus, assignedIds, membe
       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Responsáveis</p>
 
       <div ref={ref} className="relative">
-        {/* Assigned avatars */}
         <div className="flex flex-wrap gap-2 mb-2">
           {assignedMembers.map(m => (
-            <div key={m.userId} className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-full pl-1 pr-2 py-0.5 group">
-              <Avatar member={m} size="sm" />
+            <div key={m.userId}
+              className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-full pl-1 pr-2 py-0.5">
+              <MemberAvatar member={m} size="sm" />
               <span className="text-xs text-gray-700 font-medium max-w-[80px] truncate">
                 {m.fullName ?? m.email.split('@')[0]}
               </span>
               <button
                 onClick={() => toggle(m.userId)}
                 disabled={isPending}
-                className="text-gray-300 hover:text-red-400 transition ml-0.5"
+                className="text-gray-300 hover:text-red-400 transition ml-0.5 disabled:opacity-50"
               >
                 <X className="w-3 h-3" />
               </button>
             </div>
           ))}
 
-          {/* Add button */}
-          {members.length > selected.length && (
+          {unassigned.length > 0 && (
             <button
               onClick={() => setOpen(o => !o)}
               disabled={isPending}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-gray-300 text-gray-400 hover:border-indigo-400 hover:text-indigo-500 transition text-xs"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-gray-300 text-gray-400 hover:border-indigo-400 hover:text-indigo-500 transition text-xs disabled:opacity-50"
             >
-              <UserPlus className="w-3 h-3" />
+              {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}
               {selected.length === 0 ? 'Atribuir' : 'Adicionar'}
             </button>
           )}
 
-          {selected.length === 0 && members.length === 0 && (
+          {members.length === 0 && (
             <p className="text-xs text-gray-400">Nenhum membro na organização.</p>
           )}
         </div>
 
-        {/* Dropdown */}
         {open && (
           <div className="absolute left-0 top-full mt-1 w-56 bg-white rounded-xl border border-gray-200 shadow-lg z-10 py-1 max-h-52 overflow-y-auto">
             {unassigned.length === 0 ? (
@@ -114,9 +119,9 @@ export function AssigneeSelector({ activityId, currentStatus, assignedIds, membe
                   key={m.userId}
                   onClick={() => { toggle(m.userId); setOpen(false) }}
                   disabled={isPending}
-                  className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-gray-50 transition text-left"
+                  className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-gray-50 transition text-left disabled:opacity-50"
                 >
-                  <Avatar member={m} size="md" />
+                  <MemberAvatar member={m} size="md" />
                   <div className="min-w-0">
                     <p className="text-sm text-gray-800 font-medium truncate">
                       {m.fullName ?? m.email.split('@')[0]}
