@@ -6,6 +6,7 @@ import { AlertCircle, Clock, Zap, FolderOpen, FileText, Layers, CheckSquare, Dol
 import Link from 'next/link'
 import { StatusChanger } from './StatusChanger'
 import { CommentBox } from './CommentBox'
+import { AssigneeSelector } from './AssigneeSelector'
 
 function LinkRow({ icon, label, url }: { icon: React.ReactNode; label: string; url: string }) {
   return (
@@ -53,9 +54,30 @@ export default async function ActivityPage({
 
   const { data: campaign } = await supabase
     .from('campaigns')
-    .select('name')
+    .select('name, workspaces(org_id)')
     .eq('id', campaignId)
     .single()
+
+  // Fetch org members for assignee selector
+  const orgId = (campaign?.workspaces as unknown as { org_id: string } | null)?.org_id
+  const { data: membersRaw } = orgId ? await supabase
+    .from('organization_members')
+    .select('user_id, profiles(id, full_name, email, avatar_url)')
+    .eq('org_id', orgId) : { data: [] }
+
+  const members = (membersRaw ?? []).map(m => {
+    const p = m.profiles as unknown as { id: string; full_name: string | null; email: string; avatar_url: string | null } | null
+    return { userId: m.user_id, fullName: p?.full_name ?? null, email: p?.email ?? '', avatarUrl: p?.avatar_url ?? null }
+  })
+
+  // Current assignees for the activity's current status
+  const { data: assigneesRaw } = await supabase
+    .from('activity_status_assignees')
+    .select('user_id')
+    .eq('activity_id', activityId)
+    .eq('status', activity.status as never)
+
+  const assignedIds = (assigneesRaw ?? []).map(a => a.user_id)
 
   const statusCfg = STATUS_CONFIG.find((s) => s.value === activity.status)!
   const priorityCfg = PRIORITY_CONFIG[activity.priority]
@@ -202,6 +224,15 @@ export default async function ActivityPage({
               {statusCfg.label}
             </span>
           </div>
+
+          {/* Responsáveis */}
+          <AssigneeSelector
+            activityId={activityId}
+            currentStatus={activity.status}
+            assignedIds={assignedIds}
+            members={members}
+            path={path}
+          />
 
           {/* Prioridade */}
           <div className="bg-white rounded-xl border border-gray-200 p-4">
