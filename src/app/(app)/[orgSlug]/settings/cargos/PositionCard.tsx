@@ -130,11 +130,15 @@ export function PositionCard({ position, orgSlug }: Props) {
                     key={c}
                     onClick={() => setColor(c)}
                     className={cn(
-                      'w-6 h-6 rounded-full border-2 transition',
-                      color === c ? 'border-gray-900 scale-110' : 'border-transparent hover:scale-105'
+                      'w-6 h-6 rounded-full border-2 transition flex items-center justify-center',
+                      color === c ? 'border-gray-400 scale-110' : 'border-transparent hover:scale-105'
                     )}
                     style={{ backgroundColor: c }}
-                  />
+                  >
+                    {color === c && (
+                      <Check className="w-3 h-3 text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.6)]" />
+                    )}
+                  </button>
                 ))}
               </div>
             </div>
