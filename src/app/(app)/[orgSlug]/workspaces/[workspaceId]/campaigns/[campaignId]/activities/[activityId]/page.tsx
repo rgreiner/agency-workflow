@@ -70,12 +70,11 @@ export default async function ActivityPage({
     return { userId: m.user_id, fullName: p?.full_name ?? null, email: p?.email ?? '', avatarUrl: p?.avatar_url ?? null }
   })
 
-  // Current assignees for the activity's current status
+  // Responsáveis da atividade (sem vínculo de status)
   const { data: assigneesRaw } = await supabase
-    .from('activity_status_assignees')
+    .from('activity_assignees')
     .select('user_id')
     .eq('activity_id', activityId)
-    .eq('status', activity.status as never)
 
   const assignedIds = (assigneesRaw ?? []).map(a => a.user_id)
 
@@ -228,7 +227,6 @@ export default async function ActivityPage({
           {/* Responsáveis */}
           <AssigneeSelector
             activityId={activityId}
-            currentStatus={activity.status}
             assignedIds={assignedIds}
             members={members}
             path={path}

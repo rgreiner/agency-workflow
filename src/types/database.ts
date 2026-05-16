@@ -74,6 +74,27 @@ export type Database = {
           { foreignKeyName: "activity_history_activity_id_fkey"; columns: ["activity_id"]; isOneToOne: false; referencedRelation: "activities"; referencedColumns: ["id"] }
         ]
       }
+      activity_assignees: {
+        Row: {
+          activity_id: string
+          user_id: string
+          assigned_at: string
+        }
+        Insert: {
+          activity_id: string
+          user_id: string
+          assigned_at?: string
+        }
+        Update: {
+          activity_id?: string
+          user_id?: string
+          assigned_at?: string
+        }
+        Relationships: [
+          { foreignKeyName: "activity_assignees_activity_id_fkey"; columns: ["activity_id"]; isOneToOne: false; referencedRelation: "activities"; referencedColumns: ["id"] },
+          { foreignKeyName: "activity_assignees_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] }
+        ]
+      }
       activity_status_assignees: {
         Row: {
           activity_id: string
@@ -464,6 +485,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      toggle_activity_assignee: {
+        Args: {
+          p_user_id: string
+          p_activity_id: string
+          p_assignee_id: string
+        }
+        Returns: boolean
+      }
       is_org_member: {
         Args: { p_org_id: string }
         Returns: boolean
