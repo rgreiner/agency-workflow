@@ -99,13 +99,16 @@ export function Sidebar({
 
       {/* ── Org header ───────────────────────────────── */}
       <div className="px-3 pt-4 pb-3 border-b border-gray-800">
-        <button className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg hover:bg-gray-800 transition group">
+        <Link
+          href={`${base}/dashboard`}
+          className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg hover:bg-gray-800 transition group"
+        >
           <div className="w-6 h-6 rounded-md bg-indigo-500 flex items-center justify-center shrink-0">
             <span className="text-white text-[10px] font-bold">{orgName.charAt(0).toUpperCase()}</span>
           </div>
           <span className="text-gray-100 font-semibold text-sm truncate flex-1 text-left">{orgName}</span>
           <ChevronDown className="w-3.5 h-3.5 text-gray-600 shrink-0" />
-        </button>
+        </Link>
       </div>
 
       {/* ── Scrollable body ──────────────────────────── */}
