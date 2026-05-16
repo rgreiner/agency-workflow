@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
-import { Avatar } from '@/components/ui/Avatar'
 import { MemberRow } from './MemberRow'
 import { InviteButton } from './InviteButton'
 

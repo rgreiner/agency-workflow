@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Plus, ArrowLeft, AlertCircle } from 'lucide-react'
 import { STATUS_CONFIG, PRIORITY_CONFIG } from '@/types'
-import { formatDate, isOverdue, daysUntil } from '@/lib/utils'
+import { isOverdue, daysUntil } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { AvatarGroup } from '@/components/ui/Avatar'
 

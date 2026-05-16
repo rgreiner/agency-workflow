@@ -22,7 +22,7 @@ export default async function WorkspacesPage({
     .from('workspaces')
     .select('*, campaigns(count)')
     .eq('org_id', org.id)
-    .eq('archived', false)
+    .neq('archived', true)
     .order('created_at', { ascending: false })
 
   return (
