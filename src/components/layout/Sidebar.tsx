@@ -171,25 +171,32 @@ export function Sidebar({
                 <div key={ws.id}>
                   {/* Workspace row */}
                   <div className="group flex items-center px-2">
+                    {/* Chevron — só toggle, não navega */}
                     <button
                       onClick={() => toggle(ws.id)}
+                      className="p-1.5 rounded text-gray-600 hover:text-gray-300 transition-colors shrink-0"
+                    >
+                      <ChevronRight className={cn(
+                        'w-3 h-3 transition-transform duration-150',
+                        isOpen && 'rotate-90'
+                      )} />
+                    </button>
+                    {/* Nome — navega para as tarefas do workspace */}
+                    <Link
+                      href={`${base}/workspaces/${ws.id}`}
                       className={cn(
-                        'flex items-center gap-1.5 flex-1 min-w-0 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors',
-                        isWsActive
-                          ? 'text-gray-100 bg-gray-800/60'
+                        'flex items-center gap-1.5 flex-1 min-w-0 px-1.5 py-1.5 rounded-lg text-xs font-medium transition-colors',
+                        isWsActive && !pathname.includes('/campaigns/')
+                          ? 'text-gray-100'
                           : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
                       )}
                     >
-                      <ChevronRight className={cn(
-                        'w-3 h-3 shrink-0 text-gray-600 transition-transform duration-150',
-                        isOpen && 'rotate-90'
-                      )} />
                       <span
                         className="w-2 h-2 rounded-sm shrink-0"
                         style={{ backgroundColor: ws.color || '#6366f1' }}
                       />
                       <span className="truncate">{ws.name}</span>
-                    </button>
+                    </Link>
                     <Link
                       href={`${base}/workspaces/${ws.id}/campaigns/new`}
                       className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-600 hover:text-gray-300 transition"
