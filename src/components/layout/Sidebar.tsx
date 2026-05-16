@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils'
 import {
   ChevronRight,
   ChevronDown,
+  ChevronsDown,
+  ChevronsUp,
   List,
   GanttChart,
   Users,
@@ -76,6 +78,16 @@ export function Sidebar({
     })
   }
 
+  function expandAll() {
+    setExpanded(new Set(workspaces.map(ws => ws.id)))
+  }
+
+  function collapseAll() {
+    setExpanded(new Set())
+  }
+
+  const allExpanded = workspaces.length > 0 && workspaces.every(ws => expanded.has(ws.id))
+
   async function signOut() {
     await supabase.auth.signOut()
     router.push('/login')
@@ -106,13 +118,32 @@ export function Sidebar({
             <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
               Espaços
             </span>
-            <Link
-              href={`${base}/workspaces/new`}
-              className="text-gray-600 hover:text-gray-300 transition"
-              title="Novo cliente"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </Link>
+            <div className="flex items-center gap-1">
+              {allExpanded ? (
+                <button
+                  onClick={collapseAll}
+                  className="text-gray-600 hover:text-gray-300 transition"
+                  title="Fechar todos"
+                >
+                  <ChevronsUp className="w-3.5 h-3.5" />
+                </button>
+              ) : (
+                <button
+                  onClick={expandAll}
+                  className="text-gray-600 hover:text-gray-300 transition"
+                  title="Expandir todos"
+                >
+                  <ChevronsDown className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <Link
+                href={`${base}/workspaces/new`}
+                className="text-gray-600 hover:text-gray-300 transition"
+                title="Novo cliente"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           </div>
 
           <div className="space-y-px">
