@@ -24,3 +24,24 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ── Design system: Form elements ───────────────────────────────────────── */
+
+input,
+textarea,
+select {
+  color: #111827; /* gray-900 — texto digitado sempre escuro */
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #9ca3af; /* gray-400 — placeholder legível mas sem competir */
+  opacity: 1;     /* Firefox reduz opacity por padrão */
+}
+
+/* Remove o outline nativo — nossos componentes usam focus:ring do Tailwind */
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+}

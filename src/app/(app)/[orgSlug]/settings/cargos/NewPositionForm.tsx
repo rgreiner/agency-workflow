@@ -101,7 +101,7 @@ export function NewPositionForm({ orgSlug }: Props) {
               onChange={e => setName(e.target.value)}
               placeholder="Ex: Redação, Design, Atendimento..."
               autoFocus
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-gray-300"
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 "
             />
           </div>
           <div>
