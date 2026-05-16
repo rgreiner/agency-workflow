@@ -25,7 +25,7 @@ export default async function ListaPage({
 
   const { data: rawActivities } = campIds.length
     ? await supabase.from('activities')
-        .select('id, title, status, priority, complexity, due_date, start_date, layout_url, campaign_id, activity_assignees(profiles(full_name, avatar_url))')
+        .select('id, title, status, priority, complexity, due_date, start_date, layout_url, campaign_id')
         .in('campaign_id', campIds)
         .neq('status', 'concluido')
         .order('due_date', { ascending: true, nullsFirst: false })
@@ -41,8 +41,7 @@ export default async function ListaPage({
 
   const activities = (rawActivities ?? []).map(a => ({
     ...a,
-    assignees: (a.activity_assignees as unknown as { profiles: { full_name: string | null; avatar_url: string | null } }[])
-      ?.map(x => x.profiles) ?? [],
+    assignees: [] as { full_name: string | null; avatar_url: string | null }[],
   }))
 
   const grouped = STATUS_CONFIG.reduce((acc, s) => {
