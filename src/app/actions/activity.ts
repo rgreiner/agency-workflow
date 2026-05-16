@@ -17,6 +17,7 @@ export async function createActivity(
   const title = (formData.get('title') as string)?.trim()
   if (!title) return { error: 'Título obrigatório' }
 
+  const start_date = formData.get('start_date') as string
   const due_date = formData.get('due_date') as string
   const estimated_hours = formData.get('estimated_hours') as string
 
@@ -30,6 +31,7 @@ export async function createActivity(
     p_complexity: (formData.get('complexity') as string) || 'medium',
     p_due_date: due_date || null,
     p_estimated_hours: estimated_hours ? parseFloat(estimated_hours) : null,
+    p_start_date: start_date || null,
   })
 
   if (error) return { error: error.message }

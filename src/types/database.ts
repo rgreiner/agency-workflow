@@ -105,6 +105,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           description: string | null
+          start_date: string | null
           due_date: string | null
           estimated_hours: number | null
           drive_folder_url: string | null
@@ -125,6 +126,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          start_date?: string | null
           due_date?: string | null
           estimated_hours?: number | null
           drive_folder_url?: string | null
@@ -145,6 +147,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          start_date?: string | null
           due_date?: string | null
           estimated_hours?: number | null
           drive_folder_url?: string | null
@@ -444,6 +447,7 @@ export type Database = {
           p_complexity: string
           p_due_date: string | null
           p_estimated_hours: number | null
+          p_start_date?: string | null
         }
         Returns: string
       }

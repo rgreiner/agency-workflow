@@ -13,6 +13,7 @@ type Activity = {
   title: string
   status: string
   priority: string
+  start_date: string | null
   due_date: string | null
   campaign_id: string
   activity_assignees: unknown[]
@@ -94,13 +95,30 @@ export function GanttClient({ activities, campMap, profiles, orgSlug }: {
 
   function getBarStyle(activity: Activity) {
     if (!activity.due_date) return null
-    const due = new Date(activity.due_date)
-    const diffFromStart = Math.floor((due.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
-    if (diffFromStart < 0 || diffFromStart > DAYS) return null
-    return {
-      left: diffFromStart * DAY_WIDTH,
-      width: DAY_WIDTH,
-    }
+
+    const viewStart = startDate.getTime()
+    const viewEnd = viewStart + DAYS * 24 * 60 * 60 * 1000
+
+    // Usa start_date ou cai no dia antes do due_date como mínimo
+    const barStart = activity.start_date
+      ? new Date(activity.start_date).getTime()
+      : new Date(activity.due_date).getTime() - 24 * 60 * 60 * 1000
+    const barEnd = new Date(activity.due_date).getTime()
+
+    // Barra inteiramente fora da janela
+    if (barEnd < viewStart || barStart > viewEnd) return null
+
+    // Clipa nos limites da janela
+    const clippedStart = Math.max(barStart, viewStart)
+    const clippedEnd = Math.min(barEnd, viewEnd)
+
+    const left = Math.floor((clippedStart - viewStart) / (24 * 60 * 60 * 1000)) * DAY_WIDTH
+    const width = Math.max(
+      Math.ceil((clippedEnd - clippedStart) / (24 * 60 * 60 * 1000)) * DAY_WIDTH,
+      DAY_WIDTH // mínimo 1 dia
+    )
+
+    return { left, width }
   }
 
   const statusCfg = Object.fromEntries(STATUS_CONFIG.map(s => [s.value, s]))
@@ -201,7 +219,7 @@ export function GanttClient({ activities, campMap, profiles, orgSlug }: {
                             'absolute top-2 bottom-2 rounded-lg flex items-center px-2 gap-1.5 overflow-hidden cursor-pointer',
                             overdue ? 'bg-red-100 border border-red-200' : 'bg-green-100 border border-green-200'
                           )}
-                          style={{ left: Math.max(0, bar.left - 80), width: 160 }}
+                          style={{ left: bar.left, width: bar.width }}
                           title={activity.title}>
                           <span className={cn('w-2 h-2 rounded-full shrink-0', overdue ? 'bg-red-400' : 'bg-green-400')} />
                           <span className="text-xs font-medium truncate text-gray-700 flex-1">{activity.title}</span>

@@ -69,6 +69,7 @@ export default function NewActivityPage() {
     status: 'briefing',
     priority: 'medium',
     complexity: 'medium',
+    start_date: '',
     due_date: '',
     estimated_hours: '',
     drive_folder_url: '',
@@ -276,11 +277,21 @@ export default function NewActivityPage() {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Data de início</label>
+            <input type="datetime-local" name="start_date" value={form.start_date}
+              onChange={(e) => setF('start_date', e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+          </div>
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Prazo de entrega</label>
             <input type="datetime-local" name="due_date" value={form.due_date}
+              min={form.start_date || undefined}
               onChange={(e) => setF('due_date', e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
           </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Horas estimadas</label>
             <input type="number" name="estimated_hours" value={form.estimated_hours}

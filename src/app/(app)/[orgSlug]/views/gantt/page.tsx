@@ -29,11 +29,11 @@ export default async function GanttPage({
 
   const { data: activities } = campIds.length
     ? await supabase.from('activities')
-        .select('id, title, status, priority, due_date, campaign_id, activity_assignees(profiles(id, full_name, avatar_url))')
+        .select('id, title, status, priority, start_date, due_date, campaign_id, activity_assignees(profiles(id, full_name, avatar_url))')
         .in('campaign_id', campIds)
         .neq('status', 'concluido')
         .not('due_date', 'is', null)
-        .order('due_date', { ascending: true })
+        .order('start_date', { ascending: true, nullsFirst: false })
     : { data: [] }
 
   const campMap = Object.fromEntries(
