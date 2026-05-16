@@ -4,6 +4,7 @@ import { Plus, ArrowLeft, AlertCircle } from 'lucide-react'
 import { STATUS_CONFIG, PRIORITY_CONFIG } from '@/types'
 import { formatDate, isOverdue, daysUntil } from '@/lib/utils'
 import { cn } from '@/lib/utils'
+import { AvatarGroup } from '@/components/ui/Avatar'
 
 export default async function CampaignPage({
   params,
@@ -23,7 +24,7 @@ export default async function CampaignPage({
 
   const { data: activities } = await supabase
     .from('activities')
-    .select('*, activity_status_assignees(status, profiles(full_name, avatar_url))')
+    .select('*, activity_assignees(user_id, profiles(full_name, avatar_url))')
     .eq('campaign_id', campaignId)
     .order('sort_order', { ascending: true })
 
@@ -90,11 +91,20 @@ export default async function CampaignPage({
                       <div className="flex-1 min-w-0">
                         <span className="text-sm font-medium text-gray-900">{activity.title}</span>
                       </div>
-                      <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', priority.bgColor, priority.color)}>
-                        {priority.label}
-                      </span>
+                      {/* Responsáveis */}
+                      {(() => {
+                        const assignees = (activity.activity_assignees as unknown as { profiles: { full_name: string | null; avatar_url: string | null } }[])?.map(a => a.profiles) ?? []
+                        return assignees.length > 0
+                          ? <AvatarGroup users={assignees} />
+                          : <span className="text-xs text-gray-300 w-10">—</span>
+                      })()}
+                      {activity.priority !== 'medium' && (
+                        <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium shrink-0', priority.bgColor, priority.color)}>
+                          {priority.label}
+                        </span>
+                      )}
                       {activity.due_date && (
-                        <span className={cn('flex items-center gap-1 text-xs', overdue ? 'text-red-600' : 'text-gray-500')}>
+                        <span className={cn('flex items-center gap-1 text-xs shrink-0', overdue ? 'text-red-600' : 'text-gray-500')}>
                           {overdue && <AlertCircle className="w-3 h-3" />}
                           {overdue ? `${Math.abs(days!)}d atraso` : days === 0 ? 'Hoje' : `${days}d`}
                         </span>

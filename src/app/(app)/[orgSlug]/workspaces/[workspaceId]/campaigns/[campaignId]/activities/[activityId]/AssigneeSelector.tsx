@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { UserPlus, X, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -39,6 +40,7 @@ export function AssigneeSelector({ activityId, assignedIds, members, path }: Pro
   const [isPending, startTransition] = useTransition()
   const ref = useRef<HTMLDivElement>(null)
   const supabase = createClient()
+  const router = useRouter()
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -64,6 +66,7 @@ export function AssigneeSelector({ activityId, assignedIds, members, path }: Pro
           ? [...prev, userId]
           : prev.filter(id => id !== userId)
       )
+      router.refresh() // atualiza componentes server-side (lista, gantt, etc.)
     })
   }
 
