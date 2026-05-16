@@ -29,12 +29,9 @@ export default async function ConvitePage({
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Fetch invite link with org info
-  const { data: invite } = await supabase
-    .from('org_invite_links')
-    .select('token, is_active, role, organizations(name, slug)')
-    .eq('token', token)
-    .single()
+  // Usa SECURITY DEFINER para bypassar RLS (visitante ainda não é membro)
+  const { data: rows } = await supabase.rpc('get_invite_info', { p_token: token })
+  const invite = rows?.[0] ?? null
 
   // Invalid or inactive link
   if (!invite || !invite.is_active) {
@@ -55,9 +52,9 @@ export default async function ConvitePage({
     )
   }
 
-  const org = invite.organizations as unknown as { name: string; slug: string } | null
+  const org = { name: invite.org_name as string, slug: invite.org_slug as string }
 
-  if (!org) {
+  if (!org.slug) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white rounded-2xl border border-gray-200 shadow-sm p-8 text-center">

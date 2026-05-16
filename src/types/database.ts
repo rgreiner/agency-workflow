@@ -650,6 +650,16 @@ export type Database = {
         }
         Returns: string
       }
+      get_invite_info: {
+        Args: { p_token: string }
+        Returns: {
+          token: string
+          is_active: boolean
+          role: Database["public"]["Enums"]["member_role"]
+          org_name: string
+          org_slug: string
+        }[]
+      }
     }
     Enums: {
       activity_complexity: "simple" | "medium" | "complex"
