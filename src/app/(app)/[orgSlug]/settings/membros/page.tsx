@@ -1,0 +1,102 @@
+import { createClient } from '@/lib/supabase/server'
+import { notFound } from 'next/navigation'
+import { Avatar } from '@/components/ui/Avatar'
+import { MemberRow } from './MemberRow'
+
+const ROLE_LABELS: Record<string, string> = {
+  owner: 'Proprietário',
+  admin: 'Admin',
+  manager: 'Gerente',
+  member: 'Membro',
+  viewer: 'Visualizador',
+}
+
+export default async function MembrosPage({
+  params,
+}: {
+  params: Promise<{ orgSlug: string }>
+}) {
+  const { orgSlug } = await params
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) notFound()
+
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('id, name, max_members')
+    .eq('slug', orgSlug)
+    .single()
+  if (!org) notFound()
+
+  const { data: myMembership } = await supabase
+    .from('organization_members')
+    .select('role')
+    .eq('org_id', org.id)
+    .eq('user_id', user.id)
+    .single()
+
+  const isAdmin = ['owner', 'admin'].includes(myMembership?.role ?? '')
+
+  const { data: members } = await supabase
+    .from('organization_members')
+    .select('id, role, position_id, profiles(id, full_name, email, avatar_url), org_positions(id, name, color)')
+    .eq('org_id', org.id)
+    .order('joined_at', { ascending: true })
+
+  const { data: positions } = await supabase
+    .from('org_positions')
+    .select('id, name, color')
+    .eq('org_id', org.id)
+    .order('name')
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <p className="text-sm text-gray-500">
+          {members?.length ?? 0} de {org.max_members} membros
+        </p>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-gray-100 bg-gray-50/50">
+              <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Pessoa</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Cargo</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Papel</th>
+              {isAdmin && <th className="w-10" />}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {members?.map((m) => {
+              const profile = m.profiles as unknown as {
+                id: string; full_name: string | null; email: string; avatar_url: string | null
+              } | null
+              const position = m.org_positions as unknown as { id: string; name: string; color: string } | null
+              const isMe = profile?.id === user.id
+              const isOwner = m.role === 'owner'
+
+              return (
+                <MemberRow
+                  key={m.id}
+                  memberId={m.id}
+                  orgSlug={orgSlug}
+                  orgId={org.id}
+                  profile={profile}
+                  position={position}
+                  role={m.role}
+                  positions={positions ?? []}
+                  isAdmin={isAdmin}
+                  isMe={isMe}
+                  isOwner={isOwner}
+                  roleLabels={ROLE_LABELS}
+                />
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}

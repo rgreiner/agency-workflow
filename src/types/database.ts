@@ -242,12 +242,42 @@ export type Database = {
           { foreignKeyName: "invitations_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] }
         ]
       }
+      org_positions: {
+        Row: {
+          id: string
+          org_id: string
+          name: string
+          color: string
+          allowed_statuses: Database["public"]["Enums"]["activity_status"][]
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          name: string
+          color?: string
+          allowed_statuses?: Database["public"]["Enums"]["activity_status"][]
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          name?: string
+          color?: string
+          allowed_statuses?: Database["public"]["Enums"]["activity_status"][]
+          created_at?: string
+        }
+        Relationships: [
+          { foreignKeyName: "org_positions_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] }
+        ]
+      }
       organization_members: {
         Row: {
           id: string
           invited_by: string | null
           joined_at: string
           org_id: string
+          position_id: string | null
           role: Database["public"]["Enums"]["member_role"]
           user_id: string
         }
@@ -256,6 +286,7 @@ export type Database = {
           invited_by?: string | null
           joined_at?: string
           org_id: string
+          position_id?: string | null
           role?: Database["public"]["Enums"]["member_role"]
           user_id: string
         }
@@ -264,11 +295,13 @@ export type Database = {
           invited_by?: string | null
           joined_at?: string
           org_id?: string
+          position_id?: string | null
           role?: Database["public"]["Enums"]["member_role"]
           user_id?: string
         }
         Relationships: [
           { foreignKeyName: "organization_members_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },
+          { foreignKeyName: "organization_members_position_id_fkey"; columns: ["position_id"]; isOneToOne: false; referencedRelation: "org_positions"; referencedColumns: ["id"] },
           { foreignKeyName: "organization_members_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] }
         ]
       }
@@ -477,6 +510,57 @@ export type Database = {
           p_layout_url: string | null
           p_finalizacao_url: string | null
           p_orcamento: string | null
+        }
+        Returns: void
+      }
+      create_org_position: {
+        Args: {
+          p_user_id: string
+          p_org_id: string
+          p_name: string
+          p_color: string
+          p_allowed_statuses: Database["public"]["Enums"]["activity_status"][]
+        }
+        Returns: string
+      }
+      update_org_position: {
+        Args: {
+          p_user_id: string
+          p_position_id: string
+          p_name: string
+          p_color: string
+          p_allowed_statuses: Database["public"]["Enums"]["activity_status"][]
+        }
+        Returns: void
+      }
+      delete_org_position: {
+        Args: {
+          p_user_id: string
+          p_position_id: string
+        }
+        Returns: void
+      }
+      update_member: {
+        Args: {
+          p_user_id: string
+          p_org_id: string
+          p_member_id: string
+          p_position_id: string | null
+          p_role: Database["public"]["Enums"]["member_role"]
+        }
+        Returns: void
+      }
+      remove_member: {
+        Args: {
+          p_user_id: string
+          p_org_id: string
+          p_member_id: string
+        }
+        Returns: void
+      }
+      seed_default_positions: {
+        Args: {
+          p_org_id: string
         }
         Returns: void
       }

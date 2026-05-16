@@ -1,0 +1,150 @@
+'use client'
+
+import { useState, useTransition } from 'react'
+import { Avatar } from '@/components/ui/Avatar'
+import { updateMember, removeMember } from '@/app/actions/settings'
+import { Trash2, Check } from 'lucide-react'
+import { cn } from '@/lib/utils'
+
+interface Props {
+  memberId: string
+  orgSlug: string
+  orgId: string
+  profile: { id: string; full_name: string | null; email: string; avatar_url: string | null } | null
+  position: { id: string; name: string; color: string } | null
+  role: string
+  positions: { id: string; name: string; color: string }[]
+  isAdmin: boolean
+  isMe: boolean
+  isOwner: boolean
+  roleLabels: Record<string, string>
+}
+
+const ROLES = ['owner', 'admin', 'manager', 'member', 'viewer']
+
+export function MemberRow({
+  memberId, orgSlug, orgId, profile, position, role,
+  positions, isAdmin, isMe, isOwner, roleLabels,
+}: Props) {
+  const [selectedPosition, setSelectedPosition] = useState(position?.id ?? '')
+  const [selectedRole, setSelectedRole] = useState(role)
+  const [isDirty, setIsDirty] = useState(false)
+  const [isPending, startTransition] = useTransition()
+
+  function handlePositionChange(val: string) {
+    setSelectedPosition(val)
+    setIsDirty(val !== (position?.id ?? '') || selectedRole !== role)
+  }
+
+  function handleRoleChange(val: string) {
+    setSelectedRole(val)
+    setIsDirty(selectedPosition !== (position?.id ?? '') || val !== role)
+  }
+
+  function handleSave() {
+    startTransition(async () => {
+      await updateMember(orgSlug, orgId, memberId, selectedPosition || null, selectedRole as import('@/types').MemberRole)
+      setIsDirty(false)
+    })
+  }
+
+  function handleRemove() {
+    if (!confirm(`Remover ${profile?.full_name ?? profile?.email} da organização?`)) return
+    startTransition(async () => {
+      await removeMember(orgSlug, orgId, memberId)
+    })
+  }
+
+  const canEdit = isAdmin && !isOwner
+  const selectedPos = positions.find(p => p.id === selectedPosition)
+
+  return (
+    <tr className="hover:bg-gray-50/50 transition">
+      {/* Pessoa */}
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-3">
+          <Avatar name={profile?.full_name ?? profile?.email ?? '?'} avatarUrl={profile?.avatar_url} size="md" />
+          <div>
+            <p className="text-sm font-medium text-gray-900">
+              {profile?.full_name ?? '—'}
+              {isMe && <span className="ml-1.5 text-xs text-gray-400">(você)</span>}
+            </p>
+            <p className="text-xs text-gray-400">{profile?.email}</p>
+          </div>
+        </div>
+      </td>
+
+      {/* Cargo */}
+      <td className="px-4 py-3">
+        {canEdit ? (
+          <select
+            value={selectedPosition}
+            onChange={(e) => handlePositionChange(e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+          >
+            <option value="">Sem cargo</option>
+            {positions.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        ) : (
+          position ? (
+            <span
+              className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium text-white"
+              style={{ backgroundColor: position.color }}
+            >
+              {position.name}
+            </span>
+          ) : (
+            <span className="text-xs text-gray-400">—</span>
+          )
+        )}
+      </td>
+
+      {/* Papel */}
+      <td className="px-4 py-3">
+        {canEdit ? (
+          <select
+            value={selectedRole}
+            onChange={(e) => handleRoleChange(e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+          >
+            {ROLES.filter(r => r !== 'owner').map(r => (
+              <option key={r} value={r}>{roleLabels[r]}</option>
+            ))}
+          </select>
+        ) : (
+          <span className="text-sm text-gray-600">{roleLabels[role] ?? role}</span>
+        )}
+      </td>
+
+      {/* Ações */}
+      {isAdmin && (
+        <td className="px-3 py-3">
+          <div className="flex items-center gap-1.5">
+            {isDirty && canEdit && (
+              <button
+                onClick={handleSave}
+                disabled={isPending}
+                className="p-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition disabled:opacity-50"
+                title="Salvar"
+              >
+                <Check className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {canEdit && (
+              <button
+                onClick={handleRemove}
+                disabled={isPending}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-50"
+                title="Remover membro"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </td>
+      )}
+    </tr>
+  )
+}

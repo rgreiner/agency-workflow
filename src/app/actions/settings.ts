@@ -1,0 +1,110 @@
+'use server'
+
+import { createClient } from '@/lib/supabase/server'
+import { revalidatePath } from 'next/cache'
+import type { ActivityStatus, MemberRole } from '@/types'
+
+// ── CARGOS ──────────────────────────────────────
+
+export async function createPosition(orgSlug: string, formData: FormData) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { data: org } = await supabase.from('organizations').select('id').eq('slug', orgSlug).single()
+  if (!org) return { error: 'Organização não encontrada' }
+
+  const name = (formData.get('name') as string)?.trim()
+  const color = (formData.get('color') as string) || '#6366f1'
+  const statuses = formData.getAll('statuses') as ActivityStatus[]
+
+  if (!name) return { error: 'Nome obrigatório' }
+
+  const { error } = await supabase.rpc('create_org_position', {
+    p_user_id: user.id,
+    p_org_id: org.id,
+    p_name: name,
+    p_color: color,
+    p_allowed_statuses: statuses,
+  })
+
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/settings/cargos`)
+}
+
+export async function updatePosition(orgSlug: string, positionId: string, formData: FormData) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const name = (formData.get('name') as string)?.trim()
+  const color = (formData.get('color') as string) || '#6366f1'
+  const statuses = formData.getAll('statuses') as ActivityStatus[]
+
+  if (!name) return { error: 'Nome obrigatório' }
+
+  const { error } = await supabase.rpc('update_org_position', {
+    p_user_id: user.id,
+    p_position_id: positionId,
+    p_name: name,
+    p_color: color,
+    p_allowed_statuses: statuses,
+  })
+
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/settings/cargos`)
+}
+
+export async function deletePosition(orgSlug: string, positionId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { error } = await supabase.rpc('delete_org_position', {
+    p_user_id: user.id,
+    p_position_id: positionId,
+  })
+
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/settings/cargos`)
+}
+
+// ── MEMBROS ──────────────────────────────────────
+
+export async function updateMember(
+  orgSlug: string,
+  orgId: string,
+  memberId: string,
+  positionId: string | null,
+  role: MemberRole
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { error } = await supabase.rpc('update_member', {
+    p_user_id: user.id,
+    p_org_id: orgId,
+    p_member_id: memberId,
+    p_position_id: positionId,
+    p_role: role,
+  })
+
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/settings/membros`)
+}
+
+export async function removeMember(orgSlug: string, orgId: string, memberId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { error } = await supabase.rpc('remove_member', {
+    p_user_id: user.id,
+    p_org_id: orgId,
+    p_member_id: memberId,
+  })
+
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/settings/membros`)
+}
