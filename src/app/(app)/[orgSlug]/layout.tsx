@@ -38,6 +38,19 @@ export default async function OrgLayout({
     .eq('id', user.id)
     .single()
 
+  const { data: workspacesRaw } = await supabase
+    .from('workspaces')
+    .select('id, name, color, campaigns(id, name)')
+    .eq('org_id', org.id)
+    .order('name')
+
+  const workspaces = (workspacesRaw ?? []).map(ws => ({
+    id: ws.id,
+    name: ws.name,
+    color: ws.color,
+    campaigns: (ws.campaigns as unknown as { id: string; name: string }[]) ?? [],
+  }))
+
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
       <Sidebar
@@ -45,6 +58,8 @@ export default async function OrgLayout({
         orgName={org.name}
         userEmail={user.email ?? ''}
         userAvatar={profile?.avatar_url}
+        userName={profile?.full_name ?? null}
+        workspaces={workspaces}
       />
       <main className="flex-1 overflow-y-auto">
         {children}
