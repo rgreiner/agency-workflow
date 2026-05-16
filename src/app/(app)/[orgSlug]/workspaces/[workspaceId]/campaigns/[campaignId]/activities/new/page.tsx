@@ -276,26 +276,16 @@ export default function NewActivityPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <DatePicker
-              label="Data de início"
-              value={form.start_date}
-              onChange={(v) => setF('start_date', v)}
-              placeholder="Selecionar início"
-            />
-            <input type="hidden" name="start_date" value={form.start_date} />
-          </div>
-          <div>
-            <DatePicker
-              label="Prazo de entrega"
-              value={form.due_date}
-              onChange={(v) => setF('due_date', v)}
-              placeholder="Selecionar prazo"
-              minDate={form.start_date || undefined}
-            />
-            <input type="hidden" name="due_date" value={form.due_date} />
-          </div>
+        <div>
+          <DatePicker
+            label="Período de execução"
+            startDate={form.start_date}
+            endDate={form.due_date}
+            onStartChange={(v) => setF('start_date', v)}
+            onEndChange={(v) => setF('due_date', v)}
+          />
+          <input type="hidden" name="start_date" value={form.start_date} />
+          <input type="hidden" name="due_date" value={form.due_date} />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
