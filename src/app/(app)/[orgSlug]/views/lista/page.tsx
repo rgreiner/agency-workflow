@@ -15,7 +15,7 @@ export default async function ListaPage({
   if (!org) return null
 
   const { data: workspaces } = await supabase
-    .from('workspaces').select('id').eq('org_id', org.id).eq('archived', false)
+    .from('workspaces').select('id').eq('org_id', org.id).neq('archived', true)
   const wsIds = workspaces?.map(w => w.id) ?? []
 
   const { data: campaigns } = wsIds.length

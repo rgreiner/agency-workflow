@@ -18,7 +18,7 @@ export default async function DashboardPage({
   if (!orgData) return null
 
   const { data: workspaces } = await supabase
-    .from('workspaces').select('id').eq('org_id', orgData.id).eq('archived', false)
+    .from('workspaces').select('id').eq('org_id', orgData.id).neq('archived', true)
   const wsIds = workspaces?.map(w => w.id) ?? []
 
   const { data: campaigns } = wsIds.length
