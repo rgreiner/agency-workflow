@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createActivity } from '@/app/actions/activity'
 import { STATUS_CONFIG, PRIORITY_CONFIG, COMPLEXITY_CONFIG } from '@/types'
-import { ArrowLeft, FolderOpen, ExternalLink } from 'lucide-react'
+import { ArrowLeft, FolderOpen, ExternalLink, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const VEICULOS = [
@@ -55,6 +55,7 @@ export default function NewActivityPage() {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
+  const [isImprovingAI, setIsImprovingAI] = useState(false)
 
   const [date, setDate] = useState(todayPrefix())
   const [veiculo, setVeiculo] = useState('')
@@ -87,6 +88,24 @@ export default function NewActivityPage() {
 
   const driveId = parseDriveId(form.drive_folder_url)
   const driveUrl = driveId ? driveOpenUrl(driveId) : null
+
+  async function handleImproveWithAI() {
+    if (!form.description.trim() || isImprovingAI) return
+    setIsImprovingAI(true)
+    try {
+      const res = await fetch('/api/ai/improve-briefing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: form.description }),
+      })
+      const data = await res.json()
+      if (data.improved) setF('description', data.improved)
+    } catch {
+      // silently fail — user keeps original text
+    } finally {
+      setIsImprovingAI(false)
+    }
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -185,13 +204,26 @@ export default function NewActivityPage() {
 
         {/* Descrição / Briefing */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            Objetivo / Briefing <span className="text-gray-400 font-normal">(opcional)</span>
-          </label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-sm font-medium text-gray-700">
+              Objetivo / Briefing <span className="text-gray-400 font-normal">(opcional)</span>
+            </label>
+            {form.description.trim() && (
+              <button
+                type="button"
+                onClick={handleImproveWithAI}
+                disabled={isImprovingAI}
+                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-full border border-indigo-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Sparkles className={cn('w-3 h-3', isImprovingAI && 'animate-pulse')} />
+                {isImprovingAI ? 'Melhorando...' : 'Melhorar com IA'}
+              </button>
+            )}
+          </div>
           <textarea name="description" value={form.description}
             onChange={(e) => setF('description', e.target.value)}
             placeholder="Descreva o objetivo, diretrizes e referências..."
-            rows={3}
+            rows={4}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none" />
         </div>
 
