@@ -41,7 +41,6 @@ interface SidebarProps {
 }
 
 const VIEWS = [
-  { href: 'views/lista', label: 'Lista geral', icon: List },
   { href: 'views/atendimento', label: 'Atendimento', icon: Users },
   { href: 'views/gantt', label: 'Gantt', icon: GanttChart },
 ]
@@ -145,6 +144,20 @@ export function Sidebar({
               </Link>
             </div>
           </div>
+
+          {/* Todas as atividades — link para lista geral */}
+          <Link
+            href={`${base}/views/lista`}
+            className={cn(
+              'flex items-center gap-2 mx-2 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors mb-1',
+              pathname === `${base}/views/lista`
+                ? 'bg-gray-800/60 text-gray-100'
+                : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/40'
+            )}
+          >
+            <List className="w-3.5 h-3.5 shrink-0 opacity-60" />
+            <span className="truncate">{orgName}</span>
+          </Link>
 
           <div className="space-y-px">
             {workspaces.map(ws => {
