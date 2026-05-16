@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { Avatar } from '@/components/ui/Avatar'
 import { MemberRow } from './MemberRow'
+import { InviteButton } from './InviteButton'
 
 const ROLE_LABELS: Record<string, string> = {
   owner: 'Proprietário',
@@ -56,6 +57,9 @@ export default async function MembrosPage({
         <p className="text-sm text-gray-500">
           {members?.length ?? 0} de {org.max_members} membros
         </p>
+        {isAdmin && (
+          <InviteButton orgId={org.id} orgSlug={orgSlug} />
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

@@ -108,3 +108,41 @@ export async function removeMember(orgSlug: string, orgId: string, memberId: str
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/settings/membros`)
 }
+
+// ── CONVITES ──────────────────────────────────────
+
+export async function getOrCreateInviteLink(
+  orgSlug: string,
+  orgId: string
+): Promise<{ token?: string; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { data, error } = await supabase.rpc('upsert_invite_link', {
+    p_user_id: user.id,
+    p_org_id: orgId,
+    p_role: 'member',
+  })
+
+  if (error) return { error: error.message }
+  return { token: data as string }
+}
+
+export async function deactivateInviteLink(
+  orgSlug: string,
+  orgId: string
+): Promise<{ error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { error } = await supabase.rpc('deactivate_invite_link', {
+    p_user_id: user.id,
+    p_org_id: orgId,
+  })
+
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/settings/membros`)
+  return {}
+}

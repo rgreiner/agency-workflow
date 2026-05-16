@@ -204,6 +204,41 @@ export type Database = {
           { foreignKeyName: "campaigns_workspace_id_fkey"; columns: ["workspace_id"]; isOneToOne: false; referencedRelation: "workspaces"; referencedColumns: ["id"] }
         ]
       }
+      org_invite_links: {
+        Row: {
+          id: string
+          org_id: string
+          token: string
+          role: Database["public"]["Enums"]["member_role"]
+          is_active: boolean
+          created_by: string | null
+          use_count: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          token?: string
+          role?: Database["public"]["Enums"]["member_role"]
+          is_active?: boolean
+          created_by?: string | null
+          use_count?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          token?: string
+          role?: Database["public"]["Enums"]["member_role"]
+          is_active?: boolean
+          created_by?: string | null
+          use_count?: number
+          created_at?: string
+        }
+        Relationships: [
+          { foreignKeyName: "org_invite_links_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] }
+        ]
+      }
       invitations: {
         Row: {
           accepted_at: string | null
@@ -430,7 +465,7 @@ export type Database = {
     }
     Functions: {
       is_org_member: {
-        Args: { org: string }
+        Args: { p_org_id: string }
         Returns: boolean
       }
       org_member_role: {
@@ -563,6 +598,28 @@ export type Database = {
           p_org_id: string
         }
         Returns: void
+      }
+      upsert_invite_link: {
+        Args: {
+          p_user_id: string
+          p_org_id: string
+          p_role: Database["public"]["Enums"]["member_role"]
+        }
+        Returns: string
+      }
+      deactivate_invite_link: {
+        Args: {
+          p_user_id: string
+          p_org_id: string
+        }
+        Returns: undefined
+      }
+      accept_invite_link: {
+        Args: {
+          p_user_id: string
+          p_token: string
+        }
+        Returns: string
       }
     }
     Enums: {
