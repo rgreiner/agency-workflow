@@ -18,7 +18,7 @@ export async function GET() {
   // 2. Same query the members page uses
   const { data: membersWithProfiles, error: joinError } = await supabase
     .from('organization_members')
-    .select('id, role, position_id, profiles(id, full_name, email), org_positions(id, name)')
+    .select('id, role, position_id, profiles!user_id(id, full_name, email), org_positions(id, name)')
 
   // 3. Profiles visible to this user
   const { data: visibleProfiles, error: profilesError } = await supabase

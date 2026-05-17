@@ -62,7 +62,7 @@ export default async function ActivityPage({
   const orgId = (campaign?.workspaces as unknown as { org_id: string } | null)?.org_id
   const { data: membersRaw } = orgId ? await supabase
     .from('organization_members')
-    .select('user_id, profiles(id, full_name, email, avatar_url)')
+    .select('user_id, profiles!user_id(id, full_name, email, avatar_url)')
     .eq('org_id', orgId) : { data: [] }
 
   const members = (membersRaw ?? []).map(m => {
