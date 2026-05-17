@@ -77,9 +77,9 @@ export function DocumentEditor({
     content: initialContent as object,
     editable: canManage,
     onUpdate: ({ editor }) => {
-      scheduleSave(() =>
-        supabase.from('documents').update({ content: editor.getJSON() }).eq('id', docId).then(() => {})
-      )
+      scheduleSave(async () => {
+        await supabase.from('documents').update({ content: editor.getJSON() }).eq('id', docId)
+      })
     },
   })
 
