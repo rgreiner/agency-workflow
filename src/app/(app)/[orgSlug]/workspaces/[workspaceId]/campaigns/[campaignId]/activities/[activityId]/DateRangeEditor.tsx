@@ -77,6 +77,7 @@ export function DateRangeEditor({ activityId, startDate, dueDate, canEdit }: Pro
       {open && (
         <div className="absolute top-full left-0 mt-1 z-50">
           <DatePicker
+            calendarOnly
             startDate={start}
             endDate={end}
             onStartChange={v => setStart(v)}

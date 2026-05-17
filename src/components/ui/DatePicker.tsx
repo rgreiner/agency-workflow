@@ -16,7 +16,8 @@ function toYMD(d: Date) {
 function todayYMD() { return toYMD(new Date()) }
 
 function fmtShort(ymd: string) {
-  const [y, m, d] = ymd.split('-')
+  const clean = ymd.slice(0, 10)   // handle ISO timestamps like 2026-05-19T00:00:00+00:00
+  const [y, m, d] = clean.split('-')
   return `${d}/${m}/${String(y).slice(2)}`
 }
 
@@ -41,6 +42,7 @@ interface Props {
   onEndChange:   (v: string) => void
   label?: string
   placeholder?: string
+  calendarOnly?: boolean  // render just the calendar panel, no trigger button
 }
 
 // ── SingleDatePicker ───────────────────────────────────────────────────────
@@ -153,7 +155,7 @@ export function SingleDatePicker({ value, onChange, onClose }: SingleDatePickerP
 
 // ── DatePicker (range) ─────────────────────────────────────────────────────
 
-export function DatePicker({ startDate, endDate, onStartChange, onEndChange, label, placeholder = 'Definir período' }: Props) {
+export function DatePicker({ startDate, endDate, onStartChange, onEndChange, label, placeholder = 'Definir período', calendarOnly }: Props) {
   const today    = todayYMD()
   const initDate = startDate ? new Date(startDate + 'T00:00') : new Date()
 
@@ -239,6 +241,55 @@ export function DatePicker({ startDate, endDate, onStartChange, onEndChange, lab
     : startDate
     ? `${fmtShort(startDate)} → …`
     : ''
+
+  // calendarOnly: render just the calendar panel (caller manages the trigger)
+  if (calendarOnly) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-xl p-4" style={{ minWidth: 300 }}>
+        <p className="text-xs text-gray-400 text-center mb-3">
+          {phase === 'start' ? 'Clique para definir o início' : 'Clique para definir o fim'}
+        </p>
+        <div className="flex items-center justify-between mb-3">
+          <button type="button" onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-gray-100 transition text-gray-500"><ChevronLeft className="w-4 h-4" /></button>
+          <span className="text-sm font-semibold text-gray-800">{MONTHS[viewMonth]} {viewYear}</span>
+          <button type="button" onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-gray-100 transition text-gray-500"><ChevronRight className="w-4 h-4" /></button>
+        </div>
+        <div className="grid grid-cols-7 mb-1">
+          {WEEK_SHORT.map(w => <div key={w} className="text-center text-[11px] font-medium text-gray-400 py-1">{w}</div>)}
+        </div>
+        <div className="grid grid-cols-7">
+          {cells.map((ymd, i) => {
+            if (!ymd) return <div key={i} />
+            const isToday = ymd === today
+            const isStart = ymd === rangeStartEff
+            const isEnd   = ymd === rangeEndEff
+            const isMid   = !!rangeStartEff && !!rangeEndEff && ymd > rangeStartEff && ymd < rangeEndEff
+            const isSingle   = isStart && isEnd
+            const isSelected = isStart || isEnd
+            return (
+              <div key={ymd} className={cn('relative h-9 flex items-center justify-center',
+                isMid && 'bg-indigo-50',
+                isStart && !isSingle && 'bg-gradient-to-r from-transparent to-indigo-50',
+                isEnd   && !isSingle && 'bg-gradient-to-l from-transparent to-indigo-50',
+              )}>
+                <button type="button" onClick={() => handleDayClick(ymd)}
+                  onMouseEnter={() => phase === 'end' && setHovered(ymd)}
+                  onMouseLeave={() => setHovered(null)}
+                  className={cn('w-8 h-8 rounded-full text-sm transition flex items-center justify-center font-medium z-10 relative',
+                    isSelected ? 'bg-indigo-600 text-white'
+                    : isToday  ? 'ring-2 ring-indigo-400 text-indigo-600'
+                    : isMid    ? 'text-indigo-700 hover:bg-indigo-100'
+                    : 'text-gray-700 hover:bg-gray-100'
+                  )}>
+                  {Number(ymd.split('-')[2])}
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="relative" ref={ref}>
