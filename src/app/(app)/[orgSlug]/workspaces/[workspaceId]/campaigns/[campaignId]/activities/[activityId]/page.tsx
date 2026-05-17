@@ -199,6 +199,7 @@ export default async function ActivityPage({
               {/* Dates */}
               <DateRangeEditor
                 activityId={activityId}
+                path={path}
                 startDate={activity.start_date ?? null}
                 dueDate={activity.due_date}
                 canEdit={isOrgMember}
