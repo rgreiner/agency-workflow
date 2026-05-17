@@ -98,8 +98,8 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
           </p>
         </div>
 
-        {/* Column picker */}
-        <div className="relative" ref={pickerRef}>
+        {/* Column picker — desktop only */}
+        <div className="relative hidden md:block" ref={pickerRef}>
           <button
             onClick={() => setPickerOpen(o => !o)}
             className={cn(
@@ -139,18 +139,17 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
       </div>
 
       {/* ── Table ── */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
 
-        {/* Single column header */}
-        <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100 bg-gray-50/60 min-w-[600px]">
+        {/* Column header — desktop only */}
+        <div className="hidden md:flex items-center gap-2 px-4 py-2 border-b border-gray-100 bg-gray-50/60">
           <div className="flex-1 text-xs font-medium text-gray-400" />
           {visibleCols.map(col => (
             <div key={col.key} className={cn('text-xs font-medium text-gray-400 shrink-0', col.width)}>
               {col.label}
             </div>
           ))}
-          {/* spacer for status badge */}
-          <div className="w-32 text-xs font-medium text-gray-400 shrink-0">Status</div>
+          <div className="w-28 text-xs font-medium text-gray-400 shrink-0">Status</div>
         </div>
 
         {/* Status groups */}
@@ -170,7 +169,7 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                 {/* Group header */}
                 <button
                   onClick={() => toggleGroup(statusCfg.value)}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50/80 transition text-left min-w-[600px]"
+                  className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50/80 transition text-left"
                 >
                   <ChevronDown className={cn(
                     'w-3.5 h-3.5 text-gray-400 transition-transform shrink-0',
@@ -186,114 +185,136 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                 {isOpen && (
                   <div className="divide-y divide-gray-50">
                     {items.map(activity => {
-                      const camp    = campMap[activity.campaign_id]
-                      const overdue = isOverdue(activity.due_date)
-                      const days    = daysUntil(activity.due_date)
+                      const camp     = campMap[activity.campaign_id]
+                      const overdue  = isOverdue(activity.due_date)
+                      const days     = daysUntil(activity.due_date)
                       const priority = PRIORITY_CONFIG[activity.priority as ActivityPriority]
                       const statusCfgRow = STATUS_CONFIG.find(s => s.value === activity.status)
+                      const href = `/${orgSlug}/workspaces/${camp?.workspaceId}/campaigns/${activity.campaign_id}/activities/${activity.id}`
+
+                      const dueBadge = activity.due_date ? (
+                        <span className={cn(
+                          'text-xs font-medium flex items-center gap-1 shrink-0',
+                          overdue ? 'text-red-600' : days !== null && days <= 3 ? 'text-orange-500' : 'text-gray-500'
+                        )}>
+                          {overdue && <AlertCircle className="w-3 h-3 shrink-0" />}
+                          {overdue ? `${Math.abs(days!)}d atraso` : days === 0 ? 'Hoje' : days === 1 ? 'Amanhã' : `${days}d`}
+                        </span>
+                      ) : null
 
                       return (
-                        <div
-                          key={activity.id}
-                          className="flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50/60 transition group min-w-[600px]"
-                        >
-                          {/* Name — takes remaining space */}
-                          <div className="flex-1 min-w-0">
-                            <Link
-                              href={`/${orgSlug}/workspaces/${camp?.workspaceId}/campaigns/${activity.campaign_id}/activities/${activity.id}`}
-                              className="block"
-                            >
+                        <div key={activity.id} className="hover:bg-gray-50/60 transition group">
+
+                          {/* ── Mobile layout ─────────────────────────── */}
+                          <Link href={href} className="md:hidden flex items-center gap-3 px-4 py-3">
+                            <div className="flex-1 min-w-0">
                               {camp && (
-                                <span className="text-[11px] text-gray-400 block leading-tight mb-0.5">
+                                <span className="text-[11px] text-gray-400 block leading-tight mb-0.5 truncate">
                                   {camp.client} / {camp.name}
                                 </span>
                               )}
-                              <span className="text-sm font-medium text-gray-900 group-hover:text-indigo-600 transition truncate block">
+                              <span className="text-sm font-medium text-gray-900 group-hover:text-indigo-600 transition block truncate">
                                 {activity.title}
                               </span>
-                            </Link>
-                          </div>
-
-                          {/* Responsável */}
-                          {cols.responsavel && (
-                            <div className="w-32 shrink-0">
-                              {activity.assignees.length > 0
-                                ? <AvatarGroup users={activity.assignees} />
-                                : <span className="text-xs text-gray-300">—</span>
-                              }
                             </div>
-                          )}
+                            <div className="flex items-center gap-2 shrink-0">
+                              {dueBadge}
+                              {activity.assignees.length > 0 && (
+                                <AvatarGroup users={activity.assignees} />
+                              )}
+                            </div>
+                          </Link>
 
-                          {/* Início */}
-                          {cols.inicio && (
-                            <div className="w-20 shrink-0">
-                              {activity.start_date
-                                ? <span className="text-xs text-gray-500">
-                                    {new Date(activity.start_date + 'T00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                          {/* ── Desktop layout ────────────────────────── */}
+                          <div className="hidden md:flex items-center gap-2 px-4 py-2.5 group">
+                            {/* Name */}
+                            <div className="flex-1 min-w-0">
+                              <Link href={href} className="block">
+                                {camp && (
+                                  <span className="text-[11px] text-gray-400 block leading-tight mb-0.5">
+                                    {camp.client} / {camp.name}
                                   </span>
-                                : <span className="text-xs text-gray-300">—</span>
-                              }
-                            </div>
-                          )}
-
-                          {/* Prazo */}
-                          {cols.prazo && (
-                            <div className="w-24 shrink-0">
-                              {activity.due_date ? (
-                                <span className={cn(
-                                  'text-xs font-medium flex items-center gap-1',
-                                  overdue ? 'text-red-600' : days !== null && days <= 3 ? 'text-orange-500' : 'text-gray-600'
-                                )}>
-                                  {overdue && <AlertCircle className="w-3 h-3 shrink-0" />}
-                                  {overdue ? `${Math.abs(days!)}d atraso` : days === 0 ? 'Hoje' : days === 1 ? 'Amanhã' : `${days}d`}
+                                )}
+                                <span className="text-sm font-medium text-gray-900 group-hover:text-indigo-600 transition truncate block">
+                                  {activity.title}
                                 </span>
-                              ) : <span className="text-xs text-gray-300">—</span>}
+                              </Link>
                             </div>
-                          )}
 
-                          {/* Prioridade */}
-                          {cols.prioridade && (
-                            <div className="w-24 shrink-0">
-                              {activity.priority !== 'medium' ? (
-                                <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full', priority.bgColor, priority.color)}>
-                                  {priority.label}
-                                </span>
-                              ) : <span className="text-xs text-gray-300">—</span>}
-                            </div>
-                          )}
-
-                          {/* Complexidade */}
-                          {cols.complexidade && (
-                            <div className="w-28 shrink-0">
-                              <span className="text-xs text-gray-500 capitalize">{activity.complexity ?? '—'}</span>
-                            </div>
-                          )}
-
-                          {/* Layout */}
-                          {cols.layout && (
-                            <div className="w-20 shrink-0">
-                              {activity.layout_url ? (
-                                <a
-                                  href={activity.layout_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={e => e.stopPropagation()}
-                                  className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 hover:underline"
-                                >
-                                  <ExternalLink className="w-3 h-3" /> Layout
-                                </a>
-                              ) : <span className="text-xs text-gray-300">—</span>}
-                            </div>
-                          )}
-
-                          {/* Status pill — sempre visível */}
-                          <div className="w-32 shrink-0">
-                            {statusCfgRow && (
-                              <span className={cn('text-xs font-medium px-2.5 py-1 rounded-md', statusCfgRow.bgColor, statusCfgRow.color)}>
-                                {statusCfgRow.label}
-                              </span>
+                            {/* Responsável */}
+                            {cols.responsavel && (
+                              <div className="w-32 shrink-0">
+                                {activity.assignees.length > 0
+                                  ? <AvatarGroup users={activity.assignees} />
+                                  : <span className="text-xs text-gray-300">—</span>
+                                }
+                              </div>
                             )}
+
+                            {/* Início */}
+                            {cols.inicio && (
+                              <div className="w-20 shrink-0">
+                                {activity.start_date
+                                  ? <span className="text-xs text-gray-500">
+                                      {new Date(activity.start_date + 'T00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                                    </span>
+                                  : <span className="text-xs text-gray-300">—</span>
+                                }
+                              </div>
+                            )}
+
+                            {/* Prazo */}
+                            {cols.prazo && (
+                              <div className="w-24 shrink-0">
+                                {dueBadge ?? <span className="text-xs text-gray-300">—</span>}
+                              </div>
+                            )}
+
+                            {/* Prioridade */}
+                            {cols.prioridade && (
+                              <div className="w-24 shrink-0">
+                                {activity.priority !== 'medium' ? (
+                                  <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full', priority.bgColor, priority.color)}>
+                                    {priority.label}
+                                  </span>
+                                ) : <span className="text-xs text-gray-300">—</span>}
+                              </div>
+                            )}
+
+                            {/* Complexidade */}
+                            {cols.complexidade && (
+                              <div className="w-28 shrink-0">
+                                <span className="text-xs text-gray-500 capitalize">{activity.complexity ?? '—'}</span>
+                              </div>
+                            )}
+
+                            {/* Layout */}
+                            {cols.layout && (
+                              <div className="w-20 shrink-0">
+                                {activity.layout_url ? (
+                                  <a
+                                    href={activity.layout_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={e => e.stopPropagation()}
+                                    className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 hover:underline"
+                                  >
+                                    <ExternalLink className="w-3 h-3" /> Layout
+                                  </a>
+                                ) : <span className="text-xs text-gray-300">—</span>}
+                              </div>
+                            )}
+
+                            {/* Status */}
+                            <div className="w-28 shrink-0">
+                              {statusCfgRow && (
+                                <span className={cn('text-xs font-medium px-2.5 py-1 rounded-md', statusCfgRow.bgColor, statusCfgRow.color)}>
+                                  {statusCfgRow.label}
+                                </span>
+                              )}
+                            </div>
                           </div>
+
                         </div>
                       )
                     })}
