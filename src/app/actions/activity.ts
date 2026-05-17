@@ -44,7 +44,7 @@ export async function createActivity(
   const orcamento = formData.get('orcamento') as string
 
   if (drive_folder_url || redacao_url || layout_url || finalizacao_url || orcamento) {
-    await supabase.rpc('update_activity_links', {
+    const { error: linksError } = await supabase.rpc('update_activity_links', {
       p_user_id: user.id,
       p_activity_id: activityId,
       p_drive_folder_url: drive_folder_url || null,
@@ -53,6 +53,7 @@ export async function createActivity(
       p_finalizacao_url: finalizacao_url || null,
       p_orcamento: orcamento || null,
     })
+    if (linksError) return { error: linksError.message }
   }
 
   redirect(`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}/activities/${activityId}`)
