@@ -181,7 +181,7 @@ export default async function ActivityPage({
             path={path}
             title={activity.title}
             description={activity.description}
-            canManage={canManage}
+            canManage={isOrgMember}
             isOrgMember={isOrgMember}
           />
 
@@ -312,7 +312,7 @@ export default async function ActivityPage({
             <MetaRow label="Prioridade">
               <FieldEditor
                 activityId={activityId} path={path}
-                field="priority" value={activity.priority} canEdit={canManage}
+                field="priority" value={activity.priority} canEdit={isOrgMember}
                 type="select"
                 options={[
                   { value: 'low',    label: 'Baixa'   },
@@ -332,7 +332,7 @@ export default async function ActivityPage({
             <MetaRow label="Complexidade">
               <FieldEditor
                 activityId={activityId} path={path}
-                field="complexity" value={activity.complexity} canEdit={canManage}
+                field="complexity" value={activity.complexity} canEdit={isOrgMember}
                 type="select"
                 options={[
                   { value: 'simple',  label: 'Simples'   },
@@ -349,7 +349,7 @@ export default async function ActivityPage({
             <MetaRow label="Prazo">
               <FieldEditor
                 activityId={activityId} path={path}
-                field="due_date" value={activity.due_date} canEdit={canManage}
+                field="due_date" value={activity.due_date} canEdit={isOrgMember}
                 type="date"
                 display={activity.due_date
                   ? <span className={cn('text-xs font-medium', overdue ? 'text-red-600' : 'text-gray-700')}>{formatDate(activity.due_date)}</span>
@@ -362,7 +362,7 @@ export default async function ActivityPage({
             <MetaRow label="Início">
               <FieldEditor
                 activityId={activityId} path={path}
-                field="start_date" value={activity.start_date ?? null} canEdit={canManage}
+                field="start_date" value={activity.start_date ?? null} canEdit={isOrgMember}
                 type="date"
                 display={activity.start_date
                   ? <span className="text-xs text-gray-700">{formatDate(activity.start_date)}</span>
@@ -377,7 +377,7 @@ export default async function ActivityPage({
                 activityId={activityId} path={path}
                 field="estimated_hours"
                 value={activity.estimated_hours != null ? String(activity.estimated_hours) : null}
-                canEdit={canManage}
+                canEdit={isOrgMember}
                 type="number"
                 display={activity.estimated_hours != null
                   ? <span className="text-xs text-gray-700">{activity.estimated_hours}h</span>

@@ -48,9 +48,6 @@ DECLARE
     'estimated_hours','drive_folder_url','redacao_url','layout_url',
     'finalizacao_url','orcamento'
   ];
-  v_mgr_only     text[] := ARRAY[
-    'title','due_date','start_date','priority','complexity','estimated_hours'
-  ];
 BEGIN
   IF NOT (p_field = ANY(v_allowed)) THEN
     RAISE EXCEPTION 'Campo não permitido: %', p_field;
@@ -70,12 +67,9 @@ BEGIN
   FROM   organization_members
   WHERE  org_id = v_org_id AND user_id = p_user_id;
 
+  -- Any org member can edit — role/cargo-based restrictions to be added later
   IF v_role IS NULL THEN
     RAISE EXCEPTION 'Sem permissão';
-  END IF;
-
-  IF p_field = ANY(v_mgr_only) AND v_role NOT IN ('owner','admin','manager') THEN
-    RAISE EXCEPTION 'Sem permissão para editar este campo';
   END IF;
 
   -- Capture old value
