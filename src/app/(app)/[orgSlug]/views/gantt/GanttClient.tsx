@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useTransition, useCallback } from 'react'
+import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarGroup } from '@/components/ui/Avatar'
@@ -46,7 +46,7 @@ function toYMD(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 function fromYMD(s: string) {
-  const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d)
+  const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d)
 }
 function addDays(d: Date, n: number) {
   const r = new Date(d); r.setDate(r.getDate() + n); return r
@@ -65,13 +65,16 @@ type Profile   = { id: string; full_name: string|null; avatar_url: string|null }
 type CampMap   = Record<string, { name: string; client: string; workspaceId: string }>
 type Workspace = { id: string; name: string }
 
-type BarDrag = {
-  type: 'move'|'resize-start'|'resize-end'
+type DragState = {
+  type: 'move' | 'resize-start' | 'resize-end'
   activityId: string
   startX: number
+  deltaX: number
   origStart: string|null
   origEnd:   string|null
 }
+
+type CalScrub = { startX: number; origStart: Date }
 
 // ── Component ──────────────────────────────────────────────────────────────
 
@@ -85,245 +88,219 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
   const router = useRouter()
   const [, startTransition] = useTransition()
 
-  // View state
   const [viewStart, setViewStart] = useState<Date>(() => {
     const d = new Date(); d.setDate(d.getDate() - 7); return d
   })
-  const viewStartRef = useRef(viewStart)
-  viewStartRef.current = viewStart
+  const [drag,     setDrag]     = useState<DragState|null>(null)
+  const [calScrub, setCalScrub] = useState<CalScrub|null>(null)
 
-  // Filters
   const [filterWorkspace, setFilterWorkspace] = useState('')
   const [filterPerson,    setFilterPerson]    = useState('')
   const [filterStatus,    setFilterStatus]    = useState('')
 
-  // Bar drag — refs only to avoid stale closures
-  const barDragRef  = useRef<BarDrag | null>(null)
-  const localRef    = useRef<Record<string, { start: string|null; end: string|null }>>({})
-  const [localDates, setLocalDates] = useState<Record<string, { start: string|null; end: string|null }>>({})
-  const [isDraggingBar, setIsDraggingBar] = useState(false)
+  const days     = Array.from({ length: DAYS }, (_, i) => addDays(viewStart, i))
+  const todayIdx = days.findIndex(isToday)
 
-  // Calendar scrub drag
-  const calDragRef  = useRef<{ startX: number; startDate: Date } | null>(null)
-  const [isDraggingCal, setIsDraggingCal] = useState(false)
+  // ── Compute effective dates for an activity (during drag) ─────────────
 
-  // Navigation
-  function move(n: number) { setViewStart(d => addDays(d, n)) }
-  function goToday() { const d = new Date(); d.setDate(d.getDate() - 7); setViewStart(d) }
+  function effectiveDates(a: Activity): { start: string|null; end: string|null } {
+    if (!drag || drag.activityId !== a.id) return { start: a.start_date, end: a.due_date }
 
-  // Effective dates (local override during bar drag)
-  function getDates(a: Activity) {
-    const ld = localRef.current[a.id]
-    return { start: ld?.start ?? a.start_date, end: ld?.end ?? a.due_date }
+    const delta = Math.round(drag.deltaX / DAY_W)
+    let ns = drag.origStart ? fromYMD(drag.origStart) : null
+    let ne = drag.origEnd   ? fromYMD(drag.origEnd)   : null
+
+    if (drag.type === 'move') {
+      if (ns) ns = addDays(ns, delta)
+      if (ne) ne = addDays(ne, delta)
+    } else if (drag.type === 'resize-start') {
+      if (ns) { ns = addDays(ns, delta); if (ne && ns > ne) ns = new Date(ne) }
+    } else {
+      if (ne) { ne = addDays(ne, delta); if (ns && ne < ns) ne = new Date(ns) }
+    }
+
+    return { start: ns ? toYMD(ns) : null, end: ne ? toYMD(ne) : null }
   }
 
-  // Bar geometry
-  function getBar(start: string|null, end: string|null) {
+  // ── Bar geometry ─────────────────────────────────────────────────────
+
+  function barGeometry(start: string|null, end: string|null) {
     if (!end) return null
-    const vs = viewStartRef.current.getTime()
+    const vs = viewStart.getTime()
     const ve = vs + DAYS * 86400000
     const bs = start ? fromYMD(start).getTime() : fromYMD(end).getTime() - 86400000
     const be = fromYMD(end).getTime()
-    if (be < vs || bs > ve) return null
+    if (be <= vs || bs >= ve) return null
     const cs = Math.max(bs, vs)
     const ce = Math.min(be, ve)
     return {
-      left: Math.floor((cs - vs) / 86400000) * DAY_W,
-      width: Math.max(Math.ceil((ce - cs) / 86400000) * DAY_W, DAY_W),
+      left:         Math.floor((cs - vs) / 86400000) * DAY_W,
+      width:        Math.max(Math.ceil((ce - cs) / 86400000) * DAY_W, DAY_W),
       clippedLeft:  cs > bs,
       clippedRight: ce < be,
     }
   }
 
-  // ── Global mouse event handlers (run once, use refs) ──────────────────
+  // ── Pointer handlers for bars ─────────────────────────────────────────
 
-  useEffect(() => {
-    function onMouseMove(e: MouseEvent) {
-      // Bar drag
-      const bar = barDragRef.current
-      if (bar) {
-        const dx = e.clientX - bar.startX
-        const delta = Math.round(dx / DAY_W)
-        let ns = bar.origStart ? fromYMD(bar.origStart) : null
-        let ne = bar.origEnd   ? fromYMD(bar.origEnd)   : null
-
-        if (bar.type === 'move') {
-          if (ns) ns = addDays(ns, delta)
-          if (ne) ne = addDays(ne, delta)
-        } else if (bar.type === 'resize-start') {
-          if (ns) { ns = addDays(ns, delta); if (ne && ns > ne) ns = new Date(ne) }
-        } else {
-          if (ne) { ne = addDays(ne, delta); if (ns && ne < ns) ne = new Date(ns) }
-        }
-
-        localRef.current = {
-          ...localRef.current,
-          [bar.activityId]: { start: ns ? toYMD(ns) : null, end: ne ? toYMD(ne) : null },
-        }
-        setLocalDates({ ...localRef.current })
-        return
-      }
-
-      // Calendar scrub
-      const cal = calDragRef.current
-      if (cal) {
-        const dx = e.clientX - cal.startX
-        const delta = -Math.round(dx / DAY_W)  // drag right = go back in time
-        setViewStart(addDays(cal.startDate, delta))
-      }
-    }
-
-    function onMouseUp() {
-      // Commit bar drag
-      const bar = barDragRef.current
-      if (bar) {
-        const ld = localRef.current[bar.activityId]
-        if (ld && (ld.start !== bar.origStart || ld.end !== bar.origEnd)) {
-          startTransition(async () => {
-            await updateActivityDates(bar.activityId, ld.start, ld.end)
-            router.refresh()
-          })
-        }
-        barDragRef.current = null
-        setIsDraggingBar(false)
-        // Keep localDates until refresh brings fresh server data
-      }
-
-      // End calendar scrub
-      if (calDragRef.current) {
-        calDragRef.current = null
-        setIsDraggingCal(false)
-      }
-    }
-
-    document.addEventListener('mousemove', onMouseMove)
-    document.addEventListener('mouseup',   onMouseUp)
-    return () => {
-      document.removeEventListener('mousemove', onMouseMove)
-      document.removeEventListener('mouseup',   onMouseUp)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // ← empty on purpose: all state accessed via refs
-
-  // ── Bar drag start ────────────────────────────────────────────────────
-
-  const startBarDrag = useCallback((
-    e: React.MouseEvent,
-    type: BarDrag['type'],
-    activity: Activity,
-  ) => {
+  function onBarPointerDown(
+    e: React.PointerEvent,
+    type: DragState['type'],
+    a: Activity,
+  ) {
+    if (e.button !== 0) return
     e.preventDefault()
     e.stopPropagation()
-    const { start, end } = getDates(activity)
-    barDragRef.current = { type, activityId: activity.id, startX: e.clientX, origStart: start, origEnd: end }
-    setIsDraggingBar(true)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // ── Calendar scrub start ──────────────────────────────────────────────
-
-  function startCalDrag(e: React.MouseEvent) {
-    // Only left button, not on interactive elements
-    if (e.button !== 0) return
-    calDragRef.current = { startX: e.clientX, startDate: viewStart }
-    setIsDraggingCal(true)
+    ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
+    setDrag({
+      type,
+      activityId: a.id,
+      startX: e.clientX,
+      deltaX: 0,
+      origStart: a.start_date,
+      origEnd:   a.due_date,
+    })
   }
 
-  // ── Filtering + grouping ──────────────────────────────────────────────
+  function onBarPointerMove(e: React.PointerEvent, activityId: string) {
+    if (!drag || drag.activityId !== activityId) return
+    const dx = e.clientX - drag.startX
+    if (dx !== drag.deltaX) setDrag(prev => prev ? { ...prev, deltaX: dx } : null)
+  }
+
+  function onBarPointerUp(e: React.PointerEvent, a: Activity) {
+    if (!drag || drag.activityId !== a.id) return
+    ;(e.currentTarget as Element).releasePointerCapture(e.pointerId)
+
+    const { start, end } = effectiveDates(a)
+    setDrag(null)
+
+    if (start !== a.start_date || end !== a.due_date) {
+      startTransition(async () => {
+        await updateActivityDates(a.id, start, end)
+        router.refresh()
+      })
+    }
+  }
+
+  // ── Pointer handlers for calendar scrub ──────────────────────────────
+
+  function onCalPointerDown(e: React.PointerEvent) {
+    if (e.button !== 0) return
+    ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
+    setCalScrub({ startX: e.clientX, origStart: viewStart })
+  }
+
+  function onCalPointerMove(e: React.PointerEvent) {
+    if (!calScrub) return
+    const dx = e.clientX - calScrub.startX
+    const delta = -Math.round(dx / DAY_W)
+    setViewStart(addDays(calScrub.origStart, delta))
+  }
+
+  function onCalPointerUp(e: React.PointerEvent) {
+    if (!calScrub) return
+    ;(e.currentTarget as Element).releasePointerCapture(e.pointerId)
+    setCalScrub(null)
+  }
+
+  // ── Filter + group ────────────────────────────────────────────────────
 
   const filtered = activities.filter(a => {
-    if (filterStatus && a.status !== filterStatus) return false
+    if (filterStatus    && a.status !== filterStatus) return false
     const camp = campMap[a.campaign_id]
     if (filterWorkspace && camp?.workspaceId !== filterWorkspace) return false
     if (filterPerson) {
-      const assignees = (a.activity_assignees as { profiles: Profile }[])?.map(x => x.profiles) ?? []
-      if (!assignees.some(p => p?.id === filterPerson)) return false
+      const ps = (a.activity_assignees as { profiles: Profile }[])?.map(x => x.profiles) ?? []
+      if (!ps.some(p => p?.id === filterPerson)) return false
     }
     return true
   })
 
-  const assigneeMap: Record<string, { profile: Profile; activities: Activity[] }> = {}
+  const groupMap: Record<string, { profile: Profile; activities: Activity[] }> = {}
   const unassigned: Activity[] = []
   filtered.forEach(a => {
     const ps = (a.activity_assignees as { profiles: Profile }[])?.map(x => x.profiles).filter(Boolean) ?? []
     if (!ps.length) { unassigned.push(a); return }
     ps.forEach(p => {
       if (!p?.id) return
-      if (!assigneeMap[p.id]) assigneeMap[p.id] = { profile: p, activities: [] }
-      assigneeMap[p.id].activities.push(a)
+      if (!groupMap[p.id]) groupMap[p.id] = { profile: p, activities: [] }
+      groupMap[p.id].activities.push(a)
     })
   })
-  const groups = Object.values(assigneeMap).sort((a,b) =>
+  const groups = Object.values(groupMap).sort((a,b) =>
     (a.profile.full_name ?? '').localeCompare(b.profile.full_name ?? ''))
-
-  const days = Array.from({ length: DAYS }, (_, i) => addDays(viewStart, i))
-  const todayIdx = days.findIndex(isToday)
 
   // ── Render bar ────────────────────────────────────────────────────────
 
-  function renderBar(activity: Activity) {
-    const { start, end } = getDates(activity)
-    const bar = getBar(start, end)
-    if (!bar) return null
+  function renderBar(a: Activity) {
+    const { start, end } = effectiveDates(a)
+    const geo = barGeometry(start, end)
+    if (!geo) return null
 
-    const colors  = STATUS_COLORS[activity.status] ?? { bg:'#f3f4f6', border:'#9ca3af', text:'#374151' }
-    const assignees = (activity.activity_assignees as { profiles: Profile }[])?.map(x => x.profiles).filter(Boolean) ?? []
-    const isActive  = isDraggingBar && barDragRef.current?.activityId === activity.id
+    const clrs    = STATUS_COLORS[a.status] ?? { bg: '#f3f4f6', border: '#9ca3af', text: '#374151' }
+    const asns    = (a.activity_assignees as { profiles: Profile }[])?.map(x => x.profiles).filter(Boolean) ?? []
+    const active  = drag?.activityId === a.id
 
     return (
       <div
-        className="absolute top-2 bottom-2 rounded-lg flex items-center overflow-hidden"
+        className="absolute top-2 bottom-2 rounded-lg flex items-center overflow-hidden select-none"
         style={{
-          left: bar.left, width: bar.width,
-          backgroundColor: colors.bg,
-          border: `1.5px solid ${colors.border}`,
-          cursor: isDraggingBar ? (isActive ? 'grabbing' : 'default') : 'grab',
-          zIndex: isActive ? 30 : 5,
-          boxShadow: isActive ? `0 4px 12px ${colors.border}55` : undefined,
-          transition: isActive ? 'none' : 'box-shadow 0.15s',
+          left:            geo.left,
+          width:           geo.width,
+          backgroundColor: clrs.bg,
+          border:          `1.5px solid ${clrs.border}`,
+          cursor:          active ? 'grabbing' : 'grab',
+          zIndex:          active ? 30 : 5,
+          boxShadow:       active ? `0 2px 12px ${clrs.border}66` : undefined,
+          touchAction:     'none',
         }}
-        onMouseDown={e => {
-          const el = e.target as HTMLElement
-          // Don't start move if clicking a handle
-          if (el.closest('[data-gantt-handle]')) return
-          startBarDrag(e, 'move', activity)
+        onPointerDown={e => {
+          if ((e.target as HTMLElement).closest('[data-handle]')) return
+          onBarPointerDown(e, 'move', a)
         }}
-        title={`${activity.title}\n${start ?? '?'} → ${end ?? '?'}`}
+        onPointerMove={e => onBarPointerMove(e, a.id)}
+        onPointerUp={e => onBarPointerUp(e, a)}
+        onPointerCancel={() => setDrag(null)}
       >
         {/* Left resize handle */}
-        {!bar.clippedLeft && (
+        {!geo.clippedLeft && (
           <div
-            data-gantt-handle="left"
-            className="absolute left-0 top-0 bottom-0 z-10 flex items-center justify-center group/h"
-            style={{ width: HANDLE_W, cursor: 'ew-resize' }}
-            onMouseDown={e => startBarDrag(e, 'resize-start', activity)}
+            data-handle="left"
+            className="absolute left-0 top-0 bottom-0 z-10 flex items-center justify-center"
+            style={{ width: HANDLE_W, cursor: 'ew-resize', touchAction: 'none' }}
+            onPointerDown={e => onBarPointerDown(e, 'resize-start', a)}
+            onPointerMove={e => onBarPointerMove(e, a.id)}
+            onPointerUp={e => onBarPointerUp(e, a)}
           >
-            <div className="w-0.5 h-4 rounded-full opacity-50 group-hover/h:opacity-100 transition"
-                 style={{ backgroundColor: colors.border }} />
+            <div className="w-0.5 h-4 rounded-full opacity-40 hover:opacity-80 transition"
+                 style={{ backgroundColor: clrs.border }} />
           </div>
         )}
 
         {/* Content */}
-        <div className="flex items-center gap-1.5 min-w-0 flex-1 pointer-events-none"
-             style={{ paddingLeft: bar.clippedLeft ? 8 : HANDLE_W + 4, paddingRight: bar.clippedRight ? 4 : HANDLE_W + 4 }}>
-          <span className="text-[11px] font-semibold truncate flex-1" style={{ color: colors.text }}>
-            {activity.title}
+        <div
+          className="flex items-center gap-1.5 min-w-0 flex-1 pointer-events-none"
+          style={{ paddingLeft: geo.clippedLeft ? 8 : HANDLE_W + 4, paddingRight: geo.clippedRight ? 4 : HANDLE_W + 4 }}
+        >
+          <span className="text-[11px] font-semibold truncate flex-1" style={{ color: clrs.text }}>
+            {a.title}
           </span>
-          {assignees.length > 0 && bar.width > 90 && (
-            <AvatarGroup users={assignees} max={2} />
-          )}
+          {asns.length > 0 && geo.width > 90 && <AvatarGroup users={asns} max={2} />}
         </div>
 
         {/* Right resize handle */}
-        {!bar.clippedRight && (
+        {!geo.clippedRight && (
           <div
-            data-gantt-handle="right"
-            className="absolute right-0 top-0 bottom-0 z-10 flex items-center justify-center group/h"
-            style={{ width: HANDLE_W, cursor: 'ew-resize' }}
-            onMouseDown={e => startBarDrag(e, 'resize-end', activity)}
+            data-handle="right"
+            className="absolute right-0 top-0 bottom-0 z-10 flex items-center justify-center"
+            style={{ width: HANDLE_W, cursor: 'ew-resize', touchAction: 'none' }}
+            onPointerDown={e => onBarPointerDown(e, 'resize-end', a)}
+            onPointerMove={e => onBarPointerMove(e, a.id)}
+            onPointerUp={e => onBarPointerUp(e, a)}
           >
-            <div className="w-0.5 h-4 rounded-full opacity-50 group-hover/h:opacity-100 transition"
-                 style={{ backgroundColor: colors.border }} />
+            <div className="w-0.5 h-4 rounded-full opacity-40 hover:opacity-80 transition"
+                 style={{ backgroundColor: clrs.border }} />
           </div>
         )}
       </div>
@@ -332,17 +309,17 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
 
   // ── Render row ────────────────────────────────────────────────────────
 
-  function renderRow(activity: Activity) {
-    const camp = campMap[activity.campaign_id]
+  function renderRow(a: Activity) {
+    const camp = campMap[a.campaign_id]
     return (
-      <div key={activity.id} className="flex border-b border-gray-50 last:border-0" style={{ height: ROW_H }}>
+      <div key={a.id} className="flex border-b border-gray-50 last:border-0" style={{ height: ROW_H }}>
         <div className="shrink-0 border-r border-gray-100 px-3 flex flex-col justify-center" style={{ width: SIDEBAR_W }}>
           <span className="text-[10px] text-gray-400 truncate">{camp?.client} › {camp?.name}</span>
           <Link
-            href={`/${orgSlug}/workspaces/${camp?.workspaceId}/campaigns/${activity.campaign_id}/activities/${activity.id}`}
+            href={`/${orgSlug}/workspaces/${camp?.workspaceId}/campaigns/${a.campaign_id}/activities/${a.id}`}
             className="text-xs text-gray-700 font-medium hover:text-indigo-600 transition truncate block"
           >
-            {activity.title}
+            {a.title}
           </Link>
         </div>
         <div className="relative flex-1">
@@ -354,32 +331,36 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
             <div className="absolute inset-y-0 w-px bg-red-400 pointer-events-none z-20"
                  style={{ left: todayIdx * DAY_W + DAY_W / 2 }} />
           )}
-          {renderBar(activity)}
+          {renderBar(a)}
         </div>
       </div>
     )
   }
 
-  // ── Render ────────────────────────────────────────────────────────────
+  // ── Full render ───────────────────────────────────────────────────────
+
+  const isDragging = !!drag || !!calScrub
 
   return (
-    <div className="p-6 flex flex-col" style={{ height: 'calc(100vh - 2rem)', userSelect: (isDraggingBar || isDraggingCal) ? 'none' : 'auto' }}>
+    <div className="p-6 flex flex-col" style={{ height: 'calc(100vh - 2rem)', userSelect: isDragging ? 'none' : 'auto' }}>
 
-      {/* Page header */}
+      {/* Header */}
       <div className="flex items-center justify-between mb-4 shrink-0">
         <div>
           <h1 className="text-lg font-semibold text-gray-900">Gantt por responsável</h1>
-          <p className="text-gray-500 text-sm mt-0.5">{filtered.length} atividade{filtered.length !== 1 ? 's' : ''}</p>
+          <p className="text-gray-500 text-sm">{filtered.length} atividade{filtered.length !== 1 ? 's' : ''}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={goToday}
-            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition text-gray-700 font-medium">
+          <button onClick={() => { const d = new Date(); d.setDate(d.getDate()-7); setViewStart(d) }}
+            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium text-gray-700">
             Hoje
           </button>
-          <button onClick={() => move(-7)} className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+          <button onClick={() => setViewStart(d => addDays(d, -7))}
+            className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
             <ChevronLeft className="w-4 h-4 text-gray-600" />
           </button>
-          <button onClick={() => move(7)}  className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+          <button onClick={() => setViewStart(d => addDays(d, 7))}
+            className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
             <ChevronRight className="w-4 h-4 text-gray-600" />
           </button>
         </div>
@@ -410,27 +391,29 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
         )}
       </div>
 
-      {/* Gantt table */}
+      {/* Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-auto flex-1">
 
-        {/* Calendar header — draggable to navigate */}
+        {/* Calendar header — drag to scrub */}
         <div className="flex border-b border-gray-200 sticky top-0 bg-white z-30">
-          <div className="shrink-0 border-r border-gray-200 bg-white flex items-center px-4"
-               style={{ width: SIDEBAR_W }}>
-            <span className="text-xs text-gray-400 font-medium">
+          <div className="shrink-0 border-r border-gray-200 flex items-center px-4" style={{ width: SIDEBAR_W }}>
+            <span className="text-xs text-gray-400 font-medium select-none">
               {viewStart.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
             </span>
           </div>
           <div
             className="flex"
-            style={{ cursor: isDraggingCal ? 'grabbing' : 'grab' }}
-            onMouseDown={startCalDrag}
-            title="Arraste para navegar nas datas"
+            style={{ cursor: calScrub ? 'grabbing' : 'grab', touchAction: 'none' }}
+            onPointerDown={onCalPointerDown}
+            onPointerMove={onCalPointerMove}
+            onPointerUp={onCalPointerUp}
+            onPointerCancel={() => setCalScrub(null)}
+            title="Arraste para navegar"
           >
             {days.map((day, i) => (
               <div key={i}
                 className={cn(
-                  'flex flex-col items-center justify-center text-xs border-r border-gray-100 shrink-0 py-2',
+                  'flex flex-col items-center justify-center text-xs border-r border-gray-100 shrink-0 py-2 select-none',
                   isToday(day) ? 'bg-indigo-600 text-white' : isWeekend(day) ? 'bg-gray-50 text-gray-400' : 'text-gray-600'
                 )}
                 style={{ width: DAY_W }}>
@@ -460,7 +443,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
             <div className="flex items-center gap-2.5 px-4 py-2.5 bg-gray-50/60 border-b border-gray-100">
               <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-500 shrink-0">—</div>
               <span className="text-sm font-semibold text-gray-500">Sem responsável</span>
-              <span className="text-xs text-gray-400">{unassigned.length} tarefa{unassigned.length !== 1 ? 's' : ''}</span>
+              <span className="text-xs text-gray-400">{unassigned.length}</span>
             </div>
             {unassigned.map(a => renderRow(a))}
           </div>
