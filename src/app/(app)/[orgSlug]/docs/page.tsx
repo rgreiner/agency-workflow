@@ -127,8 +127,8 @@ function DocList({
               {formatDistanceToNow(doc.updated_at)}
             </span>
             {doc.visibility === 'org'
-              ? <Globe className="w-3.5 h-3.5 text-gray-300 shrink-0" title="Todo o time" />
-              : <Lock className="w-3.5 h-3.5 text-gray-300 shrink-0" title="Restrito" />
+              ? <Globe className="w-3.5 h-3.5 text-gray-300 shrink-0" />
+              : <Lock className="w-3.5 h-3.5 text-gray-300 shrink-0" />
             }
           </Link>
         )
