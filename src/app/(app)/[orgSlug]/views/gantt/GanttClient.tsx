@@ -126,10 +126,10 @@ export function GanttClient({ activities, campMap, profiles, orgSlug }: {
   const SIDEBAR_W = 220
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Gantt por responsável</h1>
+          <h1 className="text-lg font-semibold text-gray-900">Gantt por responsável</h1>
           <p className="text-gray-500 text-sm mt-0.5">{activities.length} atividade{activities.length !== 1 ? 's' : ''} com prazo</p>
         </div>
         <div className="flex items-center gap-2">

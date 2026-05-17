@@ -31,16 +31,16 @@ export default function NewCampaignPage() {
   }
 
   return (
-    <div className="p-8 max-w-xl">
+    <div className="p-6 max-w-xl">
       <button
         onClick={() => router.back()}
-        className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition mb-6"
+        className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition mb-5"
       >
         <ArrowLeft className="w-4 h-4" /> Voltar
       </button>
 
-      <h1 className="text-2xl font-semibold text-gray-900 mb-1">Nova campanha</h1>
-      <p className="text-gray-500 text-sm mb-8">Adicione uma campanha a este cliente.</p>
+      <h1 className="text-xl font-semibold text-gray-900 mb-1">Nova campanha</h1>
+      <p className="text-gray-500 text-sm mb-6">Adicione uma campanha a este cliente.</p>
 
       <form onSubmit={handleSubmit} className="space-y-5">
 

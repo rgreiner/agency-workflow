@@ -80,14 +80,14 @@ export default async function DashboardPage({
   ]
 
   return (
-    <div className="p-8 max-w-5xl">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
-        <p className="text-gray-500 text-sm mt-1">{total} atividade{total !== 1 ? 's' : ''} no total</p>
+    <div className="p-6">
+      <div className="mb-5">
+        <h1 className="text-lg font-semibold text-gray-900">Dashboard</h1>
+        <p className="text-gray-500 text-sm mt-0.5">{total} atividade{total !== 1 ? 's' : ''} no total</p>
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-4 gap-4 mb-5">
         {cards.map(({ label, value, icon: Icon, color, bg }) => (
           <div key={label} className="bg-white rounded-xl border border-gray-200 p-5">
             <div className={cn('inline-flex p-2 rounded-lg mb-3', bg)}>

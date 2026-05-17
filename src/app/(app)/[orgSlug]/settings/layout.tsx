@@ -27,13 +27,13 @@ export default async function SettingsLayout({
   const orgName = (membership.organizations as { name: string } | null)?.name
 
   return (
-    <div className="p-8 max-w-4xl">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900">Configurações</h1>
-        <p className="text-gray-500 text-sm mt-1">{orgName}</p>
+    <div className="p-6 max-w-4xl">
+      <div className="mb-5">
+        <h1 className="text-lg font-semibold text-gray-900">Configurações</h1>
+        <p className="text-gray-500 text-sm mt-0.5">{orgName}</p>
       </div>
 
-      <div className="flex gap-1 mb-8 border-b border-gray-200">
+      <div className="flex gap-1 mb-5 border-b border-gray-200">
         {[
           { href: `/${orgSlug}/settings/membros`, label: 'Membros' },
           ...(isAdmin ? [{ href: `/${orgSlug}/settings/cargos`, label: 'Cargos' }] : []),

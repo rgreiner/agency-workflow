@@ -124,14 +124,14 @@ export default function NewActivityPage() {
   }
 
   return (
-    <div className="p-8 max-w-2xl">
+    <div className="p-6 max-w-2xl">
       <button onClick={() => router.back()}
-        className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition mb-6">
+        className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition mb-5">
         <ArrowLeft className="w-4 h-4" /> Voltar
       </button>
 
-      <h1 className="text-2xl font-semibold text-gray-900 mb-1">Nova atividade</h1>
-      <p className="text-gray-500 text-sm mb-8">O título é composto automaticamente pelos campos abaixo.</p>
+      <h1 className="text-xl font-semibold text-gray-900 mb-1">Nova atividade</h1>
+      <p className="text-gray-500 text-sm mb-6">O título é composto automaticamente pelos campos abaixo.</p>
 
       <form onSubmit={handleSubmit} className="space-y-6">
 

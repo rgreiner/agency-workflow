@@ -87,12 +87,12 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
   const activeGroups = statusConfig.filter(s => grouped[s.value]?.length)
 
   return (
-    <div className="p-8">
+    <div className="p-6">
 
       {/* Page header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Lista de atividades</h1>
+          <h1 className="text-lg font-semibold text-gray-900">Lista de atividades</h1>
           <p className="text-gray-500 text-sm mt-0.5">
             {totalCount} atividade{totalCount !== 1 ? 's' : ''} em andamento
           </p>

@@ -67,10 +67,10 @@ export function AtendimentoClient({ activities, campMap, orgSlug }: {
   function hasCol(key: string) { return visibleColumns.includes(key) }
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Painel de atendimento</h1>
+          <h1 className="text-lg font-semibold text-gray-900">Painel de atendimento</h1>
           <p className="text-gray-500 text-sm mt-0.5">{filtered.length} atividade{filtered.length !== 1 ? 's' : ''} monitoradas</p>
         </div>
         <button onClick={() => setShowConfig(!showConfig)}

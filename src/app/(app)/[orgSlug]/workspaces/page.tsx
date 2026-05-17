@@ -26,11 +26,11 @@ export default async function WorkspacesPage({
     .order('created_at', { ascending: false })
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Clientes</h1>
-          <p className="text-gray-500 text-sm mt-1">Espaços de trabalho por cliente</p>
+          <h1 className="text-lg font-semibold text-gray-900">Clientes</h1>
+          <p className="text-gray-500 text-sm mt-0.5">Espaços de trabalho por cliente</p>
         </div>
         <Link
           href={`/${orgSlug}/workspaces/new`}
