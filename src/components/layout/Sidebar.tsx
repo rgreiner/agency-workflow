@@ -249,16 +249,21 @@ export function Sidebar({
         </Link>
 
         <div className="flex items-center gap-2.5 px-4 py-3 border-t border-gray-800">
-          {userAvatar ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={userAvatar} alt="" className="w-6 h-6 rounded-full shrink-0 object-cover" />
-          ) : (
-            <div className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center shrink-0">
-              <span className="text-gray-300 text-[10px]">{displayName.charAt(0).toUpperCase()}</span>
-            </div>
-          )}
-          <span className="text-gray-400 text-xs truncate flex-1">{displayName}</span>
-          <button onClick={signOut} className="text-gray-600 hover:text-gray-300 transition-colors" title="Sair">
+          <Link
+            href={`${base}/perfil`}
+            className="flex items-center gap-2.5 flex-1 min-w-0 group"
+          >
+            {userAvatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={userAvatar} alt="" className="w-6 h-6 rounded-full shrink-0 object-cover" />
+            ) : (
+              <div className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center shrink-0">
+                <span className="text-gray-300 text-[10px]">{displayName.charAt(0).toUpperCase()}</span>
+              </div>
+            )}
+            <span className="text-gray-400 text-xs truncate group-hover:text-gray-200 transition-colors">{displayName}</span>
+          </Link>
+          <button onClick={signOut} className="text-gray-600 hover:text-gray-300 transition-colors shrink-0" title="Sair">
             <LogOut className="w-3.5 h-3.5" />
           </button>
         </div>
