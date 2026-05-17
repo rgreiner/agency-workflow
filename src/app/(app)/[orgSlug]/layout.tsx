@@ -61,8 +61,11 @@ export default async function OrgLayout({
         userName={profile?.full_name ?? null}
         workspaces={workspaces}
       />
-      <main className="flex-1 overflow-y-auto">
-        {children}
+      <main className="flex-1 overflow-y-auto min-w-0">
+        {/* pt-12 md:pt-0 reserves space for the mobile hamburger button */}
+        <div className="pt-12 md:pt-0 h-full">
+          {children}
+        </div>
       </main>
     </div>
   )

@@ -139,10 +139,10 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
       </div>
 
       {/* ── Table ── */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
 
         {/* Single column header */}
-        <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100 bg-gray-50/60">
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100 bg-gray-50/60 min-w-[600px]">
           <div className="flex-1 text-xs font-medium text-gray-400" />
           {visibleCols.map(col => (
             <div key={col.key} className={cn('text-xs font-medium text-gray-400 shrink-0', col.width)}>
@@ -170,7 +170,7 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                 {/* Group header */}
                 <button
                   onClick={() => toggleGroup(statusCfg.value)}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50/80 transition text-left"
+                  className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50/80 transition text-left min-w-[600px]"
                 >
                   <ChevronDown className={cn(
                     'w-3.5 h-3.5 text-gray-400 transition-transform shrink-0',
@@ -195,7 +195,7 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                       return (
                         <div
                           key={activity.id}
-                          className="flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50/60 transition group"
+                          className="flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50/60 transition group min-w-[600px]"
                         >
                           {/* Name — takes remaining space */}
                           <div className="flex-1 min-w-0">

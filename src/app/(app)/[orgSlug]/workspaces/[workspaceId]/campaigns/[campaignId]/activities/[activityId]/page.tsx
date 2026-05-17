@@ -112,10 +112,10 @@ export default async function ActivityPage({
         <span className="text-gray-600 truncate max-w-xs">{activity.title}</span>
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
         {/* ── Coluna principal ──────────────────────────────── */}
-        <div className="col-span-2 space-y-4">
+        <div className="md:col-span-2 space-y-4">
 
           {/* Título + descrição */}
           <div>

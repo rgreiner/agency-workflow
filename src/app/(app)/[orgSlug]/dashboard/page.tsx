@@ -87,7 +87,7 @@ export default async function DashboardPage({
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-4 gap-4 mb-5">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
         {cards.map(({ label, value, icon: Icon, color, bg }) => (
           <div key={label} className="bg-white rounded-xl border border-gray-200 p-5">
             <div className={cn('inline-flex p-2 rounded-lg mb-3', bg)}>
@@ -99,7 +99,7 @@ export default async function DashboardPage({
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Status breakdown */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h2 className="text-sm font-semibold text-gray-900 mb-4">Atividades por status</h2>
