@@ -9,10 +9,6 @@ import {
   ChevronDown,
   ChevronsDown,
   ChevronsUp,
-  List,
-  GanttChart,
-  Users,
-  BookOpen,
   Settings,
   LogOut,
   Plus,
@@ -42,12 +38,6 @@ interface SidebarProps {
   userName?: string | null
   workspaces: WorkspaceItem[]
 }
-
-const VIEWS = [
-  { href: 'views/atendimento', label: 'Atendimento', icon: Users },
-  { href: 'views/gantt', label: 'Gantt', icon: GanttChart },
-  { href: 'docs', label: 'Documentos', icon: BookOpen },
-]
 
 export function Sidebar({
   orgSlug, orgName, userEmail, userAvatar, userName, workspaces,
@@ -152,20 +142,6 @@ export function Sidebar({
             </div>
           </div>
 
-          {/* Lista geral */}
-          <Link
-            href={`${base}/views/lista`}
-            className={cn(
-              'flex items-center gap-2 mx-2 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors mb-1',
-              pathname === `${base}/views/lista`
-                ? 'bg-gray-800/60 text-gray-100'
-                : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/40'
-            )}
-          >
-            <List className="w-3.5 h-3.5 shrink-0 opacity-60" />
-            <span className="truncate">{orgName}</span>
-          </Link>
-
           <div className="space-y-px">
             {workspaces.map(ws => {
               const isOpen = expanded.has(ws.id)
@@ -250,29 +226,6 @@ export function Sidebar({
           </div>
         </div>
 
-        {/* Divider */}
-        <div className="mx-3 border-t border-gray-800/80" />
-
-        {/* Views */}
-        <div className="px-2 space-y-px">
-          {VIEWS.map(({ href, label, icon: Icon }) => {
-            const full = `${base}/${href}`
-            const isActive = pathname.startsWith(full)
-            return (
-              <Link
-                key={href}
-                href={full}
-                className={cn(
-                  'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors',
-                  isActive ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
-                )}
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                {label}
-              </Link>
-            )
-          })}
-        </div>
       </div>
 
       {/* ── Bottom ───────────────────────────────────── */}

@@ -79,12 +79,13 @@ type CalState = { startX: number; origViewStart: Date }
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug }: {
+export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug, initialWorkspace }: {
   activities: Activity[]
   campMap: CampMap
   profiles: Profile[]
   workspaces: Workspace[]
   orgSlug: string
+  initialWorkspace?: string
 }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -95,7 +96,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
   })
 
   // ── Filters ───────────────────────────────────────────────────────────
-  const [filterWorkspace, setFilterWorkspace] = useState('')
+  const [filterWorkspace, setFilterWorkspace] = useState(initialWorkspace ?? '')
   const [filterPerson,    setFilterPerson]    = useState('')
   const [filterStatus,    setFilterStatus]    = useState('')
 

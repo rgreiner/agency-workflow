@@ -4,10 +4,13 @@ import { ListaClient } from './ListaClient'
 
 export default async function ListaPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ orgSlug: string }>
+  searchParams: Promise<{ ws?: string }>
 }) {
   const { orgSlug } = await params
+  const { ws } = await searchParams
   const supabase = await createClient()
 
   const { data: org } = await supabase
@@ -75,6 +78,7 @@ export default async function ListaPage({
       campMap={campMap}
       grouped={grouped}
       statusConfig={STATUS_CONFIG}
+      initialWorkspace={ws}
     />
   )
 }

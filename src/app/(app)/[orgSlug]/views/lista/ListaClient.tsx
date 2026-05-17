@@ -41,14 +41,16 @@ interface Props {
   campMap: Record<string, CampInfo>
   grouped: Record<string, Activity[]>
   statusConfig: { value: string; label: string; bgColor: string; color: string }[]
+  initialWorkspace?: string
 }
 
 // ── Component ─────────────────────────────────────────────────────────────
 
-export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfig }: Props) {
+export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfig, initialWorkspace }: Props) {
   const [cols, setCols] = useState<Record<ColKey, boolean>>(defaultCols)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [filterWorkspace, setFilterWorkspace] = useState(initialWorkspace ?? '')
   const pickerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -82,9 +84,24 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
     })
   }
 
+  // Derive workspace options from campMap
+  const workspaceOptions = Object.values(
+    Object.values(campMap).reduce((acc, c) => {
+      acc[c.workspaceId] = { id: c.workspaceId, name: c.client }
+      return acc
+    }, {} as Record<string, { id: string; name: string }>)
+  ).sort((a, b) => a.name.localeCompare(b.name))
+
+  // Filter activities by workspace if active
+  const filteredActivities = filterWorkspace
+    ? activities.filter(a => campMap[a.campaign_id]?.workspaceId === filterWorkspace)
+    : activities
+
   const visibleCols = COL_DEFS.filter(c => cols[c.key])
-  const totalCount  = activities.length
-  const activeGroups = statusConfig.filter(s => grouped[s.value]?.length)
+  const totalCount  = filteredActivities.length
+  const activeGroups = statusConfig.filter(s =>
+    filteredActivities.some(a => a.status === s.value)
+  )
 
   return (
     <div className="p-6">
@@ -97,6 +114,18 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
             {totalCount} atividade{totalCount !== 1 ? 's' : ''} em andamento
           </p>
         </div>
+
+        {/* Workspace filter */}
+        {workspaceOptions.length > 1 && (
+          <select
+            value={filterWorkspace}
+            onChange={e => setFilterWorkspace(e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          >
+            <option value="">Todos os clientes</option>
+            {workspaceOptions.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+          </select>
+        )}
 
         {/* Column picker — desktop only */}
         <div className="relative hidden md:block" ref={pickerRef}>
@@ -160,7 +189,7 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
           </div>
         ) : (
           activeGroups.map(statusCfg => {
-            const items = grouped[statusCfg.value] ?? []
+            const items = filteredActivities.filter(a => a.status === statusCfg.value)
             const isOpen = !collapsed.has(statusCfg.value)
 
             return (

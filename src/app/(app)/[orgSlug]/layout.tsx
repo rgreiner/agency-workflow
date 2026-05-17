@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { TopNav } from '@/components/layout/TopNav'
 
 export default async function OrgLayout({
   children,
@@ -61,12 +62,18 @@ export default async function OrgLayout({
         userName={profile?.full_name ?? null}
         workspaces={workspaces}
       />
-      <main className="flex-1 overflow-y-auto min-w-0">
-        {/* pt-12 md:pt-0 reserves space for the mobile hamburger button */}
-        <div className="pt-12 md:pt-0 h-full">
-          {children}
-        </div>
-      </main>
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        <TopNav
+          orgSlug={org.slug}
+          orgName={org.name}
+          workspaces={workspaces}
+        />
+        <main className="flex-1 overflow-y-auto min-w-0">
+          <div className="pt-12 md:pt-0 h-full">
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   )
 }

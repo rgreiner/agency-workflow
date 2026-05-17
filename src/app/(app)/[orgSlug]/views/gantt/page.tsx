@@ -3,10 +3,13 @@ import { GanttClient } from './GanttClient'
 
 export default async function GanttPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ orgSlug: string }>
+  searchParams: Promise<{ ws?: string }>
 }) {
   const { orgSlug } = await params
+  const { ws } = await searchParams
   const supabase = await createClient()
 
   const { data: org } = await supabase
@@ -57,6 +60,7 @@ export default async function GanttPage({
       profiles={profiles}
       workspaces={workspaceList}
       orgSlug={orgSlug}
+      initialWorkspace={ws}
     />
   )
 }
