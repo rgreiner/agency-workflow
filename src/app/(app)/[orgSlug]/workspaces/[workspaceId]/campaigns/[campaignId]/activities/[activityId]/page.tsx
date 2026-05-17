@@ -2,13 +2,14 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { STATUS_CONFIG, PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity } from '@/types'
 import { cn, formatDate, isOverdue } from '@/lib/utils'
-import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink, Calendar } from 'lucide-react'
+import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 import { StatusChanger } from './StatusChanger'
 import { CommentBox } from './CommentBox'
 import { AssigneeSelector } from './AssigneeSelector'
 import { FieldEditor } from './FieldEditor'
 import { ActivityHeader } from './ActivityHeader'
+import { DateRangeEditor } from './DateRangeEditor'
 import { Avatar } from '@/components/ui/Avatar'
 
 export default async function ActivityPage({
@@ -196,28 +197,12 @@ export default async function ActivityPage({
               />
 
               {/* Dates */}
-              <div className="flex items-center gap-1.5 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
-                <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                <FieldEditor
-                  activityId={activityId} path={path}
-                  field="start_date" value={activity.start_date ?? null} canEdit={isOrgMember}
-                  type="date"
-                  display={
-                    <span className="text-gray-600">{activity.start_date ? formatDate(activity.start_date) : 'Início'}</span>
-                  }
-                />
-                <ArrowRight className="w-3 h-3 text-gray-400" />
-                <FieldEditor
-                  activityId={activityId} path={path}
-                  field="due_date" value={activity.due_date} canEdit={isOrgMember}
-                  type="date"
-                  display={
-                    <span className={cn(overdue ? 'text-red-600 font-medium' : 'text-gray-600')}>
-                      {activity.due_date ? formatDate(activity.due_date) : 'Prazo'}
-                    </span>
-                  }
-                />
-              </div>
+              <DateRangeEditor
+                activityId={activityId}
+                startDate={activity.start_date ?? null}
+                dueDate={activity.due_date}
+                canEdit={isOrgMember}
+              />
 
               {/* Priority */}
               <FieldEditor
