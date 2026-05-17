@@ -480,6 +480,70 @@ export type Database = {
           { foreignKeyName: "workspaces_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] }
         ]
       }
+      documents: {
+        Row: {
+          id: string
+          org_id: string
+          workspace_id: string | null
+          parent_id: string | null
+          title: string
+          content: Json
+          visibility: string
+          created_by: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          workspace_id?: string | null
+          parent_id?: string | null
+          title?: string
+          content?: Json
+          visibility?: string
+          created_by: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          workspace_id?: string | null
+          parent_id?: string | null
+          title?: string
+          content?: Json
+          visibility?: string
+          created_by?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          { foreignKeyName: "documents_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },
+          { foreignKeyName: "documents_workspace_id_fkey"; columns: ["workspace_id"]; isOneToOne: false; referencedRelation: "workspaces"; referencedColumns: ["id"] },
+          { foreignKeyName: "documents_created_by_fkey"; columns: ["created_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] }
+        ]
+      }
+      document_members: {
+        Row: {
+          document_id: string
+          user_id: string
+          created_at: string
+        }
+        Insert: {
+          document_id: string
+          user_id: string
+          created_at?: string
+        }
+        Update: {
+          document_id?: string
+          user_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          { foreignKeyName: "document_members_document_id_fkey"; columns: ["document_id"]; isOneToOne: false; referencedRelation: "documents"; referencedColumns: ["id"] },
+          { foreignKeyName: "document_members_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] }
+        ]
+      }
     }
     Views: {
       [_ in never]: never
