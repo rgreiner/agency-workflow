@@ -3,7 +3,8 @@
 import { useState, useTransition } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createCampaign } from '@/app/actions/workspace'
-import { ArrowLeft, Calendar } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
+import { DatePicker } from '@/components/ui/DatePicker'
 
 export default function NewCampaignPage() {
   const { orgSlug, workspaceId } = useParams<{ orgSlug: string; workspaceId: string }>()
@@ -73,37 +74,16 @@ export default function NewCampaignPage() {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              <span className="flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5" /> Início
-              </span>
-            </label>
-            <input
-              type="date"
-              name="start_date"
-              value={form.start_date}
-              onChange={(e) => set('start_date', e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              <span className="flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5" /> Entrega
-              </span>
-            </label>
-            <input
-              type="date"
-              name="end_date"
-              value={form.end_date}
-              min={form.start_date || undefined}
-              onChange={(e) => set('end_date', e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />
-          </div>
-        </div>
+        <DatePicker
+          label="Período da campanha"
+          placeholder="Definir início e entrega"
+          startDate={form.start_date}
+          endDate={form.end_date}
+          onStartChange={v => set('start_date', v)}
+          onEndChange={v => set('end_date', v)}
+        />
+        <input type="hidden" name="start_date" value={form.start_date} />
+        <input type="hidden" name="end_date" value={form.end_date} />
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
