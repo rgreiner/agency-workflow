@@ -95,17 +95,19 @@ export function MemberRow({
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
+        ) : isOwner ? (
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-600">
+            Acesso total
+          </span>
+        ) : position ? (
+          <span
+            className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium text-white"
+            style={{ backgroundColor: position.color }}
+          >
+            {position.name}
+          </span>
         ) : (
-          position ? (
-            <span
-              className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium text-white"
-              style={{ backgroundColor: position.color }}
-            >
-              {position.name}
-            </span>
-          ) : (
-            <span className="text-xs text-gray-400">—</span>
-          )
+          <span className="text-xs text-gray-400">—</span>
         )}
       </td>
 
