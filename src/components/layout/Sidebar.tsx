@@ -12,6 +12,7 @@ import {
   List,
   GanttChart,
   Users,
+  BookOpen,
   Settings,
   LogOut,
   Plus,
@@ -43,6 +44,7 @@ interface SidebarProps {
 const VIEWS = [
   { href: 'views/atendimento', label: 'Atendimento', icon: Users },
   { href: 'views/gantt', label: 'Gantt', icon: GanttChart },
+  { href: 'docs', label: 'Documentos', icon: BookOpen },
 ]
 
 export function Sidebar({
