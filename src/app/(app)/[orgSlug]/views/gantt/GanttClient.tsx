@@ -185,11 +185,21 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
   }
 
   function onBarPointerUp(e: React.PointerEvent, a: Activity) {
-    const d = dragRef.current             // read from ref
+    const d = dragRef.current
     if (!d || d.activityId !== a.id) return
     ;(e.currentTarget as Element).releasePointerCapture(e.pointerId)
 
-    // Compute final dates from ref state
+    dragRef.current = null
+    setDrag(null)
+
+    // Click (no significant movement) → open activity page
+    if (Math.abs(d.deltaX) < 5) {
+      const camp = campMap[a.campaign_id]
+      router.push(`/${orgSlug}/workspaces/${camp.workspaceId}/campaigns/${a.campaign_id}/activities/${a.id}`)
+      return
+    }
+
+    // Drag → compute and save new dates
     const deltaDays = Math.round(d.deltaX / DAY_W)
     let ns = d.origStart ? fromYMD(d.origStart) : null
     let ne = d.origEnd   ? fromYMD(d.origEnd)   : null
@@ -205,9 +215,6 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
 
     const finalStart = ns ? toYMD(ns) : null
     const finalEnd   = ne ? toYMD(ne) : null
-
-    dragRef.current = null
-    setDrag(null)
 
     // Normalize originals for comparison (server may return ISO timestamps)
     const origStart = a.start_date ? a.start_date.slice(0, 10) : null
