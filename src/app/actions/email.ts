@@ -25,13 +25,16 @@ export async function sendInviteEmail(
   if (rpcError) return { error: rpcError.message }
 
   // Get sender name + org name
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles').select('full_name').eq('id', user.id).single()
-  const { data: org } = await supabase
+  if (profileError) return { error: profileError.message }
+
+  const { data: org, error: orgError } = await supabase
     .from('organizations').select('name').eq('id', orgId).single()
+  if (orgError) return { error: orgError.message }
 
   const senderName = profile?.full_name ?? user.email ?? 'Alguém'
-  const orgName = org?.name ?? 'uma organização'
+  const orgName = org.name
   const inviteUrl = `${SITE_URL}/convite/${token}`
 
   const { error } = await resend.emails.send({

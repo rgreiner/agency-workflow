@@ -45,3 +45,41 @@ textarea:focus,
 select:focus {
   outline: none;
 }
+
+/* ── TipTap document editor ─────────────────────────────────────────────── */
+
+.doc-editor .ProseMirror {
+  outline: none;
+  min-height: 400px;
+  color: #374151;
+  line-height: 1.75;
+}
+
+.doc-editor .ProseMirror p { margin-bottom: 0.75rem; }
+.doc-editor .ProseMirror h1 { font-size: 1.875rem; font-weight: 700; color: #111827; margin: 1.5rem 0 0.75rem; }
+.doc-editor .ProseMirror h2 { font-size: 1.5rem; font-weight: 600; color: #111827; margin: 1.25rem 0 0.5rem; }
+.doc-editor .ProseMirror h3 { font-size: 1.25rem; font-weight: 600; color: #1f2937; margin: 1rem 0 0.375rem; }
+.doc-editor .ProseMirror ul, .doc-editor .ProseMirror ol { padding-left: 1.5rem; margin-bottom: 0.75rem; }
+.doc-editor .ProseMirror li { margin-bottom: 0.25rem; }
+.doc-editor .ProseMirror blockquote { border-left: 3px solid #a5b4fc; padding-left: 1rem; color: #6b7280; font-style: italic; margin: 1rem 0; }
+.doc-editor .ProseMirror code { background: #f3f4f6; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.875rem; font-family: monospace; color: #4f46e5; }
+.doc-editor .ProseMirror pre { background: #1f2937; color: #f9fafb; padding: 1rem; border-radius: 0.75rem; margin: 1rem 0; overflow-x: auto; }
+.doc-editor .ProseMirror pre code { background: transparent; color: inherit; padding: 0; }
+.doc-editor .ProseMirror hr { border: none; border-top: 1px solid #e5e7eb; margin: 1.5rem 0; }
+
+/* Task list */
+.doc-editor .ProseMirror ul[data-type="taskList"] { list-style: none; padding-left: 0; }
+.doc-editor .ProseMirror ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.5rem; }
+.doc-editor .ProseMirror ul[data-type="taskList"] li > label { margin-top: 0.2rem; }
+.doc-editor .ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"] { cursor: pointer; accent-color: #4f46e5; }
+.doc-editor .ProseMirror ul[data-type="taskList"] li[data-checked="true"] > div { text-decoration: line-through; color: #9ca3af; }
+
+/* Placeholder */
+.doc-editor .ProseMirror p.is-editor-empty:first-child::before,
+.doc-editor .ProseMirror .is-empty::before {
+  content: attr(data-placeholder);
+  color: #d1d5db;
+  pointer-events: none;
+  float: left;
+  height: 0;
+}

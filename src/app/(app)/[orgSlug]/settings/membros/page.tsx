@@ -40,7 +40,7 @@ export default async function MembrosPage({
 
   const { data: members } = await supabase
     .from('organization_members')
-    .select('id, role, position_id, profiles(id, full_name, email, avatar_url), org_positions(id, name, color)')
+    .select('id, role, position_id, profiles!user_id(id, full_name, email, avatar_url), org_positions(id, name, color)')
     .eq('org_id', org.id)
     .order('joined_at', { ascending: true })
 

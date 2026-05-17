@@ -15,7 +15,7 @@ export default async function GanttPage({
 
   const { data: members } = await supabase
     .from('organization_members')
-    .select('profiles(id, full_name, avatar_url)')
+    .select('profiles!user_id(id, full_name, avatar_url)')
     .eq('org_id', org.id)
 
   const { data: workspaces } = await supabase
