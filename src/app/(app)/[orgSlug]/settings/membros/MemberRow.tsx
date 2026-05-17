@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
 import { updateMember, removeMember } from '@/app/actions/settings'
-import { Trash2, Check } from 'lucide-react'
+import { Trash2, Check, Loader2, AlertTriangle, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -31,6 +31,7 @@ export function MemberRow({
   const [selectedRole, setSelectedRole] = useState(role)
   const [isDirty, setIsDirty] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const [confirmRemove, setConfirmRemove] = useState(false)
 
   function handlePositionChange(val: string) {
     setSelectedPosition(val)
@@ -55,7 +56,6 @@ export function MemberRow({
   }
 
   function handleRemove() {
-    if (!confirm(`Remover ${profile?.full_name ?? profile?.email} da organização?`)) return
     startTransition(async () => {
       const result = await removeMember(orgSlug, orgId, memberId)
       if (result?.error) toast.error(result.error)
@@ -137,18 +137,37 @@ export function MemberRow({
                 className="p-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition disabled:opacity-50"
                 title="Salvar"
               >
-                <Check className="w-3.5 h-3.5" />
+                {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
               </button>
             )}
-            {canEdit && (
+            {canEdit && !confirmRemove && (
               <button
-                onClick={handleRemove}
+                onClick={() => setConfirmRemove(true)}
                 disabled={isPending}
                 className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-50"
                 title="Remover membro"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
+            )}
+            {canEdit && confirmRemove && (
+              <div className="flex items-center gap-1 bg-red-50 border border-red-100 rounded-lg px-2 py-1">
+                <AlertTriangle className="w-3 h-3 text-red-500 shrink-0" />
+                <span className="text-xs text-red-700 font-medium whitespace-nowrap">Remover?</span>
+                <button
+                  onClick={handleRemove}
+                  disabled={isPending}
+                  className="ml-1 text-xs font-semibold text-red-600 hover:text-red-800 disabled:opacity-50"
+                >
+                  {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Sim'}
+                </button>
+                <button
+                  onClick={() => setConfirmRemove(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
             )}
           </div>
         </td>

@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { STATUS_CONFIG } from '@/types'
 import { updatePosition, deletePosition } from '@/app/actions/settings'
-import { ChevronDown, ChevronUp, Trash2, Check } from 'lucide-react'
+import { ChevronDown, ChevronUp, Trash2, Check, Loader2, AlertTriangle, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -36,6 +36,7 @@ export function PositionCard({ position, orgSlug }: Props) {
   const [selected, setSelected] = useState<string[]>([...position.allowed_statuses])
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const isDirty =
     name !== position.name ||
@@ -77,7 +78,6 @@ export function PositionCard({ position, orgSlug }: Props) {
   }
 
   function handleDelete() {
-    if (!confirm(`Excluir cargo "${position.name}"? Membros com este cargo ficarão sem cargo.`)) return
     startTransition(async () => {
       const res = await deletePosition(orgSlug, position.id)
       if (res?.error) {
@@ -216,25 +216,45 @@ export function PositionCard({ position, orgSlug }: Props) {
 
           {/* Actions */}
           <div className="flex items-center justify-between pt-1">
-            <button
-              onClick={handleDelete}
-              disabled={isPending}
-              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-600 transition disabled:opacity-50"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              Excluir cargo
-            </button>
-
-            {isDirty && (
+            {!confirmDelete ? (
               <button
-                onClick={handleSave}
+                onClick={() => setConfirmDelete(true)}
                 disabled={isPending}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition disabled:opacity-50"
+                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-600 transition disabled:opacity-50"
               >
-                <Check className="w-3.5 h-3.5" />
-                Salvar alterações
+                <Trash2 className="w-3.5 h-3.5" />
+                Excluir cargo
               </button>
+            ) : (
+              <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                <span className="text-xs text-red-700 font-medium">Excluir cargo?</span>
+                <button
+                  onClick={handleDelete}
+                  disabled={isPending}
+                  className="text-xs font-semibold text-red-600 hover:text-red-800 disabled:opacity-50 flex items-center gap-1"
+                >
+                  {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Confirmar'}
+                </button>
+                <button onClick={() => setConfirmDelete(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             )}
+
+            <button
+              onClick={handleSave}
+              disabled={isPending || !isDirty}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition',
+                isDirty
+                  ? 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50'
+                  : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+              )}
+            >
+              {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              Salvar alterações
+            </button>
           </div>
         </div>
       )}

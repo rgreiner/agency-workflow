@@ -12,7 +12,7 @@ import { updateDocumentVisibility, deleteDocument } from '@/app/actions/docs'
 import {
   Bold, Italic, Strikethrough, Heading1, Heading2, Heading3,
   List, ListOrdered, CheckSquare, Code, Quote, Minus,
-  Share2, ArrowLeft, Check, Loader2, Trash2, Globe, Lock,
+  Share2, ArrowLeft, Check, Loader2, Trash2, Globe, Lock, AlertTriangle, X,
 } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
@@ -49,6 +49,8 @@ export function DocumentEditor({
   const [title, setTitle] = useState(initialTitle)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [showShare, setShowShare] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [visibility, setVisibility] = useState<'org' | 'custom'>(initialVisibility)
   const [sharedMemberIds, setSharedMemberIds] = useState<string[]>(initialMemberIds)
   const supabase = createClient()
@@ -101,9 +103,13 @@ export function DocumentEditor({
   }
 
   async function handleDelete() {
-    if (!confirm('Excluir este documento? Esta ação não pode ser desfeita.')) return
+    setDeleting(true)
     const result = await deleteDocument(docId, orgSlug)
-    if (result?.error) toast.error(result.error)
+    setDeleting(false)
+    if (result?.error) {
+      toast.error(result.error)
+      setConfirmDelete(false)
+    }
   }
 
   return (
@@ -141,14 +147,30 @@ export function DocumentEditor({
             {visibility === 'org' ? 'Todo o time' : `${sharedMemberIds.length} pessoas`}
           </button>
 
-          {canManage && (
+          {canManage && !confirmDelete && (
             <button
-              onClick={handleDelete}
+              onClick={() => setConfirmDelete(true)}
               className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
               title="Excluir documento"
             >
               <Trash2 className="w-4 h-4" />
             </button>
+          )}
+          {canManage && confirmDelete && (
+            <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+              <span className="text-xs text-red-700 font-medium">Excluir documento?</span>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="text-xs font-semibold text-red-600 hover:text-red-800 disabled:opacity-50 flex items-center gap-1"
+              >
+                {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Excluir'}
+              </button>
+              <button onClick={() => setConfirmDelete(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
           )}
         </div>
       </div>

@@ -5,6 +5,7 @@ import { getOrCreateInviteLink, deactivateInviteLink } from '@/app/actions/setti
 import { sendInviteEmail } from '@/app/actions/email'
 import { Link2, Copy, Check, UserPlus, X, Loader2, Mail, Send } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 interface Props {
   orgId: string
@@ -43,14 +44,16 @@ export function InviteButton({ orgId, orgSlug }: Props) {
     if (!inviteUrl) return
     await navigator.clipboard.writeText(inviteUrl)
     setCopied(true)
+    toast.success('Link copiado!')
     setTimeout(() => setCopied(false), 2000)
   }
 
   async function handleDeactivate() {
     const result = await deactivateInviteLink(orgSlug, orgId)
-    if (result.error) { setError(result.error); return }
+    if (result.error) { toast.error(result.error); return }
     setToken(null)
     setOpen(false)
+    toast.success('Link desativado.')
   }
 
   async function handleSendEmail(e: React.FormEvent) {
@@ -60,9 +63,10 @@ export function InviteButton({ orgId, orgSlug }: Props) {
     setError(null)
     const result = await sendInviteEmail(orgSlug, orgId, email.trim())
     setSending(false)
-    if (result.error) { setError(result.error); return }
+    if (result.error) { toast.error(result.error); return }
     setSent(true)
     setEmail('')
+    toast.success('Convite enviado!')
     setTimeout(() => setSent(false), 3000)
   }
 
