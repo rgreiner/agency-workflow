@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useRef, useTransition } from 'react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarGroup } from '@/components/ui/Avatar'
@@ -69,12 +69,12 @@ type DragState = {
   type: 'move' | 'resize-start' | 'resize-end'
   activityId: string
   startX: number
-  deltaX: number
+  deltaX: number          // pixel delta from startX
   origStart: string|null
   origEnd:   string|null
 }
 
-type CalScrub = { startX: number; origStart: Date }
+type CalState = { startX: number; origViewStart: Date }
 
 // ── Component ──────────────────────────────────────────────────────────────
 
@@ -88,42 +88,52 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
   const router = useRouter()
   const [, startTransition] = useTransition()
 
+  // ── View state ────────────────────────────────────────────────────────
   const [viewStart, setViewStart] = useState<Date>(() => {
     const d = new Date(); d.setDate(d.getDate() - 7); return d
   })
-  const [drag,     setDrag]     = useState<DragState|null>(null)
-  const [calScrub, setCalScrub] = useState<CalScrub|null>(null)
 
+  // ── Filters ───────────────────────────────────────────────────────────
   const [filterWorkspace, setFilterWorkspace] = useState('')
   const [filterPerson,    setFilterPerson]    = useState('')
   const [filterStatus,    setFilterStatus]    = useState('')
 
+  // ── Drag state: BOTH a ref (for event handlers) and state (for render) ─
+  // The ref is read immediately in event handlers (no stale closure).
+  // The state triggers re-renders to update bar positions.
+  const dragRef = useRef<DragState | null>(null)
+  const [drag,   setDrag] = useState<DragState | null>(null)
+
+  // Calendar scrub — same dual approach
+  const calRef = useRef<CalState | null>(null)
+
+  // ── Calendar days ─────────────────────────────────────────────────────
   const days     = Array.from({ length: DAYS }, (_, i) => addDays(viewStart, i))
   const todayIdx = days.findIndex(isToday)
 
-  // ── Compute effective dates for an activity (during drag) ─────────────
-
+  // ── Effective dates for an activity (incorporates live drag delta) ─────
+  // Called during render — reads from `drag` state (always current after re-render).
   function effectiveDates(a: Activity): { start: string|null; end: string|null } {
-    if (!drag || drag.activityId !== a.id) return { start: a.start_date, end: a.due_date }
+    const d = drag
+    if (!d || d.activityId !== a.id) return { start: a.start_date, end: a.due_date }
 
-    const delta = Math.round(drag.deltaX / DAY_W)
-    let ns = drag.origStart ? fromYMD(drag.origStart) : null
-    let ne = drag.origEnd   ? fromYMD(drag.origEnd)   : null
+    const days = Math.round(d.deltaX / DAY_W)
+    let ns = d.origStart ? fromYMD(d.origStart) : null
+    let ne = d.origEnd   ? fromYMD(d.origEnd)   : null
 
-    if (drag.type === 'move') {
-      if (ns) ns = addDays(ns, delta)
-      if (ne) ne = addDays(ne, delta)
-    } else if (drag.type === 'resize-start') {
-      if (ns) { ns = addDays(ns, delta); if (ne && ns > ne) ns = new Date(ne) }
+    if (d.type === 'move') {
+      if (ns) ns = addDays(ns, days)
+      if (ne) ne = addDays(ne, days)
+    } else if (d.type === 'resize-start') {
+      if (ns) { ns = addDays(ns, days); if (ne && ns > ne) ns = new Date(ne) }
     } else {
-      if (ne) { ne = addDays(ne, delta); if (ns && ne < ns) ne = new Date(ns) }
+      if (ne) { ne = addDays(ne, days); if (ns && ne < ns) ne = new Date(ns) }
     }
 
     return { start: ns ? toYMD(ns) : null, end: ne ? toYMD(ne) : null }
   }
 
-  // ── Bar geometry ─────────────────────────────────────────────────────
-
+  // ── Bar geometry ──────────────────────────────────────────────────────
   function barGeometry(start: string|null, end: string|null) {
     if (!end) return null
     const vs = viewStart.getTime()
@@ -141,70 +151,94 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
     }
   }
 
-  // ── Pointer handlers for bars ─────────────────────────────────────────
+  // ── Bar pointer handlers ──────────────────────────────────────────────
 
-  function onBarPointerDown(
-    e: React.PointerEvent,
-    type: DragState['type'],
-    a: Activity,
-  ) {
+  function startBarDrag(e: React.PointerEvent, type: DragState['type'], a: Activity) {
     if (e.button !== 0) return
     e.preventDefault()
     e.stopPropagation()
     ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
-    setDrag({
+    const state: DragState = {
       type,
       activityId: a.id,
       startX: e.clientX,
       deltaX: 0,
       origStart: a.start_date,
       origEnd:   a.due_date,
-    })
+    }
+    dragRef.current = state   // update ref immediately (no async)
+    setDrag(state)            // schedule re-render
   }
 
   function onBarPointerMove(e: React.PointerEvent, activityId: string) {
-    if (!drag || drag.activityId !== activityId) return
-    const dx = e.clientX - drag.startX
-    if (dx !== drag.deltaX) setDrag(prev => prev ? { ...prev, deltaX: dx } : null)
+    // IMPORTANT: read from ref, NOT from `drag` state.
+    // Between pointerDown and the first re-render, `drag` state is still null.
+    const d = dragRef.current
+    if (!d || d.activityId !== activityId) return
+    const dx = e.clientX - d.startX
+    if (dx === d.deltaX) return           // no change
+    const updated = { ...d, deltaX: dx }
+    dragRef.current = updated             // keep ref in sync
+    setDrag(updated)                      // trigger re-render
   }
 
   function onBarPointerUp(e: React.PointerEvent, a: Activity) {
-    if (!drag || drag.activityId !== a.id) return
+    const d = dragRef.current             // read from ref
+    if (!d || d.activityId !== a.id) return
     ;(e.currentTarget as Element).releasePointerCapture(e.pointerId)
 
-    const { start, end } = effectiveDates(a)
+    // Compute final dates from ref state
+    const deltaDays = Math.round(d.deltaX / DAY_W)
+    let ns = d.origStart ? fromYMD(d.origStart) : null
+    let ne = d.origEnd   ? fromYMD(d.origEnd)   : null
+
+    if (d.type === 'move') {
+      if (ns) ns = addDays(ns, deltaDays)
+      if (ne) ne = addDays(ne, deltaDays)
+    } else if (d.type === 'resize-start') {
+      if (ns) { ns = addDays(ns, deltaDays); if (ne && ns > ne) ns = new Date(ne) }
+    } else {
+      if (ne) { ne = addDays(ne, deltaDays); if (ns && ne < ns) ne = new Date(ns) }
+    }
+
+    const finalStart = ns ? toYMD(ns) : null
+    const finalEnd   = ne ? toYMD(ne) : null
+
+    dragRef.current = null
     setDrag(null)
 
-    if (start !== a.start_date || end !== a.due_date) {
+    if (finalStart !== a.start_date || finalEnd !== a.due_date) {
       startTransition(async () => {
-        await updateActivityDates(a.id, start, end)
+        await updateActivityDates(a.id, finalStart, finalEnd)
         router.refresh()
       })
     }
   }
 
-  // ── Pointer handlers for calendar scrub ──────────────────────────────
+  // ── Calendar scrub handlers ───────────────────────────────────────────
+  // Drag RIGHT = future dates appear | Drag LEFT = past dates appear
 
   function onCalPointerDown(e: React.PointerEvent) {
     if (e.button !== 0) return
     ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
-    setCalScrub({ startX: e.clientX, origStart: viewStart })
+    calRef.current = { startX: e.clientX, origViewStart: viewStart }
   }
 
   function onCalPointerMove(e: React.PointerEvent) {
-    if (!calScrub) return
-    const dx = e.clientX - calScrub.startX
-    const delta = -Math.round(dx / DAY_W)
-    setViewStart(addDays(calScrub.origStart, delta))
+    const c = calRef.current
+    if (!c) return
+    const dx = e.clientX - c.startX
+    // Positive dx (drag right) → positive delta → viewStart advances → future
+    const delta = Math.round(dx / DAY_W)
+    setViewStart(addDays(c.origViewStart, delta))
   }
 
   function onCalPointerUp(e: React.PointerEvent) {
-    if (!calScrub) return
     ;(e.currentTarget as Element).releasePointerCapture(e.pointerId)
-    setCalScrub(null)
+    calRef.current = null
   }
 
-  // ── Filter + group ────────────────────────────────────────────────────
+  // ── Filtering + grouping ──────────────────────────────────────────────
 
   const filtered = activities.filter(a => {
     if (filterStatus    && a.status !== filterStatus) return false
@@ -228,19 +262,19 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
       groupMap[p.id].activities.push(a)
     })
   })
-  const groups = Object.values(groupMap).sort((a,b) =>
+  const groups = Object.values(groupMap).sort((a, b) =>
     (a.profile.full_name ?? '').localeCompare(b.profile.full_name ?? ''))
 
   // ── Render bar ────────────────────────────────────────────────────────
 
   function renderBar(a: Activity) {
     const { start, end } = effectiveDates(a)
-    const geo = barGeometry(start, end)
+    const geo  = barGeometry(start, end)
     if (!geo) return null
 
-    const clrs    = STATUS_COLORS[a.status] ?? { bg: '#f3f4f6', border: '#9ca3af', text: '#374151' }
-    const asns    = (a.activity_assignees as { profiles: Profile }[])?.map(x => x.profiles).filter(Boolean) ?? []
-    const active  = drag?.activityId === a.id
+    const clrs   = STATUS_COLORS[a.status] ?? { bg: '#f3f4f6', border: '#9ca3af', text: '#374151' }
+    const asns   = (a.activity_assignees as { profiles: Profile }[])?.map(x => x.profiles).filter(Boolean) ?? []
+    const active = drag?.activityId === a.id
 
     return (
       <div
@@ -252,28 +286,28 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
           border:          `1.5px solid ${clrs.border}`,
           cursor:          active ? 'grabbing' : 'grab',
           zIndex:          active ? 30 : 5,
-          boxShadow:       active ? `0 2px 12px ${clrs.border}66` : undefined,
+          boxShadow:       active ? `0 4px 16px ${clrs.border}55` : undefined,
           touchAction:     'none',
         }}
         onPointerDown={e => {
           if ((e.target as HTMLElement).closest('[data-handle]')) return
-          onBarPointerDown(e, 'move', a)
+          startBarDrag(e, 'move', a)
         }}
         onPointerMove={e => onBarPointerMove(e, a.id)}
         onPointerUp={e => onBarPointerUp(e, a)}
-        onPointerCancel={() => setDrag(null)}
+        onPointerCancel={() => { dragRef.current = null; setDrag(null) }}
       >
         {/* Left resize handle */}
         {!geo.clippedLeft && (
           <div
             data-handle="left"
-            className="absolute left-0 top-0 bottom-0 z-10 flex items-center justify-center"
+            className="absolute left-0 top-0 bottom-0 z-10 flex items-center justify-center group/h"
             style={{ width: HANDLE_W, cursor: 'ew-resize', touchAction: 'none' }}
-            onPointerDown={e => onBarPointerDown(e, 'resize-start', a)}
+            onPointerDown={e => startBarDrag(e, 'resize-start', a)}
             onPointerMove={e => onBarPointerMove(e, a.id)}
             onPointerUp={e => onBarPointerUp(e, a)}
           >
-            <div className="w-0.5 h-4 rounded-full opacity-40 hover:opacity-80 transition"
+            <div className="w-0.5 h-4 rounded-full opacity-40 group-hover/h:opacity-90 transition"
                  style={{ backgroundColor: clrs.border }} />
           </div>
         )}
@@ -281,7 +315,10 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
         {/* Content */}
         <div
           className="flex items-center gap-1.5 min-w-0 flex-1 pointer-events-none"
-          style={{ paddingLeft: geo.clippedLeft ? 8 : HANDLE_W + 4, paddingRight: geo.clippedRight ? 4 : HANDLE_W + 4 }}
+          style={{
+            paddingLeft:  geo.clippedLeft  ? 8 : HANDLE_W + 4,
+            paddingRight: geo.clippedRight ? 4 : HANDLE_W + 4,
+          }}
         >
           <span className="text-[11px] font-semibold truncate flex-1" style={{ color: clrs.text }}>
             {a.title}
@@ -293,13 +330,13 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
         {!geo.clippedRight && (
           <div
             data-handle="right"
-            className="absolute right-0 top-0 bottom-0 z-10 flex items-center justify-center"
+            className="absolute right-0 top-0 bottom-0 z-10 flex items-center justify-center group/h"
             style={{ width: HANDLE_W, cursor: 'ew-resize', touchAction: 'none' }}
-            onPointerDown={e => onBarPointerDown(e, 'resize-end', a)}
+            onPointerDown={e => startBarDrag(e, 'resize-end', a)}
             onPointerMove={e => onBarPointerMove(e, a.id)}
             onPointerUp={e => onBarPointerUp(e, a)}
           >
-            <div className="w-0.5 h-4 rounded-full opacity-40 hover:opacity-80 transition"
+            <div className="w-0.5 h-4 rounded-full opacity-40 group-hover/h:opacity-90 transition"
                  style={{ backgroundColor: clrs.border }} />
           </div>
         )}
@@ -313,6 +350,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
     const camp = campMap[a.campaign_id]
     return (
       <div key={a.id} className="flex border-b border-gray-50 last:border-0" style={{ height: ROW_H }}>
+        {/* Sidebar info */}
         <div className="shrink-0 border-r border-gray-100 px-3 flex flex-col justify-center" style={{ width: SIDEBAR_W }}>
           <span className="text-[10px] text-gray-400 truncate">{camp?.client} › {camp?.name}</span>
           <Link
@@ -322,6 +360,8 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
             {a.title}
           </Link>
         </div>
+
+        {/* Calendar area */}
         <div className="relative flex-1">
           {days.map((day, i) => isWeekend(day) && (
             <div key={i} className="absolute inset-y-0 bg-gray-50/70 pointer-events-none"
@@ -339,10 +379,8 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
 
   // ── Full render ───────────────────────────────────────────────────────
 
-  const isDragging = !!drag || !!calScrub
-
   return (
-    <div className="p-6 flex flex-col" style={{ height: 'calc(100vh - 2rem)', userSelect: isDragging ? 'none' : 'auto' }}>
+    <div className="p-6 flex flex-col" style={{ height: 'calc(100vh - 2rem)', userSelect: drag ? 'none' : 'auto' }}>
 
       {/* Header */}
       <div className="flex items-center justify-between mb-4 shrink-0">
@@ -351,7 +389,8 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
           <p className="text-gray-500 text-sm">{filtered.length} atividade{filtered.length !== 1 ? 's' : ''}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => { const d = new Date(); d.setDate(d.getDate()-7); setViewStart(d) }}
+          <button
+            onClick={() => { const d = new Date(); d.setDate(d.getDate() - 7); setViewStart(d) }}
             className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium text-gray-700">
             Hoje
           </button>
@@ -391,30 +430,33 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
         )}
       </div>
 
-      {/* Table */}
+      {/* Gantt table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-auto flex-1">
 
-        {/* Calendar header — drag to scrub */}
+        {/* Calendar header — drag to scrub timeline */}
         <div className="flex border-b border-gray-200 sticky top-0 bg-white z-30">
           <div className="shrink-0 border-r border-gray-200 flex items-center px-4" style={{ width: SIDEBAR_W }}>
             <span className="text-xs text-gray-400 font-medium select-none">
               {viewStart.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
             </span>
           </div>
+          {/* Draggable date strip */}
           <div
             className="flex"
-            style={{ cursor: calScrub ? 'grabbing' : 'grab', touchAction: 'none' }}
+            style={{ cursor: calRef.current ? 'grabbing' : 'grab', touchAction: 'none' }}
             onPointerDown={onCalPointerDown}
             onPointerMove={onCalPointerMove}
             onPointerUp={onCalPointerUp}
-            onPointerCancel={() => setCalScrub(null)}
-            title="Arraste para navegar"
+            onPointerCancel={() => { calRef.current = null }}
+            title="Arraste: ← passado | futuro →"
           >
             {days.map((day, i) => (
               <div key={i}
                 className={cn(
                   'flex flex-col items-center justify-center text-xs border-r border-gray-100 shrink-0 py-2 select-none',
-                  isToday(day) ? 'bg-indigo-600 text-white' : isWeekend(day) ? 'bg-gray-50 text-gray-400' : 'text-gray-600'
+                  isToday(day)   ? 'bg-indigo-600 text-white'
+                  : isWeekend(day) ? 'bg-gray-50 text-gray-400'
+                  : 'text-gray-600'
                 )}
                 style={{ width: DAY_W }}>
                 <span className="font-semibold">{day.getDate()}</span>
@@ -426,7 +468,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
           </div>
         </div>
 
-        {/* Groups */}
+        {/* Groups by assignee */}
         {groups.map(({ profile, activities: ga }) => (
           <div key={profile.id} className="border-b border-gray-100 last:border-0">
             <div className="flex items-center gap-2.5 px-4 py-2.5 bg-gray-50/60 border-b border-gray-100">
