@@ -3,6 +3,7 @@
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { Pencil, Check, X, Loader2 } from 'lucide-react'
 import { updateActivityField } from '@/app/actions/activity'
+import { SingleDatePicker } from '@/components/ui/DatePicker'
 import { toast } from 'sonner'
 
 interface Option { value: string; label: string }
@@ -36,12 +37,12 @@ export function FieldEditor({ activityId, path, field, value, canEdit, type = 't
     setEditing(false)
   }
 
-  function save(val?: string) {
+  function save(val?: string | null) {
     if (savedRef.current) return
     savedRef.current = true
-    const finalVal = (val ?? draft) || null
+    const finalVal = val !== undefined ? val : (draft || null)
     setEditing(false)
-    if (finalVal === value) return   // nothing changed
+    if (finalVal === value) return
     startTransition(async () => {
       const result = await updateActivityField(path, activityId, field, finalVal)
       if (result?.error) toast.error(result.error)
@@ -54,7 +55,7 @@ export function FieldEditor({ activityId, path, field, value, canEdit, type = 't
       return (
         <div
           onClick={open}
-          className={`flex items-center gap-1.5 group/fe flex-1 min-w-0 rounded px-1 -ml-1 py-0.5 ${canEdit ? 'cursor-pointer hover:bg-indigo-50 transition' : ''}`}
+          className={`relative flex items-center gap-1.5 group/fe flex-1 min-w-0 rounded px-1 -ml-1 py-0.5 ${canEdit ? 'cursor-pointer hover:bg-indigo-50 transition' : ''}`}
         >
           {display ?? (value
             ? <span className="text-xs text-gray-700">{value}</span>
@@ -64,6 +65,23 @@ export function FieldEditor({ activityId, path, field, value, canEdit, type = 't
             <Pencil className="w-3 h-3 text-gray-300 opacity-0 group-hover/fe:opacity-100 transition shrink-0" />
           )}
           {isPending && <Loader2 className="w-3 h-3 text-indigo-500 animate-spin shrink-0" />}
+        </div>
+      )
+    }
+
+    // Date field → calendar popup
+    if (type === 'date') {
+      return (
+        <div className="relative flex-1 min-w-0">
+          {display ?? (value
+            ? <span className="text-xs text-gray-700">{value}</span>
+            : <span className="text-xs text-gray-400 italic">Clique para editar</span>
+          )}
+          <SingleDatePicker
+            value={value}
+            onChange={v => save(v)}
+            onClose={cancel}
+          />
         </div>
       )
     }
@@ -97,14 +115,16 @@ export function FieldEditor({ activityId, path, field, value, canEdit, type = 't
     )
   }
 
-  // ── Standard mode (with save/cancel buttons) ─────────────────────────
+  // ── Standard mode ─────────────────────────────────────────────────────
   if (!editing) {
     return (
-      <div className="flex items-center gap-1 justify-end group/fe">
-        {display ?? (value
-          ? <span className="text-xs text-gray-700">{value}</span>
-          : <span className="text-xs text-gray-300">—</span>
-        )}
+      <div className="relative flex items-center gap-1 group/fe">
+        <div onClick={open} className={canEdit ? 'cursor-pointer' : ''}>
+          {display ?? (value
+            ? <span className="text-xs text-gray-700">{value}</span>
+            : <span className="text-xs text-gray-300">—</span>
+          )}
+        </div>
         {canEdit && (
           <button
             onClick={open}
@@ -113,6 +133,24 @@ export function FieldEditor({ activityId, path, field, value, canEdit, type = 't
             <Pencil className="w-3 h-3" />
           </button>
         )}
+        {isPending && <Loader2 className="w-3 h-3 text-indigo-500 animate-spin shrink-0" />}
+      </div>
+    )
+  }
+
+  // Date → calendar popup (standard mode)
+  if (type === 'date') {
+    return (
+      <div className="relative">
+        {display ?? (value
+          ? <span className="text-xs text-gray-700">{value}</span>
+          : <span className="text-xs text-gray-300">—</span>
+        )}
+        <SingleDatePicker
+          value={value}
+          onChange={v => save(v)}
+          onClose={cancel}
+        />
       </div>
     )
   }

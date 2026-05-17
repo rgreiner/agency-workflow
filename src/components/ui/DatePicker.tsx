@@ -43,7 +43,115 @@ interface Props {
   placeholder?: string
 }
 
-// ── component ──────────────────────────────────────────────────────────────
+// ── SingleDatePicker ───────────────────────────────────────────────────────
+// Calendar popup for picking a single date (no trigger button — caller handles that)
+
+interface SingleDatePickerProps {
+  value: string | null        // YYYY-MM-DD or null
+  onChange: (v: string | null) => void
+  onClose: () => void
+}
+
+export function SingleDatePicker({ value, onChange, onClose }: SingleDatePickerProps) {
+  const today    = todayYMD()
+  const initDate = value ? new Date(value + 'T00:00') : new Date()
+
+  const [viewYear,  setViewYear]  = useState(initDate.getFullYear())
+  const [viewMonth, setViewMonth] = useState(initDate.getMonth())
+
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function onOut(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', onOut)
+    return () => document.removeEventListener('mousedown', onOut)
+  }, [onClose])
+
+  function prevMonth() {
+    if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1) }
+    else setViewMonth(m => m - 1)
+  }
+  function nextMonth() {
+    if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1) }
+    else setViewMonth(m => m + 1)
+  }
+
+  const cells = buildCalendarDays(viewYear, viewMonth)
+
+  return (
+    <div
+      ref={ref}
+      className="absolute z-50 mt-1 left-0 bg-white rounded-2xl border border-gray-200 shadow-xl p-4"
+      style={{ minWidth: 280 }}
+    >
+      {/* Month nav */}
+      <div className="flex items-center justify-between mb-3">
+        <button type="button" onClick={prevMonth}
+          className="p-1.5 rounded-lg hover:bg-gray-100 transition text-gray-500">
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <span className="text-sm font-semibold text-gray-800">
+          {MONTHS[viewMonth]} {viewYear}
+        </span>
+        <button type="button" onClick={nextMonth}
+          className="p-1.5 rounded-lg hover:bg-gray-100 transition text-gray-500">
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Weekday headers */}
+      <div className="grid grid-cols-7 mb-1">
+        {WEEK_SHORT.map(w => (
+          <div key={w} className="text-center text-[11px] font-medium text-gray-400 py-1">{w}</div>
+        ))}
+      </div>
+
+      {/* Days */}
+      <div className="grid grid-cols-7">
+        {cells.map((ymd, i) => {
+          if (!ymd) return <div key={i} />
+          const isToday    = ymd === today
+          const isSelected = ymd === value
+          return (
+            <div key={ymd} className="h-9 flex items-center justify-center">
+              <button
+                type="button"
+                onClick={() => { onChange(ymd); onClose() }}
+                className={cn(
+                  'w-8 h-8 rounded-full text-sm transition flex items-center justify-center font-medium',
+                  isSelected
+                    ? 'bg-indigo-600 text-white'
+                    : isToday
+                    ? 'ring-2 ring-indigo-400 text-indigo-600'
+                    : 'text-gray-700 hover:bg-gray-100'
+                )}
+              >
+                {Number(ymd.split('-')[2])}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Clear */}
+      {value && (
+        <div className="mt-3 border-t border-gray-100 pt-3 text-center">
+          <button
+            type="button"
+            onClick={() => { onChange(null); onClose() }}
+            className="text-xs text-gray-400 hover:text-red-500 transition"
+          >
+            Limpar data
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── DatePicker (range) ─────────────────────────────────────────────────────
 
 export function DatePicker({ startDate, endDate, onStartChange, onEndChange, label, placeholder = 'Definir período' }: Props) {
   const today    = todayYMD()
