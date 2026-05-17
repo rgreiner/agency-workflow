@@ -19,7 +19,7 @@ export default async function GanttPage({
     .eq('org_id', org.id)
 
   const { data: workspaces } = await supabase
-    .from('workspaces').select('id').eq('org_id', org.id).eq('archived', false)
+    .from('workspaces').select('id, name').eq('org_id', org.id).neq('archived', true)
   const wsIds = workspaces?.map(w => w.id) ?? []
 
   const { data: campaigns } = wsIds.length
@@ -48,11 +48,14 @@ export default async function GanttPage({
     .map(m => m.profiles as unknown as { id: string; full_name: string | null; avatar_url: string | null })
     .filter(Boolean)
 
+  const workspaceList = (workspaces ?? []).map(w => ({ id: w.id, name: w.name }))
+
   return (
     <GanttClient
       activities={(activities ?? []) as unknown as Parameters<typeof GanttClient>[0]['activities']}
       campMap={campMap}
       profiles={profiles}
+      workspaces={workspaceList}
       orgSlug={orgSlug}
     />
   )

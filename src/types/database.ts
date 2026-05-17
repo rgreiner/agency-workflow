@@ -772,6 +772,10 @@ export type Database = {
         }
         Returns: string
       }
+      update_activity_dates: {
+        Args: { p_user_id: string; p_activity_id: string; p_start_date: string | null; p_due_date: string | null }
+        Returns: void
+      }
       get_invite_info: {
         Args: { p_token: string }
         Returns: {

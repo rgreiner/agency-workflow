@@ -136,6 +136,24 @@ export async function updateActivityField(
   revalidatePath(path)
 }
 
+export async function updateActivityDates(
+  activityId: string,
+  startDate: string | null,
+  dueDate: string | null,
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { error } = await supabase.rpc('update_activity_dates', {
+    p_user_id: user.id,
+    p_activity_id: activityId,
+    p_start_date: startDate,
+    p_due_date: dueDate,
+  })
+  if (error) return { error: error.message }
+}
+
 export async function addComment(
   path: string,
   activityId: string,
