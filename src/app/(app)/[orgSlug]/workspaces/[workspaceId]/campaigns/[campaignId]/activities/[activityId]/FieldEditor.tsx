@@ -16,9 +16,10 @@ interface Props {
   type?: 'text' | 'date' | 'number' | 'url' | 'select'
   options?: Option[]
   display?: React.ReactNode
+  inlineRow?: boolean
 }
 
-export function FieldEditor({ activityId, path, field, value, canEdit, type = 'text', options, display }: Props) {
+export function FieldEditor({ activityId, path, field, value, canEdit, type = 'text', options, display, inlineRow }: Props) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value ?? '')
   const [isPending, startTransition] = useTransition()
@@ -36,7 +37,7 @@ export function FieldEditor({ activityId, path, field, value, canEdit, type = 't
 
   if (!editing) {
     return (
-      <div className="flex items-center gap-1 justify-end group/fe">
+      <div className={`flex items-center gap-1 group/fe ${inlineRow ? '' : 'justify-end'}`}>
         {display ?? (value
           ? <span className="text-xs text-gray-700">{value}</span>
           : <span className="text-xs text-gray-300">—</span>
@@ -54,7 +55,7 @@ export function FieldEditor({ activityId, path, field, value, canEdit, type = 't
   }
 
   return (
-    <div className="flex items-center gap-1 justify-end">
+    <div className={`flex items-center gap-1 ${inlineRow ? '' : 'justify-end'}`}>
       {type === 'select' && options ? (
         <select
           value={draft}

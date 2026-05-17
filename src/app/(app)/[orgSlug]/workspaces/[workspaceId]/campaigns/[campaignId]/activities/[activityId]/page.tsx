@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { STATUS_CONFIG, PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity } from '@/types'
 import { cn, formatDate, isOverdue } from '@/lib/utils'
-import { AlertCircle, FolderOpen, FileText, Layers, CheckSquare, Pencil, ArrowRight } from 'lucide-react'
+import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink, Calendar } from 'lucide-react'
 import Link from 'next/link'
 import { StatusChanger } from './StatusChanger'
 import { CommentBox } from './CommentBox'
@@ -10,40 +10,6 @@ import { AssigneeSelector } from './AssigneeSelector'
 import { FieldEditor } from './FieldEditor'
 import { ActivityHeader } from './ActivityHeader'
 import { Avatar } from '@/components/ui/Avatar'
-
-const FIELD_LABELS: Record<string, string> = {
-  title:            'Título',
-  description:      'Descrição',
-  due_date:         'Prazo',
-  start_date:       'Início',
-  priority:         'Prioridade',
-  complexity:       'Complexidade',
-  estimated_hours:  'Horas est.',
-  drive_folder_url: 'Drive',
-  redacao_url:      'Redação',
-  layout_url:       'Layout',
-  finalizacao_url:  'Finalização',
-  orcamento:        'Orçamento',
-}
-
-function formatFieldValue(field: string, val: string | null): string {
-  if (val === null || val === '') return '—'
-  if (field === 'priority')         return PRIORITY_CONFIG[val as ActivityPriority]?.label ?? val
-  if (field === 'complexity')       return COMPLEXITY_CONFIG[val as ActivityComplexity]?.label ?? val
-  if (field === 'due_date' || field === 'start_date') return formatDate(val)
-  if (field === 'estimated_hours')  return `${val}h`
-  if (field.endsWith('_url'))       return val.replace(/^https?:\/\//, '').slice(0, 32) + (val.length > 40 ? '…' : '')
-  return val.length > 60 ? val.slice(0, 60) + '…' : val
-}
-
-function MetaRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 last:border-0">
-      <span className="text-xs text-gray-400 shrink-0">{label}</span>
-      <div className="text-right ml-2">{children}</div>
-    </div>
-  )
-}
 
 export default async function ActivityPage({
   params,
@@ -69,13 +35,13 @@ export default async function ActivityPage({
     .from('activity_history')
     .select('*, profiles(full_name, avatar_url)')
     .eq('activity_id', activityId)
-    .order('changed_at', { ascending: false })
+    .order('changed_at', { ascending: true })
 
   const { data: fieldHistory } = await supabase
     .from('activity_field_history')
     .select('*, profiles!changed_by(full_name, avatar_url)')
     .eq('activity_id', activityId)
-    .order('changed_at', { ascending: false })
+    .order('changed_at', { ascending: true })
 
   const { data: comments } = await supabase
     .from('activity_comments')
@@ -92,7 +58,6 @@ export default async function ActivityPage({
   const ws = campaign?.workspaces as unknown as { org_id: string; name: string } | null
   const orgId = ws?.org_id
 
-  // Check current user's org membership & role
   const { data: membership } = (user && orgId) ? await supabase
     .from('organization_members')
     .select('role')
@@ -100,7 +65,6 @@ export default async function ActivityPage({
     .eq('user_id', user.id)
     .single() : { data: null }
 
-  const canManage  = ['owner', 'admin', 'manager'].includes(membership?.role ?? '')
   const isOrgMember = !!membership
 
   const { data: membersRaw } = orgId ? await supabase
@@ -120,12 +84,27 @@ export default async function ActivityPage({
 
   const assignedIds = (assigneesRaw ?? []).map(a => a.user_id)
 
-  // Merge status history + field history, sort by date desc
-  type HistoryKind =
-    | { kind: 'status'; id: string; at: string; profile: { full_name: string | null; avatar_url: string | null } | null; from: string | null; to: string; comment: string | null }
-    | { kind: 'field';  id: string; at: string; profile: { full_name: string | null; avatar_url: string | null } | null; field: string; oldVal: string | null; newVal: string | null }
+  // Merge comments + history into one feed, sorted ascending
+  type FeedItem =
+    | { kind: 'comment'; id: string; at: string; profile: { full_name: string | null; avatar_url: string | null } | null; content: string }
+    | { kind: 'status';  id: string; at: string; profile: { full_name: string | null; avatar_url: string | null } | null; from: string | null; to: string; comment: string | null }
+    | { kind: 'field';   id: string; at: string; profile: { full_name: string | null; avatar_url: string | null } | null; field: string; oldVal: string | null; newVal: string | null }
 
-  const unifiedHistory: HistoryKind[] = [
+  const FIELD_LABELS: Record<string, string> = {
+    title: 'Título', description: 'Descrição', due_date: 'Prazo', start_date: 'Início',
+    priority: 'Prioridade', complexity: 'Complexidade', estimated_hours: 'Horas est.',
+    drive_folder_url: 'Drive', redacao_url: 'Redação', layout_url: 'Layout',
+    finalizacao_url: 'Finalização', orcamento: 'Orçamento',
+  }
+
+  const feed: FeedItem[] = [
+    ...(comments ?? []).map(c => ({
+      kind: 'comment' as const,
+      id: c.id,
+      at: c.created_at,
+      profile: c.profiles as { full_name: string | null; avatar_url: string | null } | null,
+      content: c.content,
+    })),
     ...(history ?? []).map(h => ({
       kind: 'status' as const,
       id: h.id,
@@ -144,172 +123,103 @@ export default async function ActivityPage({
       oldVal: h.old_value,
       newVal: h.new_value,
     })),
-  ].sort((a, b) => b.at.localeCompare(a.at))
+  ].sort((a, b) => a.at.localeCompare(b.at))
 
-  const statusCfg    = STATUS_CONFIG.find((s) => s.value === activity.status)!
+  const statusCfg    = STATUS_CONFIG.find(s => s.value === activity.status)!
   const priorityCfg  = PRIORITY_CONFIG[activity.priority as ActivityPriority]
   const complexityCfg = COMPLEXITY_CONFIG[activity.complexity as ActivityComplexity]
   const overdue = isOverdue(activity.due_date)
-  const hasFiles = !!(activity.drive_folder_url || activity.redacao_url || activity.layout_url || activity.finalizacao_url || activity.orcamento)
 
   const path = `/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}/activities/${activityId}`
 
-  return (
-    <div className="p-6">
+  const linkFields = [
+    { field: 'drive_folder_url', icon: <FolderOpen className="w-4 h-4" />, label: 'Drive' },
+    { field: 'redacao_url',      icon: <FileText   className="w-4 h-4" />, label: 'Redação' },
+    { field: 'layout_url',       icon: <CheckSquare className="w-4 h-4"/>, label: 'Layout' },
+    { field: 'finalizacao_url',  icon: <Layers     className="w-4 h-4" />, label: 'Finalização' },
+  ] as const
 
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-xs text-gray-400 mb-4">
-        <Link href={`/${orgSlug}/views/lista`} className="hover:text-gray-600">Clientes</Link>
-        <span>/</span>
-        <Link href={`/${orgSlug}/workspaces/${workspaceId}`} className="hover:text-gray-600">{ws?.name ?? 'Cliente'}</Link>
-        <span>/</span>
-        <Link href={`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}`} className="hover:text-gray-600">
+  return (
+    <div className="flex h-screen flex-col overflow-hidden bg-white">
+
+      {/* ── Top bar ─────────────────────────────────────────────── */}
+      <div className="flex items-center gap-1.5 px-6 py-3 border-b border-gray-200 shrink-0 bg-white z-10">
+        <Link href={`/${orgSlug}/views/lista`} className="text-xs text-gray-400 hover:text-gray-600 transition">
+          Clientes
+        </Link>
+        <span className="text-gray-300 text-xs">/</span>
+        <Link href={`/${orgSlug}/workspaces/${workspaceId}`} className="text-xs text-gray-400 hover:text-gray-600 transition">
+          {ws?.name ?? 'Cliente'}
+        </Link>
+        <span className="text-gray-300 text-xs">/</span>
+        <Link href={`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}`} className="text-xs text-gray-400 hover:text-gray-600 transition">
           {campaign?.name}
         </Link>
-        <span>/</span>
-        <span className="text-gray-600 truncate max-w-xs">{activity.title}</span>
+        <span className="text-gray-300 text-xs">/</span>
+        <span className="text-xs text-gray-600 truncate max-w-xs">{activity.title}</span>
+        <div className="ml-auto flex items-center gap-3 text-xs text-gray-400 shrink-0">
+          {overdue && (
+            <span className="flex items-center gap-1 text-red-500 font-medium">
+              <AlertTriangle className="w-3.5 h-3.5" /> Atrasada
+            </span>
+          )}
+          <span>Criada {formatDate(activity.created_at)}</span>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* ── Body ────────────────────────────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden">
 
-        {/* ── Main column ───────────────────────────────────── */}
-        <div className="md:col-span-2 space-y-4">
+        {/* ── LEFT: main content ──────────────────────────────── */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-8 py-6 max-w-3xl">
 
-          {/* Title + description — inline editable */}
-          <ActivityHeader
-            activityId={activityId}
-            path={path}
-            title={activity.title}
-            description={activity.description}
-            canManage={isOrgMember}
-            isOrgMember={isOrgMember}
-          />
+            {/* Title + description */}
+            <ActivityHeader
+              activityId={activityId}
+              path={path}
+              title={activity.title}
+              description={activity.description}
+              canManage={isOrgMember}
+              isOrgMember={isOrgMember}
+            />
 
-          {/* Status changer */}
-          <StatusChanger
-            activityId={activityId}
-            currentStatus={activity.status}
-            path={path}
-          />
+            {/* Meta strip */}
+            <div className="flex items-center gap-3 mt-5 flex-wrap">
 
-          {/* Comments */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">
-              Comentários {comments && comments.length > 0 && <span className="font-normal text-gray-400">({comments.length})</span>}
-            </p>
-            {comments && comments.length > 0 ? (
-              <div className="space-y-4 mb-4">
-                {comments.map((c) => {
-                  const profile = c.profiles as { full_name: string | null; avatar_url: string | null } | null
-                  return (
-                    <div key={c.id} className="flex gap-3">
-                      <Avatar name={profile?.full_name ?? '?'} avatarUrl={profile?.avatar_url} size="sm" />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-semibold text-gray-800">{profile?.full_name ?? 'Usuário'}</span>
-                          <span className="text-xs text-gray-400">{formatDate(c.created_at)}</span>
-                        </div>
-                        <p className="text-sm text-gray-700 leading-relaxed">{c.content}</p>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-400 mb-4">Nenhum comentário ainda.</p>
-            )}
-            <CommentBox activityId={activityId} path={path} />
-          </div>
-
-          {/* Unified history */}
-          {unifiedHistory.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">Histórico</p>
-              <div className="space-y-2.5">
-                {unifiedHistory.map((entry) => {
-                  const profile = entry.profile
-                  return (
-                    <div key={entry.id} className="flex items-start gap-3 text-sm">
-                      <Avatar name={profile?.full_name ?? '?'} avatarUrl={profile?.avatar_url} size="sm" />
-                      <div className="flex-1 min-w-0">
-                        {entry.kind === 'status' ? (
-                          <>
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-xs font-semibold text-gray-700">{profile?.full_name ?? 'Sistema'}</span>
-                              <span className="text-xs text-gray-400">moveu de</span>
-                              {(() => {
-                                const from = STATUS_CONFIG.find(s => s.value === entry.from)
-                                const to   = STATUS_CONFIG.find(s => s.value === entry.to)
-                                return (
-                                  <>
-                                    {from
-                                      ? <span className={cn('text-xs font-medium px-1.5 py-0.5 rounded-full', from.bgColor, from.color)}>{from.label}</span>
-                                      : <span className="text-xs text-gray-400">início</span>
-                                    }
-                                    <ArrowRight className="w-3 h-3 text-gray-300 shrink-0" />
-                                    {to && <span className={cn('text-xs font-medium px-1.5 py-0.5 rounded-full', to.bgColor, to.color)}>{to.label}</span>}
-                                  </>
-                                )
-                              })()}
-                            </div>
-                            {entry.comment && <p className="text-xs text-gray-500 mt-0.5 italic">"{entry.comment}"</p>}
-                          </>
-                        ) : (
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs font-semibold text-gray-700">{profile?.full_name ?? 'Sistema'}</span>
-                            <Pencil className="w-3 h-3 text-gray-300 shrink-0" />
-                            <span className="text-xs text-gray-400">
-                              alterou <span className="font-medium text-gray-600">{FIELD_LABELS[entry.field] ?? entry.field}</span>
-                            </span>
-                            {entry.oldVal && (
-                              <>
-                                <span className="text-xs text-gray-300 line-through">{formatFieldValue(entry.field, entry.oldVal)}</span>
-                                <ArrowRight className="w-3 h-3 text-gray-300 shrink-0" />
-                              </>
-                            )}
-                            <span className="text-xs text-gray-700 font-medium">{formatFieldValue(entry.field, entry.newVal)}</span>
-                          </div>
-                        )}
-                        <p className="text-[10px] text-gray-400 mt-0.5">{formatDate(entry.at)}</p>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── Right sidebar ─────────────────────────────────── */}
-        <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-
-            {/* Status badge */}
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-              <span className={cn('inline-flex px-2.5 py-1 rounded-full text-xs font-semibold', statusCfg.bgColor, statusCfg.color)}>
-                {statusCfg.label}
-              </span>
-              {overdue && (
-                <span className="flex items-center gap-1 text-xs text-red-500 font-medium">
-                  <AlertCircle className="w-3 h-3" /> atrasada
-                </span>
-              )}
-            </div>
-
-            {/* Assignees */}
-            <div className="px-4 py-3 border-b border-gray-100">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Responsáveis</p>
-              <AssigneeSelector
+              {/* Status */}
+              <StatusChanger
                 activityId={activityId}
-                assignedIds={assignedIds}
-                members={members}
+                currentStatus={activity.status}
                 path={path}
                 compact
               />
-            </div>
 
-            {/* Prioridade */}
-            <MetaRow label="Prioridade">
+              {/* Dates */}
+              <div className="flex items-center gap-1.5 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
+                <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                <FieldEditor
+                  activityId={activityId} path={path}
+                  field="start_date" value={activity.start_date ?? null} canEdit={isOrgMember}
+                  type="date"
+                  display={
+                    <span className="text-gray-600">{activity.start_date ? formatDate(activity.start_date) : 'Início'}</span>
+                  }
+                />
+                <ArrowRight className="w-3 h-3 text-gray-400" />
+                <FieldEditor
+                  activityId={activityId} path={path}
+                  field="due_date" value={activity.due_date} canEdit={isOrgMember}
+                  type="date"
+                  display={
+                    <span className={cn(overdue ? 'text-red-600 font-medium' : 'text-gray-600')}>
+                      {activity.due_date ? formatDate(activity.due_date) : 'Prazo'}
+                    </span>
+                  }
+                />
+              </div>
+
+              {/* Priority */}
               <FieldEditor
                 activityId={activityId} path={path}
                 field="priority" value={activity.priority} canEdit={isOrgMember}
@@ -321,117 +231,94 @@ export default async function ActivityPage({
                   { value: 'urgent', label: 'Urgente' },
                 ]}
                 display={
-                  <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full', priorityCfg.bgColor, priorityCfg.color)}>
+                  <span className={cn('text-xs font-medium px-2.5 py-1 rounded-lg border', priorityCfg.bgColor, priorityCfg.color, 'border-transparent')}>
                     {priorityCfg.label}
                   </span>
                 }
               />
-            </MetaRow>
 
-            {/* Complexidade */}
-            <MetaRow label="Complexidade">
-              <FieldEditor
-                activityId={activityId} path={path}
-                field="complexity" value={activity.complexity} canEdit={isOrgMember}
-                type="select"
-                options={[
-                  { value: 'simple',  label: 'Simples'   },
-                  { value: 'medium',  label: 'Médio'     },
-                  { value: 'complex', label: 'Complexo'  },
-                ]}
-                display={
-                  <span className={cn('text-xs font-medium', complexityCfg.color)}>{complexityCfg.label}</span>
-                }
+              {/* Assignees */}
+              <AssigneeSelector
+                activityId={activityId}
+                assignedIds={assignedIds}
+                members={members}
+                path={path}
+                compact
               />
-            </MetaRow>
+            </div>
 
-            {/* Prazo */}
-            <MetaRow label="Prazo">
-              <FieldEditor
-                activityId={activityId} path={path}
-                field="due_date" value={activity.due_date} canEdit={isOrgMember}
-                type="date"
-                display={activity.due_date
-                  ? <span className={cn('text-xs font-medium', overdue ? 'text-red-600' : 'text-gray-700')}>{formatDate(activity.due_date)}</span>
-                  : undefined
-                }
-              />
-            </MetaRow>
+            {/* ── Campos ───────────────────────────────────────── */}
+            <div className="mt-8">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Campos</p>
+              <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100">
 
-            {/* Início */}
-            <MetaRow label="Início">
-              <FieldEditor
-                activityId={activityId} path={path}
-                field="start_date" value={activity.start_date ?? null} canEdit={isOrgMember}
-                type="date"
-                display={activity.start_date
-                  ? <span className="text-xs text-gray-700">{formatDate(activity.start_date)}</span>
-                  : undefined
-                }
-              />
-            </MetaRow>
+                {/* Complexity */}
+                <div className="flex items-center px-4 py-3 hover:bg-gray-50/60 transition group">
+                  <span className="text-xs text-gray-400 w-36 shrink-0">Complexidade</span>
+                  <FieldEditor
+                    activityId={activityId} path={path}
+                    field="complexity" value={activity.complexity} canEdit={isOrgMember}
+                    type="select"
+                    options={[
+                      { value: 'simple',  label: 'Simples'  },
+                      { value: 'medium',  label: 'Médio'    },
+                      { value: 'complex', label: 'Complexo' },
+                    ]}
+                    display={
+                      <span className={cn('text-xs font-medium', complexityCfg.color)}>{complexityCfg.label}</span>
+                    }
+                    inlineRow
+                  />
+                </div>
 
-            {/* Horas estimadas */}
-            <MetaRow label="Horas est.">
-              <FieldEditor
-                activityId={activityId} path={path}
-                field="estimated_hours"
-                value={activity.estimated_hours != null ? String(activity.estimated_hours) : null}
-                canEdit={isOrgMember}
-                type="number"
-                display={activity.estimated_hours != null
-                  ? <span className="text-xs text-gray-700">{activity.estimated_hours}h</span>
-                  : undefined
-                }
-              />
-            </MetaRow>
+                {/* Estimated hours */}
+                <div className="flex items-center px-4 py-3 hover:bg-gray-50/60 transition group">
+                  <span className="text-xs text-gray-400 w-36 shrink-0">Horas estimadas</span>
+                  <FieldEditor
+                    activityId={activityId} path={path}
+                    field="estimated_hours"
+                    value={activity.estimated_hours != null ? String(activity.estimated_hours) : null}
+                    canEdit={isOrgMember}
+                    type="number"
+                    display={activity.estimated_hours != null
+                      ? <span className="text-xs text-gray-700">{activity.estimated_hours}h</span>
+                      : undefined
+                    }
+                    inlineRow
+                  />
+                </div>
 
-            <MetaRow label="Criado em">
-              <span className="text-xs text-gray-500">{formatDate(activity.created_at)}</span>
-            </MetaRow>
-
-            {/* Links / Arquivos */}
-            <div className="border-t border-gray-100 px-4 py-3">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Arquivos e links</p>
-              <div className="space-y-2">
-                {(
-                  [
-                    { field: 'drive_folder_url', icon: <FolderOpen className="w-3.5 h-3.5" />, label: 'Drive',      canEdit: isOrgMember },
-                    { field: 'redacao_url',       icon: <FileText   className="w-3.5 h-3.5" />, label: 'Redação',   canEdit: isOrgMember },
-                    { field: 'layout_url',        icon: <CheckSquare className="w-3.5 h-3.5"/>, label: 'Layout',    canEdit: isOrgMember },
-                    { field: 'finalizacao_url',   icon: <Layers     className="w-3.5 h-3.5" />, label: 'Finalização', canEdit: isOrgMember },
-                  ] as const
-                ).map(({ field, icon, label, canEdit }) => {
+                {/* Link fields */}
+                {linkFields.map(({ field, icon, label }) => {
                   const url = activity[field as keyof typeof activity] as string | null
                   return (
-                    <div key={field} className="flex items-center gap-2">
-                      <span className="text-gray-400 shrink-0">{icon}</span>
-                      <span className="text-gray-400 text-xs w-16 shrink-0">{label}</span>
-                      <div className="flex-1 min-w-0">
+                    <div key={field} className="flex items-center px-4 py-3 hover:bg-gray-50/60 transition group">
+                      <div className="flex items-center gap-2 w-36 shrink-0">
+                        <span className="text-gray-400">{icon}</span>
+                        <span className="text-xs text-gray-400">{label}</span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
                         {url ? (
-                          <div className="flex items-center gap-1 group/link">
-                            <a
-                              href={url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-indigo-600 text-xs truncate hover:underline"
-                            >
-                              {url.replace(/^https?:\/\//, '').slice(0, 28)}{url.length > 35 ? '…' : ''}
+                          <>
+                            <a href={url} target="_blank" rel="noopener noreferrer"
+                              className="text-xs text-indigo-600 hover:underline truncate flex items-center gap-1">
+                              <ExternalLink className="w-3 h-3 shrink-0" />
+                              {url.replace(/^https?:\/\//, '').slice(0, 40)}{url.length > 47 ? '…' : ''}
                             </a>
-                            {canEdit && (
-                              <FieldEditor
-                                activityId={activityId} path={path}
-                                field={field} value={url} canEdit={canEdit}
-                                type="url"
-                                display={<span />}
-                              />
-                            )}
-                          </div>
+                            <FieldEditor
+                              activityId={activityId} path={path}
+                              field={field} value={url} canEdit={isOrgMember}
+                              type="url"
+                              display={<span />}
+                              inlineRow
+                            />
+                          </>
                         ) : (
                           <FieldEditor
                             activityId={activityId} path={path}
-                            field={field} value={null} canEdit={canEdit}
+                            field={field} value={null} canEdit={isOrgMember}
                             type="url"
+                            inlineRow
                           />
                         )}
                       </div>
@@ -440,26 +327,110 @@ export default async function ActivityPage({
                 })}
 
                 {/* Orçamento */}
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-400 text-xs w-[calc(1.75rem+0.5rem)] shrink-0">R$</span>
-                  <span className="text-gray-400 text-xs w-16 shrink-0">Orçamento</span>
-                  <div className="flex-1 min-w-0">
-                    <FieldEditor
-                      activityId={activityId} path={path}
-                      field="orcamento" value={activity.orcamento ?? null} canEdit={isOrgMember}
-                      type="text"
-                      display={activity.orcamento
-                        ? <span className="text-xs text-gray-700">{activity.orcamento}</span>
-                        : undefined
-                      }
-                    />
-                  </div>
+                <div className="flex items-center px-4 py-3 hover:bg-gray-50/60 transition group">
+                  <span className="text-xs text-gray-400 w-36 shrink-0">Orçamento</span>
+                  <FieldEditor
+                    activityId={activityId} path={path}
+                    field="orcamento" value={activity.orcamento ?? null} canEdit={isOrgMember}
+                    type="text"
+                    display={activity.orcamento
+                      ? <span className="text-xs text-gray-700">{activity.orcamento}</span>
+                      : undefined
+                    }
+                    inlineRow
+                  />
                 </div>
+
               </div>
             </div>
-
           </div>
         </div>
+
+        {/* ── RIGHT: activity feed ─────────────────────────────── */}
+        <div className="w-[360px] border-l border-gray-200 flex flex-col shrink-0 bg-gray-50/40">
+
+          {/* Header */}
+          <div className="px-5 py-3.5 border-b border-gray-200 bg-white shrink-0 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-800">Atividade</h3>
+            <span className="text-xs text-gray-400">{feed.length} registro{feed.length !== 1 ? 's' : ''}</span>
+          </div>
+
+          {/* Feed */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {feed.length === 0 && (
+              <p className="text-xs text-gray-400 text-center py-8">Nenhuma atividade ainda.</p>
+            )}
+
+            {feed.map(item => {
+              if (item.kind === 'comment') {
+                return (
+                  <div key={item.id} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                    <div className="flex items-start gap-3">
+                      <Avatar name={item.profile?.full_name ?? '?'} avatarUrl={item.profile?.avatar_url} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="text-xs font-semibold text-gray-800">{item.profile?.full_name ?? 'Usuário'}</span>
+                          <span className="text-[10px] text-gray-400">{formatDate(item.at)}</span>
+                        </div>
+                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{item.content}</p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+
+              if (item.kind === 'status') {
+                const fromCfg = STATUS_CONFIG.find(s => s.value === item.from)
+                const toCfg   = STATUS_CONFIG.find(s => s.value === item.to)
+                return (
+                  <div key={item.id} className="flex items-start gap-2.5 text-xs text-gray-500 px-1">
+                    <Avatar name={item.profile?.full_name ?? '?'} avatarUrl={item.profile?.avatar_url} size="sm" />
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <div className="flex items-center gap-1.5 flex-wrap leading-relaxed">
+                        <span className="font-medium text-gray-700">{item.profile?.full_name ?? 'Sistema'}</span>
+                        <span>moveu de</span>
+                        {fromCfg
+                          ? <span className={cn('px-1.5 py-0.5 rounded-full text-[10px] font-semibold', fromCfg.bgColor, fromCfg.color)}>{fromCfg.label}</span>
+                          : <span className="text-gray-400">início</span>
+                        }
+                        <ArrowRight className="w-3 h-3 text-gray-300 shrink-0" />
+                        {toCfg && <span className={cn('px-1.5 py-0.5 rounded-full text-[10px] font-semibold', toCfg.bgColor, toCfg.color)}>{toCfg.label}</span>}
+                      </div>
+                      {item.comment && (
+                        <p className="text-[11px] text-gray-400 mt-1 italic">"{item.comment}"</p>
+                      )}
+                      <p className="text-[10px] text-gray-400 mt-0.5">{formatDate(item.at)}</p>
+                    </div>
+                  </div>
+                )
+              }
+
+              // field change
+              return (
+                <div key={item.id} className="flex items-start gap-2.5 text-xs text-gray-500 px-1">
+                  <Avatar name={item.profile?.full_name ?? '?'} avatarUrl={item.profile?.avatar_url} size="sm" />
+                  <div className="flex-1 min-w-0 pt-0.5">
+                    <div className="flex items-center gap-1.5 flex-wrap leading-relaxed">
+                      <span className="font-medium text-gray-700">{item.profile?.full_name ?? 'Sistema'}</span>
+                      <Pencil className="w-3 h-3 text-gray-300 shrink-0" />
+                      <span>alterou <span className="font-medium text-gray-600">{FIELD_LABELS[item.field] ?? item.field}</span></span>
+                    </div>
+                    {item.newVal && (
+                      <p className="text-[11px] text-gray-500 mt-0.5">→ {item.newVal.slice(0, 60)}{item.newVal.length > 60 ? '…' : ''}</p>
+                    )}
+                    <p className="text-[10px] text-gray-400 mt-0.5">{formatDate(item.at)}</p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Comment box */}
+          <div className="border-t border-gray-200 p-4 bg-white shrink-0">
+            <CommentBox activityId={activityId} path={path} />
+          </div>
+        </div>
+
       </div>
     </div>
   )
