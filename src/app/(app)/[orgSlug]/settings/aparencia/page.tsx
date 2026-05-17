@@ -1,13 +1,14 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { STATUS_CONFIG } from '@/types'
 import type { StatusOverride } from '@/types'
 import { upsertOrgSettings } from '@/app/actions/org-settings'
 import { useOrgSettings } from '@/components/providers/OrgSettingsProvider'
+import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import { Loader2, RotateCcw } from 'lucide-react'
+import { Loader2, RotateCcw, Upload, X } from 'lucide-react'
 
 const ACCENT_PRESETS = [
   '#6366f1', // indigo (default)
@@ -30,10 +31,33 @@ export default function AparenciaPage() {
   const [isPending, startTransition] = useTransition()
 
   const [logoUrl,     setLogoUrl]     = useState(settings.logoUrl ?? '')
+  const [uploading,   setUploading]   = useState(false)
   const [accentColor, setAccentColor] = useState(settings.accentColor)
   const [overrides,   setOverrides]   = useState<StatusOverride[]>(settings.statusOverrides)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const orgId = settings.orgId
+  const orgId    = settings.orgId
+  const supabase = createClient()
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const ext  = file.name.split('.').pop()?.toLowerCase() ?? 'png'
+    const path = `${orgId}/logo.${ext}`
+    setUploading(true)
+    try {
+      const { error } = await supabase.storage
+        .from('org-logos')
+        .upload(path, file, { upsert: true, contentType: file.type })
+      if (error) { toast.error(error.message); return }
+      const { data: { publicUrl } } = supabase.storage.from('org-logos').getPublicUrl(path)
+      setLogoUrl(`${publicUrl}?t=${Date.now()}`)
+      toast.success('Logo enviado!')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   function getOverride(value: string): StatusOverride {
     return overrides.find(o => o.value === value) ?? { value }
@@ -78,25 +102,55 @@ export default function AparenciaPage() {
 
           {/* Logo */}
           <div className="px-5 py-4">
-            <label className="block text-xs font-medium text-gray-700 mb-2">Logo (URL)</label>
-            <div className="flex items-center gap-3">
-              {logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={logoUrl} alt="Logo" className="w-10 h-10 rounded-lg object-contain bg-gray-50 border border-gray-200" />
-              ) : (
-                <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 text-xs border border-gray-200">
-                  {orgSlug.charAt(0).toUpperCase()}
+            <label className="block text-xs font-medium text-gray-700 mb-3">Logo da organização</label>
+            <div className="flex items-center gap-4">
+
+              {/* Preview */}
+              <div className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-200 flex items-center justify-center bg-gray-50 shrink-0 overflow-hidden">
+                {logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-1" />
+                ) : (
+                  <span className="text-2xl font-bold text-gray-300">{orgSlug.charAt(0).toUpperCase()}</span>
+                )}
+              </div>
+
+              <div className="flex-1 space-y-2">
+                {/* File upload button */}
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".png,.svg,.jpg,.jpeg,.webp,image/png,image/svg+xml,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 font-medium text-gray-700"
+                  >
+                    {uploading
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : <Upload className="w-4 h-4" />
+                    }
+                    {uploading ? 'Enviando…' : 'Enviar arquivo'}
+                  </button>
+                  {logoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setLogoUrl('')}
+                      className="p-2 text-gray-400 hover:text-red-500 transition rounded-lg hover:bg-red-50"
+                      title="Remover logo"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
-              )}
-              <input
-                type="url"
-                value={logoUrl}
-                onChange={e => setLogoUrl(e.target.value)}
-                placeholder="https://sua-empresa.com/logo.png"
-                className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
+                <p className="text-[11px] text-gray-400">PNG, SVG, JPG ou WebP · máximo 512 KB · fundo transparente recomendado</p>
+              </div>
             </div>
-            <p className="text-[11px] text-gray-400 mt-1.5">Recomendado: PNG ou SVG com fundo transparente, mínimo 64×64px.</p>
           </div>
 
           {/* Accent color */}
