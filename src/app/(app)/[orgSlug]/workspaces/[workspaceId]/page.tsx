@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { Plus, AlertCircle } from 'lucide-react'
 import { STATUS_CONFIG, PRIORITY_CONFIG, type ActivityPriority } from '@/types'
 import { cn, isOverdue, daysUntil } from '@/lib/utils'
+import { WorkspaceEditButton } from './WorkspaceEditButton'
 
 export default async function WorkspacePage({
   params,
@@ -13,7 +14,7 @@ export default async function WorkspacePage({
   const supabase = await createClient()
 
   const { data: workspace } = await supabase
-    .from('workspaces').select('id, name, color').eq('id', workspaceId).single()
+    .from('workspaces').select('id, name, color, description').eq('id', workspaceId).single()
   if (!workspace) return null
 
   const { data: campaigns } = await supabase
@@ -48,9 +49,16 @@ export default async function WorkspacePage({
       </div>
 
       <div className="flex items-center justify-between mb-5">
-        <div>
+        <div className="flex items-center gap-2">
           <h1 className="text-xl font-semibold text-gray-900">{workspace.name}</h1>
-          <p className="text-sm text-gray-400 mt-0.5">
+          <WorkspaceEditButton
+            orgSlug={orgSlug}
+            workspaceId={workspaceId}
+            name={workspace.name}
+            description={workspace.description ?? ''}
+            color={workspace.color}
+          />
+          <p className="text-sm text-gray-400 mt-0.5 ml-1">
             {active} atividade{active !== 1 ? 's' : ''} em andamento
             {campaigns && campaigns.length > 0 && (
               <span className="ml-2">· {campaigns.length} campanha{campaigns.length !== 1 ? 's' : ''}</span>

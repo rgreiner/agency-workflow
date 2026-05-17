@@ -639,6 +639,22 @@ export type Database = {
         }
         Returns: string
       }
+      update_workspace: {
+        Args: { p_user_id: string; p_workspace_id: string; p_name: string; p_description: string; p_color: string }
+        Returns: void
+      }
+      delete_workspace: {
+        Args: { p_user_id: string; p_workspace_id: string }
+        Returns: void
+      }
+      update_campaign: {
+        Args: { p_user_id: string; p_campaign_id: string; p_name: string; p_description: string; p_start_date: string | null; p_end_date: string | null }
+        Returns: void
+      }
+      delete_campaign: {
+        Args: { p_user_id: string; p_campaign_id: string }
+        Returns: void
+      }
       create_activity: {
         Args: {
           p_user_id: string

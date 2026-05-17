@@ -5,6 +5,7 @@ import { STATUS_CONFIG, PRIORITY_CONFIG } from '@/types'
 import { isOverdue, daysUntil } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { AvatarGroup } from '@/components/ui/Avatar'
+import { CampaignEditButton } from './CampaignEditButton'
 
 export default async function CampaignPage({
   params,
@@ -48,7 +49,18 @@ export default async function CampaignPage({
       </div>
 
       <div className="flex items-center justify-between mb-5">
-        <h1 className="text-xl font-semibold text-gray-900">{campaign.name}</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-semibold text-gray-900">{campaign.name}</h1>
+          <CampaignEditButton
+            orgSlug={orgSlug}
+            workspaceId={workspaceId}
+            campaignId={campaignId}
+            name={campaign.name}
+            description={campaign.description ?? ''}
+            startDate={campaign.start_date ?? ''}
+            endDate={campaign.end_date ?? ''}
+          />
+        </div>
         <Link
           href={`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}/activities/new`}
           className="inline-flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition"
