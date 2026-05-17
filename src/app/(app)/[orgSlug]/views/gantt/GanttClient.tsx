@@ -8,6 +8,7 @@ import { STATUS_CONFIG } from '@/types'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { updateActivityDates } from '@/app/actions/activity'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -46,7 +47,8 @@ function toYMD(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 function fromYMD(s: string) {
-  const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d)
+  const clean = s.slice(0, 10)  // handle ISO timestamps like 2026-05-18T00:00:00+00:00
+  const [y, m, d] = clean.split('-').map(Number); return new Date(y, m - 1, d)
 }
 function addDays(d: Date, n: number) {
   const r = new Date(d); r.setDate(r.getDate() + n); return r
@@ -207,10 +209,15 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
     dragRef.current = null
     setDrag(null)
 
-    if (finalStart !== a.start_date || finalEnd !== a.due_date) {
+    // Normalize originals for comparison (server may return ISO timestamps)
+    const origStart = a.start_date ? a.start_date.slice(0, 10) : null
+    const origEnd   = a.due_date   ? a.due_date.slice(0, 10)   : null
+
+    if (finalStart !== origStart || finalEnd !== origEnd) {
       startTransition(async () => {
-        await updateActivityDates(a.id, finalStart, finalEnd)
-        router.refresh()
+        const result = await updateActivityDates(a.id, finalStart, finalEnd)
+        if (result?.error) toast.error(result.error)
+        else router.refresh()
       })
     }
   }

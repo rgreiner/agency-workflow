@@ -152,6 +152,7 @@ export async function updateActivityDates(
     p_due_date: dueDate,
   })
   if (error) return { error: error.message }
+  revalidatePath('/', 'layout')
 }
 
 export async function addComment(
