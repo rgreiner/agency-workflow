@@ -12,7 +12,7 @@ import { updateDocumentVisibility, deleteDocument } from '@/app/actions/docs'
 import {
   Bold, Italic, Strikethrough, Heading1, Heading2, Heading3,
   List, ListOrdered, CheckSquare, Code, Quote, Minus,
-  Share2, ArrowLeft, Check, Loader2, Trash2, Globe, Lock, AlertTriangle, X,
+  ArrowLeft, Check, Loader2, Trash2, Globe, Lock, AlertTriangle, X,
 } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
