@@ -60,9 +60,14 @@ export function DocumentEditor({
     if (saveTimer.current) clearTimeout(saveTimer.current)
     setSaveStatus('saving')
     saveTimer.current = setTimeout(async () => {
-      await fn()
-      setSaveStatus('saved')
-      setTimeout(() => setSaveStatus('idle'), 2000)
+      try {
+        await fn()
+        setSaveStatus('saved')
+        setTimeout(() => setSaveStatus('idle'), 2000)
+      } catch {
+        setSaveStatus('idle')
+        toast.error('Erro ao salvar. Tente novamente.')
+      }
     }, 1000)
   }, [])
 
@@ -84,10 +89,16 @@ export function DocumentEditor({
   })
 
   async function handleTitleBlur() {
+    if (!title.trim()) return
     setSaveStatus('saving')
-    await supabase.from('documents').update({ title }).eq('id', docId)
-    setSaveStatus('saved')
-    setTimeout(() => setSaveStatus('idle'), 2000)
+    try {
+      await supabase.from('documents').update({ title: title.trim() }).eq('id', docId)
+      setSaveStatus('saved')
+      setTimeout(() => setSaveStatus('idle'), 2000)
+    } catch {
+      setSaveStatus('idle')
+      toast.error('Erro ao salvar título.')
+    }
   }
 
   async function handleShareSave(newVis: 'org' | 'custom', newIds: string[]) {

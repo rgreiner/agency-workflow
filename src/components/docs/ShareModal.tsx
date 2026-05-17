@@ -34,8 +34,13 @@ export function ShareModal({ visibility, sharedMemberIds, members, currentUserId
 
   async function handleSave() {
     setSaving(true)
-    await onSave(vis, [...selected])
-    setSaving(false)
+    try {
+      await onSave(vis, [...selected])
+    } catch {
+      // onSave já exibe toast.error internamente
+    } finally {
+      setSaving(false)
+    }
   }
 
   const others = members.filter(m => m.userId !== currentUserId)
