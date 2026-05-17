@@ -115,6 +115,27 @@ export async function setActivityAssignees(
   return {}
 }
 
+export async function updateActivityField(
+  path: string,
+  activityId: string,
+  field: string,
+  newValue: string | null,
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { error } = await supabase.rpc('update_activity_field', {
+    p_user_id: user.id,
+    p_activity_id: activityId,
+    p_field: field,
+    p_value: newValue,
+  })
+
+  if (error) return { error: error.message }
+  revalidatePath(path)
+}
+
 export async function addComment(
   path: string,
   activityId: string,

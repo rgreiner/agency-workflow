@@ -42,6 +42,39 @@ export type Database = {
           { foreignKeyName: "activity_comments_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] }
         ]
       }
+      activity_field_history: {
+        Row: {
+          id: string
+          activity_id: string
+          changed_by: string
+          field_name: string
+          old_value: string | null
+          new_value: string | null
+          changed_at: string
+        }
+        Insert: {
+          id?: string
+          activity_id: string
+          changed_by: string
+          field_name: string
+          old_value?: string | null
+          new_value?: string | null
+          changed_at?: string
+        }
+        Update: {
+          id?: string
+          activity_id?: string
+          changed_by?: string
+          field_name?: string
+          old_value?: string | null
+          new_value?: string | null
+          changed_at?: string
+        }
+        Relationships: [
+          { foreignKeyName: "activity_field_history_activity_id_fkey"; columns: ["activity_id"]; isOneToOne: false; referencedRelation: "activities"; referencedColumns: ["id"] },
+          { foreignKeyName: "activity_field_history_changed_by_fkey"; columns: ["changed_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] }
+        ]
+      }
       activity_history: {
         Row: {
           activity_id: string
@@ -549,6 +582,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      update_activity_field: {
+        Args: {
+          p_user_id: string
+          p_activity_id: string
+          p_field: string
+          p_value: string | null
+        }
+        Returns: undefined
+      }
       toggle_activity_assignee: {
         Args: {
           p_user_id: string
