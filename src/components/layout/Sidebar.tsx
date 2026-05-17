@@ -37,10 +37,12 @@ interface SidebarProps {
   userAvatar?: string | null
   userName?: string | null
   workspaces: WorkspaceItem[]
+  logoUrl?: string | null
+  accentColor?: string
 }
 
 export function Sidebar({
-  orgSlug, orgName, userEmail, userAvatar, userName, workspaces,
+  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#6366f1',
 }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
@@ -102,9 +104,14 @@ export function Sidebar({
           href={`${base}/dashboard`}
           className="flex items-center gap-2 flex-1 min-w-0 px-2 py-1.5 rounded-lg hover:bg-gray-800 transition group"
         >
-          <div className="w-6 h-6 rounded-md bg-indigo-500 flex items-center justify-center shrink-0">
-            <span className="text-white text-[10px] font-bold">{orgName.charAt(0).toUpperCase()}</span>
-          </div>
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoUrl} alt={orgName} className="w-6 h-6 rounded-md object-contain shrink-0 bg-white" />
+          ) : (
+            <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: accentColor }}>
+              <span className="text-white text-[10px] font-bold">{orgName.charAt(0).toUpperCase()}</span>
+            </div>
+          )}
           <span className="text-gray-100 font-semibold text-sm truncate flex-1 text-left">{orgName}</span>
           <ChevronDown className="w-3.5 h-3.5 text-gray-600 shrink-0" />
         </Link>

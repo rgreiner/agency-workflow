@@ -15,6 +15,7 @@ interface Props {
   orgSlug: string
   orgName: string
   workspaces: Workspace[]
+  accentColor?: string
 }
 
 const VIEWS = [
@@ -24,7 +25,7 @@ const VIEWS = [
   { id: 'docs',        label: 'Documentos',  icon: BookOpen,   href: 'docs' },
 ]
 
-export function TopNav({ orgSlug, orgName, workspaces }: Props) {
+export function TopNav({ orgSlug, orgName, workspaces, accentColor = '#6366f1' }: Props) {
   const pathname = usePathname()
   const base = `/${orgSlug}`
 
@@ -72,10 +73,12 @@ export function TopNav({ orgSlug, orgName, workspaces }: Props) {
             href={viewHref(href)}
             className={cn(
               'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
-              isActive(href)
-                ? 'bg-indigo-50 text-indigo-700'
-                : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+              isActive(href) ? '' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
             )}
+            style={isActive(href) ? {
+              backgroundColor: accentColor + '18',
+              color: accentColor,
+            } : undefined}
           >
             <Icon className="w-3.5 h-3.5 shrink-0" />
             {label}

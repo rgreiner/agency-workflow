@@ -35,8 +35,11 @@ export default async function SettingsLayout({
 
       <div className="flex gap-1 mb-5 border-b border-gray-200">
         {[
-          { href: `/${orgSlug}/settings/membros`, label: 'Membros' },
-          ...(isAdmin ? [{ href: `/${orgSlug}/settings/cargos`, label: 'Cargos' }] : []),
+          { href: `/${orgSlug}/settings/membros`,   label: 'Membros' },
+          ...(isAdmin ? [
+            { href: `/${orgSlug}/settings/cargos`,    label: 'Cargos' },
+            { href: `/${orgSlug}/settings/aparencia`, label: 'Aparência' },
+          ] : []),
         ].map(({ href, label }) => (
           <Link
             key={href}
