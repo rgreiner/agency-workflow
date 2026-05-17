@@ -12,11 +12,10 @@ import { toast } from 'sonner'
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
-const DAY_W     = 44
-const SIDEBAR_W = 220
-const ROW_H     = 52
-const HANDLE_W  = 10
-const DAYS      = 35
+const DAY_W    = 44
+const ROW_H    = 62
+const HANDLE_W = 10
+const DAYS     = 35
 
 const STATUS_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   briefing:              { bg: '#f3e8ff', border: '#a855f7', text: '#7e22ce' },
@@ -328,16 +327,21 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
 
         {/* Content */}
         <div
-          className="flex items-center gap-1.5 min-w-0 flex-1 pointer-events-none"
+          className="flex items-center gap-2 min-w-0 flex-1 pointer-events-none"
           style={{
             paddingLeft:  geo.clippedLeft  ? 8 : HANDLE_W + 4,
             paddingRight: geo.clippedRight ? 4 : HANDLE_W + 4,
           }}
         >
-          <span className="text-[11px] font-semibold truncate flex-1" style={{ color: clrs.text }}>
-            {a.title}
-          </span>
-          {asns.length > 0 && geo.width > 90 && <AvatarGroup users={asns} max={2} />}
+          <div className="flex flex-col justify-center min-w-0 flex-1">
+            <span className="text-[10px] truncate leading-tight" style={{ color: clrs.text, opacity: 0.7 }}>
+              {campMap[a.campaign_id]?.client} › {campMap[a.campaign_id]?.name}
+            </span>
+            <span className="text-xs font-semibold truncate leading-tight" style={{ color: clrs.text }}>
+              {a.title}
+            </span>
+          </div>
+          {asns.length > 0 && geo.width > 120 && <AvatarGroup users={asns} max={2} />}
         </div>
 
         {/* Right resize handle */}
@@ -361,32 +365,17 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
   // ── Render row ────────────────────────────────────────────────────────
 
   function renderRow(a: Activity) {
-    const camp = campMap[a.campaign_id]
     return (
-      <div key={a.id} className="flex border-b border-gray-50 last:border-0" style={{ height: ROW_H }}>
-        {/* Sidebar info */}
-        <div className="shrink-0 border-r border-gray-100 px-3 flex flex-col justify-center" style={{ width: SIDEBAR_W }}>
-          <span className="text-[10px] text-gray-400 truncate">{camp?.client} › {camp?.name}</span>
-          <Link
-            href={`/${orgSlug}/workspaces/${camp?.workspaceId}/campaigns/${a.campaign_id}/activities/${a.id}`}
-            className="text-xs text-gray-700 font-medium hover:text-indigo-600 transition truncate block"
-          >
-            {a.title}
-          </Link>
-        </div>
-
-        {/* Calendar area */}
-        <div className="relative flex-1">
-          {days.map((day, i) => isWeekend(day) && (
-            <div key={i} className="absolute inset-y-0 bg-gray-50/70 pointer-events-none"
-                 style={{ left: i * DAY_W, width: DAY_W }} />
-          ))}
-          {todayIdx >= 0 && (
-            <div className="absolute inset-y-0 w-px bg-red-400 pointer-events-none z-20"
-                 style={{ left: todayIdx * DAY_W + DAY_W / 2 }} />
-          )}
-          {renderBar(a)}
-        </div>
+      <div key={a.id} className="relative border-b border-gray-50 last:border-0" style={{ height: ROW_H }}>
+        {days.map((day, i) => isWeekend(day) && (
+          <div key={i} className="absolute inset-y-0 bg-gray-50/60 pointer-events-none"
+               style={{ left: i * DAY_W, width: DAY_W }} />
+        ))}
+        {todayIdx >= 0 && (
+          <div className="absolute inset-y-0 w-px bg-red-400 pointer-events-none z-20"
+               style={{ left: todayIdx * DAY_W + DAY_W / 2 }} />
+        )}
+        {renderBar(a)}
       </div>
     )
   }
@@ -447,14 +436,24 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
       {/* Gantt table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-auto flex-1">
 
-        {/* Calendar header — drag to scrub timeline */}
-        <div className="flex border-b border-gray-200 sticky top-0 bg-white z-30">
-          <div className="shrink-0 border-r border-gray-200 flex items-center px-4" style={{ width: SIDEBAR_W }}>
-            <span className="text-xs text-gray-400 font-medium select-none">
-              {viewStart.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-            </span>
+        {/* Calendar header — sticky, two rows: months + days */}
+        <div className="sticky top-0 bg-white z-30 border-b border-gray-200">
+
+          {/* Month labels row */}
+          <div className="relative h-6 border-b border-gray-100 select-none">
+            {days.map((day, i) => {
+              const showMonth = i === 0 || day.getDate() === 1
+              if (!showMonth) return null
+              return (
+                <span key={i} className="absolute top-0 bottom-0 flex items-center px-2 text-[11px] font-semibold text-gray-500"
+                      style={{ left: i * DAY_W }}>
+                  {day.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                </span>
+              )
+            })}
           </div>
-          {/* Draggable date strip */}
+
+          {/* Day numbers — draggable to scrub */}
           <div
             className="flex"
             style={{ cursor: calRef.current ? 'grabbing' : 'grab', touchAction: 'none' }}
@@ -467,8 +466,8 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
             {days.map((day, i) => (
               <div key={i}
                 className={cn(
-                  'flex flex-col items-center justify-center text-xs border-r border-gray-100 shrink-0 py-2 select-none',
-                  isToday(day)   ? 'bg-indigo-600 text-white'
+                  'flex flex-col items-center justify-center text-xs border-r border-gray-100 shrink-0 py-1.5 select-none',
+                  isToday(day)    ? 'bg-indigo-600 text-white'
                   : isWeekend(day) ? 'bg-gray-50 text-gray-400'
                   : 'text-gray-600'
                 )}
@@ -485,7 +484,8 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
         {/* Groups by assignee */}
         {groups.map(({ profile, activities: ga }) => (
           <div key={profile.id} className="border-b border-gray-100 last:border-0">
-            <div className="flex items-center gap-2.5 px-4 py-2.5 bg-gray-50/60 border-b border-gray-100">
+            {/* Group header — sticky left so name stays visible when scrolling */}
+            <div className="sticky left-0 z-20 flex items-center gap-2.5 px-4 py-2 bg-gray-50/90 border-b border-gray-100 backdrop-blur-sm">
               <Avatar name={profile.full_name} avatarUrl={profile.avatar_url} size="sm" />
               <span className="text-sm font-semibold text-gray-800">{profile.full_name ?? '?'}</span>
               <span className="text-xs text-gray-400">{ga.length} tarefa{ga.length !== 1 ? 's' : ''}</span>
@@ -496,7 +496,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
 
         {unassigned.length > 0 && (
           <div className="border-t border-gray-100">
-            <div className="flex items-center gap-2.5 px-4 py-2.5 bg-gray-50/60 border-b border-gray-100">
+            <div className="sticky left-0 z-20 flex items-center gap-2.5 px-4 py-2 bg-gray-50/90 border-b border-gray-100 backdrop-blur-sm">
               <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-500 shrink-0">—</div>
               <span className="text-sm font-semibold text-gray-500">Sem responsável</span>
               <span className="text-xs text-gray-400">{unassigned.length}</span>
