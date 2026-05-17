@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { Toaster } from 'sonner'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -7,5 +8,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   if (!user) redirect('/login')
 
-  return <>{children}</>
+  return (
+    <>
+      {children}
+      <Toaster position="bottom-right" richColors closeButton />
+    </>
+  )
 }

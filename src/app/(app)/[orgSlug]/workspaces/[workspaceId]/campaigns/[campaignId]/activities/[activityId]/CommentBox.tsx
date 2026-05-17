@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { addComment } from '@/app/actions/activity'
 import { Send } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface Props {
   activityId: string
@@ -19,8 +20,12 @@ export function CommentBox({ activityId, path }: Props) {
     if (!content.trim()) return
     startTransition(async () => {
       const result = await addComment(path, activityId, content.trim())
-      if (result?.error) setError(result.error)
-      else setContent('')
+      if (result?.error) {
+        setError(result.error)
+        toast.error(result.error)
+      } else {
+        setContent('')
+      }
     })
   }
 

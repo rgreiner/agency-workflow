@@ -5,6 +5,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { updateMember, removeMember } from '@/app/actions/settings'
 import { Trash2, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 interface Props {
   memberId: string
@@ -43,15 +44,22 @@ export function MemberRow({
 
   function handleSave() {
     startTransition(async () => {
-      await updateMember(orgSlug, orgId, memberId, selectedPosition || null, selectedRole as import('@/types').MemberRole)
-      setIsDirty(false)
+      const result = await updateMember(orgSlug, orgId, memberId, selectedPosition || null, selectedRole as import('@/types').MemberRole)
+      if (result?.error) {
+        toast.error(result.error)
+      } else {
+        setIsDirty(false)
+        toast.success('Alterações salvas!')
+      }
     })
   }
 
   function handleRemove() {
     if (!confirm(`Remover ${profile?.full_name ?? profile?.email} da organização?`)) return
     startTransition(async () => {
-      await removeMember(orgSlug, orgId, memberId)
+      const result = await removeMember(orgSlug, orgId, memberId)
+      if (result?.error) toast.error(result.error)
+      else toast.success('Membro removido.')
     })
   }
 

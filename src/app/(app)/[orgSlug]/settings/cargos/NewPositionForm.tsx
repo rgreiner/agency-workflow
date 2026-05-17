@@ -5,6 +5,7 @@ import { STATUS_CONFIG } from '@/types'
 import { createPosition } from '@/app/actions/settings'
 import { Plus, Check, ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 interface Props {
   orgSlug: string
@@ -57,11 +58,13 @@ export function NewPositionForm({ orgSlug }: Props) {
       const res = await createPosition(orgSlug, fd)
       if (res?.error) {
         setError(res.error)
+        toast.error(res.error)
       } else {
         setName('')
         setColor('#6366f1')
         setSelected([])
         setOpen(false)
+        toast.success('Cargo criado!')
       }
     })
   }

@@ -5,6 +5,7 @@ import { STATUS_CONFIG } from '@/types'
 import { updateActivityStatus } from '@/app/actions/activity'
 import { cn } from '@/lib/utils'
 import { ChevronDown } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface Props {
   activityId: string
@@ -25,8 +26,15 @@ export function StatusChanger({ activityId, currentStatus, path }: Props) {
     if (selected === currentStatus) return
     startTransition(async () => {
       const result = await updateActivityStatus(path, activityId, selected, comment)
-      if (result?.error) setError(result.error)
-      else { setComment(''); setOpen(false) }
+      if (result?.error) {
+        setError(result.error)
+        toast.error(result.error)
+      } else {
+        setComment('')
+        setOpen(false)
+        const statusLabel = STATUS_CONFIG.find(s => s.value === selected)?.label ?? selected
+        toast.success(`Status atualizado para "${statusLabel}"`)
+      }
     })
   }
 

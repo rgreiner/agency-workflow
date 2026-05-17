@@ -5,6 +5,7 @@ import { STATUS_CONFIG } from '@/types'
 import { updatePosition, deletePosition } from '@/app/actions/settings'
 import { ChevronDown, ChevronUp, Trash2, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 interface Props {
   position: {
@@ -66,7 +67,12 @@ export function PositionCard({ position, orgSlug }: Props) {
     selected.forEach(s => fd.append('statuses', s))
     startTransition(async () => {
       const res = await updatePosition(orgSlug, position.id, fd)
-      if (res?.error) setError(res.error)
+      if (res?.error) {
+        setError(res.error)
+        toast.error(res.error)
+      } else {
+        toast.success('Cargo atualizado!')
+      }
     })
   }
 
@@ -74,7 +80,12 @@ export function PositionCard({ position, orgSlug }: Props) {
     if (!confirm(`Excluir cargo "${position.name}"? Membros com este cargo ficarão sem cargo.`)) return
     startTransition(async () => {
       const res = await deletePosition(orgSlug, position.id)
-      if (res?.error) setError(res.error)
+      if (res?.error) {
+        setError(res.error)
+        toast.error(res.error)
+      } else {
+        toast.success('Cargo excluído.')
+      }
     })
   }
 
