@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import { List, GanttChart, Users, BookOpen } from 'lucide-react'
+import { List, GanttChart, Users, BookOpen, Layout } from 'lucide-react'
 
 interface Workspace {
   id: string
@@ -23,6 +23,7 @@ const VIEWS = [
   { id: 'gantt',       label: 'Gantt',       icon: GanttChart, href: 'views/gantt' },
   { id: 'atendimento', label: 'Atendimento', icon: Users,      href: 'views/atendimento' },
   { id: 'docs',        label: 'Documentos',  icon: BookOpen,   href: 'docs' },
+  { id: 'boards',      label: 'Quadros',     icon: Layout,     href: 'boards' },
 ]
 
 export function TopNav({ orgSlug, orgName, workspaces, accentColor = '#6366f1' }: Props) {
