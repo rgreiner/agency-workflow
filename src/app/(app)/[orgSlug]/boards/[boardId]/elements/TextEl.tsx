@@ -23,6 +23,11 @@ export function TextEl({ el, editing, selected, onUpdate, onStopEdit }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const sizeCfg = SIZE_OPTIONS.find(s => s.value === el.size)!
 
+  // Keep draft accessible in effects without stale closure
+  const draftRef = useRef(draft)
+  useEffect(() => { draftRef.current = draft }, [draft])
+
+  // Focus when editing starts
   useEffect(() => {
     if (editing) {
       setDraft(el.content)
@@ -32,6 +37,15 @@ export function TextEl({ el, editing, selected, onUpdate, onStopEdit }: Props) {
         textareaRef.current?.setSelectionRange(len, len)
       })
     }
+  }, [editing]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save when editing ends — handles cases where blur doesn't fire
+  const wasEditingRef = useRef(false)
+  useEffect(() => {
+    if (!editing && wasEditingRef.current) {
+      onStopEdit(draftRef.current)
+    }
+    wasEditingRef.current = editing
   }, [editing]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-grow height while editing

@@ -19,6 +19,7 @@ export function ImageEl({ el, editing, selected, onUpdate, onStopEdit }: Props) 
   const [imgError, setImgError] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Focus URL input when editing starts (new image, no URL yet)
   useEffect(() => {
     if (editing && !el.url) {
       requestAnimationFrame(() => inputRef.current?.focus())
@@ -26,6 +27,18 @@ export function ImageEl({ el, editing, selected, onUpdate, onStopEdit }: Props) 
   }, [editing, el.url])
 
   useEffect(() => { setImgError(false) }, [el.url])
+
+  // Save URL when editing ends without explicit submit (blur didn't fire)
+  const urlDraftRef = useRef(urlDraft)
+  useEffect(() => { urlDraftRef.current = urlDraft }, [urlDraft])
+  const wasEditingRef = useRef(false)
+  useEffect(() => {
+    if (!editing && wasEditingRef.current) {
+      const url = urlDraftRef.current.trim()
+      if (url && url !== el.url) onUpdate({ url })
+    }
+    wasEditingRef.current = editing
+  }, [editing]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function submitUrl() {
     const url = urlDraft.trim()

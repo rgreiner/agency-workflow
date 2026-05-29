@@ -16,6 +16,11 @@ export function NoteEl({ el, editing, selected, onUpdate, onStopEdit }: Props) {
   const [draft, setDraft] = useState(el.content)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  // Keep draft accessible in effects without stale closure
+  const draftRef = useRef(draft)
+  useEffect(() => { draftRef.current = draft }, [draft])
+
+  // Focus when editing starts
   useEffect(() => {
     if (editing) {
       setDraft(el.content)
@@ -25,6 +30,16 @@ export function NoteEl({ el, editing, selected, onUpdate, onStopEdit }: Props) {
         textareaRef.current?.setSelectionRange(len, len)
       })
     }
+  }, [editing]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save when editing ends — handles cases where blur doesn't fire
+  // (React 18 concurrent mode can unmount the textarea before blur fires)
+  const wasEditingRef = useRef(false)
+  useEffect(() => {
+    if (!editing && wasEditingRef.current) {
+      onStopEdit(draftRef.current)
+    }
+    wasEditingRef.current = editing
   }, [editing]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
