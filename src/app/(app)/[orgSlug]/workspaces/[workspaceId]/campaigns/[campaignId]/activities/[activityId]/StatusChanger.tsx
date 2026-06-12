@@ -94,8 +94,12 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
                 <textarea
                   value={comment}
                   onChange={e => setComment(e.target.value)}
-                  placeholder="Observação (opcional)..."
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSave() }
+                  }}
+                  placeholder="Observação (opcional)... Enter confirma"
                   rows={2}
+                  autoFocus
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                 />
                 <button

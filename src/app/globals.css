@@ -46,6 +46,56 @@ select:focus {
   outline: none;
 }
 
+/* ── Acessibilidade: anel de foco visível para navegação por teclado ────── */
+
+a:focus-visible,
+button:focus-visible,
+[role='button']:focus-visible {
+  outline: 2px solid var(--accent, #6366f1);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ── Animações compartilhadas ───────────────────────────────────────────── */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes paletteIn {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Utilitários ────────────────────────────────────────────────────────── */
+
+/* Esconde a scrollbar mantendo o scroll (tabs no mobile) */
+.scrollbar-none {
+  scrollbar-width: none;       /* Firefox */
+  -ms-overflow-style: none;    /* IE/Edge legado */
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;               /* Chrome/Safari */
+}
+
+/* Scrollbar discreta para painéis internos (feed, dropdowns) */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+.scrollbar-thin::-webkit-scrollbar { width: 6px; }
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+
 /* ── TipTap document editor ─────────────────────────────────────────────── */
 
 .doc-editor .ProseMirror {

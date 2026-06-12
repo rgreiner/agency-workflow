@@ -141,14 +141,14 @@ export default async function ActivityPage({
   ] as const
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-white">
+    <div className="flex flex-col bg-white lg:h-screen lg:overflow-hidden">
 
       {/* ── Top bar ─────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1.5 px-6 py-3 border-b border-gray-200 shrink-0 bg-white z-10">
-        <Link href={`/${orgSlug}/views/lista`} className="text-xs text-gray-400 hover:text-gray-600 transition">
+      <div className="flex items-center gap-1.5 px-4 md:px-6 py-3 border-b border-gray-200 shrink-0 bg-white z-10">
+        <Link href={`/${orgSlug}/views/lista`} className="hidden sm:block text-xs text-gray-400 hover:text-gray-600 transition">
           Clientes
         </Link>
-        <span className="text-gray-300 text-xs">/</span>
+        <span className="hidden sm:block text-gray-300 text-xs">/</span>
         <Link href={`/${orgSlug}/workspaces/${workspaceId}`} className="text-xs text-gray-400 hover:text-gray-600 transition">
           {ws?.name ?? 'Cliente'}
         </Link>
@@ -164,16 +164,16 @@ export default async function ActivityPage({
               <AlertTriangle className="w-3.5 h-3.5" /> Atrasada
             </span>
           )}
-          <span>Criada {formatDate(activity.created_at)}</span>
+          <span className="hidden md:inline">Criada {formatDate(activity.created_at)}</span>
         </div>
       </div>
 
-      {/* ── Body ────────────────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* ── Body — stacks on mobile, side-by-side on lg+ ────────── */}
+      <div className="flex flex-1 flex-col lg:flex-row lg:overflow-hidden">
 
-        {/* ── LEFT: main content ──────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-8 py-6 max-w-3xl">
+        {/* ── Main content ─────────────────────────────────────── */}
+        <div className="flex-1 lg:overflow-y-auto">
+          <div className="px-4 md:px-8 py-6 max-w-3xl">
 
             {/* Title + description */}
             <ActivityHeader
@@ -332,8 +332,8 @@ export default async function ActivityPage({
           </div>
         </div>
 
-        {/* ── RIGHT: activity feed ─────────────────────────────── */}
-        <div className="w-[360px] border-l border-gray-200 flex flex-col shrink-0 bg-gray-50/40">
+        {/* ── Activity feed — full-width below content on mobile ── */}
+        <div className="w-full lg:w-[360px] border-t lg:border-t-0 lg:border-l border-gray-200 flex flex-col shrink-0 bg-gray-50/40">
 
           {/* Header */}
           <div className="px-5 py-3.5 border-b border-gray-200 bg-white shrink-0 flex items-center justify-between">
@@ -342,7 +342,7 @@ export default async function ActivityPage({
           </div>
 
           {/* Feed */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div className="flex-1 lg:overflow-y-auto scrollbar-thin p-4 space-y-3">
             {feed.length === 0 && (
               <p className="text-xs text-gray-400 text-center py-8">Nenhuma atividade ainda.</p>
             )}
