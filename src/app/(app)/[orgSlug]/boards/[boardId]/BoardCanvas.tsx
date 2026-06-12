@@ -3,8 +3,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import type { BoardElement, BoardData, Arrow, BoardElementType } from '@/types/board'
 import { createElement } from '@/types/board'
-import { updateBoardTitle } from '@/app/actions/boards'
+import { updateBoardTitle, deleteBoard } from '@/app/actions/boards'
 import { createClient } from '@/lib/supabase/client'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { NoteEl } from './elements/NoteEl'
 import { TextEl } from './elements/TextEl'
 import { ImageEl } from './elements/ImageEl'
@@ -328,6 +329,8 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
   const [pan, setPan]                   = useState({ x: 0, y: 0 })
   const [scale, setScale]               = useState(1)
   const [saveStatus, setSaveStatus]     = useState<SaveStatus>('idle')
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting]         = useState(false)
 
   const canvasRef       = useRef<HTMLDivElement>(null)
   const panRef          = useRef(pan)
@@ -572,6 +575,12 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
     await updateBoardTitle(boardId, titleDraft.trim())
   }
 
+  // ── Board delete ──────────────────────────────────────────────────────────────
+  async function handleDeleteBoard() {
+    setDeleting(true)
+    await deleteBoard(boardId, orgSlug) // redireciona para /boards
+  }
+
   // ── Canvas background ─────────────────────────────────────────────────────────
   const dotSpacing = GRID_SIZE * scale
   const bgStyle = {
@@ -642,6 +651,17 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
             <button onClick={() => zoomTo(Math.min(MAX_SCALE, scaleRef.current * 1.2))} style={zoomBtnStyle} title="Aumentar zoom"><ZoomIn size={14} color="#6b7280" /></button>
             <button onClick={fitToView} style={{ ...zoomBtnStyle, marginLeft: 2 }} title="Ajustar à tela"><Maximize2 size={14} color="#6b7280" /></button>
           </div>
+
+          {/* Delete board */}
+          <button
+            onClick={() => setConfirmDelete(true)}
+            title="Excluir quadro"
+            style={{ ...zoomBtnStyle, marginLeft: 6 }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fef2f2'; e.currentTarget.style.borderColor = '#fecaca' }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#ffffff'; e.currentTarget.style.borderColor = '#e5e7eb' }}
+          >
+            <Trash2 size={14} color="#ef4444" />
+          </button>
         </div>
 
         {/* ── Canvas viewport ── */}
@@ -793,6 +813,16 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Excluir este quadro?"
+        description={`"${title}" e todo o seu conteúdo serão removidos permanentemente. Essa ação não pode ser desfeita.`}
+        confirmLabel="Excluir quadro"
+        loading={deleting}
+        onConfirm={handleDeleteBoard}
+        onCancel={() => setConfirmDelete(false)}
+      />
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>

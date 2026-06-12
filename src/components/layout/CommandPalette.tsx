@@ -6,8 +6,9 @@ import { cn } from '@/lib/utils'
 import {
   Search, List, GanttChart, Users, BookOpen, PenTool,
   Folder, AlignLeft, Plus, Settings, User, Palette,
-  CornerDownLeft,
+  CornerDownLeft, CheckSquare, Loader2,
 } from 'lucide-react'
+import { searchActivities } from '@/app/actions/search'
 
 interface Workspace {
   id: string
@@ -46,8 +47,36 @@ function PalettePanel({ orgSlug, workspaces, onClose }: Omit<Props, 'open'>) {
   const router = useRouter()
   const [query, setQuery] = useState('')
   const [activeIdx, setActiveIdx] = useState(0)
+  // Resultados carregam a query que os gerou: itens obsoletos são descartados por derivação
+  const [activityResults, setActivityResults] = useState<{ q: string; items: Item[] }>({ q: '', items: [] })
   const listRef = useRef<HTMLDivElement>(null)
   const base = `/${orgSlug}`
+  const q = query.trim()
+
+  // Busca server-side de atividades, debounced — resultados entram no grupo "Atividades"
+  useEffect(() => {
+    if (q.length < 2) return
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      let items: Item[] = []
+      try {
+        const results = await searchActivities(orgSlug, q)
+        items = results.map(a => ({
+          id: `act-${a.id}`,
+          label: a.title,
+          hint: `${a.workspaceName} / ${a.campaignName}`,
+          group: 'Atividades',
+          href: `${base}/workspaces/${a.workspaceId}/campaigns/${a.campaignId}/activities/${a.id}`,
+          icon: CheckSquare,
+        }))
+      } catch { /* falha de rede → trata como sem resultados */ }
+      if (!cancelled) setActivityResults({ q, items })
+    }, 250)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [q, orgSlug, base])
+
+  const activityItems = q.length >= 2 && activityResults.q === q ? activityResults.items : []
+  const searching     = q.length >= 2 && activityResults.q !== q
 
   const allItems = useMemo<Item[]>(() => {
     const items: Item[] = [
@@ -92,10 +121,11 @@ function PalettePanel({ orgSlug, workspaces, onClose }: Omit<Props, 'open'>) {
   const filtered = useMemo(() => {
     if (!query.trim()) return allItems
     const q = norm(query)
-    return allItems.filter(item =>
+    const statics = allItems.filter(item =>
       norm(item.label).includes(q) || (item.hint && norm(item.hint).includes(q))
     )
-  }, [query, allItems])
+    return [...statics, ...activityItems]
+  }, [query, allItems, activityItems])
 
   // Agrupa mantendo ordem
   const groups = useMemo(() => {
@@ -167,6 +197,7 @@ function PalettePanel({ orgSlug, workspaces, onClose }: Omit<Props, 'open'>) {
             placeholder="Buscar cliente, campanha, view…"
             className="flex-1 py-3.5 text-sm text-gray-900 placeholder-gray-400 bg-transparent focus:outline-none"
           />
+          {searching && <Loader2 className="w-3.5 h-3.5 text-gray-300 animate-spin shrink-0" />}
           <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium text-gray-400 bg-gray-50 border border-gray-200 rounded">
             ESC
           </kbd>
@@ -176,7 +207,7 @@ function PalettePanel({ orgSlug, workspaces, onClose }: Omit<Props, 'open'>) {
         <div ref={listRef} className="max-h-[50vh] overflow-y-auto overscroll-contain py-2">
           {filtered.length === 0 ? (
             <p className="px-4 py-8 text-sm text-gray-400 text-center">
-              Nada encontrado para “{query}”
+              {searching ? 'Buscando atividades…' : `Nada encontrado para “${query}”`}
             </p>
           ) : (
             groups.map(group => (

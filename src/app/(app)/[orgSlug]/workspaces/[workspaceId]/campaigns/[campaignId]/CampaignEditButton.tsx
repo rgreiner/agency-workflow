@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { updateCampaign, deleteCampaign } from '@/app/actions/workspace'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { Settings, X, Check, Trash2, Loader2 } from 'lucide-react'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 
 interface Props {
   orgSlug: string
@@ -18,6 +19,7 @@ interface Props {
 
 export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, description, startDate, endDate }: Props) {
   const [open, setOpen] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [form, setForm] = useState({ name, description, start_date: startDate, end_date: endDate })
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
@@ -40,7 +42,6 @@ export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, des
   }
 
   function handleDelete() {
-    if (!confirm(`Excluir a campanha "${name}"? Todas as atividades serão perdidas.`)) return
     startTransition(async () => {
       await deleteCampaign(orgSlug, workspaceId, campaignId)
     })
@@ -100,7 +101,7 @@ export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, des
               </div>
 
               <div className="flex items-center justify-between pt-2">
-                <button type="button" onClick={handleDelete} disabled={isPending}
+                <button type="button" onClick={() => setConfirmDelete(true)} disabled={isPending}
                   className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 transition disabled:opacity-50">
                   <Trash2 className="w-4 h-4" /> Excluir campanha
                 </button>
@@ -120,6 +121,16 @@ export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, des
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title={`Excluir a campanha "${name}"?`}
+        description="Todas as atividades desta campanha serão removidas permanentemente. Essa ação não pode ser desfeita."
+        confirmLabel="Excluir campanha"
+        loading={isPending}
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </>
   )
 }

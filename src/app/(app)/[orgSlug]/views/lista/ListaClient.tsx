@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useTransition } from 'react'
 import Link from 'next/link'
 import { cn, isOverdue, daysUntil } from '@/lib/utils'
 import { PRIORITY_CONFIG, STATUS_CONFIG, type ActivityPriority } from '@/types'
-import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check } from 'lucide-react'
+import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical } from 'lucide-react'
 import { AvatarGroup } from '@/components/ui/Avatar'
+import { updateActivityStatus } from '@/app/actions/activity'
+import { toast } from 'sonner'
 
 // ── Column definitions ────────────────────────────────────────────────────
 
@@ -53,6 +55,43 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
   const [filterWorkspace, setFilterWorkspace] = useState(initialWorkspace ?? '')
   const pickerRef = useRef<HTMLDivElement>(null)
 
+  // ── Drag & drop entre status ──
+  // overrides aplicam o novo status otimisticamente até o revalidate do servidor
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [dragOverStatus, setDragOverStatus] = useState<string | null>(null)
+  const [overrides, setOverrides] = useState<Record<string, string>>({})
+  const [, startTransition] = useTransition()
+
+  function handleDrop(targetStatus: string) {
+    const id = draggingId
+    setDraggingId(null)
+    setDragOverStatus(null)
+    if (!id) return
+    const activity = activities.find(a => a.id === id)
+    const currentStatus = overrides[id] ?? activity?.status
+    if (!activity || currentStatus === targetStatus) return
+
+    const previous = overrides[id]
+    setOverrides(prev => ({ ...prev, [id]: targetStatus }))
+
+    startTransition(async () => {
+      const result = await updateActivityStatus(`/${orgSlug}/views/lista`, id, targetStatus, '')
+      if (result?.error) {
+        // rollback do update otimista
+        setOverrides(prev => {
+          const next = { ...prev }
+          if (previous) next[id] = previous
+          else delete next[id]
+          return next
+        })
+        toast.error(result.error)
+      } else {
+        const label = statusConfig.find(s => s.value === targetStatus)?.label ?? targetStatus
+        toast.success(`"${activity.title}" movida para ${label}`)
+      }
+    })
+  }
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
@@ -92,10 +131,11 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
     }, {} as Record<string, { id: string; name: string }>)
   ).sort((a, b) => a.name.localeCompare(b.name))
 
-  // Filter activities by workspace if active
-  const filteredActivities = filterWorkspace
+  // Filter activities by workspace if active, applying optimistic status overrides
+  const filteredActivities = (filterWorkspace
     ? activities.filter(a => campMap[a.campaign_id]?.workspaceId === filterWorkspace)
     : activities
+  ).map(a => overrides[a.id] ? { ...a, status: overrides[a.id] } : a)
 
   const visibleCols = COL_DEFS.filter(c => cols[c.key])
   const totalCount  = filteredActivities.length
@@ -167,11 +207,36 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
         </div>
       </div>
 
+      {/* ── Drop bar: todos os status como alvo durante o arraste ── */}
+      {draggingId && (
+        <div className="hidden md:flex flex-wrap items-center gap-1.5 mb-4 p-3 bg-white rounded-xl border-2 border-dashed border-indigo-200 animate-[slideUp_0.15s_ease-out]">
+          <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider w-full mb-1">
+            Solte em um status
+          </span>
+          {statusConfig.map(s => (
+            <div
+              key={s.value}
+              onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverStatus(s.value) }}
+              onDragLeave={() => setDragOverStatus(prev => prev === s.value ? null : prev)}
+              onDrop={e => { e.preventDefault(); handleDrop(s.value) }}
+              className={cn(
+                'text-xs font-semibold px-2.5 py-1 rounded-full cursor-copy transition-transform',
+                s.bgColor, s.color,
+                dragOverStatus === s.value && 'scale-110 ring-2 ring-indigo-400 ring-offset-1'
+              )}
+            >
+              {s.label}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* ── Table ── */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
 
         {/* Column header — desktop only */}
         <div className="hidden md:flex items-center gap-2 px-4 py-2 border-b border-gray-100 bg-gray-50/60">
+          <div className="w-3.5 shrink-0 -ml-1" />
           <div className="flex-1 text-xs font-medium text-gray-400" />
           {visibleCols.map(col => (
             <div key={col.key} className={cn('text-xs font-medium text-gray-400 shrink-0', col.width)}>
@@ -193,7 +258,21 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
             const isOpen = !collapsed.has(statusCfg.value)
 
             return (
-              <div key={statusCfg.value} className="border-b border-gray-100 last:border-0">
+              <div
+                key={statusCfg.value}
+                onDragOver={e => {
+                  if (!draggingId) return
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  setDragOverStatus(statusCfg.value)
+                }}
+                onDragLeave={() => setDragOverStatus(prev => prev === statusCfg.value ? null : prev)}
+                onDrop={e => { e.preventDefault(); handleDrop(statusCfg.value) }}
+                className={cn(
+                  'border-b border-gray-100 last:border-0 transition-colors',
+                  draggingId && dragOverStatus === statusCfg.value && 'bg-indigo-50/70 ring-2 ring-inset ring-indigo-300'
+                )}
+              >
 
                 {/* Group header */}
                 <button
@@ -254,11 +333,26 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                             </div>
                           </Link>
 
-                          {/* ── Desktop layout ────────────────────────── */}
-                          <div className="hidden md:flex items-center gap-2 px-4 py-2.5 group">
+                          {/* ── Desktop layout — arrastável entre status ── */}
+                          <div
+                            draggable
+                            onDragStart={e => {
+                              e.dataTransfer.setData('text/plain', activity.id)
+                              e.dataTransfer.effectAllowed = 'move'
+                              setDraggingId(activity.id)
+                            }}
+                            onDragEnd={() => { setDraggingId(null); setDragOverStatus(null) }}
+                            className={cn(
+                              'hidden md:flex items-center gap-2 px-4 py-2.5 group cursor-grab active:cursor-grabbing',
+                              draggingId === activity.id && 'opacity-40'
+                            )}
+                          >
+                            {/* Grip — aparece no hover */}
+                            <GripVertical className="w-3.5 h-3.5 text-gray-300 opacity-0 group-hover:opacity-100 transition shrink-0 -ml-1" />
+
                             {/* Name */}
                             <div className="flex-1 min-w-0">
-                              <Link href={href} className="block">
+                              <Link href={href} draggable={false} className="block">
                                 {camp && (
                                   <span className="text-[11px] text-gray-400 block leading-tight mb-0.5">
                                     {camp.client} / {camp.name}

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { updateWorkspace, deleteWorkspace } from '@/app/actions/workspace'
 import { Settings, X, Check, Trash2, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 
 const COLORS = [
   '#6366f1','#8b5cf6','#ec4899','#ef4444',
@@ -22,6 +23,7 @@ interface Props {
 
 export function WorkspaceEditButton({ orgSlug, workspaceId, name, description, color }: Props) {
   const [open, setOpen] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [form, setForm] = useState({ name, description, color })
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
@@ -43,7 +45,6 @@ export function WorkspaceEditButton({ orgSlug, workspaceId, name, description, c
   }
 
   function handleDelete() {
-    if (!confirm(`Excluir o cliente "${name}"? Todas as campanhas e atividades serão perdidas.`)) return
     startTransition(async () => {
       await deleteWorkspace(orgSlug, workspaceId)
     })
@@ -107,7 +108,7 @@ export function WorkspaceEditButton({ orgSlug, workspaceId, name, description, c
               </div>
 
               <div className="flex items-center justify-between pt-2">
-                <button type="button" onClick={handleDelete} disabled={isPending}
+                <button type="button" onClick={() => setConfirmDelete(true)} disabled={isPending}
                   className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 transition disabled:opacity-50">
                   <Trash2 className="w-4 h-4" /> Excluir cliente
                 </button>
@@ -127,6 +128,16 @@ export function WorkspaceEditButton({ orgSlug, workspaceId, name, description, c
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title={`Excluir o cliente "${name}"?`}
+        description="Todas as campanhas e atividades deste cliente serão removidas permanentemente. Essa ação não pode ser desfeita."
+        confirmLabel="Excluir cliente"
+        loading={isPending}
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </>
   )
 }
