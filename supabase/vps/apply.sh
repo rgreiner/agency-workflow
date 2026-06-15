@@ -28,6 +28,7 @@ done
 run "$VPS/018b_update_profile.sql"
 run "$(ls "$MIG/019_"*.sql)"
 run "$(ls "$MIG/020_"*.sql)"   # RPCs que faltavam no repo (reconstruídas)
+run "$(ls "$MIG/021_"*.sql)"   # resolve ambiguidade de overload do create_activity
 run "$VPS/99_grants.sql"
 
 # Set the authenticator password from the secrets file (value never printed).
