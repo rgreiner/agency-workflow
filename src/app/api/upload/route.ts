@@ -38,6 +38,12 @@ export async function POST(request: Request) {
   await mkdir(path.dirname(dest), { recursive: true })
   await writeFile(dest, Buffer.from(await file.arrayBuffer()))
 
-  const origin = new URL(request.url).origin
-  return NextResponse.json({ url: `${origin}/uploads/${bucket}/${rel}` })
+  // Atrás do Traefik, request.url é o endereço interno (localhost:3000) —
+  // usa os headers encaminhados pra montar a URL pública correta.
+  const proto = request.headers.get('x-forwarded-proto') ?? 'https'
+  const host =
+    request.headers.get('x-forwarded-host') ??
+    request.headers.get('host') ??
+    new URL(request.url).host
+  return NextResponse.json({ url: `${proto}://${host}/uploads/${bucket}/${rel}` })
 }
