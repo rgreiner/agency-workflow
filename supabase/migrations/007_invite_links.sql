@@ -23,13 +23,16 @@ CREATE POLICY "Owner/admin can manage invite links" ON org_invite_links
 
 -- ── HELPER: is_org_member (avoids RLS recursion) ──────────────────────────────
 
-CREATE OR REPLACE FUNCTION is_org_member(p_org_id uuid)
+-- NB: param kept as `org` (not p_org_id) to match the 001 definition — Postgres
+-- forbids renaming an input parameter via CREATE OR REPLACE; callers use it
+-- positionally so the name is irrelevant. (VPS sequential-apply fix.)
+CREATE OR REPLACE FUNCTION is_org_member(org uuid)
 RETURNS boolean
 LANGUAGE sql SECURITY DEFINER SET search_path = public
 AS $$
   SELECT EXISTS (
     SELECT 1 FROM organization_members
-    WHERE org_id = p_org_id AND user_id = auth.uid()
+    WHERE org_id = org AND user_id = auth.uid()
   );
 $$;
 

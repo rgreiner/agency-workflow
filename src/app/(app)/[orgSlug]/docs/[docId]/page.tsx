@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getUsuario } from '@/lib/auth/server'
 import { notFound } from 'next/navigation'
 import { DocumentEditor } from '@/components/docs/DocumentEditor'
 
@@ -10,7 +11,7 @@ export default async function DocPage({
   const { orgSlug, docId } = await params
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) notFound()
 
   const { data: org } = await supabase

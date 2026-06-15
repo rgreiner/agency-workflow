@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import {
   ChevronRight,
@@ -16,7 +16,7 @@ import {
   Menu,
   X,
 } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { logout } from '@/app/actions/auth'
 
 interface Campaign {
   id: string
@@ -45,8 +45,6 @@ export function Sidebar({
   orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#6366f1',
 }: SidebarProps) {
   const pathname = usePathname()
-  const router = useRouter()
-  const supabase = createClient()
   const base = `/${orgSlug}`
 
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -89,8 +87,7 @@ export function Sidebar({
   const allExpanded = workspaces.length > 0 && workspaces.every(ws => expanded.has(ws.id))
 
   async function signOut() {
-    await supabase.auth.signOut()
-    router.push('/login')
+    await logout()
   }
 
   const displayName = userName || userEmail

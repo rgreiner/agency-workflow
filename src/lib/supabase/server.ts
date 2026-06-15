@@ -1,28 +1,24 @@
-import { createServerClient } from '@supabase/ssr'
+/**
+ * Cliente supabase-js para o SERVIDOR (RSC / Server Actions). Aponta pro
+ * PostgREST self-hosted e carrega NOSSO JWT (cookie `flow-jwt`) via a opção
+ * `accessToken` — sem GoTrue, sem @supabase/ssr. Só faz `.from()`/`.rpc()`.
+ * Quando não há token (deslogado), vai como anon e a RLS nega.
+ */
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
+import { COOKIE_TOKEN } from '@/lib/auth/jwt'
 import { Database } from '@/types/database'
 
 export async function createClient() {
-  const cookieStore = await cookies()
+  const jar = await cookies()
+  const token = jar.get(COOKIE_TOKEN)?.value ?? null
 
-  return createServerClient<Database>(
+  return createSupabaseClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            )
-          } catch {
-            // Server Component — cookies set via middleware
-          }
-        },
-      },
+      accessToken: async () => token,
+      auth: { persistSession: false, autoRefreshToken: false },
     }
   )
 }

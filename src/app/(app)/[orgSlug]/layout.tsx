@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getUsuario } from '@/lib/auth/server'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { TopNav } from '@/components/layout/TopNav'
 import { OrgSettingsProvider } from '@/components/providers/OrgSettingsProvider'
@@ -14,7 +15,7 @@ export default async function OrgLayout({
   const { orgSlug } = await params
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) redirect('/login')
 
   const { data: org } = await supabase

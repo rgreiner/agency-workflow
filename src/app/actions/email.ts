@@ -2,6 +2,7 @@
 
 import { Resend } from 'resend'
 import { createClient } from '@/lib/supabase/server'
+import { getUsuario } from '@/lib/auth/server'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM = process.env.RESEND_FROM ?? 'Agency Workflow <onboarding@resend.dev>'
@@ -13,7 +14,7 @@ export async function sendInviteEmail(
   toEmail: string
 ): Promise<{ error?: string }> {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   // Get or create invite link

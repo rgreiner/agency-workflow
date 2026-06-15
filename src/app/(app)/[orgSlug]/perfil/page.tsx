@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getUsuario } from '@/lib/auth/server'
 import { redirect } from 'next/navigation'
 import { ProfileForm } from './ProfileForm'
 
@@ -10,7 +11,7 @@ export default async function PerfilPage({
   const { orgSlug } = await params
   const supabase = await createClient()
 
-  const { data: { user: authUser } } = await supabase.auth.getUser()
+  const authUser = await getUsuario()
   if (!authUser) redirect(`/${orgSlug}`)
 
   const { data: profile } = await supabase
@@ -19,8 +20,6 @@ export default async function PerfilPage({
     .eq('id', authUser.id)
     .single()
 
-  const meta = authUser.user_metadata ?? {}
-
   return (
     <ProfileForm
       user={{
@@ -28,8 +27,8 @@ export default async function PerfilPage({
         email:        authUser.email ?? '',
         fullName:     profile?.full_name ?? null,
         avatarUrl:    profile?.avatar_url ?? null,
-        googleName:   (meta.full_name as string) ?? null,
-        googleAvatar: (meta.avatar_url as string) ?? null,
+        googleName:   null,
+        googleAvatar: null,
       }}
     />
   )

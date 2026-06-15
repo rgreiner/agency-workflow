@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { getUsuario } from '@/lib/auth/server'
 
 export interface ActivitySearchResult {
   id: string
@@ -20,7 +21,7 @@ export async function searchActivities(
   if (q.length < 2) return []
 
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return []
 
   const { data: org } = await supabase

@@ -1,12 +1,13 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { getUsuario } from '@/lib/auth/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
 export async function createWorkspace(orgSlug: string, formData: FormData) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const name = (formData.get('name') as string)?.trim()
@@ -42,7 +43,7 @@ export async function createCampaign(
   formData: FormData
 ) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const name = (formData.get('name') as string)?.trim()
@@ -72,7 +73,7 @@ export async function updateWorkspace(
   formData: FormData
 ) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const name = (formData.get('name') as string)?.trim()
@@ -91,7 +92,7 @@ export async function updateWorkspace(
 
 export async function deleteWorkspace(orgSlug: string, workspaceId: string) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const { error } = await supabase.rpc('delete_workspace', {
@@ -108,7 +109,7 @@ export async function updateCampaign(
   formData: FormData
 ) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const name = (formData.get('name') as string)?.trim()
@@ -132,7 +133,7 @@ export async function deleteCampaign(
   campaignId: string
 ) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const { error } = await supabase.rpc('delete_campaign', {

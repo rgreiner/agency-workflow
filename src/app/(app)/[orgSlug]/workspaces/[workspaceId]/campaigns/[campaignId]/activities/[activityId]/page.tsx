@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getUsuario } from '@/lib/auth/server'
 import { notFound } from 'next/navigation'
 import { STATUS_CONFIG, PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity } from '@/types'
 import { cn, formatDate, isOverdue } from '@/lib/utils'
@@ -22,7 +23,7 @@ export default async function ActivityPage({
   const { orgSlug, workspaceId, campaignId, activityId } = await params
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
 
   const { data: activity } = await supabase
     .from('activities')

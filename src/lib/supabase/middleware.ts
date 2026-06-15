@@ -1,49 +1,30 @@
-import { createServerClient } from '@supabase/ssr'
+/**
+ * Gate "otimista" do proxy (Next 16): valida o cookie JWT `flow-jwt` (Web
+ * Crypto, roda no edge) e redireciona. A autorização de verdade é a RLS no
+ * banco — aqui é só UX de rota. Não usa mais supabase/GoTrue.
+ */
 import { NextResponse, type NextRequest } from 'next/server'
+import { COOKIE_TOKEN, verifyToken } from '@/lib/auth/jwt'
 
 export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request })
+  const claims = await verifyToken(request.cookies.get(COOKIE_TOKEN)?.value)
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          )
-          supabaseResponse = NextResponse.next({ request })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          )
-        },
-      },
-    }
-  )
+  const path = request.nextUrl.pathname
+  const isAuthPage = path.startsWith('/login')
+  const isConvite = path.startsWith('/convite/')
+  const isPublic = isAuthPage || isConvite
 
-  const { data: { user } } = await supabase.auth.getUser()
-
-  const isAuthPage = request.nextUrl.pathname.startsWith('/login')
-  const isAuthCallback = request.nextUrl.pathname.startsWith('/auth/callback')
-  const isConvite = request.nextUrl.pathname.startsWith('/convite/')
-  const isPublic = isAuthPage || isAuthCallback || isConvite
-
-  if (!user && !isPublic) {
+  if (!claims && !isPublic) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  if (user && isAuthPage) {
-    // Redirect to org or onboarding
+  if (claims && isAuthPage) {
     const url = request.nextUrl.clone()
-    url.pathname = '/onboarding'
+    url.pathname = '/'
     return NextResponse.redirect(url)
   }
 
-  return supabaseResponse
+  return NextResponse.next({ request })
 }

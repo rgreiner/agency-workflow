@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getUsuario } from '@/lib/auth/server'
 import { redirect } from 'next/navigation'
 import { ConviteLoginButton } from './ConviteLoginButton'
 import { AlertTriangle, Users } from 'lucide-react'
@@ -27,7 +28,7 @@ export default async function ConvitePage({
   const { token } = await params
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
 
   // Usa SECURITY DEFINER para bypassar RLS (visitante ainda não é membro)
   const { data: rows } = await supabase.rpc('get_invite_info', { p_token: token })
@@ -150,7 +151,7 @@ export default async function ConvitePage({
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          Já tem uma conta? O login com Google vinculará automaticamente ao seu perfil existente.
+          Já tem uma conta? Use o mesmo e-mail e senha para entrar.
         </p>
       </div>
     </div>

@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { getUsuario } from '@/lib/auth/server'
 import { revalidatePath } from 'next/cache'
 import type { StatusOverride } from '@/types'
 
@@ -11,7 +12,7 @@ export async function upsertOrgSettings(
   statusOverrides: StatusOverride[],
 ) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

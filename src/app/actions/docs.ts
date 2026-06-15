@@ -1,12 +1,13 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { getUsuario } from '@/lib/auth/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 export async function createDocument(orgId: string, orgSlug: string, workspaceId?: string | null) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const { data, error } = await supabase

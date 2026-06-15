@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getUsuario } from '@/lib/auth/server'
 import { notFound } from 'next/navigation'
 import { MemberRow } from './MemberRow'
 import { InviteButton } from './InviteButton'
@@ -19,7 +20,7 @@ export default async function MembrosPage({
   const { orgSlug } = await params
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) notFound()
 
   const { data: org } = await supabase

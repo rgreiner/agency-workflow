@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { getUsuario } from '@/lib/auth/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
@@ -11,7 +12,7 @@ export async function createActivity(
   formData: FormData
 ) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const title = (formData.get('title') as string)?.trim()
@@ -66,7 +67,7 @@ export async function updateActivityStatus(
   comment: string
 ) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const { error } = await supabase.rpc('update_activity_status', {
@@ -87,7 +88,7 @@ export async function setActivityAssignees(
   userIds: string[]
 ) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   // Remove assignees for this activity+status then re-insert
@@ -122,7 +123,7 @@ export async function updateActivityField(
   newValue: string | null,
 ) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const { error } = await supabase.rpc('update_activity_field', {
@@ -142,7 +143,7 @@ export async function updateActivityDates(
   dueDate: string | null,
 ) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const { error } = await supabase.rpc('update_activity_dates', {
@@ -161,7 +162,7 @@ export async function addComment(
   content: string
 ) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const { error } = await supabase.rpc('add_activity_comment', {

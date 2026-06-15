@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getUsuario } from '@/lib/auth/server'
 
 export default async function SettingsLayout({
   children,
@@ -12,7 +13,7 @@ export default async function SettingsLayout({
   const { orgSlug } = await params
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) notFound()
 
   const { data: membership } = await supabase

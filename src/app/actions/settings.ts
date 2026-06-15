@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { getUsuario } from '@/lib/auth/server'
 import { revalidatePath } from 'next/cache'
 import type { ActivityStatus, MemberRole } from '@/types'
 
@@ -8,7 +9,7 @@ import type { ActivityStatus, MemberRole } from '@/types'
 
 export async function createPosition(orgSlug: string, formData: FormData) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const { data: org } = await supabase.from('organizations').select('id').eq('slug', orgSlug).single()
@@ -34,7 +35,7 @@ export async function createPosition(orgSlug: string, formData: FormData) {
 
 export async function updatePosition(orgSlug: string, positionId: string, formData: FormData) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const name = (formData.get('name') as string)?.trim()
@@ -57,7 +58,7 @@ export async function updatePosition(orgSlug: string, positionId: string, formDa
 
 export async function deletePosition(orgSlug: string, positionId: string) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const { error } = await supabase.rpc('delete_org_position', {
@@ -79,7 +80,7 @@ export async function updateMember(
   role: MemberRole
 ) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const { error } = await supabase.rpc('update_member', {
@@ -96,7 +97,7 @@ export async function updateMember(
 
 export async function removeMember(orgSlug: string, orgId: string, memberId: string) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const { error } = await supabase.rpc('remove_member', {
@@ -116,7 +117,7 @@ export async function getOrCreateInviteLink(
   orgId: string
 ): Promise<{ token?: string; error?: string }> {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const { data, error } = await supabase.rpc('upsert_invite_link', {
@@ -134,7 +135,7 @@ export async function deactivateInviteLink(
   orgId: string
 ): Promise<{ error?: string }> {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const { error } = await supabase.rpc('deactivate_invite_link', {

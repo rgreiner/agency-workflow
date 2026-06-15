@@ -3,6 +3,7 @@
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { getUsuarioClient } from '@/lib/auth/client'
 import { UserPlus, X, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -52,7 +53,7 @@ export function AssigneeSelector({ activityId, assignedIds, members, path, compa
   }, [])
 
   async function toggle(userId: string) {
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = getUsuarioClient()
     if (!user) return
 
     startTransition(async () => {
