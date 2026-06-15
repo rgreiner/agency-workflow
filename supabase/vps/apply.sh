@@ -27,6 +27,7 @@ done
 # 017_org_logos_bucket.sql skipped on purpose (Supabase Storage only)
 run "$VPS/018b_update_profile.sql"
 run "$(ls "$MIG/019_"*.sql)"
+run "$(ls "$MIG/020_"*.sql)"   # RPCs que faltavam no repo (reconstruídas)
 run "$VPS/99_grants.sql"
 
 # Set the authenticator password from the secrets file (value never printed).
