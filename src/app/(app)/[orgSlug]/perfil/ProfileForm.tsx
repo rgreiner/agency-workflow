@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useTransition } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { uploadFile } from '@/lib/storage/upload-client'
 import { updateProfile } from '@/app/actions/profile'
 import { useOrgSettings } from '@/components/providers/OrgSettingsProvider'
 import { toast } from 'sonner'
@@ -18,7 +18,6 @@ export interface ProfileUser {
 
 export function ProfileForm({ user }: { user: ProfileUser }) {
   const settings     = useOrgSettings()
-  const supabase     = createClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [fullName,  setFullName]  = useState(user.fullName ?? '')
@@ -36,13 +35,11 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
     const path = `${user.id}/avatar.${ext}`
     setUploading(true)
     try {
-      const { error } = await supabase.storage
-        .from('avatars')
-        .upload(path, file, { upsert: true, contentType: file.type })
-      if (error) { toast.error(error.message); return }
-      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
-      setAvatarUrl(`${publicUrl}?t=${Date.now()}`)
+      const url = await uploadFile('avatars', path, file)
+      setAvatarUrl(`${url}?t=${Date.now()}`)
       toast.success('Foto atualizada!')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha no upload')
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''

@@ -6,7 +6,7 @@ import { STATUS_CONFIG } from '@/types'
 import type { StatusOverride } from '@/types'
 import { upsertOrgSettings } from '@/app/actions/org-settings'
 import { useOrgSettings } from '@/components/providers/OrgSettingsProvider'
-import { createClient } from '@/lib/supabase/client'
+import { uploadFile } from '@/lib/storage/upload-client'
 import { toast } from 'sonner'
 import { Loader2, RotateCcw, Upload, X } from 'lucide-react'
 
@@ -47,7 +47,6 @@ export default function AparenciaPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const orgId    = settings.orgId
-  const supabase = createClient()
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -56,13 +55,11 @@ export default function AparenciaPage() {
     const path = `${orgId}/logo.${ext}`
     setUploading(true)
     try {
-      const { error } = await supabase.storage
-        .from('org-logos')
-        .upload(path, file, { upsert: true, contentType: file.type })
-      if (error) { toast.error(error.message); return }
-      const { data: { publicUrl } } = supabase.storage.from('org-logos').getPublicUrl(path)
-      setLogoUrl(`${publicUrl}?t=${Date.now()}`)
+      const url = await uploadFile('org-logos', path, file)
+      setLogoUrl(`${url}?t=${Date.now()}`)
       toast.success('Logo enviado!')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha no upload')
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
