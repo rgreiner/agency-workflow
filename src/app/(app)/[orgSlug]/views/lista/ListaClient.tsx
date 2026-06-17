@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useTransition } from 'react'
 import Link from 'next/link'
 import { cn, isOverdue, daysUntil } from '@/lib/utils'
 import { PRIORITY_CONFIG, STATUS_CONFIG, type ActivityPriority } from '@/types'
-import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical } from 'lucide-react'
+import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search } from 'lucide-react'
 import { AvatarGroup } from '@/components/ui/Avatar'
 import { updateActivityStatus } from '@/app/actions/activity'
 import { toast } from 'sonner'
@@ -62,11 +62,8 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
   const [overrides, setOverrides] = useState<Record<string, string>>({})
   const [, startTransition] = useTransition()
 
-  function handleDrop(targetStatus: string) {
-    const id = draggingId
-    setDraggingId(null)
-    setDragOverStatus(null)
-    if (!id) return
+  // Troca de status (otimista) — usada pelo drag-and-drop E pelo seletor no nome.
+  function changeStatus(id: string, targetStatus: string) {
     const activity = activities.find(a => a.id === id)
     const currentStatus = overrides[id] ?? activity?.status
     if (!activity || currentStatus === targetStatus) return
@@ -90,6 +87,13 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
         toast.success(`"${activity.title}" movida para ${label}`)
       }
     })
+  }
+
+  function handleDrop(targetStatus: string) {
+    const id = draggingId
+    setDraggingId(null)
+    setDragOverStatus(null)
+    if (id) changeStatus(id, targetStatus)
   }
 
   useEffect(() => {
@@ -147,13 +151,17 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
     <div className="p-6">
 
       {/* Page header */}
-      <div className="flex items-center justify-between mb-5">
-        <div>
+      <div className="flex items-center justify-between gap-3 mb-5">
+        <div className="min-w-0">
           <h1 className="text-lg font-semibold text-gray-900">Lista de atividades</h1>
           <p className="text-gray-500 text-sm mt-0.5">
             {totalCount} atividade{totalCount !== 1 ? 's' : ''} em andamento
           </p>
         </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Nova atividade — sempre disponível no topo */}
+          <NewActivityButton orgSlug={orgSlug} campMap={campMap} />
 
         {/* Workspace filter */}
         {workspaceOptions.length > 1 && (
@@ -205,6 +213,7 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
             </div>
           )}
         </div>
+        </div>
       </div>
 
       {/* ── Drop bar: todos os status como alvo durante o arraste ── */}
@@ -232,10 +241,10 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
       )}
 
       {/* ── Table ── */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200">
 
         {/* Column header — desktop only */}
-        <div className="hidden md:flex items-center gap-2 px-4 py-2 border-b border-gray-100 bg-gray-50/60">
+        <div className="hidden md:flex items-center gap-2 px-4 py-2 border-b border-gray-100 bg-gray-50/60 rounded-t-xl">
           <div className="w-3.5 shrink-0 -ml-1" />
           <div className="flex-1 text-xs font-medium text-gray-400" />
           {visibleCols.map(col => (
@@ -269,7 +278,7 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                 onDragLeave={() => setDragOverStatus(prev => prev === statusCfg.value ? null : prev)}
                 onDrop={e => { e.preventDefault(); handleDrop(statusCfg.value) }}
                 className={cn(
-                  'border-b border-gray-100 last:border-0 transition-colors',
+                  'border-t-8 border-gray-50 first:border-t-0 transition-colors',
                   draggingId && dragOverStatus === statusCfg.value && 'bg-indigo-50/70 ring-2 ring-inset ring-indigo-300'
                 )}
               >
@@ -277,7 +286,7 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                 {/* Group header */}
                 <button
                   onClick={() => toggleGroup(statusCfg.value)}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50/80 transition text-left"
+                  className="w-full flex items-center gap-2 px-4 py-3 hover:bg-gray-50/80 transition text-left"
                 >
                   <ChevronDown className={cn(
                     'w-3.5 h-3.5 text-gray-400 transition-transform shrink-0',
@@ -314,24 +323,31 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                         <div key={activity.id} className="hover:bg-gray-50/60 transition group">
 
                           {/* ── Mobile layout ─────────────────────────── */}
-                          <Link href={href} className="md:hidden flex items-center gap-3 px-4 py-3">
-                            <div className="flex-1 min-w-0">
-                              {camp && (
-                                <span className="text-[11px] text-gray-400 block leading-tight mb-0.5 truncate">
-                                  {camp.client} / {camp.name}
+                          <div className="md:hidden flex items-center gap-3 px-4 py-3">
+                            <StatusDot
+                              current={activity.status}
+                              statusConfig={statusConfig}
+                              onChange={(s) => changeStatus(activity.id, s)}
+                            />
+                            <Link href={href} className="flex items-center gap-3 flex-1 min-w-0">
+                              <div className="flex-1 min-w-0">
+                                {camp && (
+                                  <span className="text-[11px] text-gray-400 block leading-tight mb-0.5 truncate">
+                                    {camp.client} / {camp.name}
+                                  </span>
+                                )}
+                                <span className="text-sm font-medium text-gray-900 group-hover:text-indigo-600 transition block truncate">
+                                  {activity.title}
                                 </span>
-                              )}
-                              <span className="text-sm font-medium text-gray-900 group-hover:text-indigo-600 transition block truncate">
-                                {activity.title}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              {dueBadge}
-                              {activity.assignees.length > 0 && (
-                                <AvatarGroup users={activity.assignees} />
-                              )}
-                            </div>
-                          </Link>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                {dueBadge}
+                                {activity.assignees.length > 0 && (
+                                  <AvatarGroup users={activity.assignees} />
+                                )}
+                              </div>
+                            </Link>
+                          </div>
 
                           {/* ── Desktop layout — arrastável entre status ── */}
                           <div
@@ -349,6 +365,13 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                           >
                             {/* Grip — aparece no hover */}
                             <GripVertical className="w-3.5 h-3.5 text-gray-300 opacity-0 group-hover:opacity-100 transition shrink-0 -ml-1" />
+
+                            {/* Seletor de status (bolinha) */}
+                            <StatusDot
+                              current={activity.status}
+                              statusConfig={statusConfig}
+                              onChange={(s) => changeStatus(activity.id, s)}
+                            />
 
                             {/* Name */}
                             <div className="flex-1 min-w-0">
@@ -448,6 +471,145 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
           })
         )}
       </div>
+    </div>
+  )
+}
+
+// ── Seletor de status inline (bolinha + dropdown), estilo ClickUp ───────────
+function StatusDot({
+  current,
+  statusConfig,
+  onChange,
+}: {
+  current: string
+  statusConfig: { value: string; label: string; bgColor: string; color: string }[]
+  onChange: (status: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onOut(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onOut)
+    return () => document.removeEventListener('mousedown', onOut)
+  }, [open])
+
+  const cfg = statusConfig.find(s => s.value === current)
+
+  return (
+    <div className="relative shrink-0" ref={ref}>
+      <button
+        type="button"
+        title={cfg?.label ? `Status: ${cfg.label} — clique para mudar` : 'Mudar status'}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(o => !o) }}
+        className={cn(
+          'w-4 h-4 rounded-full border-2 border-current flex items-center justify-center hover:scale-110 transition',
+          cfg?.color ?? 'text-gray-300'
+        )}
+      >
+        <Check className="w-2.5 h-2.5" strokeWidth={3.5} />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-6 z-30 w-56 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 max-h-72 overflow-y-auto">
+          <p className="px-3 pb-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+            Mudar status
+          </p>
+          {statusConfig.map(s => (
+            <button
+              key={s.value}
+              type="button"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(false); onChange(s.value) }}
+              className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition text-left"
+            >
+              <span className={cn('w-2.5 h-2.5 rounded-full border-2 border-current shrink-0', s.color)} />
+              <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full', s.bgColor, s.color)}>
+                {s.label}
+              </span>
+              {s.value === current && <Check className="w-3 h-3 text-gray-400 ml-auto shrink-0" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Botão "Nova atividade" sempre no topo (escolhe a campanha de destino) ───
+function NewActivityButton({
+  orgSlug,
+  campMap,
+}: {
+  orgSlug: string
+  campMap: Record<string, CampInfo>
+}) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onOut(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onOut)
+    return () => document.removeEventListener('mousedown', onOut)
+  }, [open])
+
+  const items = Object.entries(campMap)
+    .map(([id, c]) => ({ id, ...c }))
+    .sort((a, b) => a.client.localeCompare(b.client) || a.name.localeCompare(b.name))
+  const term = q.trim().toLowerCase()
+  const filtered = term
+    ? items.filter(i => `${i.client} ${i.name}`.toLowerCase().includes(term))
+    : items
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition"
+      >
+        <Plus className="w-4 h-4" />
+        <span className="hidden sm:inline">Nova atividade</span>
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl border border-gray-200 shadow-lg z-30 overflow-hidden">
+          <div className="p-2 border-b border-gray-100">
+            <div className="flex items-center gap-2 px-2 py-1.5 bg-gray-50 rounded-lg">
+              <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+              <input
+                autoFocus
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar campanha…"
+                className="flex-1 bg-transparent text-sm text-gray-700 placeholder-gray-400 focus:outline-none"
+              />
+            </div>
+          </div>
+          <div className="max-h-72 overflow-y-auto py-1">
+            {filtered.length === 0 ? (
+              <p className="px-3 py-6 text-xs text-gray-400 text-center">Nenhuma campanha encontrada</p>
+            ) : (
+              filtered.map(i => (
+                <Link
+                  key={i.id}
+                  href={`/${orgSlug}/workspaces/${i.workspaceId}/campaigns/${i.id}/activities/new`}
+                  className="block px-3 py-2 hover:bg-gray-50 transition"
+                >
+                  <span className="text-[11px] text-gray-400 block leading-tight">{i.client}</span>
+                  <span className="text-sm text-gray-800">{i.name}</span>
+                </Link>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

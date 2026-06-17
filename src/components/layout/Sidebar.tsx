@@ -15,6 +15,8 @@ import {
   AlignLeft,
   Menu,
   X,
+  PanelLeftClose,
+  PanelLeft,
 } from 'lucide-react'
 import { logout } from '@/app/actions/auth'
 
@@ -48,6 +50,16 @@ export function Sidebar({
   const base = `/${orgSlug}`
 
   const [mobileOpen, setMobileOpen] = useState(false)
+
+  // Colapso no desktop (persistido) — esconde a sidebar pra ampliar a área útil.
+  const [collapsed, setCollapsedState] = useState(false)
+  useEffect(() => {
+    try { setCollapsedState(localStorage.getItem('sidebar-collapsed') === '1') } catch {}
+  }, [])
+  function setCollapsed(v: boolean) {
+    setCollapsedState(v)
+    try { localStorage.setItem('sidebar-collapsed', v ? '1' : '0') } catch {}
+  }
 
   const activeWorkspaceId = workspaces.find(ws =>
     pathname.includes(`/workspaces/${ws.id}`)
@@ -112,6 +124,14 @@ export function Sidebar({
           <span className="text-gray-100 font-semibold text-sm truncate flex-1 text-left">{orgName}</span>
           <ChevronDown className="w-3.5 h-3.5 text-gray-600 shrink-0" />
         </Link>
+        {/* Ocultar — desktop only */}
+        <button
+          onClick={() => setCollapsed(true)}
+          className="hidden md:block p-1.5 text-gray-600 hover:text-gray-300 transition"
+          title="Ocultar menu"
+        >
+          <PanelLeftClose className="w-4 h-4" />
+        </button>
         {/* Close — mobile only */}
         <button
           onClick={() => setMobileOpen(false)}
@@ -284,6 +304,19 @@ export function Sidebar({
         <Menu className="w-5 h-5" />
       </button>
 
+      {/* Reabrir — desktop only, quando a sidebar está colapsada */}
+      <button
+        onClick={() => setCollapsed(false)}
+        className={cn(
+          'fixed top-3 left-3 z-50 bg-gray-900 text-gray-300 rounded-lg p-2 shadow-lg hover:text-white transition',
+          collapsed ? 'hidden md:flex' : 'hidden'
+        )}
+        title="Mostrar menu"
+        aria-label="Mostrar menu"
+      >
+        <PanelLeft className="w-5 h-5" />
+      </button>
+
       {/* Backdrop — mobile only */}
       {mobileOpen && (
         <div
@@ -297,7 +330,8 @@ export function Sidebar({
         'fixed inset-y-0 left-0 z-50 md:static md:z-auto',
         'shrink-0 h-full flex',
         'transition-transform duration-300 ease-in-out md:transition-none',
-        mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+        collapsed && 'md:w-0 md:overflow-hidden'
       )}>
         {sidebarContent}
       </div>
