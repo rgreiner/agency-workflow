@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { List, GanttChart, Users, BookOpen, PenTool, Search } from 'lucide-react'
 import { CommandPalette } from './CommandPalette'
+import { NotificationsBell } from './NotificationsBell'
 
 interface Workspace {
   id: string
@@ -106,6 +107,9 @@ export function TopNav({ orgSlug, orgName, workspaces, accentColor = '#6366f1' }
             </Link>
           ))}
         </nav>
+
+        {/* Notificações */}
+        <NotificationsBell orgSlug={orgSlug} />
 
         {/* Search trigger */}
         <button
