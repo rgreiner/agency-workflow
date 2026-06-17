@@ -10,6 +10,7 @@ import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, 
 const COMPLEXITY_ICON = { simple: SignalLow, medium: SignalMedium, complex: SignalHigh } as const
 import { AvatarGroup } from '@/components/ui/Avatar'
 import { DateRangeEditor } from '@/components/ui/DateRangeEditor'
+import { Select } from '@/components/ui/Select'
 import { updateActivityStatus, updateActivityField, setActivityArchived } from '@/app/actions/activity'
 import { createClient } from '@/lib/supabase/client'
 import { getUsuarioClient } from '@/lib/auth/client'
@@ -240,14 +241,15 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
 
         {/* Workspace filter */}
         {workspaceOptions.length > 1 && (
-          <select
+          <Select
             value={filterWorkspace}
-            onChange={e => setFilterWorkspace(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-          >
-            <option value="">Todos os clientes</option>
-            {workspaceOptions.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
+            onChange={setFilterWorkspace}
+            className="w-44"
+            options={[
+              { value: '', label: 'Todos os clientes' },
+              ...workspaceOptions.map(w => ({ value: w.id, label: w.name })),
+            ]}
+          />
         )}
 
         {/* Column picker — desktop only */}

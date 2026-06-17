@@ -4,6 +4,7 @@ import { useState, useRef, useTransition } from 'react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarGroup } from '@/components/ui/Avatar'
+import { Select } from '@/components/ui/Select'
 import { STATUS_CONFIG } from '@/types'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { updateActivityDates } from '@/app/actions/activity'
@@ -411,21 +412,24 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
 
       {/* Filters */}
       <div className="flex items-center gap-2 mb-4 shrink-0 flex-wrap">
-        <select value={filterWorkspace} onChange={e => setFilterWorkspace(e.target.value)}
-          className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
-          <option value="">Todos os clientes</option>
-          {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-        </select>
-        <select value={filterPerson} onChange={e => setFilterPerson(e.target.value)}
-          className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
-          <option value="">Todas as pessoas</option>
-          {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name ?? '?'}</option>)}
-        </select>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-          className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
-          <option value="">Todos os status</option>
-          {STATUS_CONFIG.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-        </select>
+        <Select
+          value={filterWorkspace}
+          onChange={setFilterWorkspace}
+          className="w-44"
+          options={[{ value: '', label: 'Todos os clientes' }, ...workspaces.map(w => ({ value: w.id, label: w.name }))]}
+        />
+        <Select
+          value={filterPerson}
+          onChange={setFilterPerson}
+          className="w-44"
+          options={[{ value: '', label: 'Todas as pessoas' }, ...profiles.map(p => ({ value: p.id, label: p.full_name ?? '?' }))]}
+        />
+        <Select
+          value={filterStatus}
+          onChange={setFilterStatus}
+          className="w-44"
+          options={[{ value: '', label: 'Todos os status' }, ...STATUS_CONFIG.map(s => ({ value: s.value, label: s.label }))]}
+        />
         {(filterWorkspace || filterPerson || filterStatus) && (
           <button onClick={() => { setFilterWorkspace(''); setFilterPerson(''); setFilterStatus('') }}
             className="text-xs text-gray-400 hover:text-gray-600 transition px-2 py-1.5">
