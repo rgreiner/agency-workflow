@@ -338,7 +338,20 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
           <div className="w-4 shrink-0" />
           <div className="flex-1 text-xs font-medium text-gray-400">Atividade</div>
           {visibleCols.map(col => (
-            <div key={col.key} className={cn('text-xs font-medium text-gray-400 shrink-0', col.width)}>
+            <div
+              key={col.key}
+              draggable
+              onDragStart={() => setDragCol(col.key)}
+              onDragEnd={() => setDragCol(null)}
+              onDragOver={e => e.preventDefault()}
+              onDragEnter={() => { if (dragCol && dragCol !== col.key) moveCol(dragCol, col.key) }}
+              title="Arraste para reordenar"
+              className={cn(
+                'text-xs font-medium text-gray-400 shrink-0 cursor-grab select-none transition hover:text-gray-600',
+                col.width,
+                dragCol === col.key && 'opacity-40',
+              )}
+            >
               {col.label}
             </div>
           ))}
