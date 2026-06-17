@@ -10,7 +10,7 @@ import { CommentBox } from './CommentBox'
 import { AssigneeSelector } from './AssigneeSelector'
 import { FieldEditor } from './FieldEditor'
 import { ActivityHeader } from './ActivityHeader'
-import { DateRangeEditor } from './DateRangeEditor'
+import { DateRangeEditor } from '@/components/ui/DateRangeEditor'
 import { Avatar } from '@/components/ui/Avatar'
 
 export default async function ActivityPage({

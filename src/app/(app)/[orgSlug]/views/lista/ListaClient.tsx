@@ -9,6 +9,7 @@ import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, 
 // Complexidade → ícone (1/2/3 barras)
 const COMPLEXITY_ICON = { simple: SignalLow, medium: SignalMedium, complex: SignalHigh } as const
 import { AvatarGroup } from '@/components/ui/Avatar'
+import { DateRangeEditor } from '@/components/ui/DateRangeEditor'
 import { updateActivityStatus, updateActivityField, setActivityArchived } from '@/app/actions/activity'
 import { createClient } from '@/lib/supabase/client'
 import { getUsuarioClient } from '@/lib/auth/client'
@@ -422,7 +423,7 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                           case 'responsavel':
                             return <AssigneeCell activityId={activity.id} assignedIds={activity.assignedIds} members={members} />
                           case 'prazo':
-                            return <DueDateCell activityId={activity.id} current={activity.due_date} path={listPath} />
+                            return <DateRangeEditor activityId={activity.id} path={listPath} startDate={activity.start_date ?? null} dueDate={activity.due_date} canEdit compact />
                           case 'prioridade':
                             return <PriorityCell activityId={activity.id} current={activity.priority} path={listPath} />
                           case 'complexidade':
@@ -841,70 +842,3 @@ function PriorityCell({ activityId, current, path }: { activityId: string; curre
   )
 }
 
-// ── Prazo inline (badge + date picker) ──────────────────────────────────────
-function DueDateCell({ activityId, current, path }: { activityId: string; current: string | null; path: string }) {
-  const [value, setValue] = useState<string | null>(current ? current.slice(0, 10) : null)
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    function onOut(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
-    document.addEventListener('mousedown', onOut)
-    return () => document.removeEventListener('mousedown', onOut)
-  }, [open])
-
-  const overdue = isOverdue(value)
-  const days = daysUntil(value)
-
-  async function save(v: string | null) {
-    setOpen(false)
-    if (v === value) return
-    const prev = value
-    setValue(v) // otimista
-    const r = await updateActivityField(path, activityId, 'due_date', v)
-    if (r?.error) { setValue(prev); toast.error(r.error) }
-  }
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        title="Editar prazo"
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(o => !o) }}
-        className="text-left"
-      >
-        {value ? (
-          <span className={cn(
-            'text-xs font-medium flex items-center gap-1',
-            overdue ? 'text-red-600' : days !== null && days <= 3 ? 'text-orange-500' : 'text-gray-600'
-          )}>
-            {overdue && <AlertCircle className="w-3 h-3 shrink-0" />}
-            {overdue ? `${Math.abs(days!)}d atraso` : days === 0 ? 'Hoje' : days === 1 ? 'Amanhã' : `${days}d`}
-          </span>
-        ) : <span className="text-xs text-gray-300 hover:text-indigo-500 transition">+ prazo</span>}
-      </button>
-      {open && (
-        <div className="absolute left-0 top-7 z-30 bg-white rounded-xl border border-gray-200 shadow-lg p-2 flex items-center gap-2">
-          <input
-            type="date"
-            value={value ?? ''}
-            autoFocus
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => save(e.target.value || null)}
-            className="text-sm border border-gray-200 rounded-lg px-2 py-1 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-          />
-          {value && (
-            <button
-              type="button"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); save(null) }}
-              className="text-xs text-gray-400 hover:text-red-500 transition shrink-0"
-            >
-              Limpar
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
