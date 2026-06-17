@@ -27,6 +27,7 @@ export default async function CampaignPage({
     .from('activities')
     .select('*, activity_assignees(user_id, profiles(full_name, avatar_url))')
     .eq('campaign_id', campaignId)
+    .eq('archived', false)
     .order('sort_order', { ascending: true })
 
   const grouped = STATUS_CONFIG.reduce((acc, s) => {

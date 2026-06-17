@@ -26,6 +26,7 @@ export default async function WorkspacePage({
     ? await supabase.from('activities')
         .select('id, title, status, priority, due_date, campaign_id')
         .in('campaign_id', campIds)
+        .eq('archived', false)
         .order('sort_order', { ascending: true })
     : { data: [] }
 

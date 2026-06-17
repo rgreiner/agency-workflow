@@ -26,6 +26,7 @@ export default async function AtendimentoPage({
     ? await supabase.from('activities')
         .select('id, title, status, priority, due_date, layout_url, campaign_id, updated_at, activity_assignees(profiles(full_name, avatar_url)), activity_comments(content, created_at, profiles(full_name))')
         .in('campaign_id', campIds)
+        .eq('archived', false)
         .neq('status', 'concluido')
         .order('due_date', { ascending: true, nullsFirst: false })
     : { data: [] }

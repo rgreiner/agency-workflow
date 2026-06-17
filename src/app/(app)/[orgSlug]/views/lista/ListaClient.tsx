@@ -4,12 +4,12 @@ import { useState, useEffect, useRef, useTransition } from 'react'
 import Link from 'next/link'
 import { cn, isOverdue, daysUntil } from '@/lib/utils'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority } from '@/types'
-import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search, Flag, SignalLow, SignalMedium, SignalHigh, Copy } from 'lucide-react'
+import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search, Flag, SignalLow, SignalMedium, SignalHigh, Copy, Archive, ArchiveRestore } from 'lucide-react'
 
 // Complexidade → ícone (1/2/3 barras)
 const COMPLEXITY_ICON = { simple: SignalLow, medium: SignalMedium, complex: SignalHigh } as const
 import { AvatarGroup } from '@/components/ui/Avatar'
-import { updateActivityStatus, updateActivityField } from '@/app/actions/activity'
+import { updateActivityStatus, updateActivityField, setActivityArchived } from '@/app/actions/activity'
 import { createClient } from '@/lib/supabase/client'
 import { getUsuarioClient } from '@/lib/auth/client'
 import { toast } from 'sonner'
@@ -52,12 +52,29 @@ interface Props {
   statusConfig: { value: string; label: string; bgColor: string; color: string }[]
   members: Member[]
   initialWorkspace?: string
+  view: 'ativas' | 'arquivadas'
 }
 
 // ── Component ─────────────────────────────────────────────────────────────
 
-export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfig, members, initialWorkspace }: Props) {
+export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfig, members, initialWorkspace, view }: Props) {
   const listPath = `/${orgSlug}/views/lista`
+  const isArchivedView = view === 'arquivadas'
+  // Otimista: esconde itens recém-(des)arquivados até o revalidate do servidor.
+  const [hidden, setHidden] = useState<Set<string>>(new Set())
+
+  function archiveActivity(id: string, title: string) {
+    setHidden(prev => new Set(prev).add(id))
+    startTransition(async () => {
+      const r = await setActivityArchived(listPath, id, !isArchivedView)
+      if (r?.error) {
+        setHidden(prev => { const n = new Set(prev); n.delete(id); return n })
+        toast.error(r.error)
+      } else {
+        toast.success(isArchivedView ? `"${title}" desarquivada` : `"${title}" arquivada`)
+      }
+    })
+  }
   const [cols, setCols] = useState<Record<ColKey, boolean>>(defaultCols)
   const [order, setOrder] = useState<ColKey[]>(defaultOrder)
   const [dragCol, setDragCol] = useState<ColKey | null>(null)
@@ -176,7 +193,7 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
   const filteredActivities = (filterWorkspace
     ? activities.filter(a => campMap[a.campaign_id]?.workspaceId === filterWorkspace)
     : activities
-  ).map(a => overrides[a.id] ? { ...a, status: overrides[a.id] } : a)
+  ).filter(a => !hidden.has(a.id)).map(a => overrides[a.id] ? { ...a, status: overrides[a.id] } : a)
 
   // Colunas na ordem escolhida pelo usuário (com fallback p/ defs novas)
   const orderedCols = [...order, ...COL_DEFS.map(c => c.key).filter(k => !order.includes(k))]
@@ -196,11 +213,27 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-gray-900">Lista de atividades</h1>
           <p className="text-gray-500 text-sm mt-0.5">
-            {totalCount} atividade{totalCount !== 1 ? 's' : ''} em andamento
+            {totalCount} atividade{totalCount !== 1 ? 's' : ''} {isArchivedView ? `arquivada${totalCount !== 1 ? 's' : ''}` : 'em andamento'}
           </p>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {/* Ativas / Arquivadas */}
+          <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 text-sm">
+            <Link
+              href={`/${orgSlug}/views/lista`}
+              className={cn('px-2.5 py-1 rounded-md transition', !isArchivedView ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-700')}
+            >
+              Ativas
+            </Link>
+            <Link
+              href={`/${orgSlug}/views/lista?view=arquivadas`}
+              className={cn('px-2.5 py-1 rounded-md transition', isArchivedView ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-700')}
+            >
+              Arquivadas
+            </Link>
+          </div>
+
           {/* Nova atividade — sempre disponível no topo */}
           <NewActivityButton orgSlug={orgSlug} campMap={campMap} />
 
@@ -313,8 +346,14 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
         {/* Status groups */}
         {activeGroups.length === 0 ? (
           <div className="text-center py-24">
-            <p className="text-gray-900 font-medium">Nenhuma atividade em andamento</p>
-            <p className="text-gray-500 text-sm mt-1">Todas as atividades estão concluídas ou ainda não foram criadas.</p>
+            <p className="text-gray-900 font-medium">
+              {isArchivedView ? 'Nenhuma atividade arquivada' : 'Nenhuma atividade em andamento'}
+            </p>
+            <p className="text-gray-500 text-sm mt-1">
+              {isArchivedView
+                ? 'Tarefas arquivadas aparecem aqui.'
+                : 'Todas as atividades estão concluídas ou ainda não foram criadas.'}
+            </p>
           </div>
         ) : (
           activeGroups.map(statusCfg => {
@@ -485,6 +524,16 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                                 {renderCell(col.key)}
                               </div>
                             ))}
+
+                            {/* Ação: arquivar / desarquivar */}
+                            <button
+                              type="button"
+                              title={isArchivedView ? 'Desarquivar' : 'Arquivar'}
+                              onClick={e => { e.preventDefault(); e.stopPropagation(); archiveActivity(activity.id, activity.title) }}
+                              className="p-1 rounded text-gray-300 hover:text-indigo-600 hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition shrink-0"
+                            >
+                              {isArchivedView ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                            </button>
                           </div>
 
                         </div>

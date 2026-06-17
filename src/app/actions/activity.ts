@@ -156,6 +156,25 @@ export async function updateActivityDates(
   revalidatePath('/', 'layout')
 }
 
+export async function setActivityArchived(
+  path: string,
+  activityId: string,
+  archived: boolean,
+) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { error } = await supabase.rpc('set_activity_archived', {
+    p_user_id: user.id,
+    p_activity_id: activityId,
+    p_archived: archived,
+  })
+
+  if (error) return { error: error.message }
+  revalidatePath(path)
+}
+
 export async function addComment(
   path: string,
   activityId: string,

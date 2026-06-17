@@ -49,6 +49,7 @@ export default async function DashboardPage({
         .from('activities')
         .select('id, title, status, due_date, campaign_id, campaigns(id, name, workspace_id, workspaces(id, name))')
         .in('id', myActivityIds)
+        .eq('archived', false)
         .neq('status', 'concluido')
     : { data: [] }
 
@@ -110,7 +111,7 @@ export default async function DashboardPage({
   const campIds = campaigns?.map(c => c.id) ?? []
 
   const { data: allActivities } = campIds.length
-    ? await supabase.from('activities').select('id, status, due_date').in('campaign_id', campIds)
+    ? await supabase.from('activities').select('id, status, due_date').in('campaign_id', campIds).eq('archived', false)
     : { data: [] }
 
   const total = allActivities?.length ?? 0

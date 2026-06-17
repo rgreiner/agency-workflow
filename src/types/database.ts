@@ -155,6 +155,8 @@ export type Database = {
       activities: {
         Row: {
           campaign_id: string
+          archived: boolean
+          archived_at: string | null
           complexity: Database["public"]["Enums"]["activity_complexity"]
           created_at: string
           created_by: string | null
@@ -176,6 +178,8 @@ export type Database = {
         }
         Insert: {
           campaign_id: string
+          archived?: boolean
+          archived_at?: string | null
           complexity?: Database["public"]["Enums"]["activity_complexity"]
           created_at?: string
           created_by?: string | null
@@ -197,6 +201,8 @@ export type Database = {
         }
         Update: {
           campaign_id?: string
+          archived?: boolean
+          archived_at?: string | null
           complexity?: Database["public"]["Enums"]["activity_complexity"]
           created_at?: string
           created_by?: string | null
@@ -222,6 +228,7 @@ export type Database = {
       }
       campaigns: {
         Row: {
+          archived: boolean
           created_at: string
           created_by: string | null
           description: string | null
@@ -233,6 +240,7 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          archived?: boolean
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -244,6 +252,7 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          archived?: boolean
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -635,6 +644,14 @@ export type Database = {
           p_assignee_id: string
         }
         Returns: boolean
+      }
+      set_activity_archived: {
+        Args: {
+          p_user_id: string
+          p_activity_id: string
+          p_archived: boolean
+        }
+        Returns: undefined
       }
       is_org_member: {
         Args: { p_org_id: string }

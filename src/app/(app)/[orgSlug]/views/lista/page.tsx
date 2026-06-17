@@ -7,10 +7,11 @@ export default async function ListaPage({
   searchParams,
 }: {
   params: Promise<{ orgSlug: string }>
-  searchParams: Promise<{ ws?: string }>
+  searchParams: Promise<{ ws?: string; view?: string }>
 }) {
   const { orgSlug } = await params
-  const { ws } = await searchParams
+  const { ws, view } = await searchParams
+  const archivedView = view === 'arquivadas'
   const supabase = await createClient()
 
   const { data: org } = await supabase
@@ -26,13 +27,15 @@ export default async function ListaPage({
     : { data: [] }
   const campIds = campaigns?.map(c => c.id) ?? []
 
-  // Query activities sem join — evita falha total se schema cache estiver desatualizado
+  // Query activities sem join — evita falha total se schema cache estiver desatualizado.
+  // Ativas: não-arquivadas e não-concluídas. Arquivadas: archived = true (qualquer status).
+  let actQuery = supabase.from('activities')
+    .select('id, title, status, priority, complexity, due_date, start_date, layout_url, campaign_id, archived')
+    .in('campaign_id', campIds)
+    .eq('archived', archivedView)
+  if (!archivedView) actQuery = actQuery.neq('status', 'concluido')
   const { data: rawActivities } = campIds.length
-    ? await supabase.from('activities')
-        .select('id, title, status, priority, complexity, due_date, start_date, layout_url, campaign_id')
-        .in('campaign_id', campIds)
-        .neq('status', 'concluido')
-        .order('due_date', { ascending: true, nullsFirst: false })
+    ? await actQuery.order('due_date', { ascending: true, nullsFirst: false })
     : { data: [] }
 
   // Query de responsáveis separada — se falhar, atividades continuam aparecendo
@@ -99,6 +102,7 @@ export default async function ListaPage({
       statusConfig={STATUS_CONFIG}
       members={members}
       initialWorkspace={ws}
+      view={archivedView ? 'arquivadas' : 'ativas'}
     />
   )
 }
