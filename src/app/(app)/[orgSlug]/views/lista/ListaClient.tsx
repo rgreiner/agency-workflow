@@ -332,10 +332,10 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
       )}
 
       {/* ── Table ── */}
-      <div className="bg-white rounded-xl border border-gray-200">
+      <div>
 
         {/* Column header — desktop only */}
-        <div className="hidden md:flex items-center gap-2 px-4 py-2 border-b border-gray-100 bg-gray-50/60 rounded-t-xl">
+        <div className="hidden md:flex items-center gap-2 px-4 py-2">
           <div className="w-3.5 shrink-0 -ml-1" />
           <div className="w-4 shrink-0" />
           <div className="flex-1 text-xs font-medium text-gray-400">Atividade</div>
@@ -361,7 +361,7 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
 
         {/* Status groups */}
         {activeGroups.length === 0 ? (
-          <div className="text-center py-24">
+          <div className="text-center py-24 bg-white rounded-xl border border-gray-200 shadow-sm">
             <p className="text-gray-900 font-medium">
               {isArchivedView ? 'Nenhuma atividade arquivada' : 'Nenhuma atividade em andamento'}
             </p>
@@ -372,7 +372,8 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
             </p>
           </div>
         ) : (
-          activeGroups.map(statusCfg => {
+          <div className="space-y-2.5">
+          {activeGroups.map(statusCfg => {
             const items = filteredActivities.filter(a => a.status === statusCfg.value)
             const isOpen = !collapsed.has(statusCfg.value)
 
@@ -388,15 +389,15 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                 onDragLeave={() => setDragOverStatus(prev => prev === statusCfg.value ? null : prev)}
                 onDrop={e => { e.preventDefault(); handleDrop(statusCfg.value) }}
                 className={cn(
-                  'border-t-8 border-gray-50 first:border-t-0 transition-colors',
-                  draggingId && dragOverStatus === statusCfg.value && 'bg-indigo-50/70 ring-2 ring-inset ring-indigo-300'
+                  'bg-white rounded-xl border border-gray-200 shadow-sm transition-colors',
+                  draggingId && dragOverStatus === statusCfg.value && 'ring-2 ring-inset ring-indigo-300'
                 )}
               >
 
                 {/* Group header */}
                 <button
                   onClick={() => toggleGroup(statusCfg.value)}
-                  className="w-full flex items-center gap-2 px-4 py-3 hover:bg-gray-50/80 transition text-left"
+                  className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50/80 transition text-left rounded-t-xl"
                 >
                   <ChevronDown className={cn(
                     'w-3.5 h-3.5 text-gray-400 transition-transform shrink-0',
@@ -412,7 +413,7 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
 
                 {/* Activity rows */}
                 {isOpen && (
-                  <div className="divide-y divide-gray-100">
+                  <div className="divide-y divide-gray-100 border-t border-gray-100">
                     {items.map(activity => {
                       const camp     = campMap[activity.campaign_id]
                       const overdue  = isOverdue(activity.due_date)
@@ -470,7 +471,7 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                         <div key={activity.id} className="hover:bg-gray-50/60 transition group">
 
                           {/* ── Mobile layout ─────────────────────────── */}
-                          <div className="md:hidden flex items-center gap-3 px-4 py-3">
+                          <div className="md:hidden flex items-center gap-3 px-4 py-2.5">
                             <StatusDot
                               current={activity.status}
                               statusConfig={statusConfig}
@@ -483,7 +484,7 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                                     {camp.client} / {camp.name}
                                   </span>
                                 )}
-                                <span className="text-sm font-medium text-gray-900 group-hover:text-indigo-600 transition block truncate">
+                                <span className="text-sm font-medium text-gray-900 group-hover:text-indigo-700 transition block truncate">
                                   {activity.title}
                                 </span>
                               </div>
@@ -506,7 +507,7 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                             }}
                             onDragEnd={() => { setDraggingId(null); setDragOverStatus(null) }}
                             className={cn(
-                              'hidden md:flex items-center gap-2 px-4 py-2.5 group cursor-grab active:cursor-grabbing',
+                              'hidden md:flex items-center gap-2 px-4 py-2 group cursor-grab active:cursor-grabbing',
                               draggingId === activity.id && 'opacity-40'
                             )}
                           >
@@ -528,7 +529,7 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                                     {camp.client} / {camp.name}
                                   </span>
                                 )}
-                                <span className="text-sm font-medium text-gray-900 group-hover:text-indigo-600 transition truncate block">
+                                <span className="text-sm font-medium text-gray-900 group-hover:text-indigo-700 transition truncate block">
                                   {activity.title}
                                 </span>
                               </Link>
@@ -559,7 +560,8 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                 )}
               </div>
             )
-          })
+          })}
+          </div>
         )}
       </div>
     </div>
