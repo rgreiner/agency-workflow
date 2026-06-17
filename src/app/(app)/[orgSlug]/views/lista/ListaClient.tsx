@@ -300,7 +300,7 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
 
                 {/* Activity rows */}
                 {isOpen && (
-                  <div className="divide-y divide-gray-50">
+                  <div className="divide-y divide-gray-100">
                     {items.map(activity => {
                       const camp     = campMap[activity.campaign_id]
                       const overdue  = isOverdue(activity.due_date)

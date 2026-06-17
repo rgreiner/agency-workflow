@@ -34,9 +34,9 @@ yarn-error.log*
 .env*
 
 # seeds gerados (contêm dados de negócio + hashes de senha embutidos)
-/scripts/seed-clickup.bundle.mjs
-/scripts/seed-clickup.sql
-/scripts/seed-flow-oneliner.sh
+/scripts/*.bundle.mjs
+/scripts/seed-*.sql
+/scripts/*-oneliner.sh
 
 # typescript
 *.tsbuildinfo

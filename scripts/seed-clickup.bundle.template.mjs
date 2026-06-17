@@ -71,9 +71,8 @@ function parseDate(s) {
   return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
 }
 function cleanTitle(name) {
-  const t = (name ?? "").trim();
-  const m = t.match(/^\d{6}\s*-\s*(.+)$/);
-  return (m ? m[1] : t).trim() || t;
+  // Mantém o nome completo do ClickUp (inclui o prefixo de data "YYMMDD - ...").
+  return (name ?? "").trim();
 }
 function cleanContent(s) {
   s = (s ?? "").trim();

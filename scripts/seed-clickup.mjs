@@ -138,9 +138,8 @@ function parseDate(s) {
 
 /** Remove o prefixo "YYMMDD - " do nome da tarefa. */
 function cleanTitle(name) {
-  const t = (name ?? "").trim();
-  const m = t.match(/^\d{6}\s*-\s*(.+)$/);
-  return (m ? m[1] : t).trim() || t;
+  // Mantém o nome completo do ClickUp (inclui o prefixo de data "YYMMDD - ...").
+  return (name ?? "").trim();
 }
 
 /** Briefing: desfaz os \n escapados do export. */

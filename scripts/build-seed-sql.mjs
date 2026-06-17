@@ -61,7 +61,7 @@ function parseDate(s) {
   const [, mo, d, y] = m;
   return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
 }
-function cleanTitle(name) { const t = (name ?? "").trim(); const m = t.match(/^\d{6}\s*-\s*(.+)$/); return (m ? m[1] : t).trim() || t; }
+function cleanTitle(name) { return (name ?? "").trim(); } // mantém nome completo (com data)
 function cleanContent(s) { s = (s ?? "").trim(); if (!s || s === "null") return null; return s.replace(/\\n/g, "\n").replace(/\\t/g, "\t"); }
 
 // SQL helpers
