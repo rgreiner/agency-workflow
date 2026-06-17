@@ -146,8 +146,8 @@ export function AtendimentoClient({ activities, campMap, orgSlug }: {
                     const overdue = isOverdue(activity.due_date)
                     const days = daysUntil(activity.due_date)
                     const priority = PRIORITY_CONFIG[activity.priority as keyof typeof PRIORITY_CONFIG]
-                    const assignees = (activity.activity_assignees as { profiles: { full_name: string | null; avatar_url: string | null } }[])
-                      ?.map(a => a.profiles) ?? []
+                    const assignees = (activity.activity_assignees as { profiles: { full_name: string | null; avatar_url: string | null } | null }[])
+                      ?.map(a => a.profiles).filter(Boolean) ?? []
                     const comments = activity.activity_comments as { content: string; created_at: string; profiles: { full_name: string | null } | null }[]
                     const lastComment = comments?.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
 

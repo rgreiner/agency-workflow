@@ -40,9 +40,11 @@ export function Avatar({ name, avatarUrl, size = 'sm', className }: AvatarProps)
   )
 }
 
-export function AvatarGroup({ users, max = 3 }: { users: { full_name: string | null; avatar_url: string | null }[]; max?: number }) {
-  const visible = users.slice(0, max)
-  const rest = users.length - max
+export function AvatarGroup({ users, max = 3 }: { users: ({ full_name: string | null; avatar_url: string | null } | null)[]; max?: number }) {
+  // À prova de nulos: perfis podem vir null (RLS/join) — ignora em vez de quebrar.
+  const safe = (users ?? []).filter(Boolean) as { full_name: string | null; avatar_url: string | null }[]
+  const visible = safe.slice(0, max)
+  const rest = safe.length - max
 
   return (
     <div className="flex -space-x-1.5">
