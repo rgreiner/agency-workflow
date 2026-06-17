@@ -26,11 +26,13 @@ const COL_DEFS: { key: ColKey; label: string; defaultOn: boolean; width: string 
   { key: 'layout',       label: 'Drive',         defaultOn: true,  width: 'w-28' },
 ]
 
-const STORAGE_KEY = 'lista-cols-v3'
+const STORAGE_KEY = 'lista-cols-v4'
 
 function defaultCols(): Record<ColKey, boolean> {
   return Object.fromEntries(COL_DEFS.map(c => [c.key, c.defaultOn])) as Record<ColKey, boolean>
 }
+
+const defaultOrder = (): ColKey[] => COL_DEFS.map(c => c.key)
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -57,6 +59,8 @@ interface Props {
 export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfig, members, initialWorkspace }: Props) {
   const listPath = `/${orgSlug}/views/lista`
   const [cols, setCols] = useState<Record<ColKey, boolean>>(defaultCols)
+  const [order, setOrder] = useState<ColKey[]>(defaultOrder)
+  const [dragCol, setDragCol] = useState<ColKey | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [filterWorkspace, setFilterWorkspace] = useState(initialWorkspace ?? '')
@@ -106,9 +110,20 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) setCols({ ...defaultCols(), ...JSON.parse(saved) })
+      if (!saved) return
+      const p = JSON.parse(saved)
+      const allKeys = defaultOrder()
+      if (p.visible) setCols({ ...defaultCols(), ...p.visible })
+      if (Array.isArray(p.order)) {
+        const ord = (p.order as ColKey[]).filter(k => allKeys.includes(k))
+        setOrder([...ord, ...allKeys.filter(k => !ord.includes(k))])
+      }
     } catch {}
   }, [])
+
+  function savePrefs(visible: Record<ColKey, boolean>, ord: ColKey[]) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ visible, order: ord })) } catch {}
+  }
 
   useEffect(() => {
     function onOut(e: MouseEvent) {
@@ -121,8 +136,23 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
   function toggleCol(key: ColKey) {
     setCols(prev => {
       const next = { ...prev, [key]: !prev[key] }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+      savePrefs(next, order)
       return next
+    })
+  }
+
+  // Reordena colunas (arraste no menu "Colunas"); persiste por usuário.
+  function moveCol(from: ColKey, to: ColKey) {
+    setOrder(prev => {
+      if (from === to) return prev
+      const arr = [...prev]
+      const fromIdx = arr.indexOf(from)
+      const toIdx = arr.indexOf(to)
+      if (fromIdx === -1 || toIdx === -1) return prev
+      arr.splice(fromIdx, 1)
+      arr.splice(toIdx, 0, from)
+      savePrefs(cols, arr)
+      return arr
     })
   }
 
@@ -148,7 +178,11 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
     : activities
   ).map(a => overrides[a.id] ? { ...a, status: overrides[a.id] } : a)
 
-  const visibleCols = COL_DEFS.filter(c => cols[c.key])
+  // Colunas na ordem escolhida pelo usuário (com fallback p/ defs novas)
+  const orderedCols = [...order, ...COL_DEFS.map(c => c.key).filter(k => !order.includes(k))]
+    .map(k => COL_DEFS.find(c => c.key === k))
+    .filter((c): c is (typeof COL_DEFS)[number] => !!c)
+  const visibleCols = orderedCols.filter(c => cols[c.key])
   const totalCount  = filteredActivities.length
   const activeGroups = statusConfig.filter(s =>
     filteredActivities.some(a => a.status === s.value)
@@ -198,24 +232,38 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
           </button>
 
           {pickerOpen && (
-            <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl border border-gray-200 shadow-lg py-2 z-20">
+            <div className="absolute right-0 mt-2 w-60 bg-white rounded-xl border border-gray-200 shadow-lg py-2 z-20">
               <p className="px-3 pb-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100 mb-1">
-                Colunas visíveis
+                Colunas · arraste para reordenar
               </p>
-              {COL_DEFS.map(col => (
-                <button
+              {orderedCols.map(col => (
+                <div
                   key={col.key}
-                  onClick={() => toggleCol(col.key)}
-                  className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
+                  draggable
+                  onDragStart={() => setDragCol(col.key)}
+                  onDragEnd={() => setDragCol(null)}
+                  onDragOver={e => e.preventDefault()}
+                  onDragEnter={() => { if (dragCol && dragCol !== col.key) moveCol(dragCol, col.key) }}
+                  className={cn(
+                    'flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-50 transition cursor-grab active:cursor-grabbing',
+                    dragCol === col.key && 'opacity-40'
+                  )}
                 >
-                  <span>{col.label}</span>
-                  <span className={cn(
-                    'w-4 h-4 rounded border flex items-center justify-center transition',
-                    cols[col.key] ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'
-                  )}>
-                    {cols[col.key] && <Check className="w-2.5 h-2.5 text-white" />}
-                  </span>
-                </button>
+                  <GripVertical className="w-3.5 h-3.5 text-gray-300 shrink-0" />
+                  <button
+                    type="button"
+                    onClick={() => toggleCol(col.key)}
+                    className="flex items-center justify-between flex-1 text-sm text-gray-700 text-left"
+                  >
+                    <span>{col.label}</span>
+                    <span className={cn(
+                      'w-4 h-4 rounded border flex items-center justify-center transition',
+                      cols[col.key] ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'
+                    )}>
+                      {cols[col.key] && <Check className="w-2.5 h-2.5 text-white" />}
+                    </span>
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -329,6 +377,40 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                         </span>
                       ) : null
 
+                      // Conteúdo de cada coluna (renderizado na ordem escolhida pelo usuário)
+                      function renderCell(key: ColKey) {
+                        switch (key) {
+                          case 'responsavel':
+                            return <AssigneeCell activityId={activity.id} assignedIds={activity.assignedIds} members={members} />
+                          case 'prazo':
+                            return <DueDateCell activityId={activity.id} current={activity.due_date} path={listPath} />
+                          case 'prioridade':
+                            return <PriorityCell activityId={activity.id} current={activity.priority} path={listPath} />
+                          case 'complexidade':
+                            return ComplexityIcon
+                              ? <span title={`Complexidade: ${complexity?.label}`}><ComplexityIcon className={cn('w-4 h-4', complexity?.color)} /></span>
+                              : <span className="text-xs text-gray-300">—</span>
+                          case 'layout':
+                            return activity.layout_url ? (
+                              <div className="flex items-center gap-1 min-w-0">
+                                <a
+                                  href={activity.layout_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={e => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 hover:underline min-w-0"
+                                >
+                                  <ExternalLink className="w-3 h-3 shrink-0" />
+                                  <span className="truncate">Drive</span>
+                                </a>
+                                <CopyButton text={activity.layout_url} label="Copiar link do Drive" />
+                              </div>
+                            ) : <span className="text-xs text-gray-300">—</span>
+                          default:
+                            return null
+                        }
+                      }
+
                       return (
                         <div key={activity.id} className="hover:bg-gray-50/60 transition group">
 
@@ -397,58 +479,12 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                               </Link>
                             </div>
 
-                            {/* Responsável — editável inline */}
-                            {cols.responsavel && (
-                              <div className="w-32 shrink-0">
-                                <AssigneeCell activityId={activity.id} assignedIds={activity.assignedIds} members={members} />
+                            {/* Colunas — na ordem escolhida pelo usuário */}
+                            {visibleCols.map(col => (
+                              <div key={col.key} className={cn('shrink-0', col.width)}>
+                                {renderCell(col.key)}
                               </div>
-                            )}
-
-                            {/* Prazo — editável inline */}
-                            {cols.prazo && (
-                              <div className="w-24 shrink-0">
-                                <DueDateCell activityId={activity.id} current={activity.due_date} path={listPath} />
-                              </div>
-                            )}
-
-                            {/* Prioridade — editável inline (bandeira colorida) */}
-                            {cols.prioridade && (
-                              <div className="w-20 shrink-0">
-                                <PriorityCell activityId={activity.id} current={activity.priority} path={listPath} />
-                              </div>
-                            )}
-
-                            {/* Complexidade — ícone de sinal */}
-                            {cols.complexidade && (
-                              <div className="w-24 shrink-0">
-                                {ComplexityIcon ? (
-                                  <span title={`Complexidade: ${complexity?.label}`}>
-                                    <ComplexityIcon className={cn('w-4 h-4', complexity?.color)} />
-                                  </span>
-                                ) : <span className="text-xs text-gray-300">—</span>}
-                              </div>
-                            )}
-
-                            {/* Drive — link + copiar */}
-                            {cols.layout && (
-                              <div className="w-28 shrink-0">
-                                {activity.layout_url ? (
-                                  <div className="flex items-center gap-1 min-w-0">
-                                    <a
-                                      href={activity.layout_url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      onClick={e => e.stopPropagation()}
-                                      className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 hover:underline min-w-0"
-                                    >
-                                      <ExternalLink className="w-3 h-3 shrink-0" />
-                                      <span className="truncate">Drive</span>
-                                    </a>
-                                    <CopyButton text={activity.layout_url} label="Copiar link do Drive" />
-                                  </div>
-                                ) : <span className="text-xs text-gray-300">—</span>}
-                              </div>
-                            )}
+                            ))}
                           </div>
 
                         </div>
