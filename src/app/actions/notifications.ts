@@ -16,8 +16,24 @@ export interface NotificationItem {
   workspaceId: string | null
 }
 
+export async function getUnreadCount(orgSlug: string): Promise<number> {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return 0
+  const { data: org } = await supabase
+    .from('organizations').select('id').eq('slug', orgSlug).single()
+  if (!org) return 0
+  const { count } = await supabase
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', org.id)
+    .is('read_at', null)
+  return count ?? 0
+}
+
 export async function getNotifications(
   orgSlug: string,
+  limit = 30,
 ): Promise<{ items: NotificationItem[]; unread: number }> {
   const supabase = await createClient()
   const user = await getUsuario()
@@ -32,7 +48,7 @@ export async function getNotifications(
     .select('id, type, activity_id, data, read_at, created_at, actor:profiles!actor_id(full_name), activity:activities!activity_id(title, campaign_id, campaigns(workspace_id))')
     .eq('org_id', org.id)
     .order('created_at', { ascending: false })
-    .limit(30)
+    .limit(limit)
 
   const { count } = await supabase
     .from('notifications')

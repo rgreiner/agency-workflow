@@ -19,6 +19,7 @@ import {
   PanelLeft,
 } from 'lucide-react'
 import { logout } from '@/app/actions/auth'
+import { InboxNavItem } from './InboxNavItem'
 
 interface Campaign {
   id: string
@@ -143,6 +144,10 @@ export function Sidebar({
 
       {/* ── Scrollable body ──────────────────────────── */}
       <div className="flex-1 overflow-y-auto py-3 space-y-1">
+
+        {/* Caixa de entrada — antes dos espaços */}
+        <InboxNavItem orgSlug={orgSlug} />
+        <div className="mx-3 my-2 border-t border-gray-800" />
 
         {/* Espaços */}
         <div>
