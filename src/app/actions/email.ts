@@ -4,9 +4,16 @@ import { Resend } from 'resend'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM = process.env.RESEND_FROM ?? 'Agency Workflow <onboarding@resend.dev>'
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+
+// Instancia sob demanda — NUNCA no topo do módulo: `new Resend()` sem chave
+// lança, e isso derrubaria todo o chunk de server actions só por importar este
+// arquivo (quebrava membros/cargos quando RESEND_API_KEY não está setada).
+function getResend(): Resend | null {
+  const key = process.env.RESEND_API_KEY
+  return key ? new Resend(key) : null
+}
 
 export async function sendInviteEmail(
   orgSlug: string,
@@ -37,6 +44,11 @@ export async function sendInviteEmail(
   const senderName = profile?.full_name ?? user.email ?? 'Alguém'
   const orgName = org.name
   const inviteUrl = `${SITE_URL}/convite/${token}`
+
+  const resend = getResend()
+  if (!resend) {
+    return { error: 'Envio de e-mail não configurado (defina RESEND_API_KEY).' }
+  }
 
   const { error } = await resend.emails.send({
     from: FROM,

@@ -1,8 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { NextRequest, NextResponse } from 'next/server'
 
-const client = new Anthropic()
-
 export async function POST(request: NextRequest) {
   try {
     const { text } = await request.json()
@@ -10,6 +8,10 @@ export async function POST(request: NextRequest) {
     if (!text?.trim()) {
       return NextResponse.json({ error: 'Texto obrigatório' }, { status: 400 })
     }
+
+    // Instanciado aqui (não no topo): `new Anthropic()` sem ANTHROPIC_API_KEY
+    // lança, e no topo do módulo isso quebraria a rota inteira no carregamento.
+    const client = new Anthropic()
 
     const message = await client.messages.create({
       model: 'claude-haiku-4-5',
