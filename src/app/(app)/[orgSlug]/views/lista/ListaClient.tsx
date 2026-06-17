@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useTransition } from 'react'
 import Link from 'next/link'
 import { cn, isOverdue, daysUntil } from '@/lib/utils'
-import { PRIORITY_CONFIG, STATUS_CONFIG, type ActivityPriority } from '@/types'
+import { PRIORITY_CONFIG, type ActivityPriority } from '@/types'
 import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search } from 'lucide-react'
 import { AvatarGroup } from '@/components/ui/Avatar'
 import { updateActivityStatus } from '@/app/actions/activity'
@@ -246,13 +246,13 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
         {/* Column header — desktop only */}
         <div className="hidden md:flex items-center gap-2 px-4 py-2 border-b border-gray-100 bg-gray-50/60 rounded-t-xl">
           <div className="w-3.5 shrink-0 -ml-1" />
-          <div className="flex-1 text-xs font-medium text-gray-400" />
+          <div className="w-4 shrink-0" />
+          <div className="flex-1 text-xs font-medium text-gray-400">Atividade</div>
           {visibleCols.map(col => (
             <div key={col.key} className={cn('text-xs font-medium text-gray-400 shrink-0', col.width)}>
               {col.label}
             </div>
           ))}
-          <div className="w-28 text-xs font-medium text-gray-400 shrink-0">Status</div>
         </div>
 
         {/* Status groups */}
@@ -295,7 +295,9 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                   <span className={cn('text-xs font-semibold px-2.5 py-0.5 rounded-full', statusCfg.bgColor, statusCfg.color)}>
                     {statusCfg.label}
                   </span>
-                  <span className="text-xs text-gray-400">{items.length}</span>
+                  <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2 py-0.5 min-w-[1.25rem] text-center">
+                    {items.length}
+                  </span>
                 </button>
 
                 {/* Activity rows */}
@@ -306,7 +308,6 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                       const overdue  = isOverdue(activity.due_date)
                       const days     = daysUntil(activity.due_date)
                       const priority = PRIORITY_CONFIG[activity.priority as ActivityPriority]
-                      const statusCfgRow = STATUS_CONFIG.find(s => s.value === activity.status)
                       const href = `/${orgSlug}/workspaces/${camp?.workspaceId}/campaigns/${activity.campaign_id}/activities/${activity.id}`
 
                       const dueBadge = activity.due_date ? (
@@ -332,7 +333,7 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                             <Link href={href} className="flex items-center gap-3 flex-1 min-w-0">
                               <div className="flex-1 min-w-0">
                                 {camp && (
-                                  <span className="text-[11px] text-gray-400 block leading-tight mb-0.5 truncate">
+                                  <span className="text-[11px] text-gray-500 block leading-tight mb-0.5 truncate">
                                     {camp.client} / {camp.name}
                                   </span>
                                 )}
@@ -377,7 +378,7 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                             <div className="flex-1 min-w-0">
                               <Link href={href} draggable={false} className="block">
                                 {camp && (
-                                  <span className="text-[11px] text-gray-400 block leading-tight mb-0.5">
+                                  <span className="text-[11px] text-gray-500 block leading-tight mb-0.5">
                                     {camp.client} / {camp.name}
                                   </span>
                                 )}
@@ -450,15 +451,6 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                                 ) : <span className="text-xs text-gray-300">—</span>}
                               </div>
                             )}
-
-                            {/* Status */}
-                            <div className="w-28 shrink-0">
-                              {statusCfgRow && (
-                                <span className={cn('text-xs font-medium px-2.5 py-1 rounded-md', statusCfgRow.bgColor, statusCfgRow.color)}>
-                                  {statusCfgRow.label}
-                                </span>
-                              )}
-                            </div>
                           </div>
 
                         </div>
