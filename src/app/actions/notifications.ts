@@ -85,6 +85,22 @@ export async function markNotificationRead(id: string): Promise<void> {
   await supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', id)
 }
 
+export async function markNotificationsRead(ids: string[]): Promise<void> {
+  if (!ids.length) return
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return
+  await supabase.from('notifications').update({ read_at: new Date().toISOString() }).in('id', ids)
+}
+
+export async function deleteNotifications(ids: string[]): Promise<void> {
+  if (!ids.length) return
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return
+  await supabase.from('notifications').delete().in('id', ids)
+}
+
 export async function markAllNotificationsRead(orgSlug: string): Promise<void> {
   const supabase = await createClient()
   const user = await getUsuario()
