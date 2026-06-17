@@ -33,8 +33,10 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
-# vercel
-.vercel
+# seeds gerados (contêm dados de negócio + hashes de senha embutidos)
+/scripts/seed-clickup.bundle.mjs
+/scripts/seed-clickup.sql
+/scripts/seed-flow-oneliner.sh
 
 # typescript
 *.tsbuildinfo

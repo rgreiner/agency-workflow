@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Agency Workflow ("Flow")
 
-## Getting Started
+Gestão de pauta e atividades para agências. App [Next.js 16](AGENTS.md) (App
+Router) **self-hosted num VPS** — sem Vercel, sem Supabase Cloud.
 
-First, run the development server:
+## Stack
+
+| Camada      | O que usamos                                                                 |
+|-------------|------------------------------------------------------------------------------|
+| Hosting     | VPS (Coolify)                                                                |
+| Banco       | Postgres 17 + [PostgREST](https://postgrest.org) self-hosted                  |
+| Dados       | `@supabase/supabase-js` usado **só como cliente HTTP do PostgREST** (`.from()`/`.rpc()`), carregando nosso JWT |
+| Auth        | JWT HS256 próprio (cookie `flow-jwt`), sem GoTrue — ver [`src/lib/auth`](src/lib/auth) |
+| Autorização | RLS no Postgres (o PostgREST valida o JWT e faz `SET ROLE`)                   |
+| Storage     | Volume no VPS (avatars, org-logos) — sem Supabase Storage — ver [`src/app/api/upload`](src/app/api/upload/route.ts) |
+| Email       | [Resend](https://resend.com)                                                 |
+
+> O nome "supabase" persiste em alguns lugares (`src/lib/supabase/`,
+> `NEXT_PUBLIC_SUPABASE_*`) porque a lib `supabase-js` segue sendo o cliente do
+> PostgREST. Não há mais nenhuma dependência do serviço gerenciado Supabase.
+
+## Desenvolvimento
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev   # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Copie/preencha o [`.env.local`](.env.local) — as variáveis estão documentadas
+inline lá. As essenciais: `NEXT_PUBLIC_SUPABASE_URL` (domínio do PostgREST),
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` (JWT `{role:anon}`), `JWT_SECRET` (o mesmo do
+PostgREST) e `DATABASE_URL`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deploy / infra
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Setup do VPS (PostgREST, auth, ordem de migrations, env do Coolify):
+[`supabase/vps/README.md`](supabase/vps/README.md).
 
-## Learn More
+## Notas
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Este é um **Next.js 16 com breaking changes** — leia o guia relevante em
+  `node_modules/next/dist/docs/` antes de editar código (ver [AGENTS.md](AGENTS.md)).
