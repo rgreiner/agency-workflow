@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import {
   Search, List, GanttChart, Users, BookOpen, PenTool,
   Folder, AlignLeft, Plus, Settings, User, Palette,
-  CornerDownLeft, CheckSquare, Loader2,
+  CornerDownLeft, CheckSquare, Loader2, Archive,
 } from 'lucide-react'
 import { searchActivities } from '@/app/actions/search'
 
@@ -30,6 +30,7 @@ interface Item {
   group: string
   href: string
   icon: React.ComponentType<{ className?: string }>
+  archived?: boolean
 }
 
 // Normaliza para busca sem acentos: "redação" encontra "redacao"
@@ -47,6 +48,7 @@ function PalettePanel({ orgSlug, workspaces, onClose }: Omit<Props, 'open'>) {
   const router = useRouter()
   const [query, setQuery] = useState('')
   const [activeIdx, setActiveIdx] = useState(0)
+  const [includeArchived, setIncludeArchived] = useState(false)
   // Resultados carregam a query que os gerou: itens obsoletos são descartados por derivação
   const [activityResults, setActivityResults] = useState<{ q: string; items: Item[] }>({ q: '', items: [] })
   const listRef = useRef<HTMLDivElement>(null)
@@ -60,7 +62,7 @@ function PalettePanel({ orgSlug, workspaces, onClose }: Omit<Props, 'open'>) {
     const timer = setTimeout(async () => {
       let items: Item[] = []
       try {
-        const results = await searchActivities(orgSlug, q)
+        const results = await searchActivities(orgSlug, q, includeArchived)
         items = results.map(a => ({
           id: `act-${a.id}`,
           label: a.title,
@@ -68,12 +70,13 @@ function PalettePanel({ orgSlug, workspaces, onClose }: Omit<Props, 'open'>) {
           group: 'Atividades',
           href: `${base}/workspaces/${a.workspaceId}/campaigns/${a.campaignId}/activities/${a.id}`,
           icon: CheckSquare,
+          archived: a.archived,
         }))
       } catch { /* falha de rede → trata como sem resultados */ }
       if (!cancelled) setActivityResults({ q, items })
     }, 250)
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [q, orgSlug, base])
+  }, [q, orgSlug, base, includeArchived])
 
   const activityItems = q.length >= 2 && activityResults.q === q ? activityResults.items : []
   const searching     = q.length >= 2 && activityResults.q !== q
@@ -233,6 +236,9 @@ function PalettePanel({ orgSlug, workspaces, onClose }: Omit<Props, 'open'>) {
                     >
                       <Icon className={cn('w-4 h-4 shrink-0', active ? 'text-indigo-500' : 'text-gray-400')} />
                       <span className="flex-1 truncate font-medium">{item.label}</span>
+                      {item.archived && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 shrink-0">arquivada</span>
+                      )}
                       {item.hint && (
                         <span className="text-xs text-gray-400 truncate max-w-[120px]">{item.hint}</span>
                       )}
@@ -255,6 +261,17 @@ function PalettePanel({ orgSlug, workspaces, onClose }: Omit<Props, 'open'>) {
             <kbd className="px-1 py-0.5 bg-white border border-gray-200 rounded text-[10px]">↵</kbd>
             abrir
           </span>
+          <button
+            type="button"
+            onClick={() => setIncludeArchived(v => !v)}
+            className={cn(
+              'ml-auto flex items-center gap-1 px-2 py-0.5 rounded-md transition',
+              includeArchived ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600'
+            )}
+          >
+            <Archive className="w-3 h-3" />
+            {includeArchived ? 'Arquivadas incluídas' : 'Incluir arquivadas'}
+          </button>
         </div>
       </div>
     </div>

@@ -7,6 +7,7 @@ export interface ActivitySearchResult {
   id: string
   title: string
   status: string
+  archived: boolean
   campaignId: string
   campaignName: string
   workspaceId: string
@@ -15,7 +16,8 @@ export interface ActivitySearchResult {
 
 export async function searchActivities(
   orgSlug: string,
-  query: string
+  query: string,
+  includeArchived = false,
 ): Promise<ActivitySearchResult[]> {
   const q = query.trim()
   if (q.length < 2) return []
@@ -31,28 +33,22 @@ export async function searchActivities(
     .single()
   if (!org) return []
 
-  const { data } = await supabase
-    .from('activities')
-    .select('id, title, status, campaign_id, campaigns!inner(name, workspace_id, workspaces!inner(name, org_id))')
-    .eq('campaigns.workspaces.org_id', org.id)
-    .ilike('title', `%${q}%`)
-    .order('updated_at', { ascending: false })
-    .limit(8)
-
-  return (data ?? []).map(a => {
-    const camp = a.campaigns as unknown as {
-      name: string
-      workspace_id: string
-      workspaces: { name: string }
-    }
-    return {
-      id: a.id,
-      title: a.title,
-      status: a.status,
-      campaignId: a.campaign_id,
-      campaignName: camp.name,
-      workspaceId: camp.workspace_id,
-      workspaceName: camp.workspaces.name,
-    }
+  // RPC com unaccent: ignora acentos e busca título + briefing.
+  const { data } = await supabase.rpc('search_activities', {
+    p_user_id: user.id,
+    p_org_id: org.id,
+    p_query: q,
+    p_include_archived: includeArchived,
   })
+
+  return (data ?? []).map(a => ({
+    id: a.id,
+    title: a.title,
+    status: a.status,
+    archived: a.archived,
+    campaignId: a.campaign_id,
+    campaignName: a.campaign_name,
+    workspaceId: a.workspace_id,
+    workspaceName: a.workspace_name,
+  }))
 }

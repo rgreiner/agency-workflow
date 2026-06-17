@@ -653,6 +653,24 @@ export type Database = {
         }
         Returns: undefined
       }
+      search_activities: {
+        Args: {
+          p_user_id: string
+          p_org_id: string
+          p_query: string
+          p_include_archived?: boolean
+        }
+        Returns: {
+          id: string
+          title: string
+          status: string
+          archived: boolean
+          campaign_id: string
+          campaign_name: string
+          workspace_id: string
+          workspace_name: string
+        }[]
+      }
       is_org_member: {
         Args: { p_org_id: string }
         Returns: boolean
