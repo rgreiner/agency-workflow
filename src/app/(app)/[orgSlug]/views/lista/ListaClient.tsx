@@ -3,26 +3,28 @@
 import { useState, useEffect, useRef, useTransition } from 'react'
 import Link from 'next/link'
 import { cn, isOverdue, daysUntil } from '@/lib/utils'
-import { PRIORITY_CONFIG, type ActivityPriority } from '@/types'
-import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search } from 'lucide-react'
+import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority } from '@/types'
+import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search, Flag, SignalLow, SignalMedium, SignalHigh, Copy } from 'lucide-react'
+
+// Complexidade → ícone (1/2/3 barras)
+const COMPLEXITY_ICON = { simple: SignalLow, medium: SignalMedium, complex: SignalHigh } as const
 import { AvatarGroup } from '@/components/ui/Avatar'
 import { updateActivityStatus } from '@/app/actions/activity'
 import { toast } from 'sonner'
 
 // ── Column definitions ────────────────────────────────────────────────────
 
-type ColKey = 'responsavel' | 'prazo' | 'prioridade' | 'layout' | 'complexidade' | 'inicio'
+type ColKey = 'responsavel' | 'prazo' | 'prioridade' | 'complexidade' | 'layout'
 
 const COL_DEFS: { key: ColKey; label: string; defaultOn: boolean; width: string }[] = [
   { key: 'responsavel',  label: 'Responsável',  defaultOn: true,  width: 'w-32' },
   { key: 'prazo',        label: 'Prazo',         defaultOn: true,  width: 'w-24' },
-  { key: 'prioridade',   label: 'Prioridade',    defaultOn: true,  width: 'w-24' },
-  { key: 'layout',       label: 'Layout',        defaultOn: true,  width: 'w-20' },
-  { key: 'inicio',       label: 'Início',        defaultOn: false, width: 'w-20' },
-  { key: 'complexidade', label: 'Complexidade',  defaultOn: false, width: 'w-28' },
+  { key: 'prioridade',   label: 'Prioridade',    defaultOn: true,  width: 'w-20' },
+  { key: 'complexidade', label: 'Complexidade',  defaultOn: false, width: 'w-24' },
+  { key: 'layout',       label: 'Drive',         defaultOn: true,  width: 'w-28' },
 ]
 
-const STORAGE_KEY = 'lista-cols-v2'
+const STORAGE_KEY = 'lista-cols-v3'
 
 function defaultCols(): Record<ColKey, boolean> {
   return Object.fromEntries(COL_DEFS.map(c => [c.key, c.defaultOn])) as Record<ColKey, boolean>
@@ -308,6 +310,9 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                       const overdue  = isOverdue(activity.due_date)
                       const days     = daysUntil(activity.due_date)
                       const priority = PRIORITY_CONFIG[activity.priority as ActivityPriority]
+                      const cxKey = activity.complexity as keyof typeof COMPLEXITY_ICON | undefined
+                      const ComplexityIcon = cxKey ? COMPLEXITY_ICON[cxKey] : null
+                      const complexity = cxKey ? COMPLEXITY_CONFIG[cxKey] : null
                       const href = `/${orgSlug}/workspaces/${camp?.workspaceId}/campaigns/${activity.campaign_id}/activities/${activity.id}`
 
                       const dueBadge = activity.due_date ? (
@@ -398,18 +403,6 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                               </div>
                             )}
 
-                            {/* Início */}
-                            {cols.inicio && (
-                              <div className="w-20 shrink-0">
-                                {activity.start_date
-                                  ? <span className="text-xs text-gray-500">
-                                      {new Date(activity.start_date + 'T00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                                    </span>
-                                  : <span className="text-xs text-gray-300">—</span>
-                                }
-                              </div>
-                            )}
-
                             {/* Prazo */}
                             {cols.prazo && (
                               <div className="w-24 shrink-0">
@@ -417,37 +410,47 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                               </div>
                             )}
 
-                            {/* Prioridade */}
+                            {/* Prioridade — bandeira colorida */}
                             {cols.prioridade && (
+                              <div className="w-20 shrink-0">
+                                <span title={`Prioridade: ${priority.label}`}>
+                                  <Flag className={cn(
+                                    'w-4 h-4',
+                                    priority.color,
+                                    (activity.priority === 'urgent' || activity.priority === 'high') && 'fill-current'
+                                  )} />
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Complexidade — ícone de sinal */}
+                            {cols.complexidade && (
                               <div className="w-24 shrink-0">
-                                {activity.priority !== 'medium' ? (
-                                  <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full', priority.bgColor, priority.color)}>
-                                    {priority.label}
+                                {ComplexityIcon ? (
+                                  <span title={`Complexidade: ${complexity?.label}`}>
+                                    <ComplexityIcon className={cn('w-4 h-4', complexity?.color)} />
                                   </span>
                                 ) : <span className="text-xs text-gray-300">—</span>}
                               </div>
                             )}
 
-                            {/* Complexidade */}
-                            {cols.complexidade && (
-                              <div className="w-28 shrink-0">
-                                <span className="text-xs text-gray-500 capitalize">{activity.complexity ?? '—'}</span>
-                              </div>
-                            )}
-
-                            {/* Layout */}
+                            {/* Drive — link + copiar */}
                             {cols.layout && (
-                              <div className="w-20 shrink-0">
+                              <div className="w-28 shrink-0">
                                 {activity.layout_url ? (
-                                  <a
-                                    href={activity.layout_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={e => e.stopPropagation()}
-                                    className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 hover:underline"
-                                  >
-                                    <ExternalLink className="w-3 h-3" /> Layout
-                                  </a>
+                                  <div className="flex items-center gap-1 min-w-0">
+                                    <a
+                                      href={activity.layout_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={e => e.stopPropagation()}
+                                      className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 hover:underline min-w-0"
+                                    >
+                                      <ExternalLink className="w-3 h-3 shrink-0" />
+                                      <span className="truncate">Drive</span>
+                                    </a>
+                                    <CopyButton text={activity.layout_url} label="Copiar link do Drive" />
+                                  </div>
                                 ) : <span className="text-xs text-gray-300">—</span>}
                               </div>
                             )}
@@ -603,5 +606,28 @@ function NewActivityButton({
         </div>
       )}
     </div>
+  )
+}
+
+// ── Botão copiar para o clipboard ──────────────────────────────────────────
+function CopyButton({ text, label = 'Copiar' }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      type="button"
+      title={label}
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        navigator.clipboard?.writeText(text).then(() => {
+          setCopied(true)
+          toast.success('Copiado!')
+          setTimeout(() => setCopied(false), 1200)
+        }).catch(() => toast.error('Não foi possível copiar'))
+      }}
+      className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition shrink-0"
+    >
+      {copied ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+    </button>
   )
 }
