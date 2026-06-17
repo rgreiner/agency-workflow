@@ -11,6 +11,7 @@ const COMPLEXITY_ICON = { simple: SignalLow, medium: SignalMedium, complex: Sign
 import { AvatarGroup } from '@/components/ui/Avatar'
 import { DateRangeEditor } from '@/components/ui/DateRangeEditor'
 import { Select } from '@/components/ui/Select'
+import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { updateActivityStatus, updateActivityField, setActivityArchived } from '@/app/actions/activity'
 import { createClient } from '@/lib/supabase/client'
 import { getUsuarioClient } from '@/lib/auth/client'
@@ -51,7 +52,6 @@ interface Props {
   activities: Activity[]
   campMap: Record<string, CampInfo>
   grouped: Record<string, Activity[]>
-  statusConfig: { value: string; label: string; bgColor: string; color: string }[]
   members: Member[]
   initialWorkspace?: string
   view: 'ativas' | 'arquivadas'
@@ -59,8 +59,9 @@ interface Props {
 
 // ── Component ─────────────────────────────────────────────────────────────
 
-export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfig, members, initialWorkspace, view }: Props) {
+export function ListaClient({ orgSlug, activities, campMap, grouped, members, initialWorkspace, view }: Props) {
   const listPath = `/${orgSlug}/views/lista`
+  const statusConfig = useStatusConfig()
   const isArchivedView = view === 'arquivadas'
   // Otimista: esconde itens recém-(des)arquivados até o revalidate do servidor.
   const [hidden, setHidden] = useState<Set<string>>(new Set())
@@ -319,9 +320,9 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
               onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverStatus(s.value) }}
               onDragLeave={() => setDragOverStatus(prev => prev === s.value ? null : prev)}
               onDrop={e => { e.preventDefault(); handleDrop(s.value) }}
+              style={{ backgroundColor: s.bg, color: s.text }}
               className={cn(
                 'text-xs font-semibold px-2.5 py-1 rounded-full cursor-copy transition-transform',
-                s.bgColor, s.color,
                 dragOverStatus === s.value && 'scale-110 ring-2 ring-indigo-400 ring-offset-1'
               )}
             >
@@ -403,7 +404,8 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                     'w-3.5 h-3.5 text-gray-400 transition-transform shrink-0',
                     !isOpen && '-rotate-90'
                   )} />
-                  <span className={cn('text-xs font-semibold px-2.5 py-0.5 rounded-full', statusCfg.bgColor, statusCfg.color)}>
+                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
+                    style={{ backgroundColor: statusCfg.bg, color: statusCfg.text }}>
                     {statusCfg.label}
                   </span>
                   <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2 py-0.5 min-w-[1.25rem] text-center">
@@ -575,7 +577,7 @@ function StatusDot({
   onChange,
 }: {
   current: string
-  statusConfig: { value: string; label: string; bgColor: string; color: string }[]
+  statusConfig: { value: string; label: string; bg: string; text: string }[]
   onChange: (status: string) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -598,10 +600,8 @@ function StatusDot({
         type="button"
         title={cfg?.label ? `Status: ${cfg.label} — clique para mudar` : 'Mudar status'}
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(o => !o) }}
-        className={cn(
-          'w-4 h-4 rounded-full border-2 border-current flex items-center justify-center hover:scale-110 transition',
-          cfg?.color ?? 'text-gray-300'
-        )}
+        style={{ color: cfg?.text ?? '#9ca3af' }}
+        className="w-4 h-4 rounded-full border-2 border-current flex items-center justify-center hover:scale-110 transition"
       >
         <Check className="w-2.5 h-2.5" strokeWidth={3.5} />
       </button>
@@ -618,8 +618,8 @@ function StatusDot({
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(false); onChange(s.value) }}
               className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition text-left"
             >
-              <span className={cn('w-2.5 h-2.5 rounded-full border-2 border-current shrink-0', s.color)} />
-              <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full', s.bgColor, s.color)}>
+              <span className="w-2.5 h-2.5 rounded-full border-2 border-current shrink-0" style={{ color: s.text }} />
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: s.bg, color: s.text }}>
                 {s.label}
               </span>
               {s.value === current && <Check className="w-3 h-3 text-gray-400 ml-auto shrink-0" />}

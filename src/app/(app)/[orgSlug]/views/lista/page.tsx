@@ -99,7 +99,6 @@ export default async function ListaPage({
       activities={activities}
       campMap={campMap}
       grouped={grouped}
-      statusConfig={STATUS_CONFIG}
       members={members}
       initialWorkspace={ws}
       view={archivedView ? 'arquivadas' : 'ativas'}

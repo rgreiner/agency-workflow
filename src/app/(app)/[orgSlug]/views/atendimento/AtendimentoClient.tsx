@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { STATUS_CONFIG, PRIORITY_CONFIG } from '@/types'
+import { PRIORITY_CONFIG } from '@/types'
+import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { cn, isOverdue, daysUntil } from '@/lib/utils'
 import { AlertCircle, ExternalLink, ChevronDown, Settings2 } from 'lucide-react'
 import Link from 'next/link'
@@ -57,8 +58,9 @@ export function AtendimentoClient({ activities, campMap, orgSlug }: {
     )
   }
 
+  const statusConfig = useStatusConfig()
   const filtered = activities.filter(a => monitoredStatuses.includes(a.status))
-  const grouped = STATUS_CONFIG.reduce((acc, s) => {
+  const grouped = statusConfig.reduce((acc, s) => {
     const items = filtered.filter(a => a.status === s.value)
     if (items.length > 0) acc[s.value] = items
     return acc
@@ -87,12 +89,12 @@ export function AtendimentoClient({ activities, campMap, orgSlug }: {
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Status monitorados</p>
             <div className="space-y-1.5">
-              {STATUS_CONFIG.filter(s => s.group !== 'done').map(s => (
+              {statusConfig.filter(s => s.group !== 'done').map(s => (
                 <label key={s.value} className="flex items-center gap-2.5 cursor-pointer group">
                   <input type="checkbox" checked={monitoredStatuses.includes(s.value)}
                     onChange={() => toggleStatus(s.value)}
                     className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                  <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', s.bgColor, s.color)}>
+                  <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: s.bg, color: s.text }}>
                     {s.label}
                   </span>
                 </label>
@@ -117,13 +119,13 @@ export function AtendimentoClient({ activities, campMap, orgSlug }: {
 
       {/* Lista por status */}
       <div className="space-y-2">
-        {STATUS_CONFIG.filter(s => grouped[s.value]?.length).map((statusCfg) => {
+        {statusConfig.filter(s => grouped[s.value]?.length).map((statusCfg) => {
           const items = grouped[statusCfg.value] ?? []
           return (
             <details key={statusCfg.value} open className="group bg-white rounded-xl border border-gray-200 overflow-hidden">
               <summary className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none hover:bg-gray-50 transition list-none">
                 <ChevronDown className="w-4 h-4 text-gray-400 group-open:rotate-0 -rotate-90 transition-transform" />
-                <span className={cn('px-2.5 py-1 rounded-full text-xs font-semibold', statusCfg.bgColor, statusCfg.color)}>
+                <span className="px-2.5 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: statusCfg.bg, color: statusCfg.text }}>
                   {statusCfg.label}
                 </span>
                 <span className="text-sm text-gray-400">{items.length}</span>

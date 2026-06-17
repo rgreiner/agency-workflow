@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
-import { STATUS_CONFIG } from '@/types'
+import { getMergedStatusConfig, type StatusOverride } from '@/types'
 import {
   AlertCircle, CheckCircle2, Clock, CalendarClock,
   CalendarDays, AlertTriangle, ChevronRight,
@@ -27,6 +27,12 @@ export default async function DashboardPage({
   const { data: orgData } = await supabase
     .from('organizations').select('id, name').eq('slug', orgSlug).single()
   if (!orgData) return null
+
+  // Cores de status definidas em Configurações → Aparência (mescladas).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: rawSettings } = await (supabase as any)
+    .from('org_settings').select('status_overrides').eq('org_id', orgData.id).single()
+  const statusConfig = getMergedStatusConfig((rawSettings?.status_overrides ?? []) as StatusOverride[])
 
   // ── My assigned activity IDs ───────────────────────────────────────────────
   const { data: myAssignments } = await supabase
@@ -128,7 +134,7 @@ export default async function DashboardPage({
     return d >= now && d <= weekEnd
   }).length ?? 0
 
-  const statusCounts = STATUS_CONFIG.map(s => ({
+  const statusCounts = statusConfig.map(s => ({
     ...s,
     count: allActivities?.filter(a => a.status === s.value).length ?? 0,
   })).filter(s => s.count > 0)
@@ -198,7 +204,7 @@ export default async function DashboardPage({
                     const camp = campMap[task.campaign_id]
                     const ws = (task.campaigns as unknown as { workspaces: { id: string; name: string } | null } | null)?.workspaces
                     const wsId = ws?.id ?? camp?.workspaceId
-                    const statusCfg = STATUS_CONFIG.find(s => s.value === task.status)
+                    const statusCfg = statusConfig.find(s => s.value === task.status)
                     return (
                       <Link
                         key={task.id}
@@ -212,7 +218,8 @@ export default async function DashboardPage({
                           </p>
                         </div>
                         {statusCfg && (
-                          <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full shrink-0', statusCfg.bgColor, statusCfg.color)}>
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full shrink-0"
+                            style={{ backgroundColor: statusCfg.bg, color: statusCfg.text }}>
                             {statusCfg.label}
                           </span>
                         )}
@@ -256,15 +263,18 @@ export default async function DashboardPage({
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h2 className="text-sm font-semibold text-gray-900 mb-4">Atividades por status</h2>
           <div className="space-y-2.5">
-            {statusCounts.map(({ value, label, bgColor, color, count }) => (
+            {statusCounts.map(({ value, label, bg, text, count }) => (
               <div key={value} className="flex items-center gap-3">
-                <span className={cn('px-2.5 py-0.5 rounded-full text-xs font-medium shrink-0 w-48 truncate', bgColor, color)}>
+                <span
+                  className="px-2.5 py-0.5 rounded-full text-xs font-medium shrink-0 w-48 truncate"
+                  style={{ backgroundColor: bg, color: text }}
+                >
                   {label}
                 </span>
                 <div className="flex-1 bg-gray-100 rounded-full h-1.5">
                   <div
-                    className="bg-indigo-500 h-1.5 rounded-full"
-                    style={{ width: total > 0 ? `${(count / total) * 100}%` : '0%' }}
+                    className="h-1.5 rounded-full"
+                    style={{ width: total > 0 ? `${(count / total) * 100}%` : '0%', backgroundColor: text }}
                   />
                 </div>
                 <span className="text-sm font-medium text-gray-600 w-5 text-right shrink-0">{count}</span>
@@ -283,7 +293,7 @@ export default async function DashboardPage({
             {(history ?? []).map((h) => {
               const activity = h.activities as unknown as { id: string; title: string; campaign_id: string } | null
               const prof = h.profiles as unknown as { full_name: string | null; avatar_url: string | null } | null
-              const statusCfg = STATUS_CONFIG.find(s => s.value === h.to_status)
+              const statusCfg = statusConfig.find(s => s.value === h.to_status)
               const camp = activity ? campMap[activity.campaign_id] : null
               return (
                 <div key={h.id} className="flex items-start gap-2.5">
@@ -293,7 +303,8 @@ export default async function DashboardPage({
                       <span className="text-xs font-medium text-gray-700 truncate">{prof?.full_name ?? 'Alguém'}</span>
                       <span className="text-xs text-gray-400">moveu para</span>
                       {statusCfg && (
-                        <span className={cn('text-xs font-medium px-1.5 py-0.5 rounded-full', statusCfg.bgColor, statusCfg.color)}>
+                        <span className="text-xs font-medium px-1.5 py-0.5 rounded-full"
+                          style={{ backgroundColor: statusCfg.bg, color: statusCfg.text }}>
                           {statusCfg.label}
                         </span>
                       )}
