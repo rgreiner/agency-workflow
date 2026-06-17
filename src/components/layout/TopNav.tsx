@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import { List, GanttChart, Users, BookOpen, PenTool, Search } from 'lucide-react'
+import { List, GanttChart, Users, BookOpen, PenTool, Search, PanelLeft } from 'lucide-react'
 import { CommandPalette } from './CommandPalette'
 import { NotificationsBell } from './NotificationsBell'
 
@@ -19,6 +19,8 @@ interface Props {
   orgName: string
   workspaces: Workspace[]
   accentColor?: string
+  collapsed?: boolean
+  onExpand?: () => void
 }
 
 const VIEWS = [
@@ -29,7 +31,7 @@ const VIEWS = [
   { id: 'boards',      label: 'Quadros',     icon: PenTool,    href: 'boards' },
 ]
 
-export function TopNav({ orgSlug, orgName, workspaces, accentColor = '#6366f1' }: Props) {
+export function TopNav({ orgSlug, orgName, workspaces, accentColor = '#6366f1', collapsed = false, onExpand }: Props) {
   const pathname = usePathname()
   const [paletteOpen, setPaletteOpen] = useState(false)
   const base = `/${orgSlug}`
@@ -80,6 +82,18 @@ export function TopNav({ orgSlug, orgName, workspaces, accentColor = '#6366f1' }
   return (
     <>
       <div className="h-11 bg-white border-b border-gray-200 flex items-center px-3 md:px-5 gap-3 shrink-0 z-10">
+        {/* Expandir menu — desktop, só quando a sidebar está retraída */}
+        {collapsed && onExpand && (
+          <button
+            onClick={onExpand}
+            title="Mostrar menu"
+            aria-label="Mostrar menu"
+            className="hidden md:flex items-center p-1.5 -ml-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition shrink-0"
+          >
+            <PanelLeft className="w-4 h-4" />
+          </button>
+        )}
+
         {/* Context label — hidden on small screens (hamburger occupies that space) */}
         <span className="hidden md:block text-sm font-semibold text-gray-700 truncate max-w-xs shrink-0">
           {context}

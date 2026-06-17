@@ -16,7 +16,6 @@ import {
   Menu,
   X,
   PanelLeftClose,
-  PanelLeft,
 } from 'lucide-react'
 import { logout } from '@/app/actions/auth'
 import { InboxNavItem } from './InboxNavItem'
@@ -42,25 +41,18 @@ interface SidebarProps {
   workspaces: WorkspaceItem[]
   logoUrl?: string | null
   accentColor?: string
+  collapsed: boolean
+  onCollapse: () => void
 }
 
 export function Sidebar({
   orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#6366f1',
+  collapsed, onCollapse,
 }: SidebarProps) {
   const pathname = usePathname()
   const base = `/${orgSlug}`
 
   const [mobileOpen, setMobileOpen] = useState(false)
-
-  // Colapso no desktop (persistido) — esconde a sidebar pra ampliar a área útil.
-  const [collapsed, setCollapsedState] = useState(false)
-  useEffect(() => {
-    try { setCollapsedState(localStorage.getItem('sidebar-collapsed') === '1') } catch {}
-  }, [])
-  function setCollapsed(v: boolean) {
-    setCollapsedState(v)
-    try { localStorage.setItem('sidebar-collapsed', v ? '1' : '0') } catch {}
-  }
 
   const activeWorkspaceId = workspaces.find(ws =>
     pathname.includes(`/workspaces/${ws.id}`)
@@ -127,7 +119,7 @@ export function Sidebar({
         </Link>
         {/* Ocultar — desktop only */}
         <button
-          onClick={() => setCollapsed(true)}
+          onClick={onCollapse}
           className="hidden md:block p-1.5 text-gray-600 hover:text-gray-300 transition"
           title="Ocultar menu"
         >
@@ -307,19 +299,6 @@ export function Sidebar({
         aria-label="Abrir menu"
       >
         <Menu className="w-5 h-5" />
-      </button>
-
-      {/* Reabrir — desktop only, quando a sidebar está colapsada */}
-      <button
-        onClick={() => setCollapsed(false)}
-        className={cn(
-          'fixed top-3 left-3 z-50 bg-gray-900 text-gray-300 rounded-lg p-2 shadow-lg hover:text-white transition',
-          collapsed ? 'hidden md:flex' : 'hidden'
-        )}
-        title="Mostrar menu"
-        aria-label="Mostrar menu"
-      >
-        <PanelLeft className="w-5 h-5" />
       </button>
 
       {/* Backdrop — mobile only */}

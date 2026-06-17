@@ -1,8 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
-import { Sidebar } from '@/components/layout/Sidebar'
-import { TopNav } from '@/components/layout/TopNav'
+import { AppShell } from '@/components/layout/AppShell'
 import { OrgSettingsProvider } from '@/components/providers/OrgSettingsProvider'
 
 export default async function OrgLayout({
@@ -75,31 +74,18 @@ export default async function OrgLayout({
       {/* Inject accent color as CSS variable */}
       <style>{`:root { --accent: ${accent}; }`}</style>
 
-      <div className="flex h-screen overflow-hidden bg-gray-50">
-        <Sidebar
-          orgSlug={org.slug}
-          orgName={org.name}
-          userEmail={user.email ?? ''}
-          userAvatar={profile?.avatar_url}
-          userName={profile?.full_name ?? null}
-          workspaces={workspaces}
-          logoUrl={orgSettings.logoUrl}
-          accentColor={accent}
-        />
-        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-          <TopNav
-            orgSlug={org.slug}
-            orgName={org.name}
-            workspaces={workspaces}
-            accentColor={accent}
-          />
-          <main className="flex-1 overflow-y-auto min-w-0">
-            <div className="pt-12 md:pt-0 h-full">
-              {children}
-            </div>
-          </main>
-        </div>
-      </div>
+      <AppShell
+        orgSlug={org.slug}
+        orgName={org.name}
+        userEmail={user.email ?? ''}
+        userAvatar={profile?.avatar_url}
+        userName={profile?.full_name ?? null}
+        workspaces={workspaces}
+        logoUrl={orgSettings.logoUrl}
+        accentColor={accent}
+      >
+        {children}
+      </AppShell>
     </OrgSettingsProvider>
   )
 }
