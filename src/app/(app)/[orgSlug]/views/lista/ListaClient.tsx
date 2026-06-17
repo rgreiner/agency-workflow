@@ -9,7 +9,9 @@ import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, 
 // Complexidade → ícone (1/2/3 barras)
 const COMPLEXITY_ICON = { simple: SignalLow, medium: SignalMedium, complex: SignalHigh } as const
 import { AvatarGroup } from '@/components/ui/Avatar'
-import { updateActivityStatus } from '@/app/actions/activity'
+import { updateActivityStatus, updateActivityField } from '@/app/actions/activity'
+import { createClient } from '@/lib/supabase/client'
+import { getUsuarioClient } from '@/lib/auth/client'
 import { toast } from 'sonner'
 
 // ── Column definitions ────────────────────────────────────────────────────
@@ -33,10 +35,11 @@ function defaultCols(): Record<ColKey, boolean> {
 // ── Types ─────────────────────────────────────────────────────────────────
 
 interface Assignee { full_name: string | null; avatar_url: string | null }
+interface Member { userId: string; fullName: string | null; email: string; avatarUrl: string | null }
 interface Activity {
   id: string; title: string; status: string; priority: string
   due_date: string | null; start_date?: string | null; complexity?: string | null
-  layout_url: string | null; campaign_id: string; assignees: Assignee[]
+  layout_url: string | null; campaign_id: string; assignees: Assignee[]; assignedIds: string[]
 }
 interface CampInfo { name: string; client: string; workspaceId: string }
 interface Props {
@@ -45,12 +48,14 @@ interface Props {
   campMap: Record<string, CampInfo>
   grouped: Record<string, Activity[]>
   statusConfig: { value: string; label: string; bgColor: string; color: string }[]
+  members: Member[]
   initialWorkspace?: string
 }
 
 // ── Component ─────────────────────────────────────────────────────────────
 
-export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfig, initialWorkspace }: Props) {
+export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfig, members, initialWorkspace }: Props) {
+  const listPath = `/${orgSlug}/views/lista`
   const [cols, setCols] = useState<Record<ColKey, boolean>>(defaultCols)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -309,7 +314,6 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                       const camp     = campMap[activity.campaign_id]
                       const overdue  = isOverdue(activity.due_date)
                       const days     = daysUntil(activity.due_date)
-                      const priority = PRIORITY_CONFIG[activity.priority as ActivityPriority]
                       const cxKey = activity.complexity as keyof typeof COMPLEXITY_ICON | undefined
                       const ComplexityIcon = cxKey ? COMPLEXITY_ICON[cxKey] : null
                       const complexity = cxKey ? COMPLEXITY_CONFIG[cxKey] : null
@@ -393,33 +397,24 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, statusConfi
                               </Link>
                             </div>
 
-                            {/* Responsável */}
+                            {/* Responsável — editável inline */}
                             {cols.responsavel && (
                               <div className="w-32 shrink-0">
-                                {activity.assignees.length > 0
-                                  ? <AvatarGroup users={activity.assignees} />
-                                  : <span className="text-xs text-gray-300">—</span>
-                                }
+                                <AssigneeCell activityId={activity.id} assignedIds={activity.assignedIds} members={members} />
                               </div>
                             )}
 
-                            {/* Prazo */}
+                            {/* Prazo — editável inline */}
                             {cols.prazo && (
                               <div className="w-24 shrink-0">
-                                {dueBadge ?? <span className="text-xs text-gray-300">—</span>}
+                                <DueDateCell activityId={activity.id} current={activity.due_date} path={listPath} />
                               </div>
                             )}
 
-                            {/* Prioridade — bandeira colorida */}
+                            {/* Prioridade — editável inline (bandeira colorida) */}
                             {cols.prioridade && (
                               <div className="w-20 shrink-0">
-                                <span title={`Prioridade: ${priority.label}`}>
-                                  <Flag className={cn(
-                                    'w-4 h-4',
-                                    priority.color,
-                                    (activity.priority === 'urgent' || activity.priority === 'high') && 'fill-current'
-                                  )} />
-                                </span>
+                                <PriorityCell activityId={activity.id} current={activity.priority} path={listPath} />
                               </div>
                             )}
 
@@ -629,5 +624,202 @@ function CopyButton({ text, label = 'Copiar' }: { text: string; label?: string }
     >
       {copied ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
     </button>
+  )
+}
+
+// ── Responsável inline (avatares + dropdown de membros) ─────────────────────
+function AssigneeCell({ activityId, assignedIds, members }: {
+  activityId: string
+  assignedIds: string[]
+  members: Member[]
+}) {
+  const [selected, setSelected] = useState<string[]>(assignedIds)
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onOut(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', onOut)
+    return () => document.removeEventListener('mousedown', onOut)
+  }, [open])
+
+  async function toggle(userId: string) {
+    const u = getUsuarioClient()
+    if (!u) return
+    const was = selected.includes(userId)
+    setSelected(prev => was ? prev.filter(id => id !== userId) : [...prev, userId]) // otimista
+    const { error } = await createClient().rpc('toggle_activity_assignee', {
+      p_user_id: u.id, p_activity_id: activityId, p_assignee_id: userId,
+    })
+    if (error) {
+      setSelected(prev => was ? [...prev, userId] : prev.filter(id => id !== userId))
+      toast.error(error.message)
+    }
+  }
+
+  const assigned = members.filter(m => selected.includes(m.userId))
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        title="Editar responsáveis"
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(o => !o) }}
+        className="flex items-center hover:opacity-80 transition"
+      >
+        {assigned.length > 0
+          ? <AvatarGroup users={assigned.map(m => ({ full_name: m.fullName, avatar_url: m.avatarUrl }))} />
+          : <span className="text-xs text-gray-300 hover:text-indigo-500 transition">+ atribuir</span>}
+      </button>
+      {open && (
+        <div className="absolute left-0 top-7 z-30 w-56 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 max-h-64 overflow-y-auto">
+          {members.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-gray-400">Nenhum membro</p>
+          ) : members.map(m => {
+            const on = selected.includes(m.userId)
+            return (
+              <button
+                key={m.userId}
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggle(m.userId) }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition text-left"
+              >
+                <span className={cn('w-4 h-4 rounded border flex items-center justify-center shrink-0', on ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300')}>
+                  {on && <Check className="w-2.5 h-2.5 text-white" />}
+                </span>
+                <span className="text-sm text-gray-700 truncate">{m.fullName ?? m.email.split('@')[0]}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Prioridade inline (bandeira + menu) ─────────────────────────────────────
+function PriorityCell({ activityId, current, path }: { activityId: string; current: string; path: string }) {
+  const [value, setValue] = useState(current)
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onOut(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', onOut)
+    return () => document.removeEventListener('mousedown', onOut)
+  }, [open])
+
+  const p = PRIORITY_CONFIG[value as ActivityPriority]
+  const order: ActivityPriority[] = ['urgent', 'high', 'medium', 'low']
+
+  async function set(v: ActivityPriority) {
+    setOpen(false)
+    if (v === value) return
+    const prev = value
+    setValue(v) // otimista
+    const r = await updateActivityField(path, activityId, 'priority', v)
+    if (r?.error) { setValue(prev); toast.error(r.error) }
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        title={`Prioridade: ${p.label}`}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(o => !o) }}
+        className="hover:scale-110 transition"
+      >
+        <Flag className={cn('w-4 h-4', p.color, (value === 'urgent' || value === 'high') && 'fill-current')} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-7 z-30 w-44 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5">
+          {order.map(pk => {
+            const cfg = PRIORITY_CONFIG[pk]
+            return (
+              <button
+                key={pk}
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); set(pk) }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition text-left"
+              >
+                <Flag className={cn('w-4 h-4', cfg.color, (pk === 'urgent' || pk === 'high') && 'fill-current')} />
+                <span className="text-sm text-gray-700">{cfg.label}</span>
+                {pk === value && <Check className="w-3 h-3 text-gray-400 ml-auto" />}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Prazo inline (badge + date picker) ──────────────────────────────────────
+function DueDateCell({ activityId, current, path }: { activityId: string; current: string | null; path: string }) {
+  const [value, setValue] = useState<string | null>(current ? current.slice(0, 10) : null)
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onOut(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', onOut)
+    return () => document.removeEventListener('mousedown', onOut)
+  }, [open])
+
+  const overdue = isOverdue(value)
+  const days = daysUntil(value)
+
+  async function save(v: string | null) {
+    setOpen(false)
+    if (v === value) return
+    const prev = value
+    setValue(v) // otimista
+    const r = await updateActivityField(path, activityId, 'due_date', v)
+    if (r?.error) { setValue(prev); toast.error(r.error) }
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        title="Editar prazo"
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(o => !o) }}
+        className="text-left"
+      >
+        {value ? (
+          <span className={cn(
+            'text-xs font-medium flex items-center gap-1',
+            overdue ? 'text-red-600' : days !== null && days <= 3 ? 'text-orange-500' : 'text-gray-600'
+          )}>
+            {overdue && <AlertCircle className="w-3 h-3 shrink-0" />}
+            {overdue ? `${Math.abs(days!)}d atraso` : days === 0 ? 'Hoje' : days === 1 ? 'Amanhã' : `${days}d`}
+          </span>
+        ) : <span className="text-xs text-gray-300 hover:text-indigo-500 transition">+ prazo</span>}
+      </button>
+      {open && (
+        <div className="absolute left-0 top-7 z-30 bg-white rounded-xl border border-gray-200 shadow-lg p-2 flex items-center gap-2">
+          <input
+            type="date"
+            value={value ?? ''}
+            autoFocus
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => save(e.target.value || null)}
+            className="text-sm border border-gray-200 rounded-lg px-2 py-1 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          />
+          {value && (
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); save(null) }}
+              className="text-xs text-gray-400 hover:text-red-500 transition shrink-0"
+            >
+              Limpar
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
