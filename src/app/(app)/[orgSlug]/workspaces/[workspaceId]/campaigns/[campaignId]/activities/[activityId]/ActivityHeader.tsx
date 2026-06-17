@@ -111,7 +111,7 @@ export function ActivityHeader({ activityId, path, title, description, canManage
           <>
             <div className="flex-1">
               {description ? (
-                <p className="text-gray-500 text-sm leading-relaxed">{description}</p>
+                <p className="text-gray-500 text-sm leading-relaxed whitespace-pre-wrap break-words">{description}</p>
               ) : isOrgMember ? (
                 <button
                   onClick={() => { setDescDraft(''); setEditDesc(true) }}

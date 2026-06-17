@@ -384,7 +384,7 @@ export default async function ActivityPage({
                         {toCfg && <span className={cn('px-1.5 py-0.5 rounded-full text-[10px] font-semibold', toCfg.bgColor, toCfg.color)}>{toCfg.label}</span>}
                       </div>
                       {item.comment && (
-                        <p className="text-[11px] text-gray-400 mt-1 italic">"{item.comment}"</p>
+                        <p className="text-[11px] text-gray-400 mt-1 italic whitespace-pre-wrap break-words">"{item.comment}"</p>
                       )}
                       <p className="text-[10px] text-gray-400 mt-0.5">{formatDate(item.at)}</p>
                     </div>
