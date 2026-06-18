@@ -5,23 +5,34 @@ import { useRouter } from 'next/navigation'
 import { FileSpreadsheet, X, Loader2, Check, ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { Select } from '@/components/ui/Select'
 import { parseSpecsSheet, createActivitiesFromSpecs, type SpecRow } from '@/app/actions/import-specs'
 
 type Item = SpecRow & { include: boolean }
 
-export function ImportSpecsButton({ orgSlug, campaignId }: { orgSlug: string; campaignId: string }) {
+export function ImportSpecsButton({ orgSlug, campaignId, campaigns }: {
+  orgSlug: string
+  /** Campanha fixa (página da campanha). Se ausente, mostra seletor. */
+  campaignId?: string
+  /** Lista de campanhas para escolher o destino (página do cliente). */
+  campaigns?: { id: string; name: string }[]
+}) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState<'input' | 'preview'>('input')
   const [url, setUrl] = useState('')
+  const [target, setTarget] = useState(campaignId ?? '')
   const [loading, setLoading] = useState(false)
   const [items, setItems] = useState<Item[]>([])
   const [pending, start] = useTransition()
 
-  function reset() { setStep('input'); setUrl(''); setItems([]); setLoading(false) }
+  const needsPicker = !campaignId && !!campaigns
+
+  function reset() { setStep('input'); setUrl(''); setItems([]); setLoading(false); setTarget(campaignId ?? '') }
 
   async function buscar() {
     if (!url.trim()) return
+    if (needsPicker && !target) { toast.error('Escolha a campanha de destino.'); return }
     setLoading(true)
     const r = await parseSpecsSheet(url.trim())
     setLoading(false)
@@ -33,8 +44,9 @@ export function ImportSpecsButton({ orgSlug, campaignId }: { orgSlug: string; ca
   const selected = items.filter(i => i.include)
 
   function criar() {
+    if (!target) { toast.error('Escolha a campanha de destino.'); return }
     start(async () => {
-      const r = await createActivitiesFromSpecs(orgSlug, campaignId, selected)
+      const r = await createActivitiesFromSpecs(orgSlug, target, selected)
       if ('error' in r && r.error) { toast.error(r.error); return }
       toast.success(`${(r as { created: number }).created} atividade(s) criada(s)`)
       setOpen(false); reset(); router.refresh()
@@ -72,8 +84,20 @@ export function ImportSpecsButton({ orgSlug, campaignId }: { orgSlug: string; ca
             {step === 'input' ? (
               <div className="px-6 py-5 space-y-3">
                 <p className="text-sm text-gray-500">
-                  Cole o link da planilha do Google Sheets. Cada linha vira uma atividade nesta campanha.
+                  Cole o link da planilha do Google Sheets. Cada linha vira uma atividade na campanha escolhida.
                 </p>
+                {needsPicker && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Campanha de destino</label>
+                    <Select
+                      value={target}
+                      onChange={setTarget}
+                      className="w-full"
+                      placeholder="Escolha a campanha"
+                      options={(campaigns ?? []).map(c => ({ value: c.id, label: c.name }))}
+                    />
+                  </div>
+                )}
                 <input
                   type="url"
                   autoFocus

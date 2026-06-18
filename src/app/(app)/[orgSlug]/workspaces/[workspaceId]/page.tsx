@@ -5,6 +5,7 @@ import { loadActivityList } from '@/lib/activity-list'
 import { ListaClient } from '../../views/lista/ListaClient'
 import { WorkspaceEditButton } from './WorkspaceEditButton'
 import { UnarchiveButton } from '@/components/ui/UnarchiveButton'
+import { ImportSpecsButton } from './campaigns/[campaignId]/ImportSpecsButton'
 
 export default async function WorkspacePage({
   params,
@@ -29,6 +30,8 @@ export default async function WorkspacePage({
   const data = await loadActivityList(orgSlug, { scopeWorkspaceId: workspaceId, archived: archivedView })
   if (!data) return null
 
+  const campaignOptions = Object.entries(data.campMap).map(([id, c]) => ({ id, name: c.name }))
+
   return (
     <>
       <ListaClient
@@ -51,12 +54,17 @@ export default async function WorkspacePage({
           />
         }
         secondaryActions={
-          <Link
-            href={`/${orgSlug}/workspaces/${workspaceId}/campaigns/new`}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition"
-          >
-            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Nova campanha</span>
-          </Link>
+          <>
+            {campaignOptions.length > 0 && (
+              <ImportSpecsButton orgSlug={orgSlug} campaigns={campaignOptions} />
+            )}
+            <Link
+              href={`/${orgSlug}/workspaces/${workspaceId}/campaigns/new`}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition"
+            >
+              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Nova campanha</span>
+            </Link>
+          </>
         }
       />
 
