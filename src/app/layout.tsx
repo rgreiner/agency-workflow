@@ -1,8 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { Geist } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
 import "./globals.css";
-
-const geist = Geist({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Agency Workflow",
@@ -21,7 +19,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR" className="h-full">
-      <body className={`${geist.className} h-full antialiased`}>{children}</body>
+      <body className={`${GeistSans.className} h-full antialiased`}>{children}</body>
     </html>
   );
 }
