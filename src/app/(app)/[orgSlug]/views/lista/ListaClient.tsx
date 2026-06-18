@@ -617,8 +617,11 @@ function StatusDot({
         type="button"
         title={cfg?.label ? `Status: ${cfg.label} — clique para mudar` : 'Mudar status'}
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(o => !o) }}
-        style={{ color: cfg?.text ?? '#9ca3af' }}
-        className="w-4 h-4 rounded-full border-2 border-current flex items-center justify-center hover:scale-110 transition"
+        style={cfg ? { backgroundColor: cfg.bg, color: cfg.text } : undefined}
+        className={cn(
+          'w-4 h-4 rounded-full flex items-center justify-center hover:scale-110 transition',
+          cfg ? 'ring-1 ring-inset ring-black/10' : 'border-2 border-gray-300 text-gray-300'
+        )}
       >
         <Check className="w-2.5 h-2.5" strokeWidth={3.5} />
       </button>
@@ -635,7 +638,6 @@ function StatusDot({
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(false); onChange(s.value) }}
               className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition text-left"
             >
-              <span className="w-2.5 h-2.5 rounded-full border-2 border-current shrink-0" style={{ color: s.text }} />
               <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: s.bg, color: s.text }}>
                 {s.label}
               </span>
