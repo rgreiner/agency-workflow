@@ -16,6 +16,7 @@ import {
   Menu,
   X,
   PanelLeftClose,
+  Briefcase,
 } from 'lucide-react'
 import { logout } from '@/app/actions/auth'
 import { InboxNavItem } from './InboxNavItem'
@@ -139,6 +140,21 @@ export function Sidebar({
 
         {/* Caixa de entrada — antes dos espaços */}
         <InboxNavItem orgSlug={orgSlug} />
+
+        {/* Trabalhar — tela de trabalho do cargo da pessoa */}
+        <Link
+          href={`${base}/views/atendimento`}
+          className={cn(
+            'flex items-center gap-2.5 mx-2 px-2 py-1.5 rounded-lg text-sm transition',
+            pathname.startsWith(`${base}/views/atendimento`)
+              ? 'bg-gray-800 text-gray-100'
+              : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
+          )}
+        >
+          <Briefcase className="w-4 h-4 shrink-0" />
+          <span className="flex-1">Trabalhar</span>
+        </Link>
+
         <div className="mx-3 my-2 border-t border-gray-800" />
 
         {/* Espaços */}
