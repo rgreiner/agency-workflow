@@ -17,6 +17,8 @@ const DAY_W    = 44
 const ROW_H    = 44
 const HANDLE_W = 10
 const DAYS     = 35
+const SCRUB_PX_PER_DAY = 64   // px de scroll horizontal por dia (menos sensível que a largura do dia)
+const SCRUB_MAX_STEP   = 4    // máx. de dias por evento de wheel (tira o overshoot da inércia)
 
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -147,11 +149,11 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
       e.preventDefault()
       const dx = e.deltaX * (e.deltaMode === 1 ? 16 : 1)     // normaliza modo "linhas"
       wheelAccum.current += dx
-      const steps = Math.trunc(wheelAccum.current / DAY_W)
-      if (steps !== 0) {
-        wheelAccum.current -= steps * DAY_W
-        setViewStart(d => addDays(d, steps))
-      }
+      let steps = Math.trunc(wheelAccum.current / SCRUB_PX_PER_DAY)
+      if (steps === 0) return
+      steps = Math.max(-SCRUB_MAX_STEP, Math.min(SCRUB_MAX_STEP, steps))  // limita saltos (inércia)
+      wheelAccum.current -= steps * SCRUB_PX_PER_DAY
+      setViewStart(d => addDays(d, steps))
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
