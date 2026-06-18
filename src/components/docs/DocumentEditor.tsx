@@ -83,7 +83,10 @@ export function DocumentEditor({
     editable: canManage,
     onUpdate: ({ editor }) => {
       scheduleSave(async () => {
-        await supabase.from('documents').update({ content: editor.getJSON() }).eq('id', docId)
+        const { error } = await supabase.rpc('update_document_content', {
+          p_user_id: currentUserId, p_doc_id: docId, p_content: editor.getJSON(),
+        })
+        if (error) throw new Error(error.message)
       })
     },
   })
@@ -92,7 +95,10 @@ export function DocumentEditor({
     if (!title.trim()) return
     setSaveStatus('saving')
     try {
-      await supabase.from('documents').update({ title: title.trim() }).eq('id', docId)
+      const { error } = await supabase.rpc('update_document_title', {
+        p_user_id: currentUserId, p_doc_id: docId, p_title: title.trim(),
+      })
+      if (error) throw new Error(error.message)
       setSaveStatus('saved')
       setTimeout(() => setSaveStatus('idle'), 2000)
     } catch {

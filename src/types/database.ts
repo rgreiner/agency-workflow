@@ -692,6 +692,26 @@ export type Database = {
         Args: { p_user_id: string; p_campaign_id: string; p_archived: boolean }
         Returns: undefined
       }
+      create_document: {
+        Args: { p_user_id: string; p_org_id: string; p_workspace_id: string | null }
+        Returns: string
+      }
+      update_document_content: {
+        Args: { p_user_id: string; p_doc_id: string; p_content: Json }
+        Returns: undefined
+      }
+      update_document_title: {
+        Args: { p_user_id: string; p_doc_id: string; p_title: string }
+        Returns: undefined
+      }
+      set_document_visibility: {
+        Args: { p_user_id: string; p_doc_id: string; p_visibility: string; p_member_ids: string[] }
+        Returns: undefined
+      }
+      delete_document: {
+        Args: { p_user_id: string; p_doc_id: string }
+        Returns: undefined
+      }
       search_activities: {
         Args: {
           p_user_id: string

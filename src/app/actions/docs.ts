@@ -10,21 +10,14 @@ export async function createDocument(orgId: string, orgSlug: string, workspaceId
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
-  const { data, error } = await supabase
-    .from('documents')
-    .insert({
-      org_id: orgId,
-      workspace_id: workspaceId ?? null,
-      title: 'Sem título',
-      content: { type: 'doc', content: [] },
-      visibility: 'org',
-      created_by: user.id,
-    })
-    .select('id')
-    .single()
+  const { data: newId, error } = await supabase.rpc('create_document', {
+    p_user_id: user.id,
+    p_org_id: orgId,
+    p_workspace_id: workspaceId ?? null,
+  })
 
   if (error) return { error: error.message }
-  redirect(`/${orgSlug}/docs/${data.id}`)
+  redirect(`/${orgSlug}/docs/${newId}`)
 }
 
 export async function updateDocumentVisibility(
@@ -34,28 +27,16 @@ export async function updateDocumentVisibility(
   memberIds: string[]
 ) {
   const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
 
-  const { error: visError } = await supabase
-    .from('documents')
-    .update({ visibility })
-    .eq('id', docId)
-
-  if (visError) return { error: visError.message }
-
-  const { error: delError } = await supabase
-    .from('document_members')
-    .delete()
-    .eq('document_id', docId)
-
-  if (delError) return { error: delError.message }
-
-  if (visibility === 'custom' && memberIds.length > 0) {
-    const { error } = await supabase
-      .from('document_members')
-      .insert(memberIds.map(userId => ({ document_id: docId, user_id: userId })))
-
-    if (error) return { error: error.message }
-  }
+  const { error } = await supabase.rpc('set_document_visibility', {
+    p_user_id: user.id,
+    p_doc_id: docId,
+    p_visibility: visibility,
+    p_member_ids: memberIds,
+  })
+  if (error) return { error: error.message }
 
   revalidatePath(`/${orgSlug}/docs/${docId}`)
   return {}
@@ -63,7 +44,10 @@ export async function updateDocumentVisibility(
 
 export async function deleteDocument(docId: string, orgSlug: string) {
   const supabase = await createClient()
-  const { error } = await supabase.from('documents').delete().eq('id', docId)
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { error } = await supabase.rpc('delete_document', { p_user_id: user.id, p_doc_id: docId })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/docs`)
   redirect(`/${orgSlug}/docs`)
