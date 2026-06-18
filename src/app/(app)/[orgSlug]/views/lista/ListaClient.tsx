@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect, useRef, useTransition, type ReactNode } from 'react'
+import { useState, useEffect, useRef, useTransition, type ReactNode, type ComponentType } from 'react'
 import Link from 'next/link'
 import { cn, isOverdue, daysUntil } from '@/lib/utils'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority } from '@/types'
-import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search, Flag, SignalLow, SignalMedium, SignalHigh, Copy, Archive, ArchiveRestore } from 'lucide-react'
+import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search, Flag, SignalLow, SignalMedium, SignalHigh, Copy, Archive, ArchiveRestore, X, Calendar, UserPlus, Minus, Circle } from 'lucide-react'
 
 // Complexidade → ícone (1/2/3 barras)
 const COMPLEXITY_ICON = { simple: SignalLow, medium: SignalMedium, complex: SignalHigh } as const
@@ -12,7 +12,7 @@ import { AvatarGroup } from '@/components/ui/Avatar'
 import { DateRangeEditor } from '@/components/ui/DateRangeEditor'
 import { Select } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
-import { updateActivityStatus, updateActivityField, setActivityArchived } from '@/app/actions/activity'
+import { updateActivityStatus, updateActivityField, setActivityArchived, bulkUpdateStatus, bulkUpdateField, bulkToggleAssignee, bulkSetArchived } from '@/app/actions/activity'
 import { createClient } from '@/lib/supabase/client'
 import { getUsuarioClient } from '@/lib/auth/client'
 import { toast } from 'sonner'
@@ -76,6 +76,9 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
   const isArchivedView = view === 'arquivadas'
   // Otimista: esconde itens recém-(des)arquivados até o revalidate do servidor.
   const [hidden, setHidden] = useState<Set<string>>(new Set())
+  // Seleção múltipla (ações em lote)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkPending, startBulk] = useTransition()
 
   function archiveActivity(id: string, title: string) {
     setHidden(prev => new Set(prev).add(id))
@@ -219,6 +222,71 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
     filteredActivities.some(a => a.status === s.value)
   )
 
+  // ── Seleção múltipla ──
+  const selectedIds = [...selected]
+  const selectionActive = selectedIds.length > 0
+  const visibleIds = filteredActivities.map(a => a.id)
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selected.has(id))
+
+  function toggleSelect(id: string) {
+    setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  function setMany(ids: string[], on: boolean) {
+    setSelected(prev => { const n = new Set(prev); ids.forEach(id => on ? n.add(id) : n.delete(id)); return n })
+  }
+  function clearSelection() { setSelected(new Set()) }
+
+  function bulkApplyStatus(status: string) {
+    const ids = selectedIds
+    setOverrides(prev => { const n = { ...prev }; ids.forEach(id => { n[id] = status }); return n })
+    const label = statusConfig.find(s => s.value === status)?.label ?? status
+    startBulk(async () => {
+      const r = await bulkUpdateStatus(listPath, ids, status)
+      if (r?.error) {
+        setOverrides(prev => { const n = { ...prev }; ids.forEach(id => delete n[id]); return n })
+        toast.error(r.error)
+      } else {
+        toast.success(`${ids.length} movida${ids.length !== 1 ? 's' : ''} para ${label}`)
+        clearSelection()
+      }
+    })
+  }
+
+  function bulkApplyArchive() {
+    const ids = selectedIds
+    setHidden(prev => { const n = new Set(prev); ids.forEach(id => n.add(id)); return n })
+    startBulk(async () => {
+      const r = await bulkSetArchived(listPath, ids, !isArchivedView)
+      if (r?.error) {
+        setHidden(prev => { const n = new Set(prev); ids.forEach(id => n.delete(id)); return n })
+        toast.error(r.error)
+      } else {
+        toast.success(isArchivedView ? `${ids.length} desarquivada${ids.length !== 1 ? 's' : ''}` : `${ids.length} arquivada${ids.length !== 1 ? 's' : ''}`)
+        clearSelection()
+      }
+    })
+  }
+
+  function bulkApplyDueDate(date: string | null) {
+    const ids = selectedIds
+    startBulk(async () => {
+      const r = await bulkUpdateField(listPath, ids, 'due_date', date)
+      if (r?.error) toast.error(r.error)
+      else { toast.success(date ? `Prazo aplicado a ${ids.length}` : `Prazo removido de ${ids.length}`); clearSelection() }
+    })
+  }
+
+  function bulkApplyAssignee(userId: string) {
+    // toggle = adicionar: aplica só a quem ainda não tem esse responsável
+    const ids = filteredActivities.filter(a => selected.has(a.id) && !a.assignedIds.includes(userId)).map(a => a.id)
+    if (ids.length === 0) { toast('Todas já têm esse responsável'); return }
+    startBulk(async () => {
+      const r = await bulkToggleAssignee(listPath, ids, userId)
+      if (r?.error) toast.error(r.error)
+      else { toast.success(`Responsável adicionado a ${ids.length}`); clearSelection() }
+    })
+  }
+
   return (
     <div className="p-6">
 
@@ -354,6 +422,11 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
 
         {/* Column header — desktop only */}
         <div className="hidden md:flex items-center gap-2 px-4 py-2">
+          <SelectBox
+            checked={allVisibleSelected}
+            indeterminate={selectionActive && !allVisibleSelected}
+            onChange={() => setMany(visibleIds, !allVisibleSelected)}
+          />
           <div className="w-3.5 shrink-0 -ml-1" />
           <div className="w-4 shrink-0" />
           <div className="flex-1 text-xs font-medium text-gray-400">Atividade</div>
@@ -415,28 +488,39 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
               >
 
                 {/* Group header */}
-                <button
-                  onClick={() => toggleGroup(statusCfg.value)}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50/80 transition text-left rounded-t-xl"
-                >
-                  <ChevronDown className={cn(
-                    'w-3.5 h-3.5 text-gray-400 transition-transform shrink-0',
-                    !isOpen && '-rotate-90'
-                  )} />
-                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
-                    style={{ backgroundColor: statusCfg.bg, color: statusCfg.text }}>
-                    {statusCfg.label}
-                  </span>
-                  <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2 py-0.5 min-w-[1.25rem] text-center">
-                    {items.length}
-                  </span>
-                </button>
+                <div className="w-full flex items-center gap-2 px-4 py-2.5 rounded-t-xl">
+                  <SelectBox
+                    checked={items.length > 0 && items.every(a => selected.has(a.id))}
+                    indeterminate={items.some(a => selected.has(a.id)) && !items.every(a => selected.has(a.id))}
+                    onChange={() => {
+                      const ids = items.map(a => a.id)
+                      setMany(ids, !ids.every(id => selected.has(id)))
+                    }}
+                  />
+                  <button
+                    onClick={() => toggleGroup(statusCfg.value)}
+                    className="flex items-center gap-2 flex-1 text-left hover:opacity-80 transition"
+                  >
+                    <ChevronDown className={cn(
+                      'w-3.5 h-3.5 text-gray-400 transition-transform shrink-0',
+                      !isOpen && '-rotate-90'
+                    )} />
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
+                      style={{ backgroundColor: statusCfg.bg, color: statusCfg.text }}>
+                      {statusCfg.label}
+                    </span>
+                    <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2 py-0.5 min-w-[1.25rem] text-center">
+                      {items.length}
+                    </span>
+                  </button>
+                </div>
 
                 {/* Activity rows */}
                 {isOpen && (
                   <div className="divide-y divide-gray-100 border-t border-gray-100">
                     {items.map(activity => {
                       const camp     = campMap[activity.campaign_id]
+                      const isSel    = selected.has(activity.id)
                       const overdue  = isOverdue(activity.due_date)
                       const days     = daysUntil(activity.due_date)
                       const cxKey = activity.complexity as keyof typeof COMPLEXITY_ICON | undefined
@@ -458,9 +542,9 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                       function renderCell(key: ColKey) {
                         switch (key) {
                           case 'responsavel':
-                            return <AssigneeCell activityId={activity.id} assignedIds={activity.assignedIds} members={members} />
+                            return <AssigneeCell key={activity.assignedIds.join('-')} activityId={activity.id} assignedIds={activity.assignedIds} members={members} />
                           case 'prazo':
-                            return <DateRangeEditor activityId={activity.id} path={listPath} startDate={activity.start_date ?? null} dueDate={activity.due_date} canEdit compact />
+                            return <DateRangeEditor key={`${activity.start_date ?? ''}_${activity.due_date ?? ''}`} activityId={activity.id} path={listPath} startDate={activity.start_date ?? null} dueDate={activity.due_date} canEdit compact />
                           case 'prioridade':
                             return <PriorityCell activityId={activity.id} current={activity.priority} path={listPath} />
                           case 'complexidade':
@@ -493,6 +577,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
 
                           {/* ── Mobile layout ─────────────────────────── */}
                           <div className="md:hidden flex items-center gap-3 px-4 py-2.5">
+                            <SelectBox checked={isSel} onChange={() => toggleSelect(activity.id)} />
                             <StatusDot
                               current={activity.status}
                               statusConfig={statusConfig}
@@ -529,9 +614,17 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                             onDragEnd={() => { setDraggingId(null); setDragOverStatus(null) }}
                             className={cn(
                               'hidden md:flex items-center gap-2 px-4 py-2 group cursor-grab active:cursor-grabbing',
-                              draggingId === activity.id && 'opacity-40'
+                              draggingId === activity.id && 'opacity-40',
+                              isSel && 'bg-indigo-50/60'
                             )}
                           >
+                            {/* Checkbox de seleção */}
+                            <SelectBox
+                              checked={isSel}
+                              onChange={() => toggleSelect(activity.id)}
+                              className={cn(!isSel && !selectionActive && 'opacity-0 group-hover:opacity-100')}
+                            />
+
                             {/* Grip — aparece no hover */}
                             <GripVertical className="w-3.5 h-3.5 text-gray-300 opacity-0 group-hover:opacity-100 transition shrink-0 -ml-1" />
 
@@ -585,7 +678,170 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
           </div>
         )}
       </div>
+
+      {selectionActive && (
+        <BulkActionBar
+          count={selectedIds.length}
+          pending={bulkPending}
+          statusConfig={statusConfig}
+          members={members}
+          isArchivedView={isArchivedView}
+          onStatus={bulkApplyStatus}
+          onAssignee={bulkApplyAssignee}
+          onDueDate={bulkApplyDueDate}
+          onArchive={bulkApplyArchive}
+          onClear={clearSelection}
+        />
+      )}
     </div>
+  )
+}
+
+// ── Checkbox de seleção (linha, grupo e cabeçalho) ──────────────────────────
+function SelectBox({ checked, indeterminate, onChange, className }: {
+  checked: boolean
+  indeterminate?: boolean
+  onChange: () => void
+  className?: string
+}) {
+  return (
+    <button
+      type="button"
+      draggable={false}
+      title={checked ? 'Desmarcar' : 'Selecionar'}
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange() }}
+      className={cn(
+        'w-4 h-4 rounded border flex items-center justify-center shrink-0 transition',
+        checked || indeterminate ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-300 bg-white hover:border-gray-400',
+        className,
+      )}
+    >
+      {checked ? <Check className="w-3 h-3" strokeWidth={3} /> : indeterminate ? <Minus className="w-3 h-3" strokeWidth={3} /> : null}
+    </button>
+  )
+}
+
+// ── Barra flutuante de ações em lote ────────────────────────────────────────
+function BulkActionBar({
+  count, pending, statusConfig, members, isArchivedView,
+  onStatus, onAssignee, onDueDate, onArchive, onClear,
+}: {
+  count: number
+  pending: boolean
+  statusConfig: { value: string; label: string; bg: string; text: string }[]
+  members: Member[]
+  isArchivedView: boolean
+  onStatus: (status: string) => void
+  onAssignee: (userId: string) => void
+  onDueDate: (date: string | null) => void
+  onArchive: () => void
+  onClear: () => void
+}) {
+  const [menu, setMenu] = useState<null | 'status' | 'assignee' | 'date'>(null)
+  const [date, setDate] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function onOut(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setMenu(null) }
+    document.addEventListener('mousedown', onOut)
+    return () => document.removeEventListener('mousedown', onOut)
+  }, [])
+
+  return (
+    <div ref={ref} className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-[slideUp_0.15s_ease-out]">
+      <div className={cn(
+        'flex items-center gap-1 rounded-2xl border border-gray-200 bg-white shadow-xl px-2 py-1.5',
+        pending && 'opacity-60 pointer-events-none'
+      )}>
+        <span className="text-sm font-semibold text-gray-800 px-2 tabular-nums whitespace-nowrap">
+          {count} selecionada{count !== 1 ? 's' : ''}
+        </span>
+        <div className="w-px h-5 bg-gray-200 mx-0.5" />
+
+        {/* Status */}
+        <div className="relative">
+          <BarButton icon={Circle} label="Status" active={menu === 'status'} onClick={() => setMenu(m => m === 'status' ? null : 'status')} />
+          {menu === 'status' && (
+            <div className="absolute bottom-full mb-2 left-0 w-56 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 max-h-72 overflow-y-auto">
+              {statusConfig.map(s => (
+                <button key={s.value} type="button"
+                  onClick={() => { setMenu(null); onStatus(s.value) }}
+                  className="w-full flex items-center px-3 py-1.5 hover:bg-gray-50 transition text-left">
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: s.bg, color: s.text }}>{s.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Responsável */}
+        <div className="relative">
+          <BarButton icon={UserPlus} label="Responsável" active={menu === 'assignee'} onClick={() => setMenu(m => m === 'assignee' ? null : 'assignee')} />
+          {menu === 'assignee' && (
+            <div className="absolute bottom-full mb-2 left-0 w-56 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 max-h-72 overflow-y-auto">
+              <p className="px-3 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Adicionar responsável</p>
+              {members.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-gray-400">Nenhum membro</p>
+              ) : members.map(m => (
+                <button key={m.userId} type="button"
+                  onClick={() => { setMenu(null); onAssignee(m.userId) }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition text-left">
+                  <span className="text-sm text-gray-700 truncate">{m.fullName ?? m.email.split('@')[0]}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Prazo */}
+        <div className="relative">
+          <BarButton icon={Calendar} label="Prazo" active={menu === 'date'} onClick={() => setMenu(m => m === 'date' ? null : 'date')} />
+          {menu === 'date' && (
+            <div className="absolute bottom-full mb-2 left-0 w-60 bg-white rounded-xl border border-gray-200 shadow-lg p-3">
+              <input
+                type="date"
+                value={date}
+                onChange={e => setDate(e.target.value)}
+                className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <div className="flex items-center justify-between mt-2">
+                <button type="button" onClick={() => { setMenu(null); onDueDate(null) }}
+                  className="text-xs text-gray-500 hover:text-gray-700 transition">Remover prazo</button>
+                <button type="button" disabled={!date} onClick={() => { setMenu(null); onDueDate(date) }}
+                  className="text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition">Aplicar</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="w-px h-5 bg-gray-200 mx-0.5" />
+
+        <BarButton icon={isArchivedView ? ArchiveRestore : Archive} label={isArchivedView ? 'Desarquivar' : 'Arquivar'} onClick={onArchive} />
+
+        <button type="button" onClick={onClear} title="Limpar seleção"
+          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function BarButton({ icon: Icon, label, onClick, active }: {
+  icon: ComponentType<{ className?: string }>
+  label: string
+  onClick: () => void
+  active?: boolean
+}) {
+  return (
+    <button type="button" onClick={onClick}
+      className={cn(
+        'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded-lg transition',
+        active ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-100'
+      )}>
+      <Icon className="w-4 h-4" />
+      <span className="hidden sm:inline">{label}</span>
+    </button>
   )
 }
 

@@ -175,6 +175,70 @@ export async function setActivityArchived(
   revalidatePath(path)
 }
 
+// ── Ações em lote (seleção múltipla na Lista) ───────────────────────────────
+// Reusa os RPCs por item (security definer com checagem de permissão) em
+// pequenos lotes paralelos, com um único revalidate ao final.
+async function runChunked(
+  ids: string[],
+  fn: (id: string) => PromiseLike<{ error: { message: string } | null }>,
+  size = 8,
+): Promise<{ message: string } | null> {
+  for (let i = 0; i < ids.length; i += size) {
+    const res = await Promise.all(ids.slice(i, i + size).map(fn))
+    const err = res.find(r => r.error)?.error
+    if (err) return err
+  }
+  return null
+}
+
+export async function bulkUpdateStatus(path: string, ids: string[], newStatus: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+  const err = await runChunked(ids, id =>
+    supabase.rpc('update_activity_status', {
+      p_user_id: user.id, p_activity_id: id, p_new_status: newStatus, p_comment: '',
+    }).then(r => ({ error: r.error })))
+  if (err) return { error: err.message }
+  revalidatePath(path)
+}
+
+export async function bulkUpdateField(path: string, ids: string[], field: string, value: string | null) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+  const err = await runChunked(ids, id =>
+    supabase.rpc('update_activity_field', {
+      p_user_id: user.id, p_activity_id: id, p_field: field, p_value: value,
+    }).then(r => ({ error: r.error })))
+  if (err) return { error: err.message }
+  revalidatePath(path)
+}
+
+export async function bulkToggleAssignee(path: string, ids: string[], assigneeId: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+  const err = await runChunked(ids, id =>
+    supabase.rpc('toggle_activity_assignee', {
+      p_user_id: user.id, p_activity_id: id, p_assignee_id: assigneeId,
+    }).then(r => ({ error: r.error })))
+  if (err) return { error: err.message }
+  revalidatePath(path)
+}
+
+export async function bulkSetArchived(path: string, ids: string[], archived: boolean) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+  const err = await runChunked(ids, id =>
+    supabase.rpc('set_activity_archived', {
+      p_user_id: user.id, p_activity_id: id, p_archived: archived,
+    }).then(r => ({ error: r.error })))
+  if (err) return { error: err.message }
+  revalidatePath(path)
+}
+
 export async function addComment(
   path: string,
   activityId: string,
