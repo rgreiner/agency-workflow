@@ -600,6 +600,7 @@ export type Database = {
           content: Json
           visibility: string
           created_by: string
+          is_folder: boolean
           created_at: string
           updated_at: string
         }
@@ -612,6 +613,7 @@ export type Database = {
           content?: Json
           visibility?: string
           created_by: string
+          is_folder?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -624,6 +626,7 @@ export type Database = {
           content?: Json
           visibility?: string
           created_by?: string
+          is_folder?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -693,8 +696,16 @@ export type Database = {
         Returns: undefined
       }
       create_document: {
-        Args: { p_user_id: string; p_org_id: string; p_workspace_id: string | null }
+        Args: { p_user_id: string; p_org_id: string; p_workspace_id: string | null; p_parent_id?: string | null }
         Returns: string
+      }
+      create_folder: {
+        Args: { p_user_id: string; p_org_id: string; p_workspace_id: string | null; p_name: string }
+        Returns: string
+      }
+      move_document: {
+        Args: { p_user_id: string; p_doc_id: string; p_parent_id: string | null; p_workspace_id: string | null }
+        Returns: undefined
       }
       update_document_content: {
         Args: { p_user_id: string; p_doc_id: string; p_content: Json }

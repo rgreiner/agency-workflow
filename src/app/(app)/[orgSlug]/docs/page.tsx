@@ -20,15 +20,17 @@ export default async function DocsPage({
     .single()
   if (!org) notFound()
 
-  const { data: docs } = await supabase
+  const { data: rawDocs } = await supabase
     .from('documents')
-    .select('id, title, visibility, created_at, updated_at, workspace_id, workspaces(name), profiles!created_by(full_name)')
+    .select('id, title, visibility, created_at, updated_at, workspace_id, is_folder, workspaces(name), profiles!created_by(full_name)')
     .eq('org_id', org.id)
-    .is('parent_id', null)
     .order('updated_at', { ascending: false })
 
-  const orgDocs = (docs ?? []).filter(d => !d.workspace_id)
-  const workspaceDocs = (docs ?? []).filter(d => d.workspace_id)
+  // Pastas são só estrutura (sidebar do editor); na listagem mostramos os
+  // documentos "achatados".
+  const docs = (rawDocs ?? []).filter(d => !d.is_folder)
+  const orgDocs = docs.filter(d => !d.workspace_id)
+  const workspaceDocs = docs.filter(d => d.workspace_id)
 
   const workspaceGroups = workspaceDocs.reduce<Record<string, { name: string; docs: typeof workspaceDocs }>>((acc, doc) => {
     const wsId = doc.workspace_id!

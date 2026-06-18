@@ -57,13 +57,13 @@ export default async function DocPage({
 
   const workspaceName = (doc.workspaces as unknown as { name: string } | null)?.name ?? null
 
-  // Lista de documentos para a sidebar (navegar sem voltar à listagem)
+  // Documentos + pastas para a sidebar (navegar/organizar sem voltar à listagem)
   const { data: allDocs } = await supabase
     .from('documents')
-    .select('id, title, visibility, workspace_id, workspaces(name)')
+    .select('id, title, visibility, workspace_id, parent_id, is_folder, workspaces(name)')
     .eq('org_id', org.id)
-    .is('parent_id', null)
-    .order('updated_at', { ascending: false })
+    .order('is_folder', { ascending: false })
+    .order('title', { ascending: true })
 
   // Clientes para associar o documento
   const { data: workspaces } = await supabase

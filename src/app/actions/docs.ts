@@ -5,7 +5,12 @@ import { getUsuario } from '@/lib/auth/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
-export async function createDocument(orgId: string, orgSlug: string, workspaceId?: string | null) {
+export async function createDocument(
+  orgId: string,
+  orgSlug: string,
+  workspaceId?: string | null,
+  parentId?: string | null,
+) {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
@@ -14,10 +19,63 @@ export async function createDocument(orgId: string, orgSlug: string, workspaceId
     p_user_id: user.id,
     p_org_id: orgId,
     p_workspace_id: workspaceId ?? null,
+    p_parent_id: parentId ?? null,
   })
 
   if (error) return { error: error.message }
   redirect(`/${orgSlug}/docs/${newId}`)
+}
+
+export async function createFolder(orgId: string, orgSlug: string, workspaceId: string | null, name: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { data: newId, error } = await supabase.rpc('create_folder', {
+    p_user_id: user.id,
+    p_org_id: orgId,
+    p_workspace_id: workspaceId,
+    p_name: name,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/docs`)
+  return { id: newId as string }
+}
+
+export async function renameDocument(docId: string, orgSlug: string, title: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { error } = await supabase.rpc('update_document_title', { p_user_id: user.id, p_doc_id: docId, p_title: title })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/docs`)
+  return {}
+}
+
+export async function moveDocument(docId: string, orgSlug: string, parentId: string | null, workspaceId: string | null) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { error } = await supabase.rpc('move_document', {
+    p_user_id: user.id, p_doc_id: docId, p_parent_id: parentId, p_workspace_id: workspaceId,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/docs`)
+  return {}
+}
+
+/** Exclui sem redirecionar (usado na árvore da sidebar). */
+export async function removeDocument(docId: string, orgSlug: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { error } = await supabase.rpc('delete_document', { p_user_id: user.id, p_doc_id: docId })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/docs`)
+  return {}
 }
 
 export async function updateDocumentVisibility(
