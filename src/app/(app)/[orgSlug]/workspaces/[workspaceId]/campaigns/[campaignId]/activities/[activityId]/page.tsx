@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { notFound } from 'next/navigation'
-import { STATUS_CONFIG, PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity } from '@/types'
+import { getMergedStatusConfig, PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity, type StatusOverride } from '@/types'
 import { cn, formatDate, isOverdue } from '@/lib/utils'
 import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
@@ -127,7 +127,14 @@ export default async function ActivityPage({
     })),
   ].sort((a, b) => a.at.localeCompare(b.at))
 
-  const statusCfg    = STATUS_CONFIG.find(s => s.value === activity.status)!
+  // Cores de status seguem Configurações → Aparência (mescladas)
+  const { data: orgRow } = await supabase
+    .from('organizations').select('id').eq('slug', orgSlug).single()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: rawSettings } = await (supabase as any)
+    .from('org_settings').select('status_overrides').eq('org_id', orgRow?.id).single()
+  const statusConfig = getMergedStatusConfig((rawSettings?.status_overrides ?? []) as StatusOverride[])
+
   const priorityCfg  = PRIORITY_CONFIG[activity.priority as ActivityPriority]
   const complexityCfg = COMPLEXITY_CONFIG[activity.complexity as ActivityComplexity]
   const overdue = isOverdue(activity.due_date)
@@ -367,8 +374,8 @@ export default async function ActivityPage({
               }
 
               if (item.kind === 'status') {
-                const fromCfg = STATUS_CONFIG.find(s => s.value === item.from)
-                const toCfg   = STATUS_CONFIG.find(s => s.value === item.to)
+                const fromCfg = statusConfig.find(s => s.value === item.from)
+                const toCfg   = statusConfig.find(s => s.value === item.to)
                 return (
                   <div key={item.id} className="flex items-start gap-2.5 text-xs text-gray-500 px-1">
                     <Avatar name={item.profile?.full_name ?? '?'} avatarUrl={item.profile?.avatar_url} size="sm" />
@@ -377,11 +384,11 @@ export default async function ActivityPage({
                         <span className="font-medium text-gray-700">{item.profile?.full_name ?? 'Sistema'}</span>
                         <span>moveu de</span>
                         {fromCfg
-                          ? <span className={cn('px-1.5 py-0.5 rounded-full text-[10px] font-semibold', fromCfg.bgColor, fromCfg.color)}>{fromCfg.label}</span>
+                          ? <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: fromCfg.bg, color: fromCfg.text }}>{fromCfg.label}</span>
                           : <span className="text-gray-400">início</span>
                         }
                         <ArrowRight className="w-3 h-3 text-gray-300 shrink-0" />
-                        {toCfg && <span className={cn('px-1.5 py-0.5 rounded-full text-[10px] font-semibold', toCfg.bgColor, toCfg.color)}>{toCfg.label}</span>}
+                        {toCfg && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: toCfg.bg, color: toCfg.text }}>{toCfg.label}</span>}
                       </div>
                       {item.comment && (
                         <p className="text-[11px] text-gray-400 mt-1 italic whitespace-pre-wrap break-words">"{item.comment}"</p>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition, useRef, useEffect } from 'react'
-import { STATUS_CONFIG } from '@/types'
+import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { updateActivityStatus } from '@/app/actions/activity'
 import { cn } from '@/lib/utils'
 import { ChevronDown, Check, Loader2 } from 'lucide-react'
@@ -21,7 +21,8 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
   const [isPending, startTransition] = useTransition()
   const ref = useRef<HTMLDivElement>(null)
 
-  const selectedCfg = STATUS_CONFIG.find(s => s.value === selected)!
+  const statusConfig = useStatusConfig()
+  const selectedCfg = statusConfig.find(s => s.value === selected)!
   const changed = selected !== currentStatus
 
   useEffect(() => {
@@ -41,7 +42,7 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
       } else {
         setComment('')
         setOpen(false)
-        toast.success(`Status: ${STATUS_CONFIG.find(s => s.value === selected)?.label}`)
+        toast.success(`Status: ${statusConfig.find(s => s.value === selected)?.label}`)
       }
     })
   }
@@ -53,10 +54,8 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
         <button
           type="button"
           onClick={() => setOpen(o => !o)}
-          className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition',
-            selectedCfg.bgColor, selectedCfg.color,
-          )}
+          style={{ backgroundColor: selectedCfg.bg, color: selectedCfg.text }}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
         >
           {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
           {selectedCfg.label}
@@ -71,14 +70,14 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
                 return (
                   <div key={group}>
                     <p className="px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50">{label}</p>
-                    {STATUS_CONFIG.filter(s => s.group === group).map(s => (
+                    {statusConfig.filter(s => s.group === group).map(s => (
                       <button
                         key={s.value}
                         type="button"
                         onClick={() => setSelected(s.value)}
                         className="w-full text-left px-4 py-2.5 flex items-center gap-2 hover:bg-gray-50 transition"
                       >
-                        <span className={cn('inline-flex px-2 py-0.5 rounded-full text-xs font-semibold flex-1', s.bgColor, s.color)}>
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold flex-1" style={{ backgroundColor: s.bg, color: s.text }}>
                           {s.label}
                         </span>
                         {selected === s.value && <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0" />}
@@ -126,10 +125,8 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
         <button
           type="button"
           onClick={() => setOpen(!open)}
-          className={cn(
-            'w-full flex items-center justify-between px-4 py-3 rounded-xl border text-sm font-medium transition',
-            selectedCfg.bgColor, selectedCfg.color, 'border-transparent'
-          )}
+          style={{ backgroundColor: selectedCfg.bg, color: selectedCfg.text }}
+          className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-transparent text-sm font-medium transition"
         >
           {selectedCfg.label}
           <ChevronDown className={cn('w-4 h-4 transition-transform', open && 'rotate-180')} />
@@ -142,14 +139,14 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
               return (
                 <div key={group}>
                   <p className="px-4 py-2 text-xs font-semibold text-gray-400 bg-gray-50">{label}</p>
-                  {STATUS_CONFIG.filter(s => s.group === group).map(s => (
+                  {statusConfig.filter(s => s.group === group).map(s => (
                     <button
                       key={s.value}
                       type="button"
                       onClick={() => { setSelected(s.value); setOpen(false) }}
                       className={cn('w-full text-left px-4 py-2.5 text-sm transition hover:bg-gray-50', selected === s.value ? 'font-semibold text-gray-900' : 'text-gray-700')}
                     >
-                      <span className={cn('inline-flex px-2 py-0.5 rounded-full text-xs font-medium mr-2', s.bgColor, s.color)}>{s.label}</span>
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium mr-2" style={{ backgroundColor: s.bg, color: s.text }}>{s.label}</span>
                     </button>
                   ))}
                 </div>
