@@ -51,16 +51,19 @@ interface Props {
   orgSlug: string
   activities: Activity[]
   campMap: Record<string, CampInfo>
-  grouped: Record<string, Activity[]>
   members: Member[]
   initialWorkspace?: string
   view: 'ativas' | 'arquivadas'
+  /** Título do cabeçalho (default "Lista de atividades"; na tela de cargo = nome do cargo). */
+  title?: string
+  /** Rota base para os links/revalidate (default "views/lista"). */
+  routeBase?: string
 }
 
 // ── Component ─────────────────────────────────────────────────────────────
 
-export function ListaClient({ orgSlug, activities, campMap, grouped, members, initialWorkspace, view }: Props) {
-  const listPath = `/${orgSlug}/views/lista`
+export function ListaClient({ orgSlug, activities, campMap, members, initialWorkspace, view, title = 'Lista de atividades', routeBase = 'views/lista' }: Props) {
+  const listPath = `/${orgSlug}/${routeBase}`
   const statusConfig = useStatusConfig()
   const isArchivedView = view === 'arquivadas'
   // Otimista: esconde itens recém-(des)arquivados até o revalidate do servidor.
@@ -214,7 +217,7 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, members, in
       {/* Page header */}
       <div className="flex items-center justify-between gap-3 mb-5">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-gray-900">Lista de atividades</h1>
+          <h1 className="text-lg font-semibold text-gray-900">{title}</h1>
           <p className="text-gray-500 text-sm mt-0.5">
             {totalCount} atividade{totalCount !== 1 ? 's' : ''} {isArchivedView ? `arquivada${totalCount !== 1 ? 's' : ''}` : 'em andamento'}
           </p>
@@ -224,13 +227,13 @@ export function ListaClient({ orgSlug, activities, campMap, grouped, members, in
           {/* Ativas / Arquivadas */}
           <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 text-sm">
             <Link
-              href={`/${orgSlug}/views/lista`}
+              href={`/${orgSlug}/${routeBase}`}
               className={cn('px-2.5 py-1 rounded-md transition', !isArchivedView ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-700')}
             >
               Ativas
             </Link>
             <Link
-              href={`/${orgSlug}/views/lista?view=arquivadas`}
+              href={`/${orgSlug}/${routeBase}?view=arquivadas`}
               className={cn('px-2.5 py-1 rounded-md transition', isArchivedView ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-700')}
             >
               Arquivadas
