@@ -375,6 +375,8 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
               {col.label}
             </div>
           ))}
+          {/* Espaço da ação (arquivar) no fim de cada linha — mantém colunas alinhadas */}
+          <div className="w-[22px] shrink-0" />
         </div>
 
         {/* Status groups */}
