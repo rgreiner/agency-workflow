@@ -35,7 +35,15 @@ export interface ActivityListData {
  */
 export async function loadActivityList(
   orgSlug: string,
-  opts: { ws?: string; archived?: boolean; statuses?: string[] } = {},
+  opts: {
+    ws?: string
+    archived?: boolean
+    statuses?: string[]
+    /** Escopo: apenas este cliente (inclui workspace arquivado, campanhas ativas). */
+    scopeWorkspaceId?: string
+    /** Escopo: apenas esta campanha (inclui campanha arquivada). */
+    scopeCampaignId?: string
+  } = {},
 ): Promise<ActivityListData | null> {
   const supabase = await createClient()
 
@@ -43,14 +51,27 @@ export async function loadActivityList(
     .from('organizations').select('id').eq('slug', orgSlug).single()
   if (!org) return null
 
-  const { data: workspaces } = await supabase
-    .from('workspaces').select('id').eq('org_id', org.id).neq('archived', true)
-  const wsIds = workspaces?.map(w => w.id) ?? []
-
-  const { data: campaigns } = wsIds.length
-    ? await supabase.from('campaigns').select('id, name, workspace_id, workspaces(name)').in('workspace_id', wsIds).eq('archived', false)
-    : { data: [] }
-  const campIds = campaigns?.map(c => c.id) ?? []
+  type CampRow = { id: string; name: string; workspace_id: string; workspaces: { name: string } | null }
+  let campaigns: CampRow[] = []
+  if (opts.scopeCampaignId) {
+    // Página da campanha: só esta campanha (mesmo se arquivada).
+    const { data } = await supabase
+      .from('campaigns').select('id, name, workspace_id, workspaces(name)').eq('id', opts.scopeCampaignId)
+    campaigns = (data ?? []) as unknown as CampRow[]
+  } else {
+    // Página do cliente (escopo a 1 workspace, mesmo arquivado) ou visão geral
+    // (todos os clientes ativos). Campanhas arquivadas sempre escondidas aqui.
+    let wsQ = supabase.from('workspaces').select('id').eq('org_id', org.id)
+    wsQ = opts.scopeWorkspaceId ? wsQ.eq('id', opts.scopeWorkspaceId) : wsQ.neq('archived', true)
+    const { data: workspaces } = await wsQ
+    const wsIds = workspaces?.map(w => w.id) ?? []
+    if (wsIds.length) {
+      const { data } = await supabase
+        .from('campaigns').select('id, name, workspace_id, workspaces(name)').in('workspace_id', wsIds).eq('archived', false)
+      campaigns = (data ?? []) as unknown as CampRow[]
+    }
+  }
+  const campIds = campaigns.map(c => c.id)
 
   const archivedView = !!opts.archived
   let q = supabase.from('activities')

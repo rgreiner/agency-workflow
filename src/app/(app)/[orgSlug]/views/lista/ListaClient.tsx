@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useTransition } from 'react'
+import { useState, useEffect, useRef, useTransition, type ReactNode } from 'react'
 import Link from 'next/link'
 import { cn, isOverdue, daysUntil } from '@/lib/utils'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority } from '@/types'
@@ -58,11 +58,19 @@ interface Props {
   title?: string
   /** Rota base para os links/revalidate (default "views/lista"). */
   routeBase?: string
+  /** Caminho de navegação acima do título (ex.: "Clientes / Comil"). */
+  breadcrumb?: ReactNode
+  /** Ações ao lado do título (ex.: engrenagem editar/arquivar cliente). */
+  titleActions?: ReactNode
+  /** Botão secundário na barra de ações (ex.: "Nova campanha"). */
+  secondaryActions?: ReactNode
+  /** Quando definido, "Nova atividade" vai direto p/ esta campanha (sem seletor). */
+  newActivityCampaign?: { workspaceId: string; campaignId: string }
 }
 
 // ── Component ─────────────────────────────────────────────────────────────
 
-export function ListaClient({ orgSlug, activities, campMap, members, initialWorkspace, view, title = 'Lista de atividades', routeBase = 'views/lista' }: Props) {
+export function ListaClient({ orgSlug, activities, campMap, members, initialWorkspace, view, title = 'Lista de atividades', routeBase = 'views/lista', breadcrumb, titleActions, secondaryActions, newActivityCampaign }: Props) {
   const listPath = `/${orgSlug}/${routeBase}`
   const statusConfig = useStatusConfig()
   const isArchivedView = view === 'arquivadas'
@@ -106,7 +114,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
     setOverrides(prev => ({ ...prev, [id]: targetStatus }))
 
     startTransition(async () => {
-      const result = await updateActivityStatus(`/${orgSlug}/views/lista`, id, targetStatus, '')
+      const result = await updateActivityStatus(listPath, id, targetStatus, '')
       if (result?.error) {
         // rollback do update otimista
         setOverrides(prev => {
@@ -217,7 +225,11 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
       {/* Page header */}
       <div className="flex items-center justify-between gap-3 mb-5">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-gray-900">{title}</h1>
+          {breadcrumb && <div className="mb-1 text-xs text-gray-400">{breadcrumb}</div>}
+          <div className="flex items-center gap-1.5 min-w-0">
+            <h1 className="text-lg font-semibold text-gray-900 truncate">{title}</h1>
+            {titleActions}
+          </div>
           <p className="text-gray-500 text-sm mt-0.5">
             {totalCount} atividade{totalCount !== 1 ? 's' : ''} {isArchivedView ? `arquivada${totalCount !== 1 ? 's' : ''}` : 'em andamento'}
           </p>
@@ -240,8 +252,10 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
             </Link>
           </div>
 
+          {secondaryActions}
+
           {/* Nova atividade — sempre disponível no topo */}
-          <NewActivityButton orgSlug={orgSlug} campMap={campMap} />
+          <NewActivityButton orgSlug={orgSlug} campMap={campMap} fixedCampaign={newActivityCampaign} />
 
         {/* Workspace filter */}
         {workspaceOptions.length > 1 && (
@@ -638,9 +652,11 @@ function StatusDot({
 function NewActivityButton({
   orgSlug,
   campMap,
+  fixedCampaign,
 }: {
   orgSlug: string
   campMap: Record<string, CampInfo>
+  fixedCampaign?: { workspaceId: string; campaignId: string }
 }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
@@ -654,6 +670,19 @@ function NewActivityButton({
     document.addEventListener('mousedown', onOut)
     return () => document.removeEventListener('mousedown', onOut)
   }, [open])
+
+  // Página da campanha: vai direto para a criação (sem seletor de campanha).
+  if (fixedCampaign) {
+    return (
+      <Link
+        href={`/${orgSlug}/workspaces/${fixedCampaign.workspaceId}/campaigns/${fixedCampaign.campaignId}/activities/new`}
+        className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition"
+      >
+        <Plus className="w-4 h-4" />
+        <span className="hidden sm:inline">Nova atividade</span>
+      </Link>
+    )
+  }
 
   const items = Object.entries(campMap)
     .map(([id, c]) => ({ id, ...c }))
