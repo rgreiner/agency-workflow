@@ -542,8 +542,8 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
         ))}
       </div>
 
-      {/* Gantt table */}
-      <div ref={scrollRef} className="bg-white rounded-xl border border-gray-200 overflow-auto flex-1">
+      {/* Gantt table — overscroll-x-none evita o gesto "voltar página" do trackpad */}
+      <div ref={scrollRef} className="bg-white rounded-xl border border-gray-200 overflow-auto overscroll-x-none flex-1">
 
         {/* Calendar header — sticky, two rows: months + days */}
         <div className="sticky top-0 bg-white z-30 border-b border-gray-200">

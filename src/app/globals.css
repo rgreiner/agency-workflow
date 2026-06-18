@@ -19,6 +19,13 @@
   }
 }
 
+html,
+body {
+  /* Impede o gesto "voltar página" do trackpad ao rolar na horizontal
+     (ex.: rolar os dias para a esquerda no Gantt). */
+  overscroll-behavior-x: none;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
