@@ -112,7 +112,7 @@ export default async function DashboardPage({
   const wsIds = workspaces?.map(w => w.id) ?? []
 
   const { data: campaigns } = wsIds.length
-    ? await supabase.from('campaigns').select('id, name, workspace_id').in('workspace_id', wsIds)
+    ? await supabase.from('campaigns').select('id, name, workspace_id').in('workspace_id', wsIds).eq('archived', false)
     : { data: [] }
   const campIds = campaigns?.map(c => c.id) ?? []
 

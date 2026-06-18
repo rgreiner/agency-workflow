@@ -44,6 +44,8 @@ export default async function OrgLayout({
     .from('workspaces')
     .select('id, name, color, campaigns(id, name)')
     .eq('org_id', org.id)
+    .eq('archived', false)
+    .eq('campaigns.archived', false)
     .order('name')
 
   const workspaces = (workspacesRaw ?? []).map(ws => ({

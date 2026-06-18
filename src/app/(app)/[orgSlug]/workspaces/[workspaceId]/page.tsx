@@ -4,6 +4,7 @@ import { Plus, AlertCircle } from 'lucide-react'
 import { STATUS_CONFIG, PRIORITY_CONFIG, type ActivityPriority } from '@/types'
 import { cn, isOverdue, daysUntil } from '@/lib/utils'
 import { WorkspaceEditButton } from './WorkspaceEditButton'
+import { UnarchiveButton } from '@/components/ui/UnarchiveButton'
 
 export default async function WorkspacePage({
   params,
@@ -14,13 +15,17 @@ export default async function WorkspacePage({
   const supabase = await createClient()
 
   const { data: workspace } = await supabase
-    .from('workspaces').select('id, name, color, description').eq('id', workspaceId).single()
+    .from('workspaces').select('id, name, color, description, archived').eq('id', workspaceId).single()
   if (!workspace) return null
 
   const { data: campaigns } = await supabase
-    .from('campaigns').select('id, name').eq('workspace_id', workspaceId)
+    .from('campaigns').select('id, name').eq('workspace_id', workspaceId).eq('archived', false)
   const campIds = campaigns?.map(c => c.id) ?? []
   const campMap = Object.fromEntries((campaigns ?? []).map(c => [c.id, c.name]))
+
+  const { data: archivedCampaigns } = await supabase
+    .from('campaigns').select('id, name').eq('workspace_id', workspaceId).eq('archived', true)
+    .order('name', { ascending: true })
 
   const { data: activities } = campIds.length
     ? await supabase.from('activities')
@@ -58,6 +63,7 @@ export default async function WorkspacePage({
             name={workspace.name}
             description={workspace.description ?? ''}
             color={workspace.color}
+            archived={workspace.archived ?? false}
           />
           <p className="text-sm text-gray-400 mt-0.5 ml-1">
             {active} atividade{active !== 1 ? 's' : ''} em andamento
@@ -143,6 +149,21 @@ export default async function WorkspacePage({
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Campanhas arquivadas */}
+      {archivedCampaigns && archivedCampaigns.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Campanhas arquivadas</h2>
+          <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+            {archivedCampaigns.map(camp => (
+              <div key={camp.id} className="flex items-center justify-between px-4 py-2.5">
+                <span className="text-sm text-gray-600">{camp.name}</span>
+                <UnarchiveButton orgSlug={orgSlug} workspaceId={workspaceId} campaignId={camp.id} />
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

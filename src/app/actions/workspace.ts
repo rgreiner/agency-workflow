@@ -99,7 +99,20 @@ export async function deleteWorkspace(orgSlug: string, workspaceId: string) {
     p_user_id: user.id, p_workspace_id: workspaceId,
   })
   if (error) return { error: error.message }
+  revalidatePath('/', 'layout') // atualiza sidebar + listas (evita item fantasma)
   redirect(`/${orgSlug}/workspaces`)
+}
+
+export async function setWorkspaceArchived(orgSlug: string, workspaceId: string, archived: boolean) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { error } = await supabase.rpc('set_workspace_archived', {
+    p_user_id: user.id, p_workspace_id: workspaceId, p_archived: archived,
+  })
+  if (error) return { error: error.message }
+  revalidatePath('/', 'layout')
 }
 
 export async function updateCampaign(
@@ -140,5 +153,18 @@ export async function deleteCampaign(
     p_user_id: user.id, p_campaign_id: campaignId,
   })
   if (error) return { error: error.message }
+  revalidatePath('/', 'layout') // atualiza sidebar + listas
   redirect(`/${orgSlug}/workspaces/${workspaceId}`)
+}
+
+export async function setCampaignArchived(orgSlug: string, workspaceId: string, campaignId: string, archived: boolean) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { error } = await supabase.rpc('set_campaign_archived', {
+    p_user_id: user.id, p_campaign_id: campaignId, p_archived: archived,
+  })
+  if (error) return { error: error.message }
+  revalidatePath('/', 'layout')
 }

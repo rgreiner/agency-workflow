@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { updateCampaign, deleteCampaign } from '@/app/actions/workspace'
+import { updateCampaign, deleteCampaign, setCampaignArchived } from '@/app/actions/workspace'
 import { DatePicker } from '@/components/ui/DatePicker'
-import { Settings, X, Check, Trash2, Loader2 } from 'lucide-react'
+import { Settings, X, Check, Trash2, Loader2, Archive, ArchiveRestore } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 
 interface Props {
@@ -15,9 +15,10 @@ interface Props {
   description: string
   startDate: string
   endDate: string
+  archived?: boolean
 }
 
-export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, description, startDate, endDate }: Props) {
+export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, description, startDate, endDate, archived = false }: Props) {
   const [open, setOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [form, setForm] = useState({ name, description, start_date: startDate, end_date: endDate })
@@ -44,6 +45,16 @@ export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, des
   function handleDelete() {
     startTransition(async () => {
       await deleteCampaign(orgSlug, workspaceId, campaignId)
+    })
+  }
+
+  function handleArchive() {
+    startTransition(async () => {
+      const res = await setCampaignArchived(orgSlug, workspaceId, campaignId, !archived)
+      if (res?.error) { setError(res.error); return }
+      setOpen(false)
+      if (archived) router.refresh()
+      else router.push(`/${orgSlug}/workspaces/${workspaceId}`)
     })
   }
 
@@ -101,10 +112,16 @@ export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, des
               </div>
 
               <div className="flex items-center justify-between pt-2">
-                <button type="button" onClick={() => setConfirmDelete(true)} disabled={isPending}
-                  className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 transition disabled:opacity-50">
-                  <Trash2 className="w-4 h-4" /> Excluir campanha
-                </button>
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={handleArchive} disabled={isPending}
+                    className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition disabled:opacity-50">
+                    {archived ? <><ArchiveRestore className="w-4 h-4" /> Desarquivar</> : <><Archive className="w-4 h-4" /> Arquivar</>}
+                  </button>
+                  <button type="button" onClick={() => setConfirmDelete(true)} disabled={isPending}
+                    className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 transition disabled:opacity-50">
+                    <Trash2 className="w-4 h-4" /> Excluir
+                  </button>
+                </div>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setOpen(false)}
                     className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">

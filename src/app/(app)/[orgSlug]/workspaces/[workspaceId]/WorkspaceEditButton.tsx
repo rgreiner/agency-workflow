@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { updateWorkspace, deleteWorkspace } from '@/app/actions/workspace'
-import { Settings, X, Check, Trash2, Loader2 } from 'lucide-react'
+import { updateWorkspace, deleteWorkspace, setWorkspaceArchived } from '@/app/actions/workspace'
+import { Settings, X, Check, Trash2, Loader2, Archive, ArchiveRestore } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 
@@ -19,9 +19,10 @@ interface Props {
   name: string
   description: string
   color: string
+  archived?: boolean
 }
 
-export function WorkspaceEditButton({ orgSlug, workspaceId, name, description, color }: Props) {
+export function WorkspaceEditButton({ orgSlug, workspaceId, name, description, color, archived = false }: Props) {
   const [open, setOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [form, setForm] = useState({ name, description, color })
@@ -47,6 +48,16 @@ export function WorkspaceEditButton({ orgSlug, workspaceId, name, description, c
   function handleDelete() {
     startTransition(async () => {
       await deleteWorkspace(orgSlug, workspaceId)
+    })
+  }
+
+  function handleArchive() {
+    startTransition(async () => {
+      const res = await setWorkspaceArchived(orgSlug, workspaceId, !archived)
+      if (res?.error) { setError(res.error); return }
+      setOpen(false)
+      if (archived) router.refresh()
+      else router.push(`/${orgSlug}/workspaces`)
     })
   }
 
@@ -108,10 +119,16 @@ export function WorkspaceEditButton({ orgSlug, workspaceId, name, description, c
               </div>
 
               <div className="flex items-center justify-between pt-2">
-                <button type="button" onClick={() => setConfirmDelete(true)} disabled={isPending}
-                  className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 transition disabled:opacity-50">
-                  <Trash2 className="w-4 h-4" /> Excluir cliente
-                </button>
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={handleArchive} disabled={isPending}
+                    className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition disabled:opacity-50">
+                    {archived ? <><ArchiveRestore className="w-4 h-4" /> Desarquivar</> : <><Archive className="w-4 h-4" /> Arquivar</>}
+                  </button>
+                  <button type="button" onClick={() => setConfirmDelete(true)} disabled={isPending}
+                    className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 transition disabled:opacity-50">
+                    <Trash2 className="w-4 h-4" /> Excluir
+                  </button>
+                </div>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setOpen(false)}
                     className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">

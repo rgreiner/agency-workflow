@@ -60,6 +60,7 @@ export default async function CampaignPage({
             description={campaign.description ?? ''}
             startDate={campaign.start_date ?? ''}
             endDate={campaign.end_date ?? ''}
+            archived={campaign.archived ?? false}
           />
         </div>
         <Link

@@ -684,6 +684,14 @@ export type Database = {
         }
         Returns: undefined
       }
+      set_workspace_archived: {
+        Args: { p_user_id: string; p_workspace_id: string; p_archived: boolean }
+        Returns: undefined
+      }
+      set_campaign_archived: {
+        Args: { p_user_id: string; p_campaign_id: string; p_archived: boolean }
+        Returns: undefined
+      }
       search_activities: {
         Args: {
           p_user_id: string
