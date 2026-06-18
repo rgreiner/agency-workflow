@@ -712,6 +712,10 @@ export type Database = {
         Args: { p_user_id: string; p_doc_id: string }
         Returns: undefined
       }
+      set_document_workspace: {
+        Args: { p_user_id: string; p_doc_id: string; p_workspace_id: string | null }
+        Returns: undefined
+      }
       search_activities: {
         Args: {
           p_user_id: string

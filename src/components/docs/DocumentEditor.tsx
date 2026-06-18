@@ -11,8 +11,10 @@ import { TableRow } from '@tiptap/extension-table-row'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { TableCell } from '@tiptap/extension-table-cell'
 import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 import { ShareModal } from './ShareModal'
-import { updateDocumentVisibility, deleteDocument } from '@/app/actions/docs'
+import { Select } from '@/components/ui/Select'
+import { updateDocumentVisibility, deleteDocument, setDocumentWorkspace } from '@/app/actions/docs'
 import {
   Bold, Italic, Strikethrough, Heading1, Heading2, Heading3,
   List, ListOrdered, CheckSquare, Code, Quote, Minus,
@@ -43,14 +45,17 @@ interface Props {
   initialMemberIds: string[]
   members: Member[]
   workspaceName: string | null
+  workspaces: { id: string; name: string }[]
+  initialWorkspaceId: string | null
 }
 
 export function DocumentEditor({
   docId, orgSlug, currentUserId, canManage,
   initialTitle, initialContent,
   initialVisibility, initialMemberIds, members,
-  workspaceName,
+  workspaceName, workspaces, initialWorkspaceId,
 }: Props) {
+  const router = useRouter()
   const [title, setTitle] = useState(initialTitle)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [showShare, setShowShare] = useState(false)
@@ -58,7 +63,16 @@ export function DocumentEditor({
   const [deleting, setDeleting] = useState(false)
   const [visibility, setVisibility] = useState<'org' | 'custom'>(initialVisibility)
   const [sharedMemberIds, setSharedMemberIds] = useState<string[]>(initialMemberIds)
+  const [workspaceId, setWorkspaceId] = useState<string>(initialWorkspaceId ?? '')
   const supabase = createClient()
+
+  async function handleWorkspaceChange(value: string) {
+    const prev = workspaceId
+    setWorkspaceId(value)
+    const r = await setDocumentWorkspace(docId, orgSlug, value || null)
+    if (r?.error) { setWorkspaceId(prev); toast.error(r.error) }
+    else { toast.success('Cliente atualizado.'); router.refresh() }
+  }
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const scheduleSave = useCallback((fn: () => Promise<void>) => {
@@ -160,6 +174,18 @@ export function DocumentEditor({
             <span className="flex items-center gap-1 text-xs text-green-500">
               <Check className="w-3 h-3" /> Salvo
             </span>
+          )}
+
+          {canManage && (
+            <Select
+              value={workspaceId}
+              onChange={handleWorkspaceChange}
+              align="right"
+              size="sm"
+              className="w-40"
+              placeholder="Cliente"
+              options={[{ value: '', label: 'Organização' }, ...workspaces.map(w => ({ value: w.id, label: w.name }))]}
+            />
           )}
 
           <button

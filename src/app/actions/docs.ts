@@ -42,6 +42,22 @@ export async function updateDocumentVisibility(
   return {}
 }
 
+export async function setDocumentWorkspace(docId: string, orgSlug: string, workspaceId: string | null) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { error } = await supabase.rpc('set_document_workspace', {
+    p_user_id: user.id,
+    p_doc_id: docId,
+    p_workspace_id: workspaceId,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/docs/${docId}`)
+  revalidatePath(`/${orgSlug}/docs`)
+  return {}
+}
+
 export async function deleteDocument(docId: string, orgSlug: string) {
   const supabase = await createClient()
   const user = await getUsuario()

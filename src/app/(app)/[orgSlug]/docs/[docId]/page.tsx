@@ -65,6 +65,10 @@ export default async function DocPage({
     .is('parent_id', null)
     .order('updated_at', { ascending: false })
 
+  // Clientes para associar o documento
+  const { data: workspaces } = await supabase
+    .from('workspaces').select('id, name').eq('org_id', org.id).neq('archived', true).order('name')
+
   return (
     <div className="flex h-full">
       <DocsSidebar
@@ -86,6 +90,8 @@ export default async function DocPage({
           initialMemberIds={(sharedMembers ?? []).map(m => m.user_id)}
           members={members}
           workspaceName={workspaceName}
+          workspaces={workspaces ?? []}
+          initialWorkspaceId={doc.workspace_id ?? null}
         />
       </div>
     </div>
