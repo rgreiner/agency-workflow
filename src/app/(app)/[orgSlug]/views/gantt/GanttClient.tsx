@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useTransition } from 'react'
+import { useState, useRef, useTransition, useEffect } from 'react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarGroup } from '@/components/ui/Avatar'
@@ -88,6 +88,30 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
 
   // Calendar scrub — same dual approach
   const calRef = useRef<CalState | null>(null)
+
+  // ── Scroll horizontal (trackpad/mouse) também rola o calendário ─────────
+  // Gesto horizontal → muda viewStart (mesma direção do arraste nas datas);
+  // gesto vertical continua rolando os grupos. wheel precisa de listener
+  // nativo não-passivo p/ poder preventDefault (o do React é passivo).
+  const scrollRef  = useRef<HTMLDivElement>(null)
+  const wheelAccum = useRef(0)
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    function onWheel(e: WheelEvent) {
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return  // deixa o scroll vertical passar
+      e.preventDefault()
+      const dx = e.deltaX * (e.deltaMode === 1 ? 16 : 1)     // normaliza modo "linhas"
+      wheelAccum.current += dx
+      const steps = Math.trunc(wheelAccum.current / DAY_W)
+      if (steps !== 0) {
+        wheelAccum.current -= steps * DAY_W
+        setViewStart(d => addDays(d, steps))
+      }
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
 
   // ── Calendar days ─────────────────────────────────────────────────────
   const days     = Array.from({ length: DAYS }, (_, i) => addDays(viewStart, i))
@@ -422,7 +446,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
       </div>
 
       {/* Gantt table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-auto flex-1">
+      <div ref={scrollRef} className="bg-white rounded-xl border border-gray-200 overflow-auto flex-1">
 
         {/* Calendar header — sticky, two rows: months + days */}
         <div className="sticky top-0 bg-white z-30 border-b border-gray-200">
