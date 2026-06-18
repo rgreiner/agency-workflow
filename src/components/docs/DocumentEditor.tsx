@@ -6,6 +6,10 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
+import { Table } from '@tiptap/extension-table'
+import { TableRow } from '@tiptap/extension-table-row'
+import { TableHeader } from '@tiptap/extension-table-header'
+import { TableCell } from '@tiptap/extension-table-cell'
 import { createClient } from '@/lib/supabase/client'
 import { ShareModal } from './ShareModal'
 import { updateDocumentVisibility, deleteDocument } from '@/app/actions/docs'
@@ -13,6 +17,7 @@ import {
   Bold, Italic, Strikethrough, Heading1, Heading2, Heading3,
   List, ListOrdered, CheckSquare, Code, Quote, Minus,
   ArrowLeft, Check, Loader2, Trash2, Globe, Lock, AlertTriangle, X,
+  Table as TableIcon,
 } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
@@ -78,6 +83,10 @@ export function DocumentEditor({
       Placeholder.configure({ placeholder: 'Comece a escrever…' }),
       TaskList,
       TaskItem.configure({ nested: true }),
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
     content: initialContent as object,
     editable: canManage,
@@ -211,6 +220,24 @@ export function DocumentEditor({
           <Btn onClick={() => editor.chain().focus().toggleBlockquote().run()} active={editor.isActive('blockquote')} title="Citação"><Quote className="w-3.5 h-3.5" /></Btn>
           <Btn onClick={() => editor.chain().focus().setHorizontalRule().run()} active={false} title="Separador"><Minus className="w-3.5 h-3.5" /></Btn>
           <Sep />
+          <Btn
+            onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+            active={editor.isActive('table')}
+            title="Inserir tabela"
+          >
+            <TableIcon className="w-3.5 h-3.5" />
+          </Btn>
+          {editor.isActive('table') && (
+            <>
+              <TblBtn onClick={() => editor.chain().focus().addColumnAfter().run()}>+ Coluna</TblBtn>
+              <TblBtn onClick={() => editor.chain().focus().deleteColumn().run()}>− Coluna</TblBtn>
+              <TblBtn onClick={() => editor.chain().focus().addRowAfter().run()}>+ Linha</TblBtn>
+              <TblBtn onClick={() => editor.chain().focus().deleteRow().run()}>− Linha</TblBtn>
+              <TblBtn onClick={() => editor.chain().focus().toggleHeaderRow().run()}>Cabeçalho</TblBtn>
+              <TblBtn onClick={() => editor.chain().focus().deleteTable().run()} danger>Excluir tabela</TblBtn>
+            </>
+          )}
+          <Sep />
           <button
             onClick={() => editor.chain().focus().undo().run()}
             disabled={!editor.can().undo()}
@@ -277,4 +304,18 @@ function Btn({ onClick, active, title, children }: { onClick: () => void; active
 
 function Sep() {
   return <div className="w-px h-4 bg-gray-200 mx-0.5" />
+}
+
+function TblBtn({ onClick, children, danger }: { onClick: () => void; children: React.ReactNode; danger?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'px-2 py-1 text-xs rounded whitespace-nowrap transition-colors',
+        danger ? 'text-red-500 hover:bg-red-50' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+      )}
+    >
+      {children}
+    </button>
+  )
 }
