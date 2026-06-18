@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import { Avatar, AvatarGroup } from '@/components/ui/Avatar'
 import { MultiSelect } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Bookmark, X } from 'lucide-react'
 import { updateActivityDates } from '@/app/actions/activity'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -56,6 +56,9 @@ type DragState = {
 
 type CalState = { startX: number; origViewStart: Date }
 
+type SavedFilter = { id: string; name: string; workspaces: string[]; persons: string[]; statuses: string[] }
+const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every(x => b.includes(x))
+
 // ── Component ──────────────────────────────────────────────────────────────
 
 export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug, initialWorkspace }: {
@@ -79,6 +82,47 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
   const [filterWorkspaces, setFilterWorkspaces] = useState<string[]>(initialWorkspace ? [initialWorkspace] : [])
   const [filterPersons,    setFilterPersons]    = useState<string[]>([])
   const [filterStatuses,   setFilterStatuses]   = useState<string[]>([])
+
+  // ── Filtros salvos (favoritos, por org no localStorage) ────────────────
+  const SAVED_KEY = `gantt-filtros:${orgSlug}`
+  const [saved,    setSaved]    = useState<SavedFilter[]>([])
+  const [saveOpen, setSaveOpen] = useState(false)
+  const [saveName, setSaveName] = useState('')
+  const saveRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    try { const s = localStorage.getItem(SAVED_KEY); if (s) setSaved(JSON.parse(s)) } catch {}
+  }, [SAVED_KEY])
+
+  useEffect(() => {
+    if (!saveOpen) return
+    function onOut(e: MouseEvent) { if (saveRef.current && !saveRef.current.contains(e.target as Node)) setSaveOpen(false) }
+    document.addEventListener('mousedown', onOut)
+    return () => document.removeEventListener('mousedown', onOut)
+  }, [saveOpen])
+
+  function persistSaved(next: SavedFilter[]) {
+    setSaved(next)
+    try { localStorage.setItem(SAVED_KEY, JSON.stringify(next)) } catch {}
+  }
+  function saveCurrentFilter() {
+    const name = saveName.trim()
+    if (!name) return
+    persistSaved([...saved, {
+      id: `${Date.now()}`, name,
+      workspaces: filterWorkspaces, persons: filterPersons, statuses: filterStatuses,
+    }])
+    setSaveName(''); setSaveOpen(false)
+  }
+  function applySavedFilter(f: SavedFilter) {
+    setFilterWorkspaces(f.workspaces); setFilterPersons(f.persons); setFilterStatuses(f.statuses)
+  }
+  function deleteSavedFilter(id: string) { persistSaved(saved.filter(f => f.id !== id)) }
+  function isSavedActive(f: SavedFilter) {
+    return sameSet(f.workspaces, filterWorkspaces) && sameSet(f.persons, filterPersons) && sameSet(f.statuses, filterStatuses)
+  }
+
+  const hasFilter = filterWorkspaces.length + filterPersons.length + filterStatuses.length > 0
 
   // ── Drag state: BOTH a ref (for event handlers) and state (for render) ─
   // The ref is read immediately in event handlers (no stale closure).
@@ -276,6 +320,9 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
     if (!ps.length) { unassigned.push(a); return }
     ps.forEach(p => {
       if (!p?.id) return
+      // Com filtro de pessoa, só os filtrados viram grupo (foco no volume de
+      // trabalho dela, mesmo que a task tenha outros responsáveis).
+      if (filterPersons.length && !filterPersons.includes(p.id)) return
       if (!groupMap[p.id]) groupMap[p.id] = { profile: p, activities: [] }
       groupMap[p.id].activities.push(a)
     })
@@ -440,12 +487,59 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
           allLabel="Todos os status"
           options={statusConfig.map(s => ({ value: s.value, label: s.label }))}
         />
-        {filterWorkspaces.length + filterPersons.length + filterStatuses.length > 0 && (
+        {hasFilter && (
           <button onClick={() => { setFilterWorkspaces([]); setFilterPersons([]); setFilterStatuses([]) }}
             className="text-xs text-gray-400 hover:text-gray-600 transition px-2 py-1.5">
             Limpar filtros
           </button>
         )}
+
+        {/* Salvar filtro atual */}
+        <div className="relative" ref={saveRef}>
+          <button
+            type="button"
+            onClick={() => setSaveOpen(o => !o)}
+            disabled={!hasFilter}
+            title={hasFilter ? 'Salvar filtro atual' : 'Selecione um filtro para salvar'}
+            className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition disabled:opacity-40"
+          >
+            <Bookmark className="w-3.5 h-3.5" /> Salvar filtro
+          </button>
+          {saveOpen && (
+            <div className="absolute left-0 top-full mt-1.5 z-50 w-56 bg-white rounded-xl border border-gray-200 shadow-lg p-2">
+              <input
+                autoFocus
+                value={saveName}
+                onChange={e => setSaveName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveCurrentFilter(); if (e.key === 'Escape') setSaveOpen(false) }}
+                placeholder="Nome do filtro"
+                className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <div className="flex justify-end gap-2 mt-2">
+                <button type="button" onClick={() => { setSaveOpen(false); setSaveName('') }}
+                  className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Cancelar</button>
+                <button type="button" onClick={saveCurrentFilter} disabled={!saveName.trim()}
+                  className="text-xs font-medium px-3 py-1 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition">Salvar</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Filtros salvos (chips) */}
+        {saved.length > 0 && <div className="w-px h-5 bg-gray-200" />}
+        {saved.map(f => (
+          <span key={f.id}
+            className={cn(
+              'inline-flex items-center gap-1 rounded-full border pl-3 pr-1 py-1 text-xs transition',
+              isSavedActive(f) ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+            )}>
+            <button type="button" onClick={() => applySavedFilter(f)} className="max-w-[140px] truncate" title={f.name}>{f.name}</button>
+            <button type="button" onClick={() => deleteSavedFilter(f.id)} title="Excluir filtro"
+              className="p-0.5 rounded-full text-gray-300 hover:text-red-500 hover:bg-white transition">
+              <X className="w-3 h-3" />
+            </button>
+          </span>
+        ))}
       </div>
 
       {/* Gantt table */}
