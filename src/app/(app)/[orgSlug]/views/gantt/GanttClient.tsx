@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarGroup } from '@/components/ui/Avatar'
 import { Select } from '@/components/ui/Select'
-import { STATUS_CONFIG } from '@/types'
+import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { updateActivityDates } from '@/app/actions/activity'
 import { useRouter } from 'next/navigation'
@@ -18,28 +18,6 @@ const ROW_H    = 62
 const HANDLE_W = 10
 const DAYS     = 35
 
-const STATUS_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  briefing:              { bg: '#f3e8ff', border: '#a855f7', text: '#7e22ce' },
-  pendente_cliente:      { bg: '#fff7ed', border: '#f97316', text: '#c2410c' },
-  planejamento:          { bg: '#dbeafe', border: '#3b82f6', text: '#1d4ed8' },
-  insight:               { bg: '#e0e7ff', border: '#6366f1', text: '#4338ca' },
-  redacao:               { bg: '#cffafe', border: '#06b6d4', text: '#0e7490' },
-  design:                { bg: '#fce7f3', border: '#ec4899', text: '#be185d' },
-  edicao:                { bg: '#ffe4e6', border: '#f43f5e', text: '#be123c' },
-  finalizacao:           { bg: '#ede9fe', border: '#8b5cf6', text: '#6d28d9' },
-  revisao_interna:       { bg: '#fef3c7', border: '#f59e0b', text: '#b45309' },
-  validacao_atendimento: { bg: '#fefce8', border: '#eab308', text: '#854d0e' },
-  orcamento:             { bg: '#f7fee7', border: '#84cc16', text: '#4d7c0f' },
-  producao_fornecedores: { bg: '#ccfbf1', border: '#14b8a6', text: '#0f766e' },
-  producao_audiovisual:  { bg: '#e0f2fe', border: '#0ea5e9', text: '#0369a1' },
-  validacao_midia:       { bg: '#dbeafe', border: '#3b82f6', text: '#1d4ed8' },
-  midia:                 { bg: '#d1fae5', border: '#10b981', text: '#065f46' },
-  social:                { bg: '#fae8ff', border: '#d946ef', text: '#86198f' },
-  aprovacao_cliente:     { bg: '#fff7ed', border: '#f97316', text: '#c2410c' },
-  implantacao_digital:   { bg: '#fefce8', border: '#eab308', text: '#854d0e' },
-  implantacao_off:       { bg: '#fef3c7', border: '#f59e0b', text: '#b45309' },
-  concluido:             { bg: '#dcfce7', border: '#22c55e', text: '#15803d' },
-}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -90,6 +68,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
 }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
+  const statusConfig = useStatusConfig()
 
   // ── View state ────────────────────────────────────────────────────────
   const [viewStart, setViewStart] = useState<Date>(() => {
@@ -287,7 +266,11 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
     const geo  = barGeometry(start, end)
     if (!geo) return null
 
-    const clrs   = STATUS_COLORS[a.status] ?? { bg: '#f3f4f6', border: '#9ca3af', text: '#374151' }
+    // Cores seguem Configurações → Aparência (fill = bg claro, borda/texto = text)
+    const cfg = statusConfig.find(s => s.value === a.status)
+    const clrs = cfg
+      ? { bg: cfg.bg, border: cfg.text, text: cfg.text }
+      : { bg: '#f3f4f6', border: '#9ca3af', text: '#374151' }
     const asns   = (a.activity_assignees as { profiles: Profile }[])?.map(x => x.profiles).filter(Boolean) ?? []
     const active = drag?.activityId === a.id
 
@@ -428,7 +411,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
           value={filterStatus}
           onChange={setFilterStatus}
           className="w-44"
-          options={[{ value: '', label: 'Todos os status' }, ...STATUS_CONFIG.map(s => ({ value: s.value, label: s.label }))]}
+          options={[{ value: '', label: 'Todos os status' }, ...statusConfig.map(s => ({ value: s.value, label: s.label }))]}
         />
         {(filterWorkspace || filterPerson || filterStatus) && (
           <button onClick={() => { setFilterWorkspace(''); setFilterPerson(''); setFilterStatus('') }}
