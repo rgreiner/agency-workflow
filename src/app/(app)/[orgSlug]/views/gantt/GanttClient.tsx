@@ -4,7 +4,7 @@ import { useState, useRef, useTransition, useEffect } from 'react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarGroup } from '@/components/ui/Avatar'
-import { Select } from '@/components/ui/Select'
+import { MultiSelect } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { updateActivityDates } from '@/app/actions/activity'
@@ -75,10 +75,10 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
     const d = new Date(); d.setDate(d.getDate() - 7); return d
   })
 
-  // ── Filters ───────────────────────────────────────────────────────────
-  const [filterWorkspace, setFilterWorkspace] = useState(initialWorkspace ?? '')
-  const [filterPerson,    setFilterPerson]    = useState('')
-  const [filterStatus,    setFilterStatus]    = useState('')
+  // ── Filters (multi-seleção) ───────────────────────────────────────────
+  const [filterWorkspaces, setFilterWorkspaces] = useState<string[]>(initialWorkspace ? [initialWorkspace] : [])
+  const [filterPersons,    setFilterPersons]    = useState<string[]>([])
+  const [filterStatuses,   setFilterStatuses]   = useState<string[]>([])
 
   // ── Drag state: BOTH a ref (for event handlers) and state (for render) ─
   // The ref is read immediately in event handlers (no stale closure).
@@ -259,12 +259,12 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
   // ── Filtering + grouping ──────────────────────────────────────────────
 
   const filtered = activities.filter(a => {
-    if (filterStatus    && a.status !== filterStatus) return false
+    if (filterStatuses.length && !filterStatuses.includes(a.status)) return false
     const camp = campMap[a.campaign_id]
-    if (filterWorkspace && camp?.workspaceId !== filterWorkspace) return false
-    if (filterPerson) {
+    if (filterWorkspaces.length && !(camp && filterWorkspaces.includes(camp.workspaceId))) return false
+    if (filterPersons.length) {
       const ps = (a.activity_assignees as { profiles: Profile }[])?.map(x => x.profiles) ?? []
-      if (!ps.some(p => p?.id === filterPerson)) return false
+      if (!ps.some(p => p && filterPersons.includes(p.id))) return false
     }
     return true
   })
@@ -419,26 +419,29 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
 
       {/* Filters */}
       <div className="flex items-center gap-2 mb-4 shrink-0 flex-wrap">
-        <Select
-          value={filterWorkspace}
-          onChange={setFilterWorkspace}
+        <MultiSelect
+          values={filterWorkspaces}
+          onChange={setFilterWorkspaces}
           className="w-44"
-          options={[{ value: '', label: 'Todos os clientes' }, ...workspaces.map(w => ({ value: w.id, label: w.name }))]}
+          allLabel="Todos os clientes"
+          options={workspaces.map(w => ({ value: w.id, label: w.name }))}
         />
-        <Select
-          value={filterPerson}
-          onChange={setFilterPerson}
+        <MultiSelect
+          values={filterPersons}
+          onChange={setFilterPersons}
           className="w-44"
-          options={[{ value: '', label: 'Todas as pessoas' }, ...profiles.map(p => ({ value: p.id, label: p.full_name ?? '?' }))]}
+          allLabel="Todas as pessoas"
+          options={profiles.map(p => ({ value: p.id, label: p.full_name ?? '?' }))}
         />
-        <Select
-          value={filterStatus}
-          onChange={setFilterStatus}
+        <MultiSelect
+          values={filterStatuses}
+          onChange={setFilterStatuses}
           className="w-44"
-          options={[{ value: '', label: 'Todos os status' }, ...statusConfig.map(s => ({ value: s.value, label: s.label }))]}
+          allLabel="Todos os status"
+          options={statusConfig.map(s => ({ value: s.value, label: s.label }))}
         />
-        {(filterWorkspace || filterPerson || filterStatus) && (
-          <button onClick={() => { setFilterWorkspace(''); setFilterPerson(''); setFilterStatus('') }}
+        {filterWorkspaces.length + filterPersons.length + filterStatuses.length > 0 && (
+          <button onClick={() => { setFilterWorkspaces([]); setFilterPersons([]); setFilterStatuses([]) }}
             className="text-xs text-gray-400 hover:text-gray-600 transition px-2 py-1.5">
             Limpar filtros
           </button>
