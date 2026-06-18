@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { notFound } from 'next/navigation'
 import { DocumentEditor } from '@/components/docs/DocumentEditor'
+import { DocsSidebar } from './DocsSidebar'
 
 export default async function DocPage({
   params,
@@ -56,21 +57,37 @@ export default async function DocPage({
 
   const workspaceName = (doc.workspaces as unknown as { name: string } | null)?.name ?? null
 
+  // Lista de documentos para a sidebar (navegar sem voltar à listagem)
+  const { data: allDocs } = await supabase
+    .from('documents')
+    .select('id, title, visibility, workspace_id, workspaces(name)')
+    .eq('org_id', org.id)
+    .is('parent_id', null)
+    .order('updated_at', { ascending: false })
+
   return (
-    <div className="h-full">
-      <DocumentEditor
-        docId={doc.id}
+    <div className="flex h-full">
+      <DocsSidebar
         orgSlug={orgSlug}
         orgId={org.id}
-        currentUserId={user.id}
-        canManage={canManage}
-        initialTitle={doc.title}
-        initialContent={doc.content as object}
-        initialVisibility={doc.visibility as 'org' | 'custom'}
-        initialMemberIds={(sharedMembers ?? []).map(m => m.user_id)}
-        members={members}
-        workspaceName={workspaceName}
+        currentDocId={doc.id}
+        docs={(allDocs ?? []) as unknown as Parameters<typeof DocsSidebar>[0]['docs']}
       />
+      <div className="flex-1 min-w-0">
+        <DocumentEditor
+          docId={doc.id}
+          orgSlug={orgSlug}
+          orgId={org.id}
+          currentUserId={user.id}
+          canManage={canManage}
+          initialTitle={doc.title}
+          initialContent={doc.content as object}
+          initialVisibility={doc.visibility as 'org' | 'custom'}
+          initialMemberIds={(sharedMembers ?? []).map(m => m.user_id)}
+          members={members}
+          workspaceName={workspaceName}
+        />
+      </div>
     </div>
   )
 }
