@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { loadActivityList } from '@/lib/activity-list'
 import { ListaClient } from '../../../../views/lista/ListaClient'
 import { CampaignEditButton } from './CampaignEditButton'
+import { ImportSpecsButton } from './ImportSpecsButton'
 
 export default async function CampaignPage({
   params,
@@ -38,6 +39,7 @@ export default async function CampaignPage({
       title={campaign.name}
       routeBase={`workspaces/${workspaceId}/campaigns/${campaignId}`}
       newActivityCampaign={{ workspaceId, campaignId }}
+      secondaryActions={<ImportSpecsButton orgSlug={orgSlug} campaignId={campaignId} />}
       breadcrumb={
         <span className="flex items-center gap-1.5">
           <Link href={`/${orgSlug}/workspaces`} className="hover:text-gray-600 transition">Clientes</Link>
