@@ -14,7 +14,7 @@ import { toast } from 'sonner'
 // ── Constants ─────────────────────────────────────────────────────────────
 
 const DAY_W    = 44
-const ROW_H    = 62
+const ROW_H    = 44
 const HANDLE_W = 10
 const DAYS     = 35
 
@@ -347,7 +347,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
 
     return (
       <div
-        className="absolute top-2 bottom-2 rounded-lg flex items-center overflow-hidden select-none"
+        className="absolute top-1 bottom-1 rounded-xl flex items-center overflow-hidden select-none"
         style={{
           left:            geo.left,
           width:           geo.width,
