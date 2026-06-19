@@ -6,6 +6,7 @@ import { cn, formatDate, isOverdue } from '@/lib/utils'
 import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink, HardDrive } from 'lucide-react'
 import Link from 'next/link'
 import { CopyButton } from '@/components/ui/CopyButton'
+import { DriveProvisioningNotice } from './DriveProvisioningNotice'
 import { StatusChanger } from './StatusChanger'
 import { CommentBox } from './CommentBox'
 import { AssigneeSelector } from './AssigneeSelector'
@@ -54,9 +55,12 @@ export default async function ActivityPage({
 
   const { data: campaign } = await supabase
     .from('campaigns')
-    .select('name, workspaces(org_id, name)')
+    .select('name, drive_folder_id, workspaces(org_id, name)')
     .eq('id', campaignId)
     .single()
+
+  // Pastas do Drive ainda sendo criadas em 2º plano (campanha vinculada, tarefa sem pasta)
+  const drivePending = !!campaign?.drive_folder_id && !activity.drive_folder_id
 
   const ws = campaign?.workspaces as unknown as { org_id: string; name: string } | null
   const orgId = ws?.org_id
@@ -245,6 +249,7 @@ export default async function ActivityPage({
             {/* ── Campos ───────────────────────────────────────── */}
             <div className="mt-8">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Campos</p>
+              {drivePending && <div className="mb-3"><DriveProvisioningNotice /></div>}
               <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100">
 
                 {/* Complexity */}
