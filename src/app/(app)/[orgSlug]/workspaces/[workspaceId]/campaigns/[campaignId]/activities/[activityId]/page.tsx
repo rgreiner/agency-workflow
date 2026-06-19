@@ -158,20 +158,20 @@ export default async function ActivityPage({
 
       {/* ── Top bar ─────────────────────────────────────────────── */}
       <div className="flex items-center gap-1.5 px-4 md:px-6 py-3 border-b border-gray-200 shrink-0 bg-white z-10">
-        <Link href={`/${orgSlug}/views/lista`} className="hidden sm:block text-xs text-gray-400 hover:text-gray-600 transition">
+        <Link href={`/${orgSlug}/views/lista`} className="hidden sm:block text-xs text-gray-500 hover:text-gray-600 transition">
           Clientes
         </Link>
         <span className="hidden sm:block text-gray-300 text-xs">/</span>
-        <Link href={`/${orgSlug}/workspaces/${workspaceId}`} className="text-xs text-gray-400 hover:text-gray-600 transition">
+        <Link href={`/${orgSlug}/workspaces/${workspaceId}`} className="text-xs text-gray-500 hover:text-gray-600 transition">
           {ws?.name ?? 'Cliente'}
         </Link>
         <span className="text-gray-300 text-xs">/</span>
-        <Link href={`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}`} className="text-xs text-gray-400 hover:text-gray-600 transition">
+        <Link href={`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}`} className="text-xs text-gray-500 hover:text-gray-600 transition">
           {campaign?.name}
         </Link>
         <span className="text-gray-300 text-xs">/</span>
         <span className="text-xs text-gray-600 truncate max-w-xs">{activity.title}</span>
-        <div className="ml-auto flex items-center gap-3 text-xs text-gray-400 shrink-0">
+        <div className="ml-auto flex items-center gap-3 text-xs text-gray-500 shrink-0">
           {overdue && (
             <span className="flex items-center gap-1 text-red-500 font-medium">
               <AlertTriangle className="w-3.5 h-3.5" /> Atrasada
@@ -248,13 +248,13 @@ export default async function ActivityPage({
 
             {/* ── Campos ───────────────────────────────────────── */}
             <div className="mt-8">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Campos</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Campos</p>
               {drivePending && <div className="mb-3"><DriveProvisioningNotice /></div>}
               <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100">
 
                 {/* Complexity */}
                 <div className="flex items-center px-4 py-3 hover:bg-gray-50/60 transition group">
-                  <span className="text-xs text-gray-400 w-36 shrink-0">Complexidade</span>
+                  <span className="text-xs text-gray-500 w-36 shrink-0">Complexidade</span>
                   <FieldEditor
                     activityId={activityId} path={path}
                     field="complexity" value={activity.complexity} canEdit={isOrgMember}
@@ -273,7 +273,7 @@ export default async function ActivityPage({
 
                 {/* Estimated hours */}
                 <div className="flex items-center px-4 py-3 hover:bg-gray-50/60 transition group">
-                  <span className="text-xs text-gray-400 w-36 shrink-0">Horas estimadas</span>
+                  <span className="text-xs text-gray-500 w-36 shrink-0">Horas estimadas</span>
                   <FieldEditor
                     activityId={activityId} path={path}
                     field="estimated_hours"
@@ -292,8 +292,8 @@ export default async function ActivityPage({
                 {activity.drive_path && (
                   <div className="flex items-center px-4 py-3 hover:bg-gray-50/60 transition group">
                     <div className="flex items-center gap-2 w-36 shrink-0">
-                      <span className="text-gray-400"><HardDrive className="w-4 h-4" /></span>
-                      <span className="text-xs text-gray-400">Caminho na máquina</span>
+                      <span className="text-gray-500"><HardDrive className="w-4 h-4" /></span>
+                      <span className="text-xs text-gray-500">Caminho na máquina</span>
                     </div>
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <span className="text-xs text-gray-600 font-mono truncate">{activity.drive_path}</span>
@@ -308,8 +308,8 @@ export default async function ActivityPage({
                   return (
                     <div key={field} className="flex items-center px-4 py-3 hover:bg-gray-50/60 transition group">
                       <div className="flex items-center gap-2 w-36 shrink-0">
-                        <span className="text-gray-400">{icon}</span>
-                        <span className="text-xs text-gray-400">{label}</span>
+                        <span className="text-gray-500">{icon}</span>
+                        <span className="text-xs text-gray-500">{label}</span>
                       </div>
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         {url ? (
@@ -342,7 +342,7 @@ export default async function ActivityPage({
 
                 {/* Orçamento */}
                 <div className="flex items-center px-4 py-3 hover:bg-gray-50/60 transition group">
-                  <span className="text-xs text-gray-400 w-36 shrink-0">Orçamento</span>
+                  <span className="text-xs text-gray-500 w-36 shrink-0">Orçamento</span>
                   <FieldEditor
                     activityId={activityId} path={path}
                     field="orcamento" value={activity.orcamento ?? null} canEdit={isOrgMember}
@@ -365,14 +365,14 @@ export default async function ActivityPage({
 
           {/* Header */}
           <div className="px-5 py-3.5 border-b border-gray-200 bg-white shrink-0 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-800">Atividade</h3>
-            <span className="text-xs text-gray-400">{feed.length} registro{feed.length !== 1 ? 's' : ''}</span>
+            <h2 className="text-sm font-semibold text-gray-800">Atividade</h2>
+            <span className="text-xs text-gray-500">{feed.length} registro{feed.length !== 1 ? 's' : ''}</span>
           </div>
 
           {/* Feed */}
           <div className="flex-1 lg:overflow-y-auto scrollbar-thin p-4 space-y-3">
             {feed.length === 0 && (
-              <p className="text-xs text-gray-400 text-center py-8">Nenhuma atividade ainda.</p>
+              <p className="text-xs text-gray-500 text-center py-8">Nenhuma atividade ainda.</p>
             )}
 
             {feed.map(item => {
@@ -384,7 +384,7 @@ export default async function ActivityPage({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1.5">
                           <span className="text-xs font-semibold text-gray-800">{item.profile?.full_name ?? 'Usuário'}</span>
-                          <span className="text-[10px] text-gray-400">{formatDate(item.at)}</span>
+                          <span className="text-[10px] text-gray-500">{formatDate(item.at)}</span>
                         </div>
                         <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{item.content}</p>
                       </div>
@@ -405,15 +405,15 @@ export default async function ActivityPage({
                         <span>moveu de</span>
                         {fromCfg
                           ? <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: fromCfg.bg, color: fromCfg.text }}>{fromCfg.label}</span>
-                          : <span className="text-gray-400">início</span>
+                          : <span className="text-gray-500">início</span>
                         }
                         <ArrowRight className="w-3 h-3 text-gray-300 shrink-0" />
                         {toCfg && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: toCfg.bg, color: toCfg.text }}>{toCfg.label}</span>}
                       </div>
                       {item.comment && (
-                        <p className="text-[11px] text-gray-400 mt-1 italic whitespace-pre-wrap break-words">"{item.comment}"</p>
+                        <p className="text-[11px] text-gray-500 mt-1 italic whitespace-pre-wrap break-words">"{item.comment}"</p>
                       )}
-                      <p className="text-[10px] text-gray-400 mt-0.5">{formatDate(item.at)}</p>
+                      <p className="text-[10px] text-gray-500 mt-0.5">{formatDate(item.at)}</p>
                     </div>
                   </div>
                 )
@@ -432,7 +432,7 @@ export default async function ActivityPage({
                     {item.newVal && (
                       <p className="text-[11px] text-gray-500 mt-0.5">→ {item.newVal.slice(0, 60)}{item.newVal.length > 60 ? '…' : ''}</p>
                     )}
-                    <p className="text-[10px] text-gray-400 mt-0.5">{formatDate(item.at)}</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">{formatDate(item.at)}</p>
                   </div>
                 </div>
               )

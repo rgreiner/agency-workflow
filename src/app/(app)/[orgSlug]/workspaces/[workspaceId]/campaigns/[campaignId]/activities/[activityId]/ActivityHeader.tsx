@@ -46,6 +46,7 @@ export function ActivityHeader({ activityId, path, title, description, canManage
           <div className="flex-1 flex items-start gap-2">
             <input
               value={titleDraft}
+              aria-label="Título da tarefa"
               onChange={e => setTitleDraft(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') setEditTitle(false) }}
               className="flex-1 text-xl font-semibold text-gray-900 border border-indigo-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
@@ -54,15 +55,17 @@ export function ActivityHeader({ activityId, path, title, description, canManage
             <button
               onClick={saveTitle}
               disabled={isPending}
+              aria-label="Salvar título"
               className="p-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 shrink-0"
             >
-              {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              {isPending ? <Loader2 aria-hidden className="w-3.5 h-3.5 animate-spin" /> : <Check aria-hidden className="w-3.5 h-3.5" />}
             </button>
             <button
               onClick={() => setEditTitle(false)}
+              aria-label="Cancelar edição do título"
               className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 shrink-0"
             >
-              <X className="w-3.5 h-3.5" />
+              <X aria-hidden className="w-3.5 h-3.5" />
             </button>
           </div>
         ) : (
@@ -71,9 +74,10 @@ export function ActivityHeader({ activityId, path, title, description, canManage
             {canManage && (
               <button
                 onClick={() => { setTitleDraft(title); setEditTitle(true) }}
-                className="p-1 rounded text-gray-300 hover:text-gray-500 hover:bg-gray-100 opacity-0 group-hover/title:opacity-100 transition mt-0.5 shrink-0"
+                aria-label="Editar título"
+                className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 opacity-0 group-hover/title:opacity-100 focus-visible:opacity-100 transition mt-0.5 shrink-0"
               >
-                <Pencil className="w-3.5 h-3.5" />
+                <Pencil aria-hidden className="w-3.5 h-3.5" />
               </button>
             )}
           </>
@@ -86,6 +90,7 @@ export function ActivityHeader({ activityId, path, title, description, canManage
           <div className="flex-1 flex items-start gap-2">
             <textarea
               value={descDraft}
+              aria-label="Descrição da tarefa"
               onChange={e => setDescDraft(e.target.value)}
               className="flex-1 text-sm text-gray-500 border border-indigo-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white resize-none leading-relaxed"
               rows={4}
@@ -95,15 +100,17 @@ export function ActivityHeader({ activityId, path, title, description, canManage
               <button
                 onClick={saveDesc}
                 disabled={isPending}
+                aria-label="Salvar descrição"
                 className="p-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
               >
-                {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                {isPending ? <Loader2 aria-hidden className="w-3.5 h-3.5 animate-spin" /> : <Check aria-hidden className="w-3.5 h-3.5" />}
               </button>
               <button
                 onClick={() => setEditDesc(false)}
+                aria-label="Cancelar edição da descrição"
                 className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
               >
-                <X className="w-3.5 h-3.5" />
+                <X aria-hidden className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -115,7 +122,7 @@ export function ActivityHeader({ activityId, path, title, description, canManage
               ) : isOrgMember ? (
                 <button
                   onClick={() => { setDescDraft(''); setEditDesc(true) }}
-                  className="text-sm text-gray-300 hover:text-gray-400 transition italic"
+                  className="text-sm text-gray-500 hover:text-gray-700 transition italic"
                 >
                   Adicionar descrição…
                 </button>
@@ -124,9 +131,10 @@ export function ActivityHeader({ activityId, path, title, description, canManage
             {isOrgMember && description && (
               <button
                 onClick={() => { setDescDraft(description ?? ''); setEditDesc(true) }}
-                className="p-1 rounded text-gray-300 hover:text-gray-500 hover:bg-gray-100 opacity-0 group-hover/desc:opacity-100 transition shrink-0"
+                aria-label="Editar descrição"
+                className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 opacity-0 group-hover/desc:opacity-100 focus-visible:opacity-100 transition shrink-0"
               >
-                <Pencil className="w-3.5 h-3.5" />
+                <Pencil aria-hidden className="w-3.5 h-3.5" />
               </button>
             )}
           </>

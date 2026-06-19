@@ -14,10 +14,16 @@ export function DriveProvisioningNotice() {
   const [tries, setTries] = useState(0)
 
   useEffect(() => {
-    if (tries >= 8) return
-    const t = setTimeout(() => { router.refresh(); setTries(n => n + 1) }, 4000)
-    return () => clearTimeout(t)
-  }, [tries, router])
+    let count = 0
+    const id = setInterval(() => {
+      if (document.visibilityState !== 'visible') return   // pausa em aba oculta (não gasta tentativa)
+      count += 1
+      router.refresh()
+      setTries(count)
+      if (count >= 8) clearInterval(id)
+    }, 4000)
+    return () => clearInterval(id)
+  }, [router])
 
   const slow = tries >= 8
 

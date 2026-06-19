@@ -49,15 +49,17 @@ export function CommentBox({ activityId, path }: Props) {
           onChange={(e) => setContent(e.target.value)}
           onKeyDown={handleKeyDown}
           rows={2}
+          aria-label="Comentário"
           placeholder="Adicione um comentário…  (Enter = nova linha, ⌘/Ctrl+Enter envia)"
-          className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-y min-h-[44px]"
+          className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-y min-h-[44px]"
         />
         <button
           type="submit"
           disabled={!content.trim() || isPending}
+          aria-label="Enviar comentário"
           className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition disabled:opacity-40 disabled:cursor-not-allowed self-stretch"
         >
-          <Send className="w-4 h-4" />
+          <Send aria-hidden className="w-4 h-4" />
         </button>
       </div>
       {error && <p className="text-xs text-red-600 mt-1">{error}</p>}

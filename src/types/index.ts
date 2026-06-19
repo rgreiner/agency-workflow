@@ -80,13 +80,13 @@ export function getMergedStatusConfig(overrides: StatusOverride[] = []): StatusC
 
 export const PRIORITY_CONFIG = {
   low: { label: 'Baixa', color: 'text-gray-600', bgColor: 'bg-gray-100' },
-  medium: { label: 'Média', color: 'text-blue-600', bgColor: 'bg-blue-100' },
-  high: { label: 'Alta', color: 'text-orange-600', bgColor: 'bg-orange-100' },
-  urgent: { label: 'Urgente', color: 'text-red-600', bgColor: 'bg-red-100' },
+  medium: { label: 'Média', color: 'text-blue-600 dark:text-blue-300', bgColor: 'bg-blue-100 dark:bg-blue-500/15' },
+  high: { label: 'Alta', color: 'text-orange-600 dark:text-orange-300', bgColor: 'bg-orange-100 dark:bg-orange-500/15' },
+  urgent: { label: 'Urgente', color: 'text-red-600 dark:text-red-300', bgColor: 'bg-red-100 dark:bg-red-500/15' },
 }
 
 export const COMPLEXITY_CONFIG = {
-  simple: { label: 'Simples', color: 'text-green-600' },
-  medium: { label: 'Médio', color: 'text-yellow-600' },
-  complex: { label: 'Complexo', color: 'text-red-600' },
+  simple: { label: 'Simples', color: 'text-green-600 dark:text-green-400' },
+  medium: { label: 'Médio', color: 'text-yellow-600 dark:text-yellow-400' },
+  complex: { label: 'Complexo', color: 'text-red-600 dark:text-red-400' },
 }

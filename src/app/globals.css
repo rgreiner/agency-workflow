@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Habilita `dark:` por CLASSE (.dark no <html>), não por media query. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
