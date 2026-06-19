@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { revalidatePath } from 'next/cache'
+import { provisionActivitiesDrive } from '@/lib/drive-provision'
 
 export interface SpecRow {
   title: string
@@ -132,6 +133,7 @@ export async function createActivitiesFromSpecs(orgSlug: string, campaignId: str
   const valid = items.filter(i => i.title?.trim())
   if (valid.length === 0) return { error: 'Nenhuma atividade selecionada.' }
 
+  const created: { activityId: string; title: string }[] = []
   for (let i = 0; i < valid.length; i += 6) {
     const batch = valid.slice(i, i + 6)
     const res = await Promise.all(batch.map(it =>
@@ -146,10 +148,14 @@ export async function createActivitiesFromSpecs(orgSlug: string, campaignId: str
         p_due_date: it.dueDate ?? null,
         p_estimated_hours: null,
         p_start_date: null,
-      }).then(r => ({ error: r.error }))))
+      }).then(r => ({ error: r.error, id: r.data as string | null, title: it.title.trim() }))))
     const err = res.find(r => r.error)?.error
     if (err) return { error: err.message }
+    for (const r of res) if (r.id) created.push({ activityId: r.id, title: r.title })
   }
+
+  // Cria as pastas no Drive em 2º plano (se a campanha tiver pasta vinculada)
+  await provisionActivitiesDrive(supabase, { campaignId, userId: user.id, items: created })
 
   revalidatePath('/', 'layout')
   return { created: valid.length }

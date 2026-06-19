@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import { provisionActivitiesDrive } from '@/lib/drive-provision'
 
 export async function createActivity(
   orgSlug: string,
@@ -56,6 +57,11 @@ export async function createActivity(
     })
     if (linksError) return { error: linksError.message }
   }
+
+  // Cria as pastas no Drive em 2º plano (se a campanha tiver pasta vinculada)
+  await provisionActivitiesDrive(supabase, {
+    campaignId, userId: user.id, items: [{ activityId: activityId as string, title }],
+  })
 
   redirect(`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}/activities/${activityId}`)
 }

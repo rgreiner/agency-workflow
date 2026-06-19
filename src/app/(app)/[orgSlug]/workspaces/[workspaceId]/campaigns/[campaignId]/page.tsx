@@ -57,6 +57,7 @@ export default async function CampaignPage({
           startDate={campaign.start_date ?? ''}
           endDate={campaign.end_date ?? ''}
           archived={campaign.archived ?? false}
+          driveFolderId={campaign.drive_folder_id ?? null}
         />
       }
     />

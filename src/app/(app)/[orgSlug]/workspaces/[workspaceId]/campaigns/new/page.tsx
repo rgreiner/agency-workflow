@@ -16,6 +16,7 @@ export default function NewCampaignPage() {
     description: '',
     start_date: '',
     end_date: '',
+    drive_folder: '',
   })
 
   function set(field: string, value: string) {
@@ -84,6 +85,21 @@ export default function NewCampaignPage() {
         />
         <input type="hidden" name="start_date" value={form.start_date} />
         <input type="hidden" name="end_date" value={form.end_date} />
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            Pasta do Drive <span className="text-gray-400 font-normal">(opcional)</span>
+          </label>
+          <input
+            type="url"
+            name="drive_folder"
+            value={form.drive_folder}
+            onChange={(e) => set('drive_folder', e.target.value)}
+            placeholder="https://drive.google.com/drive/folders/…"
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          />
+          <p className="text-xs text-gray-400 mt-1">As tarefas desta campanha criarão pastas dentro dela automaticamente.</p>
+        </div>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 

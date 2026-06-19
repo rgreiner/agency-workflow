@@ -200,6 +200,9 @@ export type Database = {
           layout_url: string | null
           finalizacao_url: string | null
           orcamento: string | null
+          drive_folder_id: string | null
+          drive_path: string | null
+          preview_url: string | null
           id: string
           priority: Database["public"]["Enums"]["activity_priority"]
           sort_order: number
@@ -223,6 +226,9 @@ export type Database = {
           layout_url?: string | null
           finalizacao_url?: string | null
           orcamento?: string | null
+          drive_folder_id?: string | null
+          drive_path?: string | null
+          preview_url?: string | null
           id?: string
           priority?: Database["public"]["Enums"]["activity_priority"]
           sort_order?: number
@@ -246,6 +252,9 @@ export type Database = {
           layout_url?: string | null
           finalizacao_url?: string | null
           orcamento?: string | null
+          drive_folder_id?: string | null
+          drive_path?: string | null
+          preview_url?: string | null
           id?: string
           priority?: Database["public"]["Enums"]["activity_priority"]
           sort_order?: number
@@ -269,6 +278,7 @@ export type Database = {
           start_date: string | null
           updated_at: string
           workspace_id: string
+          drive_folder_id: string | null
         }
         Insert: {
           archived?: boolean
@@ -281,6 +291,7 @@ export type Database = {
           start_date?: string | null
           updated_at?: string
           workspace_id: string
+          drive_folder_id?: string | null
         }
         Update: {
           archived?: boolean
@@ -293,6 +304,7 @@ export type Database = {
           start_date?: string | null
           updated_at?: string
           workspace_id?: string
+          drive_folder_id?: string | null
         }
         Relationships: [
           { foreignKeyName: "campaigns_workspace_id_fkey"; columns: ["workspace_id"]; isOneToOne: false; referencedRelation: "workspaces"; referencedColumns: ["id"] }
@@ -725,6 +737,23 @@ export type Database = {
       }
       set_document_workspace: {
         Args: { p_user_id: string; p_doc_id: string; p_workspace_id: string | null }
+        Returns: undefined
+      }
+      set_campaign_drive: {
+        Args: { p_user_id: string; p_campaign_id: string; p_drive_folder_id: string | null }
+        Returns: undefined
+      }
+      set_activity_drive: {
+        Args: {
+          p_user_id: string
+          p_activity_id: string
+          p_drive_folder_id: string | null
+          p_drive_path: string | null
+          p_drive_folder_url: string | null
+          p_redacao_url: string | null
+          p_finalizacao_url: string | null
+          p_preview_url: string | null
+        }
         Returns: undefined
       }
       search_activities: {

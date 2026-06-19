@@ -3,8 +3,9 @@ import { getUsuario } from '@/lib/auth/server'
 import { notFound } from 'next/navigation'
 import { getMergedStatusConfig, PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity, type StatusOverride } from '@/types'
 import { cn, formatDate, isOverdue } from '@/lib/utils'
-import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink } from 'lucide-react'
+import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink, HardDrive } from 'lucide-react'
 import Link from 'next/link'
+import { CopyButton } from '@/components/ui/CopyButton'
 import { StatusChanger } from './StatusChanger'
 import { CommentBox } from './CommentBox'
 import { AssigneeSelector } from './AssigneeSelector'
@@ -144,8 +145,8 @@ export default async function ActivityPage({
   const linkFields = [
     { field: 'drive_folder_url', icon: <FolderOpen className="w-4 h-4" />, label: 'Drive' },
     { field: 'redacao_url',      icon: <FileText   className="w-4 h-4" />, label: 'Redação' },
-    { field: 'layout_url',       icon: <CheckSquare className="w-4 h-4"/>, label: 'Layout' },
-    { field: 'finalizacao_url',  icon: <Layers     className="w-4 h-4" />, label: 'Finalização' },
+    { field: 'preview_url',      icon: <CheckSquare className="w-4 h-4"/>, label: 'Preview' },
+    { field: 'finalizacao_url',  icon: <Layers     className="w-4 h-4" />, label: 'Final' },
   ] as const
 
   return (
@@ -281,6 +282,20 @@ export default async function ActivityPage({
                     inlineRow
                   />
                 </div>
+
+                {/* Caminho na máquina (Drive Desktop) */}
+                {activity.drive_path && (
+                  <div className="flex items-center px-4 py-3 hover:bg-gray-50/60 transition group">
+                    <div className="flex items-center gap-2 w-36 shrink-0">
+                      <span className="text-gray-400"><HardDrive className="w-4 h-4" /></span>
+                      <span className="text-xs text-gray-400">Caminho na máquina</span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className="text-xs text-gray-600 font-mono truncate">{activity.drive_path}</span>
+                      <CopyButton text={activity.drive_path} label="Copiar caminho" />
+                    </div>
+                  </div>
+                )}
 
                 {/* Link fields */}
                 {linkFields.map(({ field, icon, label }) => {

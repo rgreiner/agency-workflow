@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { updateCampaign, deleteCampaign, setCampaignArchived } from '@/app/actions/workspace'
+import { updateCampaign, deleteCampaign, setCampaignArchived, setCampaignDrive } from '@/app/actions/workspace'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { Settings, X, Check, Trash2, Loader2, Archive, ArchiveRestore } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -16,12 +16,14 @@ interface Props {
   startDate: string
   endDate: string
   archived?: boolean
+  driveFolderId?: string | null
 }
 
-export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, description, startDate, endDate, archived = false }: Props) {
+export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, description, startDate, endDate, archived = false, driveFolderId = null }: Props) {
   const [open, setOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [form, setForm] = useState({ name, description, start_date: startDate, end_date: endDate })
+  const [drive, setDrive] = useState(driveFolderId ? `https://drive.google.com/drive/folders/${driveFolderId}` : '')
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
   const router = useRouter()
@@ -37,6 +39,8 @@ export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, des
     startTransition(async () => {
       const res = await updateCampaign(orgSlug, workspaceId, campaignId, fd)
       if (res?.error) { setError(res.error); return }
+      const d = await setCampaignDrive(orgSlug, workspaceId, campaignId, drive)
+      if (d?.error) { setError(d.error); return }
       setOpen(false)
       router.refresh()
     })
@@ -109,6 +113,17 @@ export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, des
                 />
                 <input type="hidden" name="start_date" value={form.start_date} />
                 <input type="hidden" name="end_date" value={form.end_date} />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Pasta do Drive</label>
+                <input
+                  type="url" value={drive}
+                  onChange={e => setDrive(e.target.value)}
+                  placeholder="https://drive.google.com/drive/folders/…"
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <p className="text-xs text-gray-400 mt-1">Novas tarefas criam pastas dentro dela automaticamente.</p>
               </div>
 
               <div className="flex items-center justify-between pt-2">

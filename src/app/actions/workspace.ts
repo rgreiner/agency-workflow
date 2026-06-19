@@ -50,6 +50,7 @@ export async function createCampaign(
   const description = (formData.get('description') as string) ?? ''
   const start_date = (formData.get('start_date') as string) || null
   const end_date = (formData.get('end_date') as string) || null
+  const driveFolderId = extractDriveFolderId(formData.get('drive_folder') as string)
 
   if (!name) return { error: 'Nome obrigatório' }
 
@@ -64,7 +65,37 @@ export async function createCampaign(
 
   if (error) return { error: error.message }
 
+  if (driveFolderId) {
+    await supabase.rpc('set_campaign_drive', {
+      p_user_id: user.id, p_campaign_id: campaignId as string, p_drive_folder_id: driveFolderId,
+    })
+  }
+
   redirect(`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}`)
+}
+
+/** Extrai o ID de uma pasta do Drive a partir de um link (ou ID puro). */
+function extractDriveFolderId(input: string | null): string | null {
+  const s = (input ?? '').trim()
+  if (!s) return null
+  const m = s.match(/\/folders\/([a-zA-Z0-9-_]+)/) || s.match(/[?&]id=([a-zA-Z0-9-_]+)/)
+  if (m) return m[1]
+  if (/^[a-zA-Z0-9-_]{20,}$/.test(s)) return s
+  return null
+}
+
+export async function setCampaignDrive(orgSlug: string, workspaceId: string, campaignId: string, driveLink: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const folderId = extractDriveFolderId(driveLink)
+  const { error } = await supabase.rpc('set_campaign_drive', {
+    p_user_id: user.id, p_campaign_id: campaignId, p_drive_folder_id: folderId,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}`)
+  return {}
 }
 
 export async function updateWorkspace(

@@ -1,0 +1,115 @@
+import 'server-only'
+import { google, type drive_v3 } from 'googleapis'
+
+/**
+ * Cliente de Drive via conta de serviço (env GOOGLE_SERVICE_ACCOUNT_KEY — JSON
+ * em base64 ou cru). Init preguiçoso: importar este módulo nunca quebra; só
+ * falha quando uma função é chamada sem a chave configurada.
+ */
+
+const SUBFOLDERS = ['Final', 'Preview', 'Redação', 'Mockup', 'Links'] as const
+
+function parseCreds(raw: string): { client_email: string; private_key: string } {
+  const txt = raw.trim()
+  try { return JSON.parse(txt) } catch { /* tenta base64 */ }
+  try { return JSON.parse(Buffer.from(txt, 'base64').toString('utf8')) } catch { /* inválida */ }
+  throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY inválida (esperado JSON ou base64).')
+}
+
+let _drive: drive_v3.Drive | null = null
+function getDrive(): drive_v3.Drive {
+  if (_drive) return _drive
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
+  if (!raw) throw new Error('Integração com o Drive não configurada (GOOGLE_SERVICE_ACCOUNT_KEY).')
+  const creds = parseCreds(raw)
+  const auth = new google.auth.JWT({
+    email: creds.client_email,
+    key: creds.private_key,
+    scopes: ['https://www.googleapis.com/auth/drive'],
+  })
+  _drive = google.drive({ version: 'v3', auth })
+  return _drive
+}
+
+export function driveConfigured(): boolean {
+  return !!process.env.GOOGLE_SERVICE_ACCOUNT_KEY
+}
+
+export const folderLink = (id: string) => `https://drive.google.com/drive/folders/${id}`
+
+/** Extrai o ID de pasta de um link do Drive (ou devolve a própria string se já for um ID). */
+export function extractFolderId(input: string): string | null {
+  const s = input.trim()
+  const m = s.match(/\/folders\/([a-zA-Z0-9-_]+)/) || s.match(/[?&]id=([a-zA-Z0-9-_]+)/)
+  if (m) return m[1]
+  if (/^[a-zA-Z0-9-_]{20,}$/.test(s)) return s
+  return null
+}
+
+async function findFolder(parentId: string, name: string): Promise<string | null> {
+  const drive = getDrive()
+  const q = `'${parentId}' in parents and name = '${name.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
+  const r = await drive.files.list({
+    q, fields: 'files(id)', pageSize: 1,
+    supportsAllDrives: true, includeItemsFromAllDrives: true,
+  })
+  return r.data.files?.[0]?.id ?? null
+}
+
+/** Cria a pasta (ou reusa se já existir uma com o mesmo nome no pai). */
+async function ensureFolder(parentId: string, name: string): Promise<{ id: string; link: string }> {
+  const existing = await findFolder(parentId, name)
+  if (existing) return { id: existing, link: folderLink(existing) }
+  const drive = getDrive()
+  const res = await drive.files.create({
+    requestBody: { name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] },
+    fields: 'id, webViewLink',
+    supportsAllDrives: true,
+  })
+  const id = res.data.id!
+  return { id, link: res.data.webViewLink ?? folderLink(id) }
+}
+
+/** Reconstrói o caminho da pasta no Drive (ex.: "Clientes\One a One\2026\Institucional\<tarefa>"). */
+async function buildDrivePath(folderId: string): Promise<string> {
+  const drive = getDrive()
+  const parts: string[] = []
+  let cur: string | undefined = folderId
+  let driveId: string | undefined
+  let guard = 0
+  while (cur && guard++ < 30) {
+    const data: drive_v3.Schema$File =
+      (await drive.files.get({ fileId: cur, fields: 'id, name, parents, driveId', supportsAllDrives: true })).data
+    driveId = data.driveId ?? driveId
+    if (driveId && data.id === driveId) break   // raiz do Drive Compartilhado (nome vem do drives.get)
+    if (data.name) parts.unshift(data.name)
+    cur = data.parents?.[0]
+  }
+  // Nome canônico do Drive Compartilhado (a raiz via files.get às vezes volta como "Drive")
+  if (driveId) {
+    try {
+      const d = (await drive.drives.get({ driveId, fields: 'name' })).data
+      if (d.name) parts.unshift(d.name)
+    } catch { /* sem permissão de listar o drive — ignora */ }
+  }
+  return parts.join('\\')
+}
+
+export interface TaskFoldersResult {
+  taskFolderId: string
+  taskFolderLink: string
+  sub: Record<string, { id: string; link: string }>
+  drivePath: string   // caminho relativo no Drive (sem o prefixo local)
+}
+
+/** Cria a pasta da tarefa + subpastas dentro da pasta da campanha. Idempotente. */
+export async function createTaskFolders(campaignFolderId: string, taskName: string): Promise<TaskFoldersResult> {
+  const safeName = taskName.trim().replace(/[\\/:*?"<>|]/g, '-') || 'Tarefa'
+  const task = await ensureFolder(campaignFolderId, safeName)
+  const sub: Record<string, { id: string; link: string }> = {}
+  for (const name of SUBFOLDERS) {
+    sub[name] = await ensureFolder(task.id, name)
+  }
+  const drivePath = await buildDrivePath(task.id)
+  return { taskFolderId: task.id, taskFolderLink: task.link, sub, drivePath }
+}
