@@ -18,8 +18,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR" className="h-full">
-      <body className={`${GeistSans.className} h-full antialiased`}>{children}</body>
+    <html lang="pt-BR" className="h-full" suppressHydrationWarning>
+      <body className={`${GeistSans.className} h-full antialiased`}>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('theme');var m=window.matchMedia('(prefers-color-scheme: dark)').matches;if(t==='dark'||(t!=='light'&&m)){document.documentElement.classList.add('dark')}}catch(e){}})()`,
+          }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

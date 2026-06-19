@@ -12,11 +12,40 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ── Tema escuro (classe .dark no <html>) ───────────────────────────────────
+   As utilities do Tailwind v4 (bg-white, text-gray-900, border-gray-200,
+   hover/opacidade…) referenciam var(--color-*). Invertendo a escala de cinza
+   aqui, o app inteiro vira escuro sem tocar em cada componente. Accent (indigo)
+   e cores de status (hex inline) ficam intactos. */
+.dark {
+  --background: #0d1117;
+  --foreground: #f0f6fc;
+  --color-white:    #161b22;
+  --color-gray-50:  #0d1117;
+  --color-gray-100: #1c222b;
+  --color-gray-200: #2a313c;
+  --color-gray-300: #3a424e;
+  --color-gray-400: #7d8794;
+  --color-gray-500: #97a1af;
+  --color-gray-600: #b3bcc9;
+  --color-gray-700: #ccd4de;
+  --color-gray-800: #e2e7ed;
+  --color-gray-900: #f0f6fc;
+}
+
+/* A sidebar permanece escura no tema escuro (reset dos cinzas ao valor claro). */
+.dark .sidebar-shell {
+  --color-white:    #ffffff;
+  --color-gray-50:  #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #101828;
 }
 
 html,
@@ -37,7 +66,7 @@ body {
 input,
 textarea,
 select {
-  color: #111827; /* gray-900 — texto digitado sempre escuro */
+  color: var(--color-gray-900); /* acompanha o tema (claro: escuro / escuro: claro) */
 }
 
 input::placeholder,

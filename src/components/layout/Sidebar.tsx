@@ -19,6 +19,7 @@ import {
   Briefcase,
 } from 'lucide-react'
 import { logout } from '@/app/actions/auth'
+import { ThemeToggle } from './ThemeToggle'
 import { InboxNavItem } from './InboxNavItem'
 
 interface Campaign {
@@ -99,7 +100,7 @@ export function Sidebar({
   const displayName = userName || userEmail
 
   const sidebarContent = (
-    <aside className="w-60 bg-gray-900 flex flex-col h-full select-none">
+    <aside className="sidebar-shell w-60 bg-gray-900 flex flex-col h-full select-none">
 
       {/* ── Org header ───────────────────────────────── */}
       <div className="px-3 pt-4 pb-3 border-b border-gray-800 flex items-center gap-1">
@@ -293,6 +294,7 @@ export function Sidebar({
             )}
             <span className="text-gray-400 text-xs truncate group-hover:text-gray-200 transition-colors">{displayName}</span>
           </Link>
+          <ThemeToggle />
           <button onClick={signOut} className="text-gray-600 hover:text-gray-300 transition-colors shrink-0" title="Sair">
             <LogOut className="w-3.5 h-3.5" />
           </button>
