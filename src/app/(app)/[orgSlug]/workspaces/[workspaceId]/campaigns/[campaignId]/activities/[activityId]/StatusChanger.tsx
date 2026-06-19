@@ -54,22 +54,25 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
         <button
           type="button"
           onClick={() => setOpen(o => !o)}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-label={`Status: ${selectedCfg.label} — alterar`}
           style={{ backgroundColor: selectedCfg.bg, color: selectedCfg.text }}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
         >
-          {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+          {isPending ? <Loader2 aria-hidden className="w-3 h-3 animate-spin" /> : null}
           {selectedCfg.label}
-          <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', open && 'rotate-180')} />
+          <ChevronDown aria-hidden className={cn('w-3.5 h-3.5 transition-transform', open && 'rotate-180')} />
         </button>
 
         {open && (
-          <div className="absolute top-full mt-1.5 left-0 w-64 bg-white rounded-xl border border-gray-200 shadow-lg z-50 overflow-hidden">
+          <div className="pop-in absolute top-full mt-1.5 left-0 w-64 bg-white rounded-xl border border-gray-200 shadow-lg z-50 overflow-hidden">
             <div className="max-h-64 overflow-y-auto">
               {['internal', 'external', 'done'].map(group => {
                 const label = group === 'internal' ? 'Trabalho interno' : group === 'external' ? 'Cliente / Fornecedores' : 'Encerrado'
                 return (
                   <div key={group}>
-                    <p className="px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50">{label}</p>
+                    <p className="px-4 py-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider bg-gray-50">{label}</p>
                     {statusConfig.filter(s => s.group === group).map(s => (
                       <button
                         key={s.value}
@@ -99,7 +102,7 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
                   placeholder="Observação (opcional)... Enter confirma"
                   rows={2}
                   autoFocus
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs text-gray-700 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                 />
                 <button
                   onClick={handleSave}
@@ -133,12 +136,12 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
         </button>
 
         {open && (
-          <div className="absolute top-full mt-1 left-0 right-0 bg-white rounded-xl border border-gray-200 shadow-lg z-10 overflow-hidden max-h-72 overflow-y-auto">
+          <div className="pop-in absolute top-full mt-1 left-0 right-0 bg-white rounded-xl border border-gray-200 shadow-lg z-10 overflow-hidden max-h-72 overflow-y-auto">
             {['internal', 'external', 'done'].map(group => {
               const label = group === 'internal' ? 'Trabalho interno' : group === 'external' ? 'Cliente / Fornecedores' : 'Encerrado'
               return (
                 <div key={group}>
-                  <p className="px-4 py-2 text-xs font-semibold text-gray-400 bg-gray-50">{label}</p>
+                  <p className="px-4 py-2 text-xs font-semibold text-gray-500 bg-gray-50">{label}</p>
                   {statusConfig.filter(s => s.group === group).map(s => (
                     <button
                       key={s.value}
@@ -162,7 +165,7 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
           onChange={e => setComment(e.target.value)}
           placeholder="Observação sobre a mudança (opcional)..."
           rows={2}
-          className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none mb-3"
+          className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-700 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none mb-3"
         />
       )}
 

@@ -88,9 +88,10 @@ export function AssigneeSelector({ activityId, assignedIds, members, path, compa
             <button
               onClick={() => toggle(m.userId)}
               disabled={isPending}
-              className="text-gray-300 hover:text-red-400 transition ml-0.5 disabled:opacity-50"
+              aria-label={`Remover ${m.fullName ?? m.email.split('@')[0]}`}
+              className="text-gray-400 hover:text-red-400 transition ml-0.5 disabled:opacity-50"
             >
-              <X className="w-3 h-3" />
+              <X aria-hidden className="w-3 h-3" />
             </button>
           </div>
         ))}
@@ -99,7 +100,7 @@ export function AssigneeSelector({ activityId, assignedIds, members, path, compa
           <button
             onClick={() => setOpen(o => !o)}
             disabled={isPending}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-gray-300 text-gray-400 hover:border-indigo-400 hover:text-indigo-500 transition text-xs disabled:opacity-50"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-gray-300 text-gray-500 hover:border-indigo-400 hover:text-indigo-500 transition text-xs disabled:opacity-50"
           >
             {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}
             {selected.length === 0 ? 'Atribuir' : 'Adicionar'}
@@ -107,14 +108,14 @@ export function AssigneeSelector({ activityId, assignedIds, members, path, compa
         )}
 
         {members.length === 0 && (
-          <p className="text-xs text-gray-400">Nenhum membro na organização.</p>
+          <p className="text-xs text-gray-500">Nenhum membro na organização.</p>
         )}
       </div>
 
       {open && (
-        <div className="absolute left-0 top-full mt-1 w-56 bg-white rounded-xl border border-gray-200 shadow-lg z-10 py-1 max-h-52 overflow-y-auto">
+        <div className="pop-in absolute left-0 top-full mt-1 w-56 bg-white rounded-xl border border-gray-200 shadow-lg z-10 py-1 max-h-52 overflow-y-auto">
           {unassigned.length === 0 ? (
-            <p className="text-xs text-gray-400 px-3 py-2">Todos já atribuídos</p>
+            <p className="text-xs text-gray-500 px-3 py-2">Todos já atribuídos</p>
           ) : (
             unassigned.map(m => (
               <button
@@ -128,7 +129,7 @@ export function AssigneeSelector({ activityId, assignedIds, members, path, compa
                   <p className="text-sm text-gray-800 font-medium truncate">
                     {m.fullName ?? m.email.split('@')[0]}
                   </p>
-                  <p className="text-xs text-gray-400 truncate">{m.email}</p>
+                  <p className="text-xs text-gray-500 truncate">{m.email}</p>
                 </div>
               </button>
             ))
