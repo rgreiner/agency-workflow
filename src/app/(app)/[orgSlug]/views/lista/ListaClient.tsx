@@ -19,7 +19,7 @@ import { toast } from 'sonner'
 
 // ── Column definitions ────────────────────────────────────────────────────
 
-type ColKey = 'responsavel' | 'prazo' | 'prioridade' | 'complexidade' | 'redacao' | 'layout' | 'ultimoComentario'
+type ColKey = 'responsavel' | 'prazo' | 'prioridade' | 'complexidade' | 'redacao' | 'preview' | 'ultimoComentario'
 
 const COL_DEFS: { key: ColKey; label: string; defaultOn: boolean; width: string }[] = [
   { key: 'responsavel',      label: 'Responsável',       defaultOn: true,  width: 'w-32' },
@@ -27,11 +27,11 @@ const COL_DEFS: { key: ColKey; label: string; defaultOn: boolean; width: string 
   { key: 'prioridade',       label: 'Prioridade',        defaultOn: true,  width: 'w-20' },
   { key: 'complexidade',     label: 'Complexidade',      defaultOn: false, width: 'w-24' },
   { key: 'redacao',          label: 'Redação',           defaultOn: true,  width: 'w-24' },
-  { key: 'layout',           label: 'Layout',            defaultOn: true,  width: 'w-24' },
+  { key: 'preview',          label: 'Preview',           defaultOn: true,  width: 'w-24' },
   { key: 'ultimoComentario', label: 'Último comentário', defaultOn: false, width: 'w-48' },
 ]
 
-const STORAGE_KEY = 'lista-cols-v5'
+const STORAGE_KEY = 'lista-cols-v6'
 
 function defaultCols(): Record<ColKey, boolean> {
   return Object.fromEntries(COL_DEFS.map(c => [c.key, c.defaultOn])) as Record<ColKey, boolean>
@@ -47,7 +47,7 @@ interface LastComment { content: string; at: string; author: string | null }
 interface Activity {
   id: string; title: string; status: string; priority: string
   due_date: string | null; start_date?: string | null; complexity?: string | null
-  redacao_url: string | null; layout_url: string | null; lastComment: LastComment | null
+  redacao_url: string | null; preview_url: string | null; lastComment: LastComment | null
   campaign_id: string; assignees: Assignee[]; assignedIds: string[]
 }
 interface CampInfo { name: string; client: string; workspaceId: string }
@@ -579,9 +579,9 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                             return activity.redacao_url
                               ? <DriveLink url={activity.redacao_url} label="Redação" />
                               : <span className="text-xs text-gray-300">—</span>
-                          case 'layout':
-                            return activity.layout_url
-                              ? <DriveLink url={activity.layout_url} label="Layout" />
+                          case 'preview':
+                            return activity.preview_url
+                              ? <DriveLink url={activity.preview_url} label="Preview" />
                               : <span className="text-xs text-gray-300">—</span>
                           case 'ultimoComentario':
                             return activity.lastComment ? (

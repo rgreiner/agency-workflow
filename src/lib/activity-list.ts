@@ -16,7 +16,7 @@ export interface ListActivity {
   start_date: string | null
   complexity: string | null
   redacao_url: string | null
-  layout_url: string | null
+  preview_url: string | null
   lastComment: LastComment | null
   campaign_id: string
   assignees: { full_name: string | null; avatar_url: string | null }[]
@@ -83,7 +83,7 @@ export async function loadActivityList(
 
   const archivedView = !!opts.archived
   let q = supabase.from('activities')
-    .select('id, title, status, priority, complexity, due_date, start_date, redacao_url, layout_url, campaign_id, archived')
+    .select('id, title, status, priority, complexity, due_date, start_date, redacao_url, preview_url, campaign_id, archived')
     .in('campaign_id', campIds)
     .eq('archived', archivedView)
   if (!archivedView) q = q.neq('status', 'concluido')
@@ -159,7 +159,7 @@ export async function loadActivityList(
     start_date: a.start_date,
     complexity: a.complexity,
     redacao_url: a.redacao_url,
-    layout_url: a.layout_url,
+    preview_url: a.preview_url,
     lastComment: lastCommentMap[a.id] ?? null,
     campaign_id: a.campaign_id,
     assignees: assigneeMap[a.id] ?? [],
