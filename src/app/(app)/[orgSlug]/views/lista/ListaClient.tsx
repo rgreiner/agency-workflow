@@ -218,9 +218,10 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
     .filter((c): c is (typeof COL_DEFS)[number] => !!c)
   const visibleCols = orderedCols.filter(c => cols[c.key])
   const totalCount  = filteredActivities.length
+  // Ordem invertida (Concluído no topo, Briefing no final) — preferência do usuário
   const activeGroups = statusConfig.filter(s =>
     filteredActivities.some(a => a.status === s.value)
-  )
+  ).reverse()
 
   // ── Seleção múltipla ──
   const selectedIds = [...selected]
