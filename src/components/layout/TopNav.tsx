@@ -19,6 +19,8 @@ interface Props {
   orgName: string
   workspaces: Workspace[]
   accentColor?: string
+  /** Nome do cargo do usuário — substitui o rótulo "Atendimento" na aba de trabalho. */
+  positionName?: string | null
   collapsed?: boolean
   onExpand?: () => void
 }
@@ -31,7 +33,7 @@ const VIEWS = [
   { id: 'boards',      label: 'Quadros',     icon: PenTool,    href: 'boards' },
 ]
 
-export function TopNav({ orgSlug, orgName, workspaces, accentColor = '#6366f1', collapsed = false, onExpand }: Props) {
+export function TopNav({ orgSlug, orgName, workspaces, accentColor = '#6366f1', positionName, collapsed = false, onExpand }: Props) {
   const pathname = usePathname()
   const [paletteOpen, setPaletteOpen] = useState(false)
   const base = `/${orgSlug}`
@@ -103,23 +105,30 @@ export function TopNav({ orgSlug, orgName, workspaces, accentColor = '#6366f1', 
 
         {/* View tabs — horizontally scrollable on mobile */}
         <nav className="flex items-center gap-0.5 overflow-x-auto scrollbar-none flex-1 min-w-0 pl-10 md:pl-0">
-          {VIEWS.map(({ id, label, icon: Icon, href }) => (
-            <Link
-              key={id}
-              href={viewHref(href)}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap shrink-0',
-                isActive(href) ? '' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
-              )}
-              style={isActive(href) ? {
-                backgroundColor: accentColor + '18',
-                color: accentColor,
-              } : undefined}
-            >
-              <Icon className="w-3.5 h-3.5 shrink-0" />
-              {label}
-            </Link>
-          ))}
+          {VIEWS.map(({ id, label, icon: Icon, href }) => {
+            // Aba de trabalho mostra o nome do cargo (ex.: "Redação"); sem cargo → "Atendimento".
+            const tabLabel = id === 'atendimento' && positionName ? positionName : label
+            const active = isActive(href)
+            return (
+              <Link
+                key={id}
+                href={viewHref(href)}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap shrink-0',
+                  active ? 'topnav-tab-active' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+                )}
+                // No claro: tinta sutil + texto accent. No escuro, .dark .topnav-tab-active
+                // (globals.css) sobrepõe para um chip sólido — o accent puro sumia no fundo escuro.
+                style={active ? {
+                  backgroundColor: accentColor + '18',
+                  color: accentColor,
+                } : undefined}
+              >
+                <Icon className="w-3.5 h-3.5 shrink-0" />
+                {tabLabel}
+              </Link>
+            )
+          })}
         </nav>
 
         {/* Notificações */}

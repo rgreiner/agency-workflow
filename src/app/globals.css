@@ -39,6 +39,14 @@
   --color-gray-900: #f0f6fc;
 }
 
+/* Aba ativa do menu superior: no escuro o accent puro como texto (estilo inline)
+   tem contraste baixo e "some". Aqui viramos um chip sólido — !important para
+   vencer o style inline que serve o tema claro. */
+.dark .topnav-tab-active {
+  background-color: var(--accent, #6366f1) !important;
+  color: #fff !important;
+}
+
 /* A sidebar permanece escura no tema escuro (reset dos cinzas ao valor claro). */
 .dark .sidebar-shell {
   --color-white:    #ffffff;

@@ -19,17 +19,19 @@ import { toast } from 'sonner'
 
 // ── Column definitions ────────────────────────────────────────────────────
 
-type ColKey = 'responsavel' | 'prazo' | 'prioridade' | 'complexidade' | 'layout'
+type ColKey = 'responsavel' | 'prazo' | 'prioridade' | 'complexidade' | 'redacao' | 'layout' | 'ultimoComentario'
 
 const COL_DEFS: { key: ColKey; label: string; defaultOn: boolean; width: string }[] = [
-  { key: 'responsavel',  label: 'Responsável',  defaultOn: true,  width: 'w-32' },
-  { key: 'prazo',        label: 'Prazo',         defaultOn: true,  width: 'w-24' },
-  { key: 'prioridade',   label: 'Prioridade',    defaultOn: true,  width: 'w-20' },
-  { key: 'complexidade', label: 'Complexidade',  defaultOn: false, width: 'w-24' },
-  { key: 'layout',       label: 'Drive',         defaultOn: true,  width: 'w-28' },
+  { key: 'responsavel',      label: 'Responsável',       defaultOn: true,  width: 'w-32' },
+  { key: 'prazo',            label: 'Prazo',             defaultOn: true,  width: 'w-24' },
+  { key: 'prioridade',       label: 'Prioridade',        defaultOn: true,  width: 'w-20' },
+  { key: 'complexidade',     label: 'Complexidade',      defaultOn: false, width: 'w-24' },
+  { key: 'redacao',          label: 'Redação',           defaultOn: true,  width: 'w-24' },
+  { key: 'layout',           label: 'Layout',            defaultOn: true,  width: 'w-24' },
+  { key: 'ultimoComentario', label: 'Último comentário', defaultOn: false, width: 'w-48' },
 ]
 
-const STORAGE_KEY = 'lista-cols-v4'
+const STORAGE_KEY = 'lista-cols-v5'
 
 function defaultCols(): Record<ColKey, boolean> {
   return Object.fromEntries(COL_DEFS.map(c => [c.key, c.defaultOn])) as Record<ColKey, boolean>
@@ -41,10 +43,12 @@ const defaultOrder = (): ColKey[] => COL_DEFS.map(c => c.key)
 
 interface Assignee { full_name: string | null; avatar_url: string | null }
 interface Member { userId: string; fullName: string | null; email: string; avatarUrl: string | null }
+interface LastComment { content: string; at: string; author: string | null }
 interface Activity {
   id: string; title: string; status: string; priority: string
   due_date: string | null; start_date?: string | null; complexity?: string | null
-  layout_url: string | null; campaign_id: string; assignees: Assignee[]; assignedIds: string[]
+  redacao_url: string | null; layout_url: string | null; lastComment: LastComment | null
+  campaign_id: string; assignees: Assignee[]; assignedIds: string[]
 }
 interface CampInfo { name: string; client: string; workspaceId: string }
 interface Props {
@@ -268,23 +272,42 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
     })
   }
 
-  function bulkApplyDueDate(date: string | null) {
+  // Datas em lote (intervalo início → prazo). undefined = não mexe no campo;
+  // null = limpa; string = define. Permite aplicar só o prazo sem zerar o início.
+  function bulkApplyDates(start: string | null | undefined, due: string | null | undefined) {
     const ids = selectedIds
     startBulk(async () => {
-      const r = await bulkUpdateField(listPath, ids, 'due_date', date)
-      if (r?.error) toast.error(r.error)
-      else { toast.success(date ? `Prazo aplicado a ${ids.length}` : `Prazo removido de ${ids.length}`); clearSelection() }
+      let error: string | undefined
+      if (start !== undefined) {
+        const r = await bulkUpdateField(listPath, ids, 'start_date', start)
+        if (r?.error) error = r.error
+      }
+      if (!error && due !== undefined) {
+        const r = await bulkUpdateField(listPath, ids, 'due_date', due)
+        if (r?.error) error = r.error
+      }
+      if (error) toast.error(error)
+      else {
+        toast.success(start === null && due === null ? `Datas removidas de ${ids.length}` : `Datas atualizadas em ${ids.length}`)
+        clearSelection()
+      }
     })
   }
 
-  function bulkApplyAssignee(userId: string) {
-    // toggle = adicionar: aplica só a quem ainda não tem esse responsável
-    const ids = filteredActivities.filter(a => selected.has(a.id) && !a.assignedIds.includes(userId)).map(a => a.id)
-    if (ids.length === 0) { toast('Todas já têm esse responsável'); return }
+  // Responsáveis em lote (multi): para cada pessoa escolhida, adiciona só a quem
+  // ainda não a tem (toggle = adicionar, sem remover quem já está).
+  function bulkApplyAssignees(userIds: string[]) {
+    if (userIds.length === 0) return
     startBulk(async () => {
-      const r = await bulkToggleAssignee(listPath, ids, userId)
-      if (r?.error) toast.error(r.error)
-      else { toast.success(`Responsável adicionado a ${ids.length}`); clearSelection() }
+      let error: string | undefined
+      for (const uid of userIds) {
+        const ids = filteredActivities.filter(a => selected.has(a.id) && !a.assignedIds.includes(uid)).map(a => a.id)
+        if (ids.length === 0) continue
+        const r = await bulkToggleAssignee(listPath, ids, uid)
+        if (r?.error) { error = r.error; break }
+      }
+      if (error) toast.error(error)
+      else { toast.success(userIds.length === 1 ? 'Responsável adicionado' : 'Responsáveis adicionados'); clearSelection() }
     })
   }
 
@@ -552,21 +575,22 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                             return ComplexityIcon
                               ? <span title={`Complexidade: ${complexity?.label}`}><ComplexityIcon className={cn('w-4 h-4', complexity?.color)} /></span>
                               : <span className="text-xs text-gray-300">—</span>
+                          case 'redacao':
+                            return activity.redacao_url
+                              ? <DriveLink url={activity.redacao_url} label="Redação" />
+                              : <span className="text-xs text-gray-300">—</span>
                           case 'layout':
-                            return activity.layout_url ? (
-                              <div className="flex items-center gap-1 min-w-0">
-                                <a
-                                  href={activity.layout_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={e => e.stopPropagation()}
-                                  className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 hover:underline min-w-0"
-                                >
-                                  <ExternalLink className="w-3 h-3 shrink-0" />
-                                  <span className="truncate">Drive</span>
-                                </a>
-                                <CopyButton text={activity.layout_url} label="Copiar link do Drive" />
-                              </div>
+                            return activity.layout_url
+                              ? <DriveLink url={activity.layout_url} label="Layout" />
+                              : <span className="text-xs text-gray-300">—</span>
+                          case 'ultimoComentario':
+                            return activity.lastComment ? (
+                              <span
+                                className="text-xs text-gray-500 truncate block"
+                                title={`${activity.lastComment.author ? activity.lastComment.author + ': ' : ''}${activity.lastComment.content}`}
+                              >
+                                {activity.lastComment.content}
+                              </span>
                             ) : <span className="text-xs text-gray-300">—</span>
                           default:
                             return null
@@ -688,8 +712,8 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
           members={members}
           isArchivedView={isArchivedView}
           onStatus={bulkApplyStatus}
-          onAssignee={bulkApplyAssignee}
-          onDueDate={bulkApplyDueDate}
+          onAssignees={bulkApplyAssignees}
+          onDates={bulkApplyDates}
           onArchive={bulkApplyArchive}
           onClear={clearSelection}
         />
@@ -725,7 +749,7 @@ function SelectBox({ checked, indeterminate, onChange, className }: {
 // ── Barra flutuante de ações em lote ────────────────────────────────────────
 function BulkActionBar({
   count, pending, statusConfig, members, isArchivedView,
-  onStatus, onAssignee, onDueDate, onArchive, onClear,
+  onStatus, onAssignees, onDates, onArchive, onClear,
 }: {
   count: number
   pending: boolean
@@ -733,20 +757,28 @@ function BulkActionBar({
   members: Member[]
   isArchivedView: boolean
   onStatus: (status: string) => void
-  onAssignee: (userId: string) => void
-  onDueDate: (date: string | null) => void
+  onAssignees: (userIds: string[]) => void
+  onDates: (start: string | null | undefined, due: string | null | undefined) => void
   onArchive: () => void
   onClear: () => void
 }) {
   const [menu, setMenu] = useState<null | 'status' | 'assignee' | 'date'>(null)
-  const [date, setDate] = useState('')
+  const [start, setStart] = useState('')
+  const [due, setDue] = useState('')
+  const [pickAssignees, setPickAssignees] = useState<string[]>([])
   const ref = useRef<HTMLDivElement>(null)
 
+  // Ao fechar o menu, descarta a seleção/edição em andamento (evita estado preso).
+  function closeMenu() { setMenu(null); setPickAssignees([]); setStart(''); setDue('') }
+
   useEffect(() => {
-    function onOut(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setMenu(null) }
+    function onOut(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) closeMenu() }
     document.addEventListener('mousedown', onOut)
     return () => document.removeEventListener('mousedown', onOut)
   }, [])
+
+  // Campo de data com o mesmo visual dos demais inputs do app (claro e escuro).
+  const dateInputClass = 'mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 transition [color-scheme:light] dark:[color-scheme:dark]'
 
   return (
     <div ref={ref} className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-[slideUp_0.15s_ease-out]">
@@ -759,14 +791,14 @@ function BulkActionBar({
         </span>
         <div className="w-px h-5 bg-gray-200 mx-0.5" />
 
-        {/* Status */}
+        {/* Status — aplica um status a todas (seleção única faz sentido aqui). */}
         <div className="relative">
-          <BarButton icon={Circle} label="Status" active={menu === 'status'} onClick={() => setMenu(m => m === 'status' ? null : 'status')} />
+          <BarButton icon={Circle} label="Status" active={menu === 'status'} onClick={() => menu === 'status' ? closeMenu() : setMenu('status')} />
           {menu === 'status' && (
             <div className="pop-up absolute bottom-full mb-2 left-0 w-56 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 max-h-72 overflow-y-auto">
               {statusConfig.map(s => (
                 <button key={s.value} type="button"
-                  onClick={() => { setMenu(null); onStatus(s.value) }}
+                  onClick={() => { closeMenu(); onStatus(s.value) }}
                   className="w-full flex items-center px-3 py-1.5 hover:bg-gray-50 transition text-left">
                   <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: s.bg, color: s.text }}>{s.label}</span>
                 </button>
@@ -775,40 +807,65 @@ function BulkActionBar({
           )}
         </div>
 
-        {/* Responsável */}
+        {/* Responsável — multi-seleção: marque vários e confirme. */}
         <div className="relative">
-          <BarButton icon={UserPlus} label="Responsável" active={menu === 'assignee'} onClick={() => setMenu(m => m === 'assignee' ? null : 'assignee')} />
+          <BarButton icon={UserPlus} label="Responsável" active={menu === 'assignee'} onClick={() => menu === 'assignee' ? closeMenu() : setMenu('assignee')} />
           {menu === 'assignee' && (
-            <div className="pop-up absolute bottom-full mb-2 left-0 w-56 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 max-h-72 overflow-y-auto">
-              <p className="px-3 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Adicionar responsável</p>
+            <div className="pop-up absolute bottom-full mb-2 left-0 w-60 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5">
+              <p className="px-3 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Adicionar responsáveis</p>
               {members.length === 0 ? (
                 <p className="px-3 py-2 text-xs text-gray-400">Nenhum membro</p>
-              ) : members.map(m => (
-                <button key={m.userId} type="button"
-                  onClick={() => { setMenu(null); onAssignee(m.userId) }}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition text-left">
-                  <span className="text-sm text-gray-700 truncate">{m.fullName ?? m.email.split('@')[0]}</span>
-                </button>
-              ))}
+              ) : (
+                <>
+                  <div className="max-h-56 overflow-y-auto">
+                    {members.map(m => {
+                      const on = pickAssignees.includes(m.userId)
+                      return (
+                        <button key={m.userId} type="button"
+                          onClick={() => setPickAssignees(prev => on ? prev.filter(x => x !== m.userId) : [...prev, m.userId])}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition text-left">
+                          <span className={cn('w-4 h-4 rounded border flex items-center justify-center shrink-0', on ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300')}>
+                            {on && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                          </span>
+                          <span className="text-sm text-gray-700 truncate">{m.fullName ?? m.email.split('@')[0]}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="flex items-center justify-end px-3 pt-2 mt-1 border-t border-gray-100">
+                    <button type="button" disabled={pickAssignees.length === 0}
+                      onClick={() => { const sel = pickAssignees; closeMenu(); onAssignees(sel) }}
+                      className="text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition">
+                      Adicionar{pickAssignees.length > 0 ? ` (${pickAssignees.length})` : ''}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
 
-        {/* Prazo */}
+        {/* Prazo — intervalo início → prazo. Campo vazio não altera. */}
         <div className="relative">
-          <BarButton icon={Calendar} label="Prazo" active={menu === 'date'} onClick={() => setMenu(m => m === 'date' ? null : 'date')} />
+          <BarButton icon={Calendar} label="Prazo" active={menu === 'date'} onClick={() => menu === 'date' ? closeMenu() : setMenu('date')} />
           {menu === 'date' && (
-            <div className="pop-up absolute bottom-full mb-2 left-0 w-60 bg-white rounded-xl border border-gray-200 shadow-lg p-3">
-              <input
-                type="date"
-                value={date}
-                onChange={e => setDate(e.target.value)}
-                className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-              <div className="flex items-center justify-between mt-2">
-                <button type="button" onClick={() => { setMenu(null); onDueDate(null) }}
-                  className="text-xs text-gray-500 hover:text-gray-700 transition">Remover prazo</button>
-                <button type="button" disabled={!date} onClick={() => { setMenu(null); onDueDate(date) }}
+            <div className="pop-up absolute bottom-full mb-2 left-0 w-72 bg-white rounded-xl border border-gray-200 shadow-lg p-3 space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block">
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Início</span>
+                  <input type="date" value={start} max={due || undefined} onChange={e => setStart(e.target.value)} className={dateInputClass} />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Prazo</span>
+                  <input type="date" value={due} min={start || undefined} onChange={e => setDue(e.target.value)} className={dateInputClass} />
+                </label>
+              </div>
+              <p className="text-[11px] text-gray-400">Campo vazio não é alterado.</p>
+              <div className="flex items-center justify-between pt-1">
+                <button type="button" onClick={() => { closeMenu(); onDates(null, null) }}
+                  className="text-xs text-gray-500 hover:text-gray-700 transition">Remover datas</button>
+                <button type="button" disabled={!start && !due}
+                  onClick={() => { const s = start || undefined; const d = due || undefined; closeMenu(); onDates(s, d) }}
                   className="text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition">Aplicar</button>
               </div>
             </div>
@@ -996,6 +1053,25 @@ function NewActivityButton({
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Link de entregável (Redação / Layout) + botão copiar ────────────────────
+function DriveLink({ url, label }: { url: string; label: string }) {
+  return (
+    <div className="flex items-center gap-1 min-w-0">
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={e => e.stopPropagation()}
+        className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 hover:underline min-w-0"
+      >
+        <ExternalLink className="w-3 h-3 shrink-0" />
+        <span className="truncate">{label}</span>
+      </a>
+      <CopyButton text={url} label={`Copiar link · ${label}`} />
     </div>
   )
 }

@@ -20,6 +20,8 @@ interface Props {
   workspaces: WorkspaceItem[]
   logoUrl?: string | null
   accentColor?: string
+  /** Nome do cargo do usuário — rótulo da aba de trabalho no menu superior. */
+  positionName?: string | null
   children: React.ReactNode
 }
 
@@ -29,7 +31,7 @@ interface Props {
  * sobre o conteúdo.
  */
 export function AppShell({
-  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, children,
+  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, children,
 }: Props) {
   const [collapsed, setCollapsedState] = useState(false)
 
@@ -62,6 +64,7 @@ export function AppShell({
           orgName={orgName}
           workspaces={workspaces}
           accentColor={accentColor}
+          positionName={positionName}
           collapsed={collapsed}
           onExpand={() => setCollapsed(false)}
         />

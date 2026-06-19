@@ -1,6 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import type { ActivityStatus } from '@/types'
 
+export interface LastComment {
+  content: string
+  at: string
+  author: string | null
+}
+
 export interface ListActivity {
   id: string
   title: string
@@ -9,7 +15,9 @@ export interface ListActivity {
   due_date: string | null
   start_date: string | null
   complexity: string | null
+  redacao_url: string | null
   layout_url: string | null
+  lastComment: LastComment | null
   campaign_id: string
   assignees: { full_name: string | null; avatar_url: string | null }[]
   assignedIds: string[]
@@ -75,7 +83,7 @@ export async function loadActivityList(
 
   const archivedView = !!opts.archived
   let q = supabase.from('activities')
-    .select('id, title, status, priority, complexity, due_date, start_date, layout_url, campaign_id, archived')
+    .select('id, title, status, priority, complexity, due_date, start_date, redacao_url, layout_url, campaign_id, archived')
     .in('campaign_id', campIds)
     .eq('archived', archivedView)
   if (!archivedView) q = q.neq('status', 'concluido')
@@ -104,6 +112,27 @@ export async function loadActivityList(
     return acc
   }, {} as Record<string, string[]>)
 
+  // Último comentário por atividade (coluna opcional na Lista). Ordena desc e
+  // fica com o primeiro visto de cada atividade = o mais recente.
+  const { data: commentsRaw } = actIds.length
+    ? await supabase.from('activity_comments')
+        .select('activity_id, content, created_at, profiles(full_name)')
+        .in('activity_id', actIds)
+        .order('created_at', { ascending: false })
+    : { data: [] }
+
+  const lastCommentMap: Record<string, LastComment> = {}
+  for (const c of commentsRaw ?? []) {
+    const cid = (c as { activity_id: string }).activity_id
+    if (lastCommentMap[cid]) continue
+    const p = (c as { profiles: unknown }).profiles as { full_name: string | null } | null
+    lastCommentMap[cid] = {
+      content: (c as { content: string }).content,
+      at: (c as { created_at: string }).created_at,
+      author: p?.full_name ?? null,
+    }
+  }
+
   const { data: membersRaw } = await supabase
     .from('organization_members')
     .select('user_id, profiles!user_id(full_name, email, avatar_url)')
@@ -129,7 +158,9 @@ export async function loadActivityList(
     due_date: a.due_date,
     start_date: a.start_date,
     complexity: a.complexity,
+    redacao_url: a.redacao_url,
     layout_url: a.layout_url,
+    lastComment: lastCommentMap[a.id] ?? null,
     campaign_id: a.campaign_id,
     assignees: assigneeMap[a.id] ?? [],
     assignedIds: assignedIdsMap[a.id] ?? [],

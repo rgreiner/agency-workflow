@@ -27,12 +27,17 @@ export default async function OrgLayout({
 
   const { data: membership } = await supabase
     .from('organization_members')
-    .select('role')
+    .select('role, org_positions(name)')
     .eq('org_id', org.id)
     .eq('user_id', user.id)
     .single()
 
   if (!membership) redirect('/')
+
+  // Nome do cargo do usuário (ex.: "Redação") — vira o rótulo da aba de trabalho
+  // no menu superior. Sem cargo (ex.: owner "acesso total") → fallback "Atendimento".
+  const positionName =
+    (membership.org_positions as unknown as { name: string } | null)?.name ?? null
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -85,6 +90,7 @@ export default async function OrgLayout({
         workspaces={workspaces}
         logoUrl={orgSettings.logoUrl}
         accentColor={accent}
+        positionName={positionName}
       >
         {children}
       </AppShell>
