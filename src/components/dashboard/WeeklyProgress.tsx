@@ -122,7 +122,7 @@ export function WeeklyProgress({ done, total, overdue, myActiveCount, userName }
           </div>
           <div className="h-2.5 bg-white/60 rounded-full overflow-hidden">
             <div
-              className={cn('h-full rounded-full transition-all duration-700 ease-out', m.bar)}
+              className={cn('h-full rounded-full transition-[width] duration-700 ease-out', m.bar)}
               style={{ width: `${width}%` }}
             />
           </div>

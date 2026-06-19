@@ -283,7 +283,7 @@ function DocRow({ doc, orgSlug, active, nested, inFolder, menuOpen, onMenu, fold
 
 function Popover({ children }: { children: ReactNode }) {
   return (
-    <div className="absolute right-0 top-full mt-1 z-50 w-48 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5">
+    <div className="pop-in absolute right-0 top-full mt-1 z-50 w-48 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5">
       {children}
     </div>
   )

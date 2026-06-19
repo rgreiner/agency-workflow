@@ -354,7 +354,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
           </button>
 
           {pickerOpen && (
-            <div className="absolute right-0 mt-2 w-60 bg-white rounded-xl border border-gray-200 shadow-lg py-2 z-20">
+            <div className="pop-in absolute right-0 mt-2 w-60 bg-white rounded-xl border border-gray-200 shadow-lg py-2 z-20">
               <p className="px-3 pb-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100 mb-1">
                 Colunas · arraste para reordenar
               </p>
@@ -465,7 +465,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
             </p>
           </div>
         ) : (
-          <div className="space-y-2.5">
+          <div className="space-y-2.5 stagger-in">
           {activeGroups.map(statusCfg => {
             const items = filteredActivities.filter(a => a.status === statusCfg.value)
             const isOpen = !collapsed.has(statusCfg.value)
@@ -762,7 +762,7 @@ function BulkActionBar({
         <div className="relative">
           <BarButton icon={Circle} label="Status" active={menu === 'status'} onClick={() => setMenu(m => m === 'status' ? null : 'status')} />
           {menu === 'status' && (
-            <div className="absolute bottom-full mb-2 left-0 w-56 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 max-h-72 overflow-y-auto">
+            <div className="pop-up absolute bottom-full mb-2 left-0 w-56 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 max-h-72 overflow-y-auto">
               {statusConfig.map(s => (
                 <button key={s.value} type="button"
                   onClick={() => { setMenu(null); onStatus(s.value) }}
@@ -778,7 +778,7 @@ function BulkActionBar({
         <div className="relative">
           <BarButton icon={UserPlus} label="Responsável" active={menu === 'assignee'} onClick={() => setMenu(m => m === 'assignee' ? null : 'assignee')} />
           {menu === 'assignee' && (
-            <div className="absolute bottom-full mb-2 left-0 w-56 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 max-h-72 overflow-y-auto">
+            <div className="pop-up absolute bottom-full mb-2 left-0 w-56 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 max-h-72 overflow-y-auto">
               <p className="px-3 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Adicionar responsável</p>
               {members.length === 0 ? (
                 <p className="px-3 py-2 text-xs text-gray-400">Nenhum membro</p>
@@ -797,7 +797,7 @@ function BulkActionBar({
         <div className="relative">
           <BarButton icon={Calendar} label="Prazo" active={menu === 'date'} onClick={() => setMenu(m => m === 'date' ? null : 'date')} />
           {menu === 'date' && (
-            <div className="absolute bottom-full mb-2 left-0 w-60 bg-white rounded-xl border border-gray-200 shadow-lg p-3">
+            <div className="pop-up absolute bottom-full mb-2 left-0 w-60 bg-white rounded-xl border border-gray-200 shadow-lg p-3">
               <input
                 type="date"
                 value={date}
@@ -885,7 +885,7 @@ function StatusDot({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-6 z-30 w-56 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 max-h-72 overflow-y-auto">
+        <div className="pop-in absolute left-0 top-6 z-30 w-56 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 max-h-72 overflow-y-auto">
           <p className="px-3 pb-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
             Mudar status
           </p>
@@ -964,7 +964,7 @@ function NewActivityButton({
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl border border-gray-200 shadow-lg z-30 overflow-hidden">
+        <div className="pop-in absolute right-0 mt-2 w-72 bg-white rounded-xl border border-gray-200 shadow-lg z-30 overflow-hidden">
           <div className="p-2 border-b border-gray-100">
             <div className="flex items-center gap-2 px-2 py-1.5 bg-gray-50 rounded-lg">
               <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
@@ -1068,7 +1068,7 @@ function AssigneeCell({ activityId, assignedIds, members }: {
           : <span className="text-xs text-gray-300 hover:text-indigo-500 transition">+ atribuir</span>}
       </button>
       {open && (
-        <div className="absolute left-0 top-7 z-30 w-56 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 max-h-64 overflow-y-auto">
+        <div className="pop-in absolute left-0 top-7 z-30 w-56 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 max-h-64 overflow-y-auto">
           {members.length === 0 ? (
             <p className="px-3 py-2 text-xs text-gray-400">Nenhum membro</p>
           ) : members.map(m => {
@@ -1129,7 +1129,7 @@ function PriorityCell({ activityId, current, path }: { activityId: string; curre
         <Flag className={cn('w-4 h-4', p.color, (value === 'urgent' || value === 'high') && 'fill-current')} />
       </button>
       {open && (
-        <div className="absolute left-0 top-7 z-30 w-44 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5">
+        <div className="pop-in absolute left-0 top-7 z-30 w-44 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5">
           {order.map(pk => {
             const cfg = PRIORITY_CONFIG[pk]
             return (

@@ -508,7 +508,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
             <Bookmark className="w-3.5 h-3.5" /> Salvar filtro
           </button>
           {saveOpen && (
-            <div className="absolute left-0 top-full mt-1.5 z-50 w-56 bg-white rounded-xl border border-gray-200 shadow-lg p-2">
+            <div className="pop-in absolute left-0 top-full mt-1.5 z-50 w-56 bg-white rounded-xl border border-gray-200 shadow-lg p-2">
               <input
                 autoFocus
                 value={saveName}
