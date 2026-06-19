@@ -65,8 +65,8 @@ export function ImportSpecsButton({ orgSlug, campaignId, campaigns }: {
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-          <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl border border-gray-200 flex flex-col max-h-[85vh]">
+        <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="modal-card w-full max-w-2xl bg-white rounded-2xl shadow-xl border border-gray-200 flex flex-col max-h-[85vh]">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
               <div className="flex items-center gap-2">
                 {step === 'preview' && (

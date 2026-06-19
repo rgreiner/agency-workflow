@@ -93,7 +93,7 @@ export function Select({
           ref={listRef}
           role="listbox"
           className={cn(
-            'absolute z-50 mt-1.5 min-w-full max-h-72 overflow-y-auto bg-white rounded-xl border border-gray-200 shadow-lg py-1.5',
+            'pop-in absolute z-50 mt-1.5 min-w-full max-h-72 overflow-y-auto bg-white rounded-xl border border-gray-200 shadow-lg py-1.5',
             align === 'right' ? 'right-0' : 'left-0'
           )}
         >
@@ -188,7 +188,7 @@ export function MultiSelect({
         <div
           role="listbox"
           className={cn(
-            'absolute z-50 mt-1.5 min-w-full max-h-72 overflow-y-auto bg-white rounded-xl border border-gray-200 shadow-lg py-1.5',
+            'pop-in absolute z-50 mt-1.5 min-w-full max-h-72 overflow-y-auto bg-white rounded-xl border border-gray-200 shadow-lg py-1.5',
             align === 'right' ? 'right-0' : 'left-0'
           )}
         >

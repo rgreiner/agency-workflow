@@ -72,8 +72,8 @@ export function WorkspaceEditButton({ orgSlug, workspaceId, name, description, c
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-200">
+        <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="modal-card w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-200">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="text-base font-semibold text-gray-900">Editar cliente</h2>
               <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 transition">

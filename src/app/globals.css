@@ -3,6 +3,9 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* Curvas custom (mais "punch" que as nativas) — Emil/Ionic */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 }
 
 @theme inline {
@@ -46,6 +49,33 @@
   --color-gray-700: #374151;
   --color-gray-800: #1f2937;
   --color-gray-900: #101828;
+}
+
+/* ── Polish (Emil) — micro-interações que compõem em todo o app ────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  /* Feedback de toque: qualquer botão "afunda" levemente ao pressionar.
+     Não definimos transition global (evita sobrescrever as do Tailwind);
+     botões que já têm `transition` animam suave, os demais dão o snap. */
+  button:not(:disabled):active {
+    transform: scale(0.97);
+  }
+
+  /* Entrada de dropdowns/popovers: escala a partir do topo (do gatilho). */
+  .pop-in {
+    animation: popIn 0.16s var(--ease-out);
+    transform-origin: top;
+  }
+  @keyframes popIn {
+    from { opacity: 0; transform: scale(0.96) translateY(-2px); }
+  }
+
+  /* Entrada de modal: backdrop em fade + card subindo de leve. */
+  .modal-backdrop { animation: backdropIn 0.18s var(--ease-out); }
+  .modal-card     { animation: modalIn 0.2s var(--ease-out); }
+  @keyframes backdropIn { from { opacity: 0; } }
+  @keyframes modalIn {
+    from { opacity: 0; transform: scale(0.96) translateY(6px); }
+  }
 }
 
 html,
