@@ -82,26 +82,37 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
         </button>
 
         {open && (
-          <div className="pop-in absolute top-full mt-1.5 left-0 w-64 bg-white rounded-xl border border-gray-200 shadow-lg z-50 overflow-hidden">
-            <div className="max-h-64 overflow-y-auto">
+          <div
+            style={{ transformOrigin: 'top left' }}
+            className="pop-in absolute top-full mt-1.5 left-0 w-60 bg-white rounded-xl border border-gray-200 shadow-lg z-50 overflow-hidden"
+          >
+            <div className="max-h-72 overflow-y-auto py-1">
               {['internal', 'external', 'done'].map(group => {
+                const items = statusConfig.filter(s => s.group === group)
+                if (!items.length) return null
                 const label = group === 'internal' ? 'Trabalho interno' : group === 'external' ? 'Cliente / Fornecedores' : 'Encerrado'
                 return (
                   <div key={group}>
-                    <p className="px-4 py-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider bg-gray-50">{label}</p>
-                    {statusConfig.filter(s => s.group === group).map(s => (
-                      <button
-                        key={s.value}
-                        type="button"
-                        onClick={() => applyStatus(s.value)}
-                        className="w-full text-left px-4 py-2.5 flex items-center gap-2 hover:bg-gray-50 transition"
-                      >
-                        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold flex-1" style={{ backgroundColor: s.bg, color: s.text }}>
-                          {s.label}
-                        </span>
-                        {selected === s.value && <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0" />}
-                      </button>
-                    ))}
+                    <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
+                    {items.map(s => {
+                      const isSel = selected === s.value
+                      return (
+                        <button
+                          key={s.value}
+                          type="button"
+                          onClick={() => applyStatus(s.value)}
+                          className={cn(
+                            'w-full text-left px-3 py-1.5 flex items-center gap-2 transition-colors',
+                            isSel ? 'bg-gray-50' : 'hover:bg-gray-50',
+                          )}
+                        >
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ backgroundColor: s.bg, color: s.text }}>
+                            {s.label}
+                          </span>
+                          {isSel && <Check className="w-3.5 h-3.5 text-gray-400 ml-auto shrink-0" />}
+                        </button>
+                      )
+                    })}
                   </div>
                 )
               })}
