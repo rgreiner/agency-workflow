@@ -9,6 +9,7 @@ import { CopyButton } from '@/components/ui/CopyButton'
 import { DriveProvisioningNotice } from './DriveProvisioningNotice'
 import { StatusChanger } from './StatusChanger'
 import { RedacaoReviewBanner } from './RedacaoReviewBanner'
+import { AutoRefresh } from '@/components/ui/AutoRefresh'
 import { CommentBox } from './CommentBox'
 import { AssigneeSelector } from './AssigneeSelector'
 import { FieldEditor } from './FieldEditor'
@@ -246,6 +247,10 @@ export default async function ActivityPage({
                 compact
               />
             </div>
+
+            {/* Atualiza a tarefa sozinha (revisão em 2º plano, mudanças de outros);
+                mais rápido enquanto a revisão de Redação está rodando. */}
+            <AutoRefresh fast={activity.redacao_review_status === 'reviewing'} />
 
             {/* Revisão de Redação (IA) — "revisando…" / apontamentos + avançar mesmo assim */}
             <RedacaoReviewBanner
