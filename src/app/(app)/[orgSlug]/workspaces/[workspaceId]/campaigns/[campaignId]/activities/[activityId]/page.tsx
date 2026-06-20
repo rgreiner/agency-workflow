@@ -156,7 +156,7 @@ export default async function ActivityPage({
   ] as const
 
   return (
-    <div className="flex flex-col bg-white lg:h-screen lg:overflow-hidden">
+    <div className="flex flex-col bg-white lg:h-full lg:overflow-hidden">
 
       {/* ── Top bar ─────────────────────────────────────────────── */}
       <div className="flex items-center gap-1.5 px-4 md:px-6 py-3 border-b border-gray-200 shrink-0 bg-white z-10">
