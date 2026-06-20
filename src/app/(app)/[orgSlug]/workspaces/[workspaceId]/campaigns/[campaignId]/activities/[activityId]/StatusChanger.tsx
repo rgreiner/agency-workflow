@@ -47,6 +47,22 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
     })
   }
 
+  // Modo compacto: clicar num status já aplica (sem etapa de confirmação).
+  function applyStatus(status: string) {
+    setOpen(false)
+    if (status === currentStatus) return
+    setSelected(status) // otimista
+    startTransition(async () => {
+      const result = await updateActivityStatus(path, activityId, status, '')
+      if (result?.error) {
+        setSelected(currentStatus) // rollback
+        toast.error(result.error)
+      } else {
+        toast.success(`Status: ${statusConfig.find(s => s.value === status)?.label}`)
+      }
+    })
+  }
+
   // ── Compact inline mode ──────────────────────────────────────────────
   if (compact) {
     return (
@@ -77,7 +93,7 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
                       <button
                         key={s.value}
                         type="button"
-                        onClick={() => setSelected(s.value)}
+                        onClick={() => applyStatus(s.value)}
                         className="w-full text-left px-4 py-2.5 flex items-center gap-2 hover:bg-gray-50 transition"
                       >
                         <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold flex-1" style={{ backgroundColor: s.bg, color: s.text }}>
@@ -90,29 +106,6 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
                 )
               })}
             </div>
-
-            {changed && (
-              <div className="border-t border-gray-100 p-3 space-y-2">
-                <textarea
-                  value={comment}
-                  onChange={e => setComment(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSave() }
-                  }}
-                  placeholder="Observação (opcional)... Enter confirma"
-                  rows={2}
-                  autoFocus
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs text-gray-700 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                />
-                <button
-                  onClick={handleSave}
-                  disabled={isPending}
-                  className="w-full py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition disabled:opacity-40"
-                >
-                  {isPending ? 'Salvando…' : 'Confirmar status'}
-                </button>
-              </div>
-            )}
           </div>
         )}
       </div>
