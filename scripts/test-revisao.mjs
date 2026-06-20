@@ -97,12 +97,27 @@ const body = {
 
 const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
 
+console.log('\n→ Chamando o Gemini…')
+
 const t0 = Date.now()
-const res = await fetch(url, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(body),
-})
+const controller = new AbortController()
+const timer = setTimeout(() => controller.abort(), 30000)
+let res
+try {
+  res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: controller.signal,
+  })
+} catch (err) {
+  clearTimeout(timer)
+  console.error('\n❌ Não consegui falar com o Gemini:')
+  console.error(`   ${err?.name === 'AbortError' ? 'Timeout (30s) — sem resposta.' : (err?.message || err)}`)
+  console.error('   Dica: cheque conexão/proxy/VPN. A chamada vai pra generativelanguage.googleapis.com.\n')
+  process.exit(1)
+}
+clearTimeout(timer)
 
 if (!res.ok) {
   console.error(`\n❌ Gemini respondeu ${res.status}:`)

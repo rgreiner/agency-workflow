@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { CopyButton } from '@/components/ui/CopyButton'
 import { DriveProvisioningNotice } from './DriveProvisioningNotice'
 import { StatusChanger } from './StatusChanger'
+import { RedacaoReviewBanner } from './RedacaoReviewBanner'
 import { CommentBox } from './CommentBox'
 import { AssigneeSelector } from './AssigneeSelector'
 import { FieldEditor } from './FieldEditor'
@@ -245,6 +246,15 @@ export default async function ActivityPage({
                 compact
               />
             </div>
+
+            {/* Revisão de Redação (IA) — "revisando…" / apontamentos + avançar mesmo assim */}
+            <RedacaoReviewBanner
+              activityId={activityId}
+              path={path}
+              status={activity.redacao_review_status ?? null}
+              errors={(activity.redacao_review_errors as unknown as { trecho: string; problema: string; sugestao: string; tipo?: string }[] | null) ?? null}
+              currentStatus={activity.status}
+            />
 
             {/* ── Campos ───────────────────────────────────────── */}
             <div className="mt-8">

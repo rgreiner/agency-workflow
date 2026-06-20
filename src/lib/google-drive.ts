@@ -113,3 +113,54 @@ export async function createTaskFolders(campaignFolderId: string, taskName: stri
   const drivePath = await buildDrivePath(task.id)
   return { taskFolderId: task.id, taskFolderLink: task.link, sub, drivePath }
 }
+
+// ── Leitura de conteúdo (revisão de Redação) ────────────────────────────────
+
+const DOC_MIME    = 'application/vnd.google-apps.document'
+const FOLDER_MIME = 'application/vnd.google-apps.folder'
+
+/** Exporta um Google Doc como texto puro. */
+async function exportDocText(fileId: string): Promise<string> {
+  const drive = getDrive()
+  const r = await drive.files.export({ fileId, mimeType: 'text/plain' }, { responseType: 'text' })
+  return typeof r.data === 'string' ? r.data : String(r.data ?? '')
+}
+
+/**
+ * Lê o texto do entregável de Redação a partir do link (Doc único OU pasta).
+ * - Link de Doc do Google → exporta o texto dele.
+ * - Link de pasta → exporta todos os Google Docs dentro dela.
+ * Outros tipos de arquivo são ignorados. Retorna o texto concatenado + os nomes.
+ */
+export async function readRedacaoText(link: string): Promise<{ text: string; sources: string[] }> {
+  const id = extractFolderId(link)   // mesma regex serve p/ ?id= de arquivo e /folders/
+  if (!id) return { text: '', sources: [] }
+  const drive = getDrive()
+
+  const meta = (await drive.files.get({
+    fileId: id, fields: 'id, name, mimeType', supportsAllDrives: true,
+  })).data
+
+  // Arquivo único
+  if (meta.mimeType !== FOLDER_MIME) {
+    if (meta.mimeType !== DOC_MIME) return { text: '', sources: [] }
+    const text = await exportDocText(id)
+    return { text, sources: meta.name ? [meta.name] : [] }
+  }
+
+  // Pasta: exporta cada Google Doc lá dentro
+  const r = await drive.files.list({
+    q: `'${id}' in parents and mimeType = '${DOC_MIME}' and trashed = false`,
+    fields: 'files(id, name)', pageSize: 50, orderBy: 'name',
+    supportsAllDrives: true, includeItemsFromAllDrives: true,
+  })
+  const files = r.data.files ?? []
+  const parts: string[] = []
+  const sources: string[] = []
+  for (const f of files) {
+    if (!f.id) continue
+    const t = await exportDocText(f.id)
+    if (t.trim()) { parts.push(`### ${f.name ?? 'Documento'}\n${t}`); sources.push(f.name ?? 'Documento') }
+  }
+  return { text: parts.join('\n\n'), sources }
+}

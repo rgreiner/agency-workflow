@@ -203,6 +203,10 @@ export type Database = {
           drive_folder_id: string | null
           drive_path: string | null
           preview_url: string | null
+          redacao_review_status: string | null
+          redacao_review_errors: Json | null
+          redacao_review_target: string | null
+          redacao_review_at: string | null
           id: string
           priority: Database["public"]["Enums"]["activity_priority"]
           sort_order: number
@@ -229,6 +233,10 @@ export type Database = {
           drive_folder_id?: string | null
           drive_path?: string | null
           preview_url?: string | null
+          redacao_review_status?: string | null
+          redacao_review_errors?: Json | null
+          redacao_review_target?: string | null
+          redacao_review_at?: string | null
           id?: string
           priority?: Database["public"]["Enums"]["activity_priority"]
           sort_order?: number
@@ -255,6 +263,10 @@ export type Database = {
           drive_folder_id?: string | null
           drive_path?: string | null
           preview_url?: string | null
+          redacao_review_status?: string | null
+          redacao_review_errors?: Json | null
+          redacao_review_target?: string | null
+          redacao_review_at?: string | null
           id?: string
           priority?: Database["public"]["Enums"]["activity_priority"]
           sort_order?: number
@@ -753,6 +765,16 @@ export type Database = {
           p_redacao_url: string | null
           p_finalizacao_url: string | null
           p_preview_url: string | null
+        }
+        Returns: undefined
+      }
+      set_redacao_review: {
+        Args: {
+          p_user_id: string
+          p_activity_id: string
+          p_status: string | null
+          p_errors: Json | null
+          p_target: string | null
         }
         Returns: undefined
       }

@@ -5,6 +5,7 @@ import { getUsuario } from '@/lib/auth/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { provisionActivitiesDrive } from '@/lib/drive-provision'
+import { scheduleRedacaoReview, isRedacaoAdvance } from '@/lib/redacao-gate'
 
 export async function createActivity(
   orgSlug: string,
@@ -76,6 +77,11 @@ export async function updateActivityStatus(
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
+  // Status atual — p/ detectar avanço a partir de Redação (gate de revisão).
+  const { data: cur } = await supabase
+    .from('activities').select('status').eq('id', activityId).single()
+  const fromStatus = cur?.status ?? null
+
   const { error } = await supabase.rpc('update_activity_status', {
     p_user_id: user.id,
     p_activity_id: activityId,
@@ -84,6 +90,10 @@ export async function updateActivityStatus(
   })
 
   if (error) return { error: error.message }
+
+  if (isRedacaoAdvance(fromStatus, newStatus)) {
+    scheduleRedacaoReview({ supabase, userId: user.id, activityId, toStatus: newStatus })
+  }
   revalidatePath(path)
 }
 
@@ -201,11 +211,22 @@ export async function bulkUpdateStatus(path: string, ids: string[], newStatus: s
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
+
+  // Status atuais — p/ disparar o gate de revisão nos que avançam a partir de Redação.
+  const { data: curRows } = await supabase.from('activities').select('id, status').in('id', ids)
+  const fromMap = new Map((curRows ?? []).map(r => [r.id, r.status as string]))
+
   const err = await runChunked(ids, id =>
     supabase.rpc('update_activity_status', {
       p_user_id: user.id, p_activity_id: id, p_new_status: newStatus, p_comment: '',
     }).then(r => ({ error: r.error })))
   if (err) return { error: err.message }
+
+  for (const id of ids) {
+    if (isRedacaoAdvance(fromMap.get(id) ?? null, newStatus)) {
+      scheduleRedacaoReview({ supabase, userId: user.id, activityId: id, toStatus: newStatus })
+    }
+  }
   revalidatePath(path)
 }
 
@@ -260,6 +281,35 @@ export async function addComment(
     p_content: content,
   })
 
+  if (error) return { error: error.message }
+  revalidatePath(path)
+}
+
+/**
+ * "Avançar mesmo assim" — o redador assume os apontamentos da revisão e avança a
+ * tarefa para o status que tentou antes (redacao_review_target, ou 'design'),
+ * via RPC direto p/ não re-disparar a revisão.
+ */
+export async function confirmRedacaoErrors(path: string, activityId: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { data: act } = await supabase
+    .from('activities').select('redacao_review_target').eq('id', activityId).single()
+  const target = act?.redacao_review_target || 'design'
+
+  await supabase.rpc('set_redacao_review', {
+    p_user_id: user.id, p_activity_id: activityId, p_status: 'overridden', p_errors: null, p_target: null,
+  })
+  await supabase.rpc('add_activity_comment', {
+    p_user_id: user.id, p_activity_id: activityId,
+    p_content: '✋ Apontamentos da revisão assumidos pelo redador — avançando mesmo assim.',
+  })
+
+  const { error } = await supabase.rpc('update_activity_status', {
+    p_user_id: user.id, p_activity_id: activityId, p_new_status: target, p_comment: '',
+  })
   if (error) return { error: error.message }
   revalidatePath(path)
 }
