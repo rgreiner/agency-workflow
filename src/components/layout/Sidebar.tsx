@@ -16,15 +16,18 @@ import {
   Menu,
   X,
   PanelLeftClose,
+  PanelLeft,
   Briefcase,
   List,
   GanttChart,
   BookOpen,
   PenTool,
+  Search,
 } from 'lucide-react'
 import { logout } from '@/app/actions/auth'
 import { ThemeToggle } from './ThemeToggle'
 import { InboxNavItem } from './InboxNavItem'
+import { CommandPalette } from './CommandPalette'
 
 interface Campaign {
   id: string
@@ -51,6 +54,7 @@ interface SidebarProps {
   positionName?: string | null
   collapsed: boolean
   onCollapse: () => void
+  onExpand?: () => void
 }
 
 // Visões da org (antes ficavam na barra superior). "Atendimento" = o item "Trabalhar".
@@ -63,12 +67,31 @@ const VIEWS = [
 
 export function Sidebar({
   orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#6366f1',
-  positionName, collapsed, onCollapse,
+  positionName, collapsed, onCollapse, onExpand,
 }: SidebarProps) {
   const pathname = usePathname()
   const base = `/${orgSlug}`
 
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+
+  // SSR sempre renderiza 'Ctrl K'; suppressHydrationWarning no <kbd> cobre o Mac.
+  const shortcutLabel =
+    typeof navigator !== 'undefined' && navigator.platform.toUpperCase().includes('MAC')
+      ? '⌘K'
+      : 'Ctrl K'
+
+  // Atalho global ⌘K / Ctrl+K para a busca.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen(o => !o)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
 
   const activeWorkspaceId = workspaces.find(ws =>
     pathname.includes(`/workspaces/${ws.id}`)
@@ -152,6 +175,19 @@ export function Sidebar({
 
       {/* ── Scrollable body ──────────────────────────── */}
       <div className="flex-1 overflow-y-auto py-3 space-y-1">
+
+        {/* Buscar (⌘K) */}
+        <button
+          type="button"
+          onClick={() => setPaletteOpen(true)}
+          className="flex items-center gap-2.5 mx-2 px-2 py-1.5 rounded-lg text-sm text-gray-400 hover:text-gray-100 hover:bg-gray-800/60 transition w-[calc(100%-1rem)]"
+        >
+          <Search className="w-4 h-4 shrink-0" />
+          <span className="flex-1 text-left">Buscar</span>
+          <kbd suppressHydrationWarning className="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded">
+            {shortcutLabel}
+          </kbd>
+        </button>
 
         {/* Caixa de entrada — antes dos espaços */}
         <InboxNavItem orgSlug={orgSlug} />
@@ -350,6 +386,18 @@ export function Sidebar({
         <Menu className="w-5 h-5" />
       </button>
 
+      {/* Expandir — desktop, quando a sidebar está recolhida (substitui o botão do topo) */}
+      {collapsed && onExpand && (
+        <button
+          onClick={onExpand}
+          className="hidden md:flex fixed top-3 left-3 z-50 bg-gray-900 text-gray-300 rounded-lg p-2 shadow-lg hover:text-white transition"
+          title="Mostrar menu"
+          aria-label="Mostrar menu"
+        >
+          <PanelLeft className="w-5 h-5" />
+        </button>
+      )}
+
       {/* Backdrop — mobile only */}
       {mobileOpen && (
         <div
@@ -368,6 +416,14 @@ export function Sidebar({
       )}>
         {sidebarContent}
       </div>
+
+      {/* Busca rápida (⌘K / item "Buscar") */}
+      <CommandPalette
+        orgSlug={orgSlug}
+        workspaces={workspaces}
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+      />
     </>
   )
 }

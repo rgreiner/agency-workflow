@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { Sidebar } from './Sidebar'
-import { TopNav } from './TopNav'
 
 interface WorkspaceItem {
   id: string
@@ -26,9 +25,9 @@ interface Props {
 }
 
 /**
- * Casca do app: detém o estado de colapso da sidebar (persistido) e o compartilha
- * entre Sidebar e TopNav — assim o botão de expandir vive no TopNav, sem flutuar
- * sobre o conteúdo.
+ * Casca do app: detém o estado de colapso da sidebar (persistido). Sem barra
+ * superior — navegação, busca e notificações vivem na Sidebar; quando recolhida,
+ * a própria Sidebar mostra um botão flutuante para reabrir.
  */
 export function AppShell({
   orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, children,
@@ -58,15 +57,9 @@ export function AppShell({
         positionName={positionName}
         collapsed={collapsed}
         onCollapse={() => setCollapsed(true)}
+        onExpand={() => setCollapsed(false)}
       />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <TopNav
-          orgSlug={orgSlug}
-          orgName={orgName}
-          workspaces={workspaces}
-          collapsed={collapsed}
-          onExpand={() => setCollapsed(false)}
-        />
         <main className="flex-1 overflow-y-auto min-w-0">
           <div className="pt-12 md:pt-0 h-full">
             {children}
