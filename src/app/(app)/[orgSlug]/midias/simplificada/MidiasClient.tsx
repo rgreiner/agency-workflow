@@ -3,7 +3,7 @@
 import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Archive, ArchiveRestore, Megaphone } from 'lucide-react'
+import { Plus, Archive, ArchiveRestore, Megaphone, Pencil } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { setMidiaSituacao, setMidiaArchived } from '@/app/actions/midia'
@@ -66,7 +66,7 @@ export function MidiasClient({ orgSlug, midias, archivedView }: {
                 <th className="text-right px-4 py-3">Valor</th>
                 <th className="text-right px-4 py-3">Comissão</th>
                 <th className="text-left px-4 py-3 w-44">Situação</th>
-                <th className="w-12" />
+                <th className="w-20" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -76,7 +76,11 @@ export function MidiasClient({ orgSlug, midias, archivedView }: {
                 return (
                   <tr key={m.id} className="hover:bg-gray-50/50 transition">
                     <td className="px-4 py-3 text-sm text-gray-400">{m.numero ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{m.titulo}</td>
+                    <td className="px-4 py-3 text-sm font-medium">
+                      <Link href={`/${orgSlug}/midias/simplificada/${m.id}`} className="text-gray-900 hover:text-indigo-600 transition">
+                        {m.titulo}
+                      </Link>
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-600">{m.cliente}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{m.veiculo}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{labelOf(MIDIA_TIPO_OPTIONS, m.tipo)}</td>
@@ -92,12 +96,18 @@ export function MidiasClient({ orgSlug, midias, archivedView }: {
                         <Select size="sm" value={m.situacao} onChange={v => changeSituacao(m.id, v)} options={MIDIA_SITUACAO_OPTIONS} />
                       )}
                     </td>
-                    <td className="px-3 py-3 text-right">
-                      <button onClick={() => archive(m)} disabled={isPending}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition disabled:opacity-50"
-                        title={m.archived ? 'Desarquivar' : 'Arquivar'}>
-                        {m.archived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
-                      </button>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Link href={`/${orgSlug}/midias/simplificada/${m.id}`}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Link>
+                        <button onClick={() => archive(m)} disabled={isPending}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition disabled:opacity-50"
+                          title={m.archived ? 'Desarquivar' : 'Arquivar'}>
+                          {m.archived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )

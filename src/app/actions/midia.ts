@@ -56,6 +56,7 @@ export async function updateMidia(orgSlug: string, midiaId: string, formData: Fo
   })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/midias/simplificada`)
+  redirect(`/${orgSlug}/midias/simplificada`)
 }
 
 export async function setMidiaSituacao(orgSlug: string, midiaId: string, situacao: string) {
