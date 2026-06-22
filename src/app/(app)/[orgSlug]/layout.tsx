@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { AppShell } from '@/components/layout/AppShell'
 import { OrgSettingsProvider } from '@/components/providers/OrgSettingsProvider'
+import { UserPrefsProvider } from '@/components/providers/UserPrefsProvider'
 
 export default async function OrgLayout({
   children,
@@ -41,7 +42,7 @@ export default async function OrgLayout({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, avatar_url')
+    .select('full_name, avatar_url, drive_mac_user, drive_google_email')
     .eq('id', user.id)
     .single()
 
@@ -78,6 +79,11 @@ export default async function OrgLayout({
 
   return (
     <OrgSettingsProvider settings={orgSettings}>
+      <UserPrefsProvider value={{
+        orgSlug: org.slug,
+        driveMacUser: (profile as { drive_mac_user?: string | null } | null)?.drive_mac_user ?? null,
+        driveGoogleEmail: (profile as { drive_google_email?: string | null } | null)?.drive_google_email ?? null,
+      }}>
       {/* Inject accent color as CSS variable */}
       <style>{`:root { --accent: ${accent}; }`}</style>
 
@@ -94,6 +100,7 @@ export default async function OrgLayout({
       >
         {children}
       </AppShell>
+      </UserPrefsProvider>
     </OrgSettingsProvider>
   )
 }

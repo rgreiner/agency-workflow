@@ -14,6 +14,8 @@ export interface ProfileUser {
   avatarUrl: string | null
   googleName: string | null
   googleAvatar: string | null
+  driveMacUser: string | null
+  driveGoogleEmail: string | null
 }
 
 export function ProfileForm({ user }: { user: ProfileUser }) {
@@ -22,6 +24,8 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
 
   const [fullName,  setFullName]  = useState(user.fullName ?? '')
   const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl ?? '')
+  const [driveMacUser,     setDriveMacUser]     = useState(user.driveMacUser ?? '')
+  const [driveGoogleEmail, setDriveGoogleEmail] = useState(user.driveGoogleEmail ?? '')
   const [uploading, setUploading] = useState(false)
   const [isPending, startTransition] = useTransition()
 
@@ -49,7 +53,7 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
   function handleSave() {
     if (!fullName.trim()) { toast.error('Nome obrigatório'); return }
     startTransition(async () => {
-      const result = await updateProfile(fullName, avatarUrl)
+      const result = await updateProfile(fullName, avatarUrl, driveMacUser, driveGoogleEmail)
       if (result?.error) toast.error(result.error)
       else toast.success('Perfil atualizado!')
     })
@@ -146,6 +150,40 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
                 className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-400 bg-gray-50 cursor-not-allowed"
               />
               <p className="text-[11px] text-gray-400 mt-1">Gerenciado pela sua conta Google.</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Caminho na máquina (Mac) */}
+        <div className="px-6 py-5">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Caminho na máquina (Mac)</p>
+          <p className="text-[12px] text-gray-400 mb-4 leading-relaxed">
+            Só para quem usa Mac. Com esses dados o Flow monta o caminho local das pastas do Drive no seu Mac
+            (no Windows não precisa). Em branco, mostramos o caminho do Windows.
+          </p>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">E-mail da conta Google (Drive)</label>
+              <input
+                type="email"
+                value={driveGoogleEmail}
+                onChange={e => setDriveGoogleEmail(e.target.value)}
+                placeholder="voce@empresa.com.br"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent"
+                style={{ '--tw-ring-color': accent } as React.CSSProperties}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Usuário do Mac</label>
+              <input
+                type="text"
+                value={driveMacUser}
+                onChange={e => setDriveMacUser(e.target.value)}
+                placeholder="ex.: rafaelgreiner"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent"
+                style={{ '--tw-ring-color': accent } as React.CSSProperties}
+              />
+              <p className="text-[11px] text-gray-400 mt-1">O nome da sua pasta em /Users (no Finder, sua pasta pessoal).</p>
             </div>
           </div>
         </div>
