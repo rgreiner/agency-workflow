@@ -5,7 +5,6 @@ import { getMergedStatusConfig, PRIORITY_CONFIG, COMPLEXITY_CONFIG, type Activit
 import { cn, formatDate, isOverdue } from '@/lib/utils'
 import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink, HardDrive } from 'lucide-react'
 import Link from 'next/link'
-import { CopyButton } from '@/components/ui/CopyButton'
 import { DriveProvisioningNotice } from './DriveProvisioningNotice'
 import { StatusChanger } from './StatusChanger'
 import { RedacaoReviewBanner } from './RedacaoReviewBanner'
@@ -16,6 +15,7 @@ import { FieldEditor } from './FieldEditor'
 import { ActivityHeader } from './ActivityHeader'
 import { DateRangeEditor } from '@/components/ui/DateRangeEditor'
 import { Avatar } from '@/components/ui/Avatar'
+import { MachinePath } from '@/components/ui/MachinePath'
 
 export default async function ActivityPage({
   params,
@@ -311,8 +311,7 @@ export default async function ActivityPage({
                       <span className="text-xs text-gray-500">Caminho na máquina</span>
                     </div>
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="text-xs text-gray-600 font-mono truncate">{activity.drive_path}</span>
-                      <CopyButton text={activity.drive_path} label="Copiar caminho" />
+                      <MachinePath winPath={activity.drive_path} />
                     </div>
                   </div>
                 )}

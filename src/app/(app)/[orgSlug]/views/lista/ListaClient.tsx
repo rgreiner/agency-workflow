@@ -10,6 +10,7 @@ import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, 
 const COMPLEXITY_ICON = { simple: SignalLow, medium: SignalMedium, complex: SignalHigh } as const
 import { AvatarGroup } from '@/components/ui/Avatar'
 import { DateRangeEditor } from '@/components/ui/DateRangeEditor'
+import { MachinePath } from '@/components/ui/MachinePath'
 import { Select } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { updateActivityStatus, updateActivityField, setActivityArchived, bulkUpdateStatus, bulkUpdateField, bulkToggleAssignee, bulkSetArchived } from '@/app/actions/activity'
@@ -19,7 +20,7 @@ import { toast } from 'sonner'
 
 // ── Column definitions ────────────────────────────────────────────────────
 
-type ColKey = 'responsavel' | 'prazo' | 'prioridade' | 'complexidade' | 'redacao' | 'preview' | 'ultimoComentario'
+type ColKey = 'responsavel' | 'prazo' | 'prioridade' | 'complexidade' | 'redacao' | 'preview' | 'caminho' | 'ultimoComentario'
 
 const COL_DEFS: { key: ColKey; label: string; defaultOn: boolean; width: string }[] = [
   { key: 'responsavel',      label: 'Responsável',       defaultOn: true,  width: 'w-32' },
@@ -28,10 +29,11 @@ const COL_DEFS: { key: ColKey; label: string; defaultOn: boolean; width: string 
   { key: 'complexidade',     label: 'Complexidade',      defaultOn: false, width: 'w-24' },
   { key: 'redacao',          label: 'Redação',           defaultOn: true,  width: 'w-24' },
   { key: 'preview',          label: 'Preview',           defaultOn: true,  width: 'w-24' },
+  { key: 'caminho',          label: 'Caminho',           defaultOn: false, width: 'w-56' },
   { key: 'ultimoComentario', label: 'Último comentário', defaultOn: false, width: 'w-48' },
 ]
 
-const STORAGE_KEY = 'lista-cols-v6'
+const STORAGE_KEY = 'lista-cols-v7'
 
 function defaultCols(): Record<ColKey, boolean> {
   return Object.fromEntries(COL_DEFS.map(c => [c.key, c.defaultOn])) as Record<ColKey, boolean>
@@ -47,7 +49,7 @@ interface LastComment { content: string; at: string; author: string | null }
 interface Activity {
   id: string; title: string; status: string; priority: string
   due_date: string | null; start_date?: string | null; complexity?: string | null
-  redacao_url: string | null; preview_url: string | null; lastComment: LastComment | null
+  redacao_url: string | null; preview_url: string | null; drive_path: string | null; lastComment: LastComment | null
   campaign_id: string; assignees: Assignee[]; assignedIds: string[]
 }
 interface CampInfo { name: string; client: string; workspaceId: string }
@@ -582,6 +584,10 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                           case 'preview':
                             return activity.preview_url
                               ? <DriveLink url={activity.preview_url} label="Preview" />
+                              : <span className="text-xs text-gray-300">—</span>
+                          case 'caminho':
+                            return activity.drive_path
+                              ? <MachinePath winPath={activity.drive_path} compact />
                               : <span className="text-xs text-gray-300">—</span>
                           case 'ultimoComentario':
                             return activity.lastComment ? (
