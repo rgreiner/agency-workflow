@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useTransition, type ReactNode, type Compon
 import Link from 'next/link'
 import { cn, isOverdue, daysUntil } from '@/lib/utils'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority } from '@/types'
-import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search, Flag, SignalLow, SignalMedium, SignalHigh, Copy, Archive, ArchiveRestore, X, Calendar, UserPlus, Minus, Circle } from 'lucide-react'
+import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search, Flag, SignalLow, SignalMedium, SignalHigh, Copy, Archive, ArchiveRestore, X, Calendar, UserPlus, Minus, Circle, User } from 'lucide-react'
 
 // Complexidade → ícone (1/2/3 barras)
 const COMPLEXITY_ICON = { simple: SignalLow, medium: SignalMedium, complex: SignalHigh } as const
@@ -105,6 +105,8 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
   // Concluído começa recolhido (fluxo: revisar → selecionar pelo checkbox do grupo → arquivar).
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(['concluido']))
   const [filterWorkspace, setFilterWorkspace] = useState(initialWorkspace ?? '')
+  const [onlyMine, setOnlyMine] = useState(false)
+  const me = getUsuarioClient()?.id ?? null
   const pickerRef = useRef<HTMLDivElement>(null)
 
   // ── Drag & drop entre status ──
@@ -217,7 +219,10 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
   const filteredActivities = (filterWorkspace
     ? activities.filter(a => campMap[a.campaign_id]?.workspaceId === filterWorkspace)
     : activities
-  ).filter(a => !hidden.has(a.id)).map(a => overrides[a.id] ? { ...a, status: overrides[a.id] } : a)
+  )
+    .filter(a => !hidden.has(a.id))
+    .filter(a => !onlyMine || (!!me && a.assignedIds.includes(me)))
+    .map(a => overrides[a.id] ? { ...a, status: overrides[a.id] } : a)
 
   // Colunas na ordem escolhida pelo usuário (com fallback p/ defs novas)
   const orderedCols = [...order, ...COL_DEFS.map(c => c.key).filter(k => !order.includes(k))]
@@ -347,76 +352,43 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
             </Link>
           </div>
 
-          {secondaryActions}
-
-          {/* Nova atividade — sempre disponível no topo */}
-          <NewActivityButton orgSlug={orgSlug} campMap={campMap} fixedCampaign={newActivityCampaign} />
-
-        {/* Workspace filter */}
-        {workspaceOptions.length > 1 && (
-          <Select
-            value={filterWorkspace}
-            onChange={setFilterWorkspace}
-            className="w-44"
-            options={[
-              { value: '', label: 'Todos os clientes' },
-              ...workspaceOptions.map(w => ({ value: w.id, label: w.name })),
-            ]}
-          />
-        )}
-
-        {/* Column picker — desktop only */}
-        <div className="relative hidden md:block" ref={pickerRef}>
+          {/* Eu — só as tarefas em que sou responsável */}
           <button
-            onClick={() => setPickerOpen(o => !o)}
+            type="button"
+            onClick={() => setOnlyMine(v => !v)}
+            title="Mostrar só as tarefas em que sou responsável"
             className={cn(
-              'inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg border transition',
-              pickerOpen
+              'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded-lg border transition',
+              onlyMine
                 ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
                 : 'bg-white border-gray-200 text-gray-500 hover:text-gray-700 hover:border-gray-300'
             )}
           >
-            <Columns3 className="w-4 h-4" />
-            Colunas
+            <User className="w-4 h-4" />
+            Eu
           </button>
 
-          {pickerOpen && (
-            <div className="pop-in absolute right-0 mt-2 w-60 bg-white rounded-xl border border-gray-200 shadow-lg py-2 z-20">
-              <p className="px-3 pb-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100 mb-1">
-                Colunas · arraste para reordenar
-              </p>
-              {orderedCols.map(col => (
-                <div
-                  key={col.key}
-                  draggable
-                  onDragStart={() => setDragCol(col.key)}
-                  onDragEnd={() => setDragCol(null)}
-                  onDragOver={e => e.preventDefault()}
-                  onDragEnter={() => { if (dragCol && dragCol !== col.key) moveCol(dragCol, col.key) }}
-                  className={cn(
-                    'flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-50 transition cursor-grab active:cursor-grabbing',
-                    dragCol === col.key && 'opacity-40'
-                  )}
-                >
-                  <GripVertical className="w-3.5 h-3.5 text-gray-300 shrink-0" />
-                  <button
-                    type="button"
-                    onClick={() => toggleCol(col.key)}
-                    className="flex items-center justify-between flex-1 text-sm text-gray-700 text-left"
-                  >
-                    <span>{col.label}</span>
-                    <span className={cn(
-                      'w-4 h-4 rounded border flex items-center justify-center transition',
-                      cols[col.key] ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'
-                    )}>
-                      {cols[col.key] && <Check className="w-2.5 h-2.5 text-white" />}
-                    </span>
-                  </button>
-                </div>
-              ))}
-            </div>
+          {/* Cliente */}
+          {workspaceOptions.length > 1 && (
+            <Select
+              value={filterWorkspace}
+              onChange={setFilterWorkspace}
+              className="w-44"
+              options={[
+                { value: '', label: 'Todos os clientes' },
+                ...workspaceOptions.map(w => ({ value: w.id, label: w.name })),
+              ]}
+            />
           )}
-        </div>
+
+          {/* separador: filtros | ações */}
+          <div className="w-px h-6 bg-gray-200 mx-0.5" />
+
+          {secondaryActions}
+
+          {/* Nova atividade — canto direito, separada dos filtros */}
+          <NewActivityButton orgSlug={orgSlug} campMap={campMap} fixedCampaign={newActivityCampaign} />
+
         </div>
       </div>
 
@@ -475,8 +447,57 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
               {col.label}
             </div>
           ))}
-          {/* Espaço da ação (arquivar) no fim de cada linha — mantém colunas alinhadas */}
-          <div className="w-[22px] shrink-0" />
+          {/* Colunas — ícone no fim da linha de títulos (mostrar/ocultar/reordenar) */}
+          <div className="relative shrink-0" ref={pickerRef}>
+            <button
+              type="button"
+              onClick={() => setPickerOpen(o => !o)}
+              title="Colunas — mostrar, ocultar e reordenar"
+              className={cn(
+                'flex items-center justify-center w-[22px] h-[22px] rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition',
+                pickerOpen && 'bg-indigo-50 text-indigo-600'
+              )}
+            >
+              <Columns3 className="w-4 h-4" />
+            </button>
+
+            {pickerOpen && (
+              <div className="pop-in absolute right-0 mt-2 w-60 bg-white rounded-xl border border-gray-200 shadow-lg py-2 z-30">
+                <p className="px-3 pb-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100 mb-1">
+                  Colunas · arraste para reordenar
+                </p>
+                {orderedCols.map(col => (
+                  <div
+                    key={col.key}
+                    draggable
+                    onDragStart={() => setDragCol(col.key)}
+                    onDragEnd={() => setDragCol(null)}
+                    onDragOver={e => e.preventDefault()}
+                    onDragEnter={() => { if (dragCol && dragCol !== col.key) moveCol(dragCol, col.key) }}
+                    className={cn(
+                      'flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-50 transition cursor-grab active:cursor-grabbing',
+                      dragCol === col.key && 'opacity-40'
+                    )}
+                  >
+                    <GripVertical className="w-3.5 h-3.5 text-gray-300 shrink-0" />
+                    <button
+                      type="button"
+                      onClick={() => toggleCol(col.key)}
+                      className="flex items-center justify-between flex-1 text-sm text-gray-700 text-left"
+                    >
+                      <span>{col.label}</span>
+                      <span className={cn(
+                        'w-4 h-4 rounded border flex items-center justify-center transition',
+                        cols[col.key] ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'
+                      )}>
+                        {cols[col.key] && <Check className="w-2.5 h-2.5 text-white" />}
+                      </span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Status groups */}
