@@ -17,6 +17,10 @@ import {
   X,
   PanelLeftClose,
   Briefcase,
+  List,
+  GanttChart,
+  BookOpen,
+  PenTool,
 } from 'lucide-react'
 import { logout } from '@/app/actions/auth'
 import { ThemeToggle } from './ThemeToggle'
@@ -43,13 +47,23 @@ interface SidebarProps {
   workspaces: WorkspaceItem[]
   logoUrl?: string | null
   accentColor?: string
+  /** Nome do cargo — rótulo do item "Trabalhar" quando houver. */
+  positionName?: string | null
   collapsed: boolean
   onCollapse: () => void
 }
 
+// Visões da org (antes ficavam na barra superior). "Atendimento" = o item "Trabalhar".
+const VIEWS = [
+  { id: 'lista', label: 'Lista',      icon: List,       href: 'views/lista' },
+  { id: 'gantt', label: 'Gantt',      icon: GanttChart, href: 'views/gantt' },
+  { id: 'docs',  label: 'Documentos', icon: BookOpen,   href: 'docs' },
+  { id: 'boards',label: 'Quadros',    icon: PenTool,    href: 'boards' },
+]
+
 export function Sidebar({
   orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#6366f1',
-  collapsed, onCollapse,
+  positionName, collapsed, onCollapse,
 }: SidebarProps) {
   const pathname = usePathname()
   const base = `/${orgSlug}`
@@ -142,7 +156,7 @@ export function Sidebar({
         {/* Caixa de entrada — antes dos espaços */}
         <InboxNavItem orgSlug={orgSlug} />
 
-        {/* Trabalhar — tela de trabalho do cargo da pessoa */}
+        {/* Trabalhar — tela de trabalho do cargo da pessoa (mostra o cargo, se houver) */}
         <Link
           href={`${base}/views/atendimento`}
           className={cn(
@@ -153,8 +167,25 @@ export function Sidebar({
           )}
         >
           <Briefcase className="w-4 h-4 shrink-0" />
-          <span className="flex-1">Trabalhar</span>
+          <span className="flex-1 truncate">{positionName ?? 'Trabalhar'}</span>
         </Link>
+
+        {/* Visões da org — Lista (todos os clientes/status), Gantt, Documentos, Quadros */}
+        {VIEWS.map(({ id, label, icon: Icon, href }) => (
+          <Link
+            key={id}
+            href={`${base}/${href}`}
+            className={cn(
+              'flex items-center gap-2.5 mx-2 px-2 py-1.5 rounded-lg text-sm transition',
+              pathname.startsWith(`${base}/${href}`)
+                ? 'bg-gray-800 text-gray-100'
+                : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
+            )}
+          >
+            <Icon className="w-4 h-4 shrink-0" />
+            <span className="flex-1">{label}</span>
+          </Link>
+        ))}
 
         <div className="mx-3 my-2 border-t border-gray-800" />
 

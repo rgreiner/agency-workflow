@@ -55,6 +55,7 @@ export function AppShell({
         workspaces={workspaces}
         logoUrl={logoUrl}
         accentColor={accentColor}
+        positionName={positionName}
         collapsed={collapsed}
         onCollapse={() => setCollapsed(true)}
       />
@@ -63,8 +64,6 @@ export function AppShell({
           orgSlug={orgSlug}
           orgName={orgName}
           workspaces={workspaces}
-          accentColor={accentColor}
-          positionName={positionName}
           collapsed={collapsed}
           onExpand={() => setCollapsed(false)}
         />

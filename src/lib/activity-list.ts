@@ -48,6 +48,8 @@ export async function loadActivityList(
     ws?: string
     archived?: boolean
     statuses?: string[]
+    /** Inclui também os 'concluido' na visão ativa (Lista = visão completa). */
+    includeConcluido?: boolean
     /** Escopo: apenas este cliente (inclui workspace arquivado, campanhas ativas). */
     scopeWorkspaceId?: string
     /** Escopo: apenas esta campanha (inclui campanha arquivada). */
@@ -87,7 +89,7 @@ export async function loadActivityList(
     .select('id, title, status, priority, complexity, due_date, start_date, redacao_url, preview_url, drive_path, campaign_id, archived')
     .in('campaign_id', campIds)
     .eq('archived', archivedView)
-  if (!archivedView) q = q.neq('status', 'concluido')
+  if (!archivedView && !opts.includeConcluido) q = q.neq('status', 'concluido')
   if (opts.statuses && opts.statuses.length) q = q.in('status', opts.statuses as ActivityStatus[])
   const { data: rawActivities } = campIds.length
     ? await q.order('due_date', { ascending: true, nullsFirst: false })

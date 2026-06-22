@@ -2,9 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
-import Link from 'next/link'
-import { cn } from '@/lib/utils'
-import { List, GanttChart, Users, BookOpen, PenTool, Search, PanelLeft } from 'lucide-react'
+import { Search, PanelLeft } from 'lucide-react'
 import { CommandPalette } from './CommandPalette'
 import { NotificationsBell } from './NotificationsBell'
 
@@ -18,25 +16,17 @@ interface Props {
   orgSlug: string
   orgName: string
   workspaces: Workspace[]
-  accentColor?: string
-  /** Nome do cargo do usuário — substitui o rótulo "Atendimento" na aba de trabalho. */
-  positionName?: string | null
   collapsed?: boolean
   onExpand?: () => void
 }
 
-const VIEWS = [
-  { id: 'lista',       label: 'Lista',       icon: List,       href: 'views/lista' },
-  { id: 'gantt',       label: 'Gantt',       icon: GanttChart, href: 'views/gantt' },
-  { id: 'atendimento', label: 'Atendimento', icon: Users,      href: 'views/atendimento' },
-  { id: 'docs',        label: 'Documentos',  icon: BookOpen,   href: 'docs' },
-  { id: 'boards',      label: 'Quadros',     icon: PenTool,    href: 'boards' },
-]
-
-export function TopNav({ orgSlug, orgName, workspaces, accentColor = '#6366f1', positionName, collapsed = false, onExpand }: Props) {
+/**
+ * Barra superior enxuta: contexto (cliente › campanha) + notificações + busca.
+ * A navegação de visões (Lista, Gantt, etc.) vive na Sidebar.
+ */
+export function TopNav({ orgSlug, orgName, workspaces, collapsed = false, onExpand }: Props) {
   const pathname = usePathname()
   const [paletteOpen, setPaletteOpen] = useState(false)
-  const base = `/${orgSlug}`
 
   // SSR sempre renderiza 'Ctrl K'; suppressHydrationWarning no <kbd> cobre o ajuste no Mac
   const shortcutLabel =
@@ -65,16 +55,6 @@ export function TopNav({ orgSlug, orgName, workspaces, accentColor = '#6366f1', 
     ? currentWs.campaigns.find(c => c.id === campMatch[1])
     : null
 
-  function viewHref(viewPath: string) {
-    const full = `${base}/${viewPath}`
-    if (currentWs) return `${full}?ws=${currentWs.id}`
-    return full
-  }
-
-  function isActive(viewPath: string) {
-    return pathname.startsWith(`${base}/${viewPath}`)
-  }
-
   const context = currentCamp
     ? `${currentWs?.name} › ${currentCamp.name}`
     : currentWs
@@ -96,40 +76,12 @@ export function TopNav({ orgSlug, orgName, workspaces, accentColor = '#6366f1', 
           </button>
         )}
 
-        {/* Context label — hidden on small screens (hamburger occupies that space) */}
-        <span className="hidden md:block text-sm font-semibold text-gray-700 truncate max-w-xs shrink-0">
+        {/* Context label — pl-10 no mobile p/ não colidir com o hambúrguer fixo */}
+        <span className="text-sm font-semibold text-gray-700 truncate min-w-0 pl-10 md:pl-0">
           {context}
         </span>
 
-        <div className="hidden md:block w-px h-4 bg-gray-200 shrink-0" />
-
-        {/* View tabs — horizontally scrollable on mobile */}
-        <nav className="flex items-center gap-0.5 overflow-x-auto scrollbar-none flex-1 min-w-0 pl-10 md:pl-0">
-          {VIEWS.map(({ id, label, icon: Icon, href }) => {
-            // Aba de trabalho mostra o nome do cargo (ex.: "Redação"); sem cargo → "Atendimento".
-            const tabLabel = id === 'atendimento' && positionName ? positionName : label
-            const active = isActive(href)
-            return (
-              <Link
-                key={id}
-                href={viewHref(href)}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap shrink-0',
-                  active ? 'topnav-tab-active' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
-                )}
-                // No claro: tinta sutil + texto accent. No escuro, .dark .topnav-tab-active
-                // (globals.css) sobrepõe para um chip sólido — o accent puro sumia no fundo escuro.
-                style={active ? {
-                  backgroundColor: accentColor + '18',
-                  color: accentColor,
-                } : undefined}
-              >
-                <Icon className="w-3.5 h-3.5 shrink-0" />
-                {tabLabel}
-              </Link>
-            )
-          })}
-        </nav>
+        <div className="flex-1" />
 
         {/* Notificações */}
         <NotificationsBell orgSlug={orgSlug} />

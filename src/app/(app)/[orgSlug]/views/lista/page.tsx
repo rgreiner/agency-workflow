@@ -12,7 +12,8 @@ export default async function ListaPage({
   const { ws, view } = await searchParams
   const archivedView = view === 'arquivadas'
 
-  const data = await loadActivityList(orgSlug, { ws, archived: archivedView })
+  // Lista = visão completa: todos os clientes e todos os status (inclui Concluído).
+  const data = await loadActivityList(orgSlug, { ws, archived: archivedView, includeConcluido: true })
   if (!data) return null
 
   return (
