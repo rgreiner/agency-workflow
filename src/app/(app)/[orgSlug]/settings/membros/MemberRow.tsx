@@ -14,6 +14,7 @@ interface Props {
   profile: { id: string; full_name: string | null; email: string; avatar_url: string | null } | null
   position: { id: string; name: string; color: string } | null
   role: string
+  canFinance: boolean
   positions: { id: string; name: string; color: string }[]
   isAdmin: boolean
   isMe: boolean
@@ -24,28 +25,41 @@ interface Props {
 const ROLES = ['owner', 'admin', 'manager', 'member', 'viewer']
 
 export function MemberRow({
-  memberId, orgSlug, orgId, profile, position, role,
+  memberId, orgSlug, orgId, profile, position, role, canFinance,
   positions, isAdmin, isMe, isOwner, roleLabels,
 }: Props) {
   const [selectedPosition, setSelectedPosition] = useState(position?.id ?? '')
   const [selectedRole, setSelectedRole] = useState(role)
+  const [selectedFinance, setSelectedFinance] = useState(canFinance)
   const [isDirty, setIsDirty] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [confirmRemove, setConfirmRemove] = useState(false)
 
+  function recomputeDirty(pos: string, r: string, fin: boolean) {
+    setIsDirty(pos !== (position?.id ?? '') || r !== role || fin !== canFinance)
+  }
+
   function handlePositionChange(val: string) {
     setSelectedPosition(val)
-    setIsDirty(val !== (position?.id ?? '') || selectedRole !== role)
+    recomputeDirty(val, selectedRole, selectedFinance)
   }
 
   function handleRoleChange(val: string) {
     setSelectedRole(val)
-    setIsDirty(selectedPosition !== (position?.id ?? '') || val !== role)
+    recomputeDirty(selectedPosition, val, selectedFinance)
+  }
+
+  function handleFinanceChange(val: boolean) {
+    setSelectedFinance(val)
+    recomputeDirty(selectedPosition, selectedRole, val)
   }
 
   function handleSave() {
     startTransition(async () => {
-      const result = await updateMember(orgSlug, orgId, memberId, selectedPosition || null, selectedRole as import('@/types').MemberRole)
+      const result = await updateMember(
+        orgSlug, orgId, memberId, selectedPosition || null,
+        selectedRole as import('@/types').MemberRole, selectedFinance,
+      )
       if (result?.error) {
         toast.error(result.error)
       } else {
@@ -64,7 +78,8 @@ export function MemberRow({
   }
 
   const canEdit = isAdmin && !isOwner
-  const selectedPos = positions.find(p => p.id === selectedPosition)
+  // Owner/admin têm Financeiro implícito (acesso total).
+  const financeImplicit = isOwner || selectedRole === 'admin'
 
   return (
     <tr className="hover:bg-gray-50/50 transition">
@@ -101,7 +116,7 @@ export function MemberRow({
           </span>
         ) : position ? (
           <span
-            className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium text-white"
+            className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium text-[#fff]"
             style={{ backgroundColor: position.color }}
           >
             {position.name}
@@ -128,6 +143,38 @@ export function MemberRow({
         )}
       </td>
 
+      {/* Financeiro */}
+      <td className="px-4 py-3">
+        {financeImplicit ? (
+          <span className="inline-flex items-center gap-1 text-xs text-gray-400" title="Admins têm acesso ao Financeiro">
+            <Check className="w-3.5 h-3.5" /> Sempre
+          </span>
+        ) : canEdit ? (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={selectedFinance}
+            onClick={() => handleFinanceChange(!selectedFinance)}
+            className={cn(
+              'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
+              selectedFinance ? 'bg-indigo-600' : 'bg-gray-300'
+            )}
+            title="Ver/operar Financeiro e Faturamento"
+          >
+            <span className={cn(
+              'inline-block h-4 w-4 transform rounded-full bg-[#fff] transition-transform',
+              selectedFinance ? 'translate-x-4' : 'translate-x-0.5'
+            )} />
+          </button>
+        ) : canFinance ? (
+          <span className="inline-flex items-center gap-1 text-xs text-indigo-600">
+            <Check className="w-3.5 h-3.5" /> Sim
+          </span>
+        ) : (
+          <span className="text-xs text-gray-400">—</span>
+        )}
+      </td>
+
       {/* Ações */}
       {isAdmin && (
         <td className="px-3 py-3">
@@ -136,7 +183,7 @@ export function MemberRow({
               <button
                 onClick={handleSave}
                 disabled={isPending}
-                className="p-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition disabled:opacity-50"
+                className="p-1.5 rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 transition disabled:opacity-50"
                 title="Salvar"
               >
                 {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}

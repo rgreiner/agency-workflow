@@ -77,18 +77,21 @@ export async function updateMember(
   orgId: string,
   memberId: string,
   positionId: string | null,
-  role: MemberRole
+  role: MemberRole,
+  canFinance?: boolean
 ) {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
-  const { error } = await supabase.rpc('update_member', {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('update_member', {
     p_user_id: user.id,
     p_org_id: orgId,
     p_member_id: memberId,
     p_position_id: positionId,
     p_role: role,
+    p_can_finance: canFinance ?? null,
   })
 
   if (error) return { error: error.message }
