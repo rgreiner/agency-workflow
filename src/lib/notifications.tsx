@@ -1,4 +1,4 @@
-import { MessageSquare, ArrowRightLeft, UserPlus, LogIn } from 'lucide-react'
+import { MessageSquare, ArrowRightLeft, UserPlus, LogIn, AtSign } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { STATUS_CONFIG } from '@/types'
 import type { NotificationItem } from '@/app/actions/notifications'
@@ -14,6 +14,7 @@ export function messageOf(n: NotificationItem): string {
     case 'status_change':  return `${actor} mudou o status${to ? ` para ${statusLabel(to)}` : ''}`
     case 'entered_status': return `Entrou em ${statusLabel(to)} — sua etapa`
     case 'new_comment':    return `${actor} comentou${n.data?.preview ? `: ${n.data.preview}` : ''}`
+    case 'mention':        return `${actor} ${n.data?.all ? 'mencionou todos' : 'mencionou você'}${n.data?.preview ? `: ${n.data.preview}` : ''}`
     case 'assigned':       return 'Você foi associado a esta tarefa'
     default:               return 'Atualização'
   }
@@ -21,6 +22,7 @@ export function messageOf(n: NotificationItem): string {
 
 export function NotifIcon({ type, className = 'w-3.5 h-3.5' }: { type: string; className?: string }) {
   if (type === 'new_comment')    return <MessageSquare className={cn(className, 'text-sky-500')} />
+  if (type === 'mention')        return <AtSign className={cn(className, 'text-pink-500')} />
   if (type === 'assigned')       return <UserPlus className={cn(className, 'text-violet-500')} />
   if (type === 'entered_status') return <LogIn className={cn(className, 'text-emerald-500')} />
   return <ArrowRightLeft className={cn(className, 'text-indigo-500')} />

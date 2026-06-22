@@ -890,6 +890,16 @@ export type Database = {
         }
         Returns: string
       }
+      add_comment_with_mentions: {
+        Args: {
+          p_user_id: string
+          p_activity_id: string
+          p_content: string
+          p_mention_ids?: string[]
+          p_mention_all?: boolean
+        }
+        Returns: string
+      }
       update_activity_links: {
         Args: {
           p_user_id: string

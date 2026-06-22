@@ -269,16 +269,20 @@ export async function bulkSetArchived(path: string, ids: string[], archived: boo
 export async function addComment(
   path: string,
   activityId: string,
-  content: string
+  content: string,
+  mentionIds: string[] = [],
+  mentionAll = false,
 ) {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
-  const { error } = await supabase.rpc('add_activity_comment', {
+  const { error } = await supabase.rpc('add_comment_with_mentions', {
     p_user_id: user.id,
     p_activity_id: activityId,
     p_content: content,
+    p_mention_ids: mentionIds,
+    p_mention_all: mentionAll,
   })
 
   if (error) return { error: error.message }

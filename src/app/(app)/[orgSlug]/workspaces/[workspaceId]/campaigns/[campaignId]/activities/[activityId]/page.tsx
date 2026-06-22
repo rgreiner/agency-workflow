@@ -474,7 +474,11 @@ export default async function ActivityPage({
 
           {/* Comment box */}
           <div className="border-t border-gray-200 p-4 bg-white shrink-0">
-            <CommentBox activityId={activityId} path={path} />
+            <CommentBox
+              activityId={activityId}
+              path={path}
+              members={members.map(m => ({ id: m.userId, name: m.fullName ?? m.email }))}
+            />
           </div>
         </div>
 
