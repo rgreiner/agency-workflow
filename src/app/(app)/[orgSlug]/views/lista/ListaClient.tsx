@@ -4,14 +4,14 @@ import { useState, useEffect, useRef, useTransition, type ReactNode, type Compon
 import Link from 'next/link'
 import { cn, isOverdue, daysUntil } from '@/lib/utils'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority } from '@/types'
-import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search, Flag, SignalLow, SignalMedium, SignalHigh, Copy, Archive, ArchiveRestore, X, Calendar, UserPlus, Minus, Circle, User } from 'lucide-react'
+import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search, Flag, SignalLow, SignalMedium, SignalHigh, Copy, Archive, ArchiveRestore, X, Calendar, UserPlus, Minus, Circle, User, Bookmark } from 'lucide-react'
 
 // Complexidade → ícone (1/2/3 barras)
 const COMPLEXITY_ICON = { simple: SignalLow, medium: SignalMedium, complex: SignalHigh } as const
 import { AvatarGroup } from '@/components/ui/Avatar'
 import { DateRangeEditor } from '@/components/ui/DateRangeEditor'
 import { MachinePath } from '@/components/ui/MachinePath'
-import { Select } from '@/components/ui/Select'
+import { MultiSelect } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { updateActivityStatus, updateActivityField, setActivityArchived, bulkUpdateStatus, bulkUpdateField, bulkToggleAssignee, bulkSetArchived } from '@/app/actions/activity'
 import { createClient } from '@/lib/supabase/client'
@@ -40,6 +40,10 @@ function defaultCols(): Record<ColKey, boolean> {
 }
 
 const defaultOrder = (): ColKey[] => COL_DEFS.map(c => c.key)
+
+// ── Filtros salvos (presets, por org no localStorage) ───────────────────────
+type SavedFilter = { id: string; name: string; workspaces: string[]; persons: string[]; statuses: string[] }
+const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every(x => b.includes(x))
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -104,10 +108,19 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
   const [pickerOpen, setPickerOpen] = useState(false)
   // Concluído começa recolhido (fluxo: revisar → selecionar pelo checkbox do grupo → arquivar).
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(['concluido']))
-  const [filterWorkspace, setFilterWorkspace] = useState(initialWorkspace ?? '')
+  const [filterWorkspaces, setFilterWorkspaces] = useState<string[]>(initialWorkspace ? [initialWorkspace] : [])
+  const [filterPersons,  setFilterPersons]  = useState<string[]>([])
+  const [filterStatuses, setFilterStatuses] = useState<string[]>([])
   const [onlyMine, setOnlyMine] = useState(false)
   const me = getUsuarioClient()?.id ?? null
   const pickerRef = useRef<HTMLDivElement>(null)
+
+  // Filtros salvos (presets por org)
+  const SAVED_KEY = `lista-filtros:${orgSlug}`
+  const [saved,    setSaved]    = useState<SavedFilter[]>([])
+  const [saveOpen, setSaveOpen] = useState(false)
+  const [saveName, setSaveName] = useState('')
+  const saveRef = useRef<HTMLDivElement>(null)
 
   // ── Drag & drop entre status ──
   // overrides aplicam o novo status otimisticamente até o revalidate do servidor
@@ -176,6 +189,36 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
     return () => document.removeEventListener('mousedown', onOut)
   }, [])
 
+  // ── Filtros salvos: carrega do localStorage + fecha o "Salvar" ao clicar fora ──
+  useEffect(() => {
+    try { const s = localStorage.getItem(SAVED_KEY); if (s) setSaved(JSON.parse(s)) } catch {}
+  }, [SAVED_KEY])
+
+  useEffect(() => {
+    if (!saveOpen) return
+    function onOut(e: MouseEvent) { if (saveRef.current && !saveRef.current.contains(e.target as Node)) setSaveOpen(false) }
+    document.addEventListener('mousedown', onOut)
+    return () => document.removeEventListener('mousedown', onOut)
+  }, [saveOpen])
+
+  function persistSaved(next: SavedFilter[]) {
+    setSaved(next)
+    try { localStorage.setItem(SAVED_KEY, JSON.stringify(next)) } catch {}
+  }
+  function saveCurrentFilter() {
+    const name = saveName.trim()
+    if (!name) return
+    persistSaved([...saved, { id: `${Date.now()}`, name, workspaces: filterWorkspaces, persons: filterPersons, statuses: filterStatuses }])
+    setSaveName(''); setSaveOpen(false)
+  }
+  function applySavedFilter(f: SavedFilter) {
+    setFilterWorkspaces(f.workspaces); setFilterPersons(f.persons); setFilterStatuses(f.statuses)
+  }
+  function deleteSavedFilter(id: string) { persistSaved(saved.filter(f => f.id !== id)) }
+  function isSavedActive(f: SavedFilter) {
+    return sameSet(f.workspaces, filterWorkspaces) && sameSet(f.persons, filterPersons) && sameSet(f.statuses, filterStatuses)
+  }
+
   function toggleCol(key: ColKey) {
     setCols(prev => {
       const next = { ...prev, [key]: !prev[key] }
@@ -216,13 +259,14 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
   ).sort((a, b) => a.name.localeCompare(b.name))
 
   // Filter activities by workspace if active, applying optimistic status overrides
-  const filteredActivities = (filterWorkspace
-    ? activities.filter(a => campMap[a.campaign_id]?.workspaceId === filterWorkspace)
-    : activities
-  )
+  const filteredActivities = activities
     .filter(a => !hidden.has(a.id))
-    .filter(a => !onlyMine || (!!me && a.assignedIds.includes(me)))
     .map(a => overrides[a.id] ? { ...a, status: overrides[a.id] } : a)
+    .filter(a => !onlyMine || (!!me && a.assignedIds.includes(me)))
+    .filter(a => filterWorkspaces.length === 0 || filterWorkspaces.includes(campMap[a.campaign_id]?.workspaceId ?? ''))
+    .filter(a => filterPersons.length === 0 || a.assignedIds.some(id => filterPersons.includes(id)))
+    .filter(a => filterStatuses.length === 0 || filterStatuses.includes(a.status))
+  const hasFilter = filterWorkspaces.length + filterPersons.length + filterStatuses.length > 0
 
   // Colunas na ordem escolhida pelo usuário (com fallback p/ defs novas)
   const orderedCols = [...order, ...COL_DEFS.map(c => c.key).filter(k => !order.includes(k))]
@@ -368,19 +412,6 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
             Eu
           </button>
 
-          {/* Cliente */}
-          {workspaceOptions.length > 1 && (
-            <Select
-              value={filterWorkspace}
-              onChange={setFilterWorkspace}
-              className="w-44"
-              options={[
-                { value: '', label: 'Todos os clientes' },
-                ...workspaceOptions.map(w => ({ value: w.id, label: w.name })),
-              ]}
-            />
-          )}
-
           {/* separador: filtros | ações */}
           <div className="w-px h-6 bg-gray-200 mx-0.5" />
 
@@ -390,6 +421,88 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
           <NewActivityButton orgSlug={orgSlug} campMap={campMap} fixedCampaign={newActivityCampaign} />
 
         </div>
+      </div>
+
+      {/* ── Filtros: Cliente · Pessoas · Status + presets salvos ── */}
+      <div className="flex items-center gap-2 mb-5 flex-wrap">
+        {workspaceOptions.length > 1 && (
+          <MultiSelect
+            values={filterWorkspaces}
+            onChange={setFilterWorkspaces}
+            className="w-44"
+            allLabel="Todos os clientes"
+            options={workspaceOptions.map(w => ({ value: w.id, label: w.name }))}
+          />
+        )}
+        <MultiSelect
+          values={filterPersons}
+          onChange={setFilterPersons}
+          className="w-44"
+          allLabel="Todas as pessoas"
+          options={members.map(m => ({ value: m.userId, label: m.fullName ?? m.email }))}
+        />
+        <MultiSelect
+          values={filterStatuses}
+          onChange={setFilterStatuses}
+          className="w-44"
+          allLabel="Todos os status"
+          options={statusConfig.map(s => ({ value: s.value, label: s.label }))}
+        />
+        {hasFilter && (
+          <button
+            onClick={() => { setFilterWorkspaces([]); setFilterPersons([]); setFilterStatuses([]) }}
+            className="text-xs text-gray-400 hover:text-gray-600 transition px-2 py-1.5"
+          >
+            Limpar filtros
+          </button>
+        )}
+
+        {/* Salvar filtro atual */}
+        <div className="relative" ref={saveRef}>
+          <button
+            type="button"
+            onClick={() => setSaveOpen(o => !o)}
+            disabled={!hasFilter}
+            title={hasFilter ? 'Salvar filtro atual' : 'Selecione um filtro para salvar'}
+            className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition disabled:opacity-40"
+          >
+            <Bookmark className="w-3.5 h-3.5" /> Salvar filtro
+          </button>
+          {saveOpen && (
+            <div className="pop-in absolute left-0 top-full mt-1.5 z-50 w-56 bg-white rounded-xl border border-gray-200 shadow-lg p-2">
+              <input
+                autoFocus
+                value={saveName}
+                onChange={e => setSaveName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveCurrentFilter(); if (e.key === 'Escape') setSaveOpen(false) }}
+                placeholder="Nome do filtro"
+                className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <div className="flex justify-end gap-2 mt-2">
+                <button type="button" onClick={() => { setSaveOpen(false); setSaveName('') }}
+                  className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Cancelar</button>
+                <button type="button" onClick={saveCurrentFilter} disabled={!saveName.trim()}
+                  className="text-xs font-medium px-3 py-1 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition">Salvar</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Presets salvos (chips) */}
+        {saved.length > 0 && <div className="w-px h-5 bg-gray-200" />}
+        {saved.map(f => (
+          <span key={f.id}
+            className={cn(
+              'inline-flex items-center gap-1 rounded-full border pl-3 pr-1 py-1 text-xs transition',
+              isSavedActive(f) ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+            )}>
+            <button type="button" onClick={() => applySavedFilter(f)} className="max-w-[140px] truncate" title={f.name}>{f.name}</button>
+            <button type="button" onClick={() => deleteSavedFilter(f.id)} title="Excluir filtro"
+              className="p-0.5 rounded-full text-gray-300 hover:text-red-500 hover:bg-white transition">
+              <X className="w-3 h-3" />
+            </button>
+          </span>
+        ))}
       </div>
 
       {/* ── Drop bar: todos os status como alvo durante o arraste ── */}
