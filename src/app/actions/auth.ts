@@ -8,7 +8,11 @@
 import { redirect } from 'next/navigation'
 import { buscarUsuarioPorEmail, criarUsuario } from '@/lib/auth/usuarios'
 import { verificarSenha } from '@/lib/auth/password'
+import { criarTokenReset, consumirTokenReset, redefinirSenhaUsuario } from '@/lib/auth/reset'
+import { sendPasswordResetEmail } from '@/app/actions/email'
 import { iniciarSessao, encerrarSessao } from '@/lib/auth/server'
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
 
 export async function login(formData: FormData): Promise<void> {
   const email = String(formData.get('email') || '').trim()
@@ -27,6 +31,41 @@ export async function login(formData: FormData): Promise<void> {
 export async function logout(): Promise<void> {
   await encerrarSessao()
   redirect('/login')
+}
+
+/**
+ * Solicita o reset: se houver conta com o e-mail, gera um token e manda o link.
+ * Resposta SEMPRE genérica (não revela se o e-mail existe).
+ */
+export async function solicitarReset(formData: FormData): Promise<void> {
+  const email = String(formData.get('email') || '').trim()
+  if (!email) redirect('/recuperar-senha?erro=campos')
+
+  const usuario = await buscarUsuarioPorEmail(email)
+  if (usuario) {
+    try {
+      const token = await criarTokenReset(usuario.id)
+      const r = await sendPasswordResetEmail(usuario.email, `${SITE_URL}/redefinir-senha/${token}`, usuario.nome)
+      if (r.error) console.error('[reset] falha ao enviar e-mail:', r.error)
+    } catch (e) {
+      console.error('[reset] erro ao solicitar reset:', e)
+    }
+  }
+  redirect('/recuperar-senha?enviado=1')
+}
+
+/** Redefine a senha a partir do token (uso único, validade de 1h). */
+export async function redefinirSenha(token: string, formData: FormData): Promise<void> {
+  const senha = String(formData.get('senha') || '')
+  const confirmar = String(formData.get('confirmar') || '')
+  if (senha.length < 8) redirect(`/redefinir-senha/${token}?erro=curta`)
+  if (senha !== confirmar) redirect(`/redefinir-senha/${token}?erro=confere`)
+
+  const userId = await consumirTokenReset(token)
+  if (!userId) redirect(`/redefinir-senha/${token}?erro=token`)
+
+  await redefinirSenhaUsuario(userId, senha)
+  redirect('/login?reset=ok')
 }
 
 /**

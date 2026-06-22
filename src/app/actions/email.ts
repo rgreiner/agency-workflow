@@ -100,3 +100,61 @@ export async function sendInviteEmail(
   if (error) return { error: error.message }
   return {}
 }
+
+export async function sendPasswordResetEmail(
+  toEmail: string,
+  resetUrl: string,
+  nome: string | null,
+): Promise<{ error?: string }> {
+  const resend = getResend()
+  if (!resend) return { error: 'Envio de e-mail não configurado (defina RESEND_API_KEY).' }
+
+  const saudacao = nome ? `Olá, ${nome}!` : 'Olá!'
+
+  const { error } = await resend.emails.send({
+    from: FROM,
+    to: toEmail,
+    subject: 'Redefinir sua senha — Agency Workflow',
+    html: `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9fafb; margin: 0; padding: 40px 16px;">
+  <div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 16px; border: 1px solid #e5e7eb; overflow: hidden;">
+
+    <div style="background: #4f46e5; padding: 32px; text-align: center;">
+      <p style="color: rgba(255,255,255,0.85); margin: 0; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase;">Agency Workflow</p>
+    </div>
+
+    <div style="padding: 32px;">
+      <h1 style="font-size: 22px; font-weight: 700; color: #111827; margin: 0 0 8px;">Redefinir senha</h1>
+      <p style="color: #6b7280; font-size: 15px; margin: 0 0 24px; line-height: 1.5;">
+        ${saudacao} Recebemos um pedido para redefinir a senha da sua conta. Clique no botão abaixo para escolher uma nova senha.
+      </p>
+
+      <a href="${resetUrl}"
+         style="display: block; background: #4f46e5; color: white; text-decoration: none; text-align: center; padding: 14px 24px; border-radius: 10px; font-weight: 600; font-size: 15px;">
+        Criar nova senha
+      </a>
+
+      <p style="color: #9ca3af; font-size: 12px; margin: 20px 0 0; text-align: center;">
+        Ou acesse: <a href="${resetUrl}" style="color: #6366f1;">${resetUrl}</a>
+      </p>
+      <p style="color: #9ca3af; font-size: 12px; margin: 12px 0 0; text-align: center;">
+        Este link expira em 1 hora.
+      </p>
+    </div>
+
+    <div style="border-top: 1px solid #f3f4f6; padding: 16px 32px;">
+      <p style="color: #d1d5db; font-size: 11px; margin: 0; text-align: center;">
+        Se você não pediu para redefinir a senha, pode ignorar este e-mail com segurança.
+      </p>
+    </div>
+  </div>
+</body>
+</html>`,
+  })
+
+  if (error) return { error: error.message }
+  return {}
+}

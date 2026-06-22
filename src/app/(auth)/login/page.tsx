@@ -1,11 +1,12 @@
+import Link from 'next/link'
 import { login } from '@/app/actions/auth'
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string; next?: string }>
+  searchParams: Promise<{ erro?: string; next?: string; reset?: string }>
 }) {
-  const { erro, next } = await searchParams
+  const { erro, next, reset } = await searchParams
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -17,6 +18,12 @@ export default async function LoginPage({
           <h1 className="text-2xl font-semibold text-gray-900">Agency Workflow</h1>
           <p className="text-gray-500 mt-1 text-sm">Gestão de pauta e atividades</p>
         </div>
+
+        {reset === 'ok' && (
+          <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+            Senha redefinida! Faça login com a nova senha.
+          </div>
+        )}
 
         <form action={login} className="space-y-4">
           <input type="hidden" name="next" value={next ?? ''} />
@@ -36,9 +43,14 @@ export default async function LoginPage({
           </div>
 
           <div>
-            <label htmlFor="senha" className="block text-sm font-medium text-gray-700 mb-1">
-              Senha
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label htmlFor="senha" className="block text-sm font-medium text-gray-700">
+                Senha
+              </label>
+              <Link href="/recuperar-senha" className="text-xs text-indigo-600 hover:text-indigo-700">
+                Esqueci a senha
+              </Link>
+            </div>
             <input
               id="senha"
               name="senha"
