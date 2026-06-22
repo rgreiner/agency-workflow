@@ -5,16 +5,39 @@ import { getUsuario } from '@/lib/auth/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
+/** Lê todos os campos do cadastro de cliente a partir do FormData. */
+function readClientData(formData: FormData) {
+  const get = (k: string) => ((formData.get(k) as string) ?? '').trim()
+  return {
+    name: get('name'),
+    description: get('description'),
+    color: get('color') || '#6366f1',
+    legal_name: get('legal_name'),
+    trade_name: get('trade_name'),
+    tax_id: get('tax_id'),
+    state_registration: get('state_registration'),
+    city_registration: get('city_registration'),
+    finance_email: get('finance_email'),
+    phone: get('phone'),
+    contact_name: get('contact_name'),
+    address_zip: get('address_zip'),
+    address_street: get('address_street'),
+    address_number: get('address_number'),
+    address_complement: get('address_complement'),
+    address_district: get('address_district'),
+    address_city: get('address_city'),
+    address_state: get('address_state'),
+    payment_terms: get('payment_terms'),
+  }
+}
+
 export async function createWorkspace(orgSlug: string, formData: FormData) {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
-  const name = (formData.get('name') as string)?.trim()
-  const description = (formData.get('description') as string) ?? ''
-  const color = (formData.get('color') as string) || '#6366f1'
-
-  if (!name) return { error: 'Nome obrigatório' }
+  const data = readClientData(formData)
+  if (!data.name) return { error: 'Nome obrigatório' }
 
   const { data: org } = await supabase
     .from('organizations')
@@ -24,15 +47,22 @@ export async function createWorkspace(orgSlug: string, formData: FormData) {
 
   if (!org) return { error: 'Organização não encontrada' }
 
-  const { error } = await supabase.rpc('create_workspace', {
+  const { data: workspaceId, error } = await supabase.rpc('create_workspace', {
     p_user_id: user.id,
     p_org_id: org.id,
-    p_name: name,
-    p_description: description,
-    p_color: color,
+    p_name: data.name,
+    p_description: data.description,
+    p_color: data.color,
   })
 
   if (error) return { error: error.message }
+
+  // Salva os demais dados cadastrais (fiscais/contato/endereço).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error: e2 } = await (supabase as any).rpc('update_workspace_cadastro', {
+    p_user_id: user.id, p_workspace_id: workspaceId, p_data: data,
+  })
+  if (e2) return { error: e2.message }
 
   redirect(`/${orgSlug}/workspaces`)
 }
@@ -107,14 +137,12 @@ export async function updateWorkspace(
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
-  const name = (formData.get('name') as string)?.trim()
-  const description = (formData.get('description') as string) ?? ''
-  const color = (formData.get('color') as string) || '#6366f1'
-  if (!name) return { error: 'Nome obrigatório' }
+  const data = readClientData(formData)
+  if (!data.name) return { error: 'Nome obrigatório' }
 
-  const { error } = await supabase.rpc('update_workspace', {
-    p_user_id: user.id, p_workspace_id: workspaceId,
-    p_name: name, p_description: description, p_color: color,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('update_workspace_cadastro', {
+    p_user_id: user.id, p_workspace_id: workspaceId, p_data: data,
   })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/workspaces/${workspaceId}`)

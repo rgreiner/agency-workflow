@@ -19,8 +19,11 @@ export default async function WorkspacePage({
   const archivedView = view === 'arquivadas'
   const supabase = await createClient()
 
-  const { data: workspace } = await supabase
-    .from('workspaces').select('id, name, color, description, archived').eq('id', workspaceId).single()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: workspace } = await (supabase as any)
+    .from('workspaces')
+    .select('id, name, color, description, archived, legal_name, trade_name, tax_id, state_registration, city_registration, finance_email, phone, contact_name, address_zip, address_street, address_number, address_complement, address_district, address_city, address_state, payment_terms')
+    .eq('id', workspaceId).single()
   if (!workspace) return null
 
   const { data: archivedCampaigns } = await supabase
@@ -48,9 +51,28 @@ export default async function WorkspacePage({
             orgSlug={orgSlug}
             workspaceId={workspaceId}
             name={workspace.name}
-            description={workspace.description ?? ''}
-            color={workspace.color}
             archived={workspace.archived ?? false}
+            initial={{
+              name: workspace.name ?? '',
+              description: workspace.description ?? '',
+              color: workspace.color ?? '#6366f1',
+              legal_name: workspace.legal_name ?? '',
+              trade_name: workspace.trade_name ?? '',
+              tax_id: workspace.tax_id ?? '',
+              state_registration: workspace.state_registration ?? '',
+              city_registration: workspace.city_registration ?? '',
+              finance_email: workspace.finance_email ?? '',
+              phone: workspace.phone ?? '',
+              contact_name: workspace.contact_name ?? '',
+              address_zip: workspace.address_zip ?? '',
+              address_street: workspace.address_street ?? '',
+              address_number: workspace.address_number ?? '',
+              address_complement: workspace.address_complement ?? '',
+              address_district: workspace.address_district ?? '',
+              address_city: workspace.address_city ?? '',
+              address_state: workspace.address_state ?? '',
+              payment_terms: workspace.payment_terms ?? '',
+            }}
           />
         }
         secondaryActions={
