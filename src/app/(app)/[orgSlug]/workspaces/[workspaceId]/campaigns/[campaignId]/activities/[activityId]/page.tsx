@@ -156,6 +156,14 @@ export default async function ActivityPage({
     { field: 'finalizacao_url',  icon: <Layers     className="w-4 h-4" />, label: 'Final' },
   ] as const
 
+  // Campo "Drive": caminho na máquina (drive_path) com fallback p/ drive_folder_url
+  // quando este foi preenchido com um caminho (G:\…) em vez de URL. "Abrir no Drive"
+  // só quando drive_folder_url é um URL de verdade.
+  const driveUrlRaw   = (activity.drive_folder_url ?? '').trim()
+  const driveWebUrl   = /^https?:\/\//i.test(driveUrlRaw) ? driveUrlRaw : null
+  const driveLooksPath = /^[A-Za-z]:[\\/]/.test(driveUrlRaw) || driveUrlRaw.includes('\\')
+  const driveWinPath  = (activity.drive_path ?? '').trim() || (driveLooksPath ? driveUrlRaw : '')
+
   return (
     <div className="flex flex-col bg-white lg:h-full lg:overflow-hidden">
 
@@ -304,30 +312,28 @@ export default async function ActivityPage({
                   />
                 </div>
 
-                {/* Drive — a pasta de trabalho do job: caminho local (G:\ / Mac) + abrir a raiz no Drive web */}
-                {(activity.drive_path || activity.drive_folder_url) && (
-                  <div className="flex items-center px-4 py-3 hover:bg-gray-50/60 transition group">
-                    <div className="flex items-center gap-2 w-36 shrink-0">
-                      <span className="text-gray-500"><FolderOpen className="w-4 h-4" /></span>
-                      <span className="text-xs text-gray-500">Drive</span>
-                    </div>
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      {activity.drive_path && <MachinePath winPath={activity.drive_path} />}
-                      {activity.drive_folder_url && (
-                        <a
-                          href={activity.drive_folder_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="Abrir a pasta-raiz do job no Google Drive"
-                          className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 hover:underline shrink-0"
-                        >
-                          <ExternalLink className="w-3 h-3 shrink-0" />
-                          Abrir no Drive
-                        </a>
-                      )}
-                    </div>
+                {/* Drive — pasta de trabalho do job: caminho na máquina (editável, OS-aware) + abrir a raiz no Drive web */}
+                <div className="flex items-center px-4 py-3 hover:bg-gray-50/60 transition group">
+                  <div className="flex items-center gap-2 w-36 shrink-0">
+                    <span className="text-gray-500"><FolderOpen className="w-4 h-4" /></span>
+                    <span className="text-xs text-gray-500">Drive</span>
                   </div>
-                )}
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <MachinePath winPath={driveWinPath} editable activityId={activityId} path={path} />
+                    {driveWebUrl && (
+                      <a
+                        href={driveWebUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Abrir a pasta-raiz do job no Google Drive"
+                        className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 hover:underline shrink-0"
+                      >
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                        Abrir no Drive
+                      </a>
+                    )}
+                  </div>
+                </div>
 
                 {/* Link fields */}
                 {linkFields.map(({ field, icon, label }) => {
