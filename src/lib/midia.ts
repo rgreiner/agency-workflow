@@ -20,8 +20,11 @@ export const MIDIA_FATURAMENTO_OPTIONS = [
 ]
 
 // "quem paga a comissão da agência" por modo de faturamento.
+// valor_bruto → veículo (confirmado pela tela de Faturamento: lançamento "Desconto
+// Padrão Agência" contra o veículo). As variações de "líquido contra o cliente"
+// ainda serão confirmadas com um documento preenchido.
 export const FATURAMENTO_PAGADOR: Record<string, 'cliente' | 'veiculo'> = {
-  valor_bruto: 'cliente',
+  valor_bruto: 'veiculo',
   valor_bruto_comissao_cliente: 'cliente',
   liquido_contra_cliente: 'cliente',
   liquido_contra_cliente_ac_agencia: 'cliente',
