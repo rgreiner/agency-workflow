@@ -29,7 +29,7 @@ const COL_DEFS: { key: ColKey; label: string; defaultOn: boolean; width: string 
   { key: 'complexidade',     label: 'Complexidade',      defaultOn: false, width: 'w-24' },
   { key: 'redacao',          label: 'Redação',           defaultOn: true,  width: 'w-24' },
   { key: 'preview',          label: 'Preview',           defaultOn: true,  width: 'w-24' },
-  { key: 'caminho',          label: 'Caminho',           defaultOn: false, width: 'w-56' },
+  { key: 'caminho',          label: 'Drive',             defaultOn: false, width: 'w-56' },
   { key: 'ultimoComentario', label: 'Último comentário', defaultOn: false, width: 'w-48' },
 ]
 

@@ -3,7 +3,7 @@ import { getUsuario } from '@/lib/auth/server'
 import { notFound } from 'next/navigation'
 import { getMergedStatusConfig, PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity, type StatusOverride } from '@/types'
 import { cn, formatDate, isOverdue } from '@/lib/utils'
-import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink, HardDrive } from 'lucide-react'
+import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 import { DriveProvisioningNotice } from './DriveProvisioningNotice'
 import { StatusChanger } from './StatusChanger'
@@ -148,8 +148,9 @@ export default async function ActivityPage({
 
   const path = `/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}/activities/${activityId}`
 
+  // "Drive" (a pasta) NÃO entra aqui — é o caminho da máquina (G:\ / Mac), logo
+  // acima. Estes são os links web do Google Drive.
   const linkFields = [
-    { field: 'drive_folder_url', icon: <FolderOpen className="w-4 h-4" />, label: 'Drive' },
     { field: 'redacao_url',      icon: <FileText   className="w-4 h-4" />, label: 'Redação' },
     { field: 'preview_url',      icon: <CheckSquare className="w-4 h-4"/>, label: 'Preview' },
     { field: 'finalizacao_url',  icon: <Layers     className="w-4 h-4" />, label: 'Final' },
@@ -303,12 +304,12 @@ export default async function ActivityPage({
                   />
                 </div>
 
-                {/* Caminho na máquina (Drive Desktop) */}
+                {/* Drive — a pasta no computador (caminho local G:\ / Mac, OS-aware) */}
                 {activity.drive_path && (
                   <div className="flex items-center px-4 py-3 hover:bg-gray-50/60 transition group">
                     <div className="flex items-center gap-2 w-36 shrink-0">
-                      <span className="text-gray-500"><HardDrive className="w-4 h-4" /></span>
-                      <span className="text-xs text-gray-500">Caminho na máquina</span>
+                      <span className="text-gray-500"><FolderOpen className="w-4 h-4" /></span>
+                      <span className="text-xs text-gray-500">Drive</span>
                     </div>
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <MachinePath winPath={activity.drive_path} />
