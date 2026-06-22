@@ -304,15 +304,27 @@ export default async function ActivityPage({
                   />
                 </div>
 
-                {/* Drive — a pasta no computador (caminho local G:\ / Mac, OS-aware) */}
-                {activity.drive_path && (
+                {/* Drive — a pasta de trabalho do job: caminho local (G:\ / Mac) + abrir a raiz no Drive web */}
+                {(activity.drive_path || activity.drive_folder_url) && (
                   <div className="flex items-center px-4 py-3 hover:bg-gray-50/60 transition group">
                     <div className="flex items-center gap-2 w-36 shrink-0">
                       <span className="text-gray-500"><FolderOpen className="w-4 h-4" /></span>
                       <span className="text-xs text-gray-500">Drive</span>
                     </div>
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <MachinePath winPath={activity.drive_path} />
+                      {activity.drive_path && <MachinePath winPath={activity.drive_path} />}
+                      {activity.drive_folder_url && (
+                        <a
+                          href={activity.drive_folder_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Abrir a pasta-raiz do job no Google Drive"
+                          className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 hover:underline shrink-0"
+                        >
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                          Abrir no Drive
+                        </a>
+                      )}
                     </div>
                   </div>
                 )}
