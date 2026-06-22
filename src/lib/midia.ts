@@ -75,6 +75,13 @@ export function formatBRL(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0)
 }
 
+/** 'YYYY-MM-DD' → 'DD/MM/YYYY' (sem conversão de fuso). */
+export function formatDateBR(d?: string | null): string {
+  if (!d) return '—'
+  const [y, mo, da] = d.slice(0, 10).split('-')
+  return da && mo && y ? `${da}/${mo}/${y}` : '—'
+}
+
 /** Converte string "1.234,56" / "1234.56" em número. */
 export function parseMoney(input: string): number {
   const s = (input ?? '').trim().replace(/\./g, '').replace(',', '.')
