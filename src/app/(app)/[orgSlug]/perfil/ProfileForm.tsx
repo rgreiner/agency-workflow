@@ -216,7 +216,7 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
         <button
           onClick={handleSave}
           disabled={isPending || !fullName.trim()}
-          className="flex items-center gap-2 px-5 py-2.5 text-white text-sm font-semibold rounded-xl transition disabled:opacity-50"
+          className="flex items-center gap-2 px-5 py-2.5 text-[#fff] text-sm font-semibold rounded-xl transition disabled:opacity-50"
           style={{ backgroundColor: accent }}
         >
           {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
