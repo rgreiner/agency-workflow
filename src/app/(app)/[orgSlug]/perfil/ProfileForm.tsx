@@ -4,6 +4,7 @@ import { useState, useRef, useTransition } from 'react'
 import { uploadFile } from '@/lib/storage/upload-client'
 import { updateProfile } from '@/app/actions/profile'
 import { useOrgSettings } from '@/components/providers/OrgSettingsProvider'
+import { AvatarCropper } from '@/components/ui/AvatarCropper'
 import { toast } from 'sonner'
 import { Upload, Loader2, Check, RefreshCw } from 'lucide-react'
 
@@ -27,26 +28,31 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
   const [driveMacUser,     setDriveMacUser]     = useState(user.driveMacUser ?? '')
   const [driveGoogleEmail, setDriveGoogleEmail] = useState(user.driveGoogleEmail ?? '')
   const [uploading, setUploading] = useState(false)
+  const [cropFile, setCropFile] = useState<File | null>(null)
   const [isPending, startTransition] = useTransition()
 
   const isFromGoogle = !!user.googleAvatar
   const accent = settings.accentColor
 
-  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  // Selecionar a imagem abre o cropper (não envia direto).
+  function pickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (!file) return
-    const ext  = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
-    const path = `${user.id}/avatar.${ext}`
+    if (file) setCropFile(file)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  // Resultado do cropper (WebP 512px já comprimido) → upload.
+  async function handleCropped(result: File) {
+    setCropFile(null)
     setUploading(true)
     try {
-      const url = await uploadFile('avatars', path, file)
+      const url = await uploadFile('avatars', `${user.id}/avatar.webp`, result)
       setAvatarUrl(`${url}?t=${Date.now()}`)
       toast.success('Foto atualizada!')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Falha no upload')
     } finally {
       setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
@@ -88,7 +94,7 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/gif"
                 className="hidden"
-                onChange={handleAvatarUpload}
+                onChange={pickFile}
               />
               <button
                 type="button"
@@ -217,6 +223,14 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
           Salvar alterações
         </button>
       </div>
+
+      {cropFile && (
+        <AvatarCropper
+          file={cropFile}
+          onCancel={() => setCropFile(null)}
+          onConfirm={handleCropped}
+        />
+      )}
     </div>
   )
 }
