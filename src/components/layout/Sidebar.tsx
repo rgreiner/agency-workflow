@@ -23,6 +23,11 @@ import {
   BookOpen,
   PenTool,
   Search,
+  Megaphone,
+  ClipboardList,
+  Wallet,
+  Users,
+  type LucideIcon,
 } from 'lucide-react'
 import { logout } from '@/app/actions/auth'
 import { ThemeToggle } from './ThemeToggle'
@@ -52,9 +57,82 @@ interface SidebarProps {
   accentColor?: string
   /** Nome do cargo — rótulo do item "Trabalhar" quando houver. */
   positionName?: string | null
+  /** Permissão para ver/operar o grupo Financeiro. */
+  canFinance?: boolean
   collapsed: boolean
   onCollapse: () => void
   onExpand?: () => void
+}
+
+interface NavItem { label: string; href: string }
+interface NavGroupDef { id: string; label: string; icon: LucideIcon; items: NavItem[]; finance?: boolean }
+
+// Grupos do módulo comercial/financeiro (SigaSW → One a One).
+const COMERCIAL_GROUPS: NavGroupDef[] = [
+  { id: 'midias', label: 'Liberação de mídias', icon: Megaphone, items: [
+    { label: 'Simplificada', href: 'midias/simplificada' },
+    { label: 'Impressa',     href: 'midias/impressa' },
+    { label: 'Eletrônica',   href: 'midias/eletronica' },
+    { label: 'Externas',     href: 'midias/externas' },
+    { label: 'Digitais',     href: 'midias/digitais' },
+  ] },
+  { id: 'producao', label: 'Liberação de Produção', icon: ClipboardList, items: [
+    { label: 'Orçamento',          href: 'producao/orcamento' },
+    { label: 'Pedido de produção', href: 'producao/pedido' },
+    { label: 'FEE',                href: 'producao/fee' },
+  ] },
+  { id: 'financeiro', label: 'Financeiro', icon: Wallet, finance: true, items: [
+    { label: 'Lançamentos', href: 'financeiro/lancamentos' },
+    { label: 'Faturamento', href: 'financeiro/faturamento' },
+  ] },
+  { id: 'cadastros', label: 'Cadastros', icon: Users, items: [
+    { label: 'Clientes',     href: 'workspaces' },
+    { label: 'Veículos',     href: 'cadastros/veiculos' },
+    { label: 'Fornecedores', href: 'cadastros/fornecedores' },
+  ] },
+]
+
+function NavGroup({ base, pathname, group, open, onToggle }: {
+  base: string; pathname: string; group: NavGroupDef; open: boolean; onToggle: () => void
+}) {
+  const Icon = group.icon
+  const anyActive = group.items.some(it => pathname.startsWith(`${base}/${it.href}`))
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onToggle}
+        className={cn(
+          'flex items-center gap-2.5 mx-2 px-2 py-1.5 rounded-lg text-sm transition w-[calc(100%-1rem)]',
+          anyActive ? 'text-gray-100' : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
+        )}
+      >
+        <Icon className="w-4 h-4 shrink-0" />
+        <span className="flex-1 text-left truncate">{group.label}</span>
+        <ChevronRight className={cn('w-3.5 h-3.5 text-gray-600 shrink-0 transition-transform duration-150', open && 'rotate-90')} />
+      </button>
+      {open && (
+        <div className="ml-7 mr-2 mt-px space-y-px">
+          {group.items.map(it => {
+            const href = `${base}/${it.href}`
+            const active = pathname.startsWith(href)
+            return (
+              <Link
+                key={it.href}
+                href={href}
+                className={cn(
+                  'flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors',
+                  active ? 'bg-indigo-600/20 text-indigo-300' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/60'
+                )}
+              >
+                <span className="truncate">{it.label}</span>
+              </Link>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // Visões da org (antes ficavam na barra superior). "Atendimento" = o item "Trabalhar".
@@ -67,13 +145,32 @@ const VIEWS = [
 
 export function Sidebar({
   orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#6366f1',
-  positionName, collapsed, onCollapse, onExpand,
+  positionName, canFinance = false, collapsed, onCollapse, onExpand,
 }: SidebarProps) {
   const pathname = usePathname()
   const base = `/${orgSlug}`
 
   const [mobileOpen, setMobileOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+
+  // Grupos comerciais (Financeiro só com permissão). Estado de abertura por dispositivo.
+  const comercialGroups = COMERCIAL_GROUPS.filter(g => (g.finance ? canFinance : true))
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('sidebar-comercial-groups')
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (raw) setOpenGroups(new Set(JSON.parse(raw) as string[]))
+    } catch {}
+  }, [])
+  function toggleGroup(id: string) {
+    setOpenGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      try { localStorage.setItem('sidebar-comercial-groups', JSON.stringify([...next])) } catch {}
+      return next
+    })
+  }
 
   // SSR sempre renderiza 'Ctrl K'; suppressHydrationWarning no <kbd> cobre o Mac.
   const shortcutLabel =
@@ -221,6 +318,22 @@ export function Sidebar({
             <Icon className="w-4 h-4 shrink-0" />
             <span className="flex-1">{label}</span>
           </Link>
+        ))}
+
+        {/* ── Comercial / Financeiro / Cadastros ───────── */}
+        <div className="mx-3 my-2 border-t border-gray-800" />
+        <div className="px-4 mb-1">
+          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Comercial</span>
+        </div>
+        {comercialGroups.map(g => (
+          <NavGroup
+            key={g.id}
+            base={base}
+            pathname={pathname}
+            group={g}
+            open={openGroups.has(g.id)}
+            onToggle={() => toggleGroup(g.id)}
+          />
         ))}
 
         <div className="mx-3 my-2 border-t border-gray-800" />

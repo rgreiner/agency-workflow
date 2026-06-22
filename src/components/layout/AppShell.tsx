@@ -21,6 +21,8 @@ interface Props {
   accentColor?: string
   /** Nome do cargo do usuário — rótulo da aba de trabalho no menu superior. */
   positionName?: string | null
+  /** Permissão para ver/operar o grupo Financeiro. */
+  canFinance?: boolean
   children: React.ReactNode
 }
 
@@ -30,7 +32,7 @@ interface Props {
  * a própria Sidebar mostra um botão flutuante para reabrir.
  */
 export function AppShell({
-  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, children,
+  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, canFinance, children,
 }: Props) {
   const [collapsed, setCollapsedState] = useState(false)
 
@@ -55,6 +57,7 @@ export function AppShell({
         logoUrl={logoUrl}
         accentColor={accentColor}
         positionName={positionName}
+        canFinance={canFinance}
         collapsed={collapsed}
         onCollapse={() => setCollapsed(true)}
         onExpand={() => setCollapsed(false)}

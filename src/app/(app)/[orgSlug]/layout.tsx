@@ -26,14 +26,18 @@ export default async function OrgLayout({
 
   if (!org) redirect('/')
 
-  const { data: membership } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: membership } = await (supabase as any)
     .from('organization_members')
-    .select('role, org_positions(name)')
+    .select('role, can_finance, org_positions(name)')
     .eq('org_id', org.id)
     .eq('user_id', user.id)
-    .single()
+    .single() as { data: { role: string; can_finance: boolean; org_positions: { name: string } | null } | null }
 
   if (!membership) redirect('/')
+
+  // Permissão de Financeiro: flag explícita ou implícita para owner/admin.
+  const canFinance = membership.can_finance || ['owner', 'admin'].includes(membership.role)
 
   // Nome do cargo do usuário (ex.: "Redação") — vira o rótulo da aba de trabalho
   // no menu superior. Sem cargo (ex.: owner "acesso total") → fallback "Atendimento".
@@ -97,6 +101,7 @@ export default async function OrgLayout({
         logoUrl={orgSettings.logoUrl}
         accentColor={accent}
         positionName={positionName}
+        canFinance={canFinance}
       >
         {children}
       </AppShell>
