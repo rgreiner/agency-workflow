@@ -102,7 +102,8 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
   const [order, setOrder] = useState<ColKey[]>(defaultOrder)
   const [dragCol, setDragCol] = useState<ColKey | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  // Concluído começa recolhido (fluxo: revisar → selecionar pelo checkbox do grupo → arquivar).
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(['concluido']))
   const [filterWorkspace, setFilterWorkspace] = useState(initialWorkspace ?? '')
   const pickerRef = useRef<HTMLDivElement>(null)
 
