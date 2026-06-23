@@ -15,12 +15,14 @@ export interface ProducaoRow {
 }
 
 export function ProducaoClient({
-  orgSlug, items, archivedView, basePath, title, subtitle, addLabel, gerarPedidos = false,
+  orgSlug, items, archivedView, basePath, title, subtitle, addLabel, gerarPedidos = false, showPrint = true,
 }: {
   orgSlug: string; items: ProducaoRow[]; archivedView: boolean
   basePath: string; title: string; subtitle: string; addLabel: string
   /** Mostra "Gerar PPs" nos orçamentos aprovados. */
   gerarPedidos?: boolean
+  /** Mostra o botão de imprimir/PDF (false enquanto o tipo não tiver impressão). */
+  showPrint?: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -87,7 +89,7 @@ export function ProducaoClient({
                             <Factory className="w-3.5 h-3.5" /> Gerar PPs
                           </button>
                         )}
-                        <Link href={`${base}/${r.id}/print`} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Imprimir / PDF"><Printer className="w-3.5 h-3.5" /></Link>
+                        {showPrint && <Link href={`${base}/${r.id}/print`} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Imprimir / PDF"><Printer className="w-3.5 h-3.5" /></Link>}
                         <Link href={`${base}/${r.id}`} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar"><Pencil className="w-3.5 h-3.5" /></Link>
                         <button onClick={() => archive(r)} disabled={isPending} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition disabled:opacity-50" title={r.archived ? 'Desarquivar' : 'Arquivar'}>
                           {r.archived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
