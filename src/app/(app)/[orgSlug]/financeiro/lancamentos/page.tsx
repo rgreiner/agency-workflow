@@ -12,7 +12,7 @@ export default async function LancamentosPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: raw } = await (supabase as any)
     .from('lancamentos')
-    .select('id, tipo, origem_tipo, contato_nome, descricao, valor, vencimento, competencia, situacao, nf_emitida, boleto_gerado')
+    .select('id, tipo, origem_tipo, contato_nome, descricao, valor, vencimento, competencia, situacao, nf_emitida, boleto_gerado, revisar')
     .eq('org_id', orgId)
     .order('vencimento', { ascending: true, nullsFirst: false })
 

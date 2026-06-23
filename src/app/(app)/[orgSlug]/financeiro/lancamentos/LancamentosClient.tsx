@@ -2,10 +2,10 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronLeft, ChevronRight, FileText, Receipt, Check, RotateCcw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText, Receipt, Check, RotateCcw, AlertTriangle, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
-import { setLancamentoSituacao, setLancamentoFlags } from '@/app/actions/financeiro'
+import { setLancamentoSituacao, setLancamentoFlags, ressincronizarLancamento, marcarLancamentoRevisado } from '@/app/actions/financeiro'
 
 export interface Lancamento {
   id: string
@@ -19,6 +19,7 @@ export interface Lancamento {
   situacao: string
   nf_emitida: boolean
   boleto_gerado: boolean
+  revisar: boolean
 }
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -49,6 +50,7 @@ export function LancamentosClient({ orgSlug, lancamentos, today }: {
   }, [lancamentos, mes, today])
 
   const sum = (arr: Lancamento[]) => arr.reduce((s, l) => s + val(l), 0)
+  const revisarCount = lancamentos.filter(l => l.revisar).length
 
   return (
     <div className="p-6">
@@ -63,6 +65,13 @@ export function LancamentosClient({ orgSlug, lancamentos, today }: {
           <button onClick={() => setMes(m => shiftMonth(m, 1))} className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 transition"><ChevronRight className="w-4 h-4" /></button>
         </div>
       </div>
+
+      {revisarCount > 0 && (
+        <div className="mb-5 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span><strong>{revisarCount}</strong> lançamento(s) com o documento alterado depois de lançado — revise (atualizar do documento ou marcar revisado).</span>
+        </div>
+      )}
 
       <Bucket title="Atrasado" tone="red" total={sum(atrasado)} items={atrasado} orgSlug={orgSlug} today={today} emptyHint="Nada atrasado." />
       <Bucket title={`A vencer em ${monthLabel(mes)}`} tone="amber" total={sum(aVencer)} items={aVencer} orgSlug={orgSlug} today={today} emptyHint="Nada a vencer neste mês." />
@@ -127,21 +136,44 @@ function Row({ l, orgSlug, today, paid }: { l: Lancamento; orgSlug: string; toda
   function togglePago() {
     startTransition(async () => { await setLancamentoSituacao(orgSlug, l.id, paid ? 'em_aberto' : 'pago'); router.refresh() })
   }
+  function atualizarDoDoc() {
+    startTransition(async () => { await ressincronizarLancamento(orgSlug, l.id); router.refresh() })
+  }
+  function marcarRevisado() {
+    startTransition(async () => { await marcarLancamentoRevisado(orgSlug, l.id); router.refresh() })
+  }
 
   return (
-    <tr className={cn('transition', isPending ? 'opacity-50' : 'hover:bg-gray-50/50')}>
+    <tr className={cn('transition', isPending ? 'opacity-50' : 'hover:bg-gray-50/50', l.revisar && 'bg-amber-50/40')}>
       <td className={cn('px-4 py-2.5 text-sm', overdue ? 'text-red-600 font-medium' : 'text-gray-600')}>{formatDateBR(l.vencimento)}</td>
-      <td className="px-4 py-2.5 text-sm text-gray-900">{l.contato_nome ?? '—'}</td>
+      <td className="px-4 py-2.5 text-sm text-gray-900">
+        {l.contato_nome ?? '—'}
+        {l.revisar && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 text-[10px] font-medium px-1.5 py-0.5 align-middle"><AlertTriangle className="w-2.5 h-2.5" /> alterado</span>}
+      </td>
       <td className="px-4 py-2.5 text-sm text-gray-600">{l.descricao ?? '—'}</td>
       <td className="px-4 py-2.5 text-sm font-medium text-gray-900 text-right">{formatBRL(val(l))}</td>
       <td className="px-3 py-2.5 text-center"><Flag on={l.nf_emitida} onClick={toggleNf} label="NF" /></td>
       <td className="px-3 py-2.5 text-center"><Flag on={l.boleto_gerado} onClick={toggleBoleto} label="Boleto" /></td>
-      <td className="px-3 py-2.5 text-right">
-        <button onClick={togglePago} disabled={isPending}
-          className={cn('inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition disabled:opacity-50',
-            paid ? 'text-gray-500 hover:bg-gray-100' : 'bg-emerald-600 text-[#fff] hover:bg-emerald-700')}>
-          {paid ? <><RotateCcw className="w-3.5 h-3.5" /> Reabrir</> : <><Check className="w-3.5 h-3.5" /> Pago</>}
-        </button>
+      <td className="px-3 py-2.5">
+        <div className="flex items-center justify-end gap-1.5">
+          {l.revisar && (
+            <>
+              <button onClick={atualizarDoDoc} disabled={isPending} title="Atualizar do documento"
+                className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-50 transition disabled:opacity-50">
+                <RefreshCw className="w-3.5 h-3.5" /> Atualizar
+              </button>
+              <button onClick={marcarRevisado} disabled={isPending} title="Marcar como revisado"
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition disabled:opacity-50">
+                <Check className="w-3.5 h-3.5" />
+              </button>
+            </>
+          )}
+          <button onClick={togglePago} disabled={isPending}
+            className={cn('inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition disabled:opacity-50',
+              paid ? 'text-gray-500 hover:bg-gray-100' : 'bg-emerald-600 text-[#fff] hover:bg-emerald-700')}>
+            {paid ? <><RotateCcw className="w-3.5 h-3.5" /> Reabrir</> : <><Check className="w-3.5 h-3.5" /> Pago</>}
+          </button>
+        </div>
       </td>
     </tr>
   )
