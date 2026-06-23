@@ -17,11 +17,19 @@ export interface MidiaRow {
   situacao: string; archived: boolean; cliente: string; veiculo: string
 }
 
-export function MidiasClient({ orgSlug, midias, archivedView }: {
+export function MidiasClient({
+  orgSlug, midias, archivedView,
+  basePath = 'midias/simplificada',
+  title = 'Liberação de mídias — Simplificada',
+  subtitle = 'Autorizações de mídia (todos os tipos)',
+  addLabel = 'Adicionar Mídia Simplificada',
+}: {
   orgSlug: string; midias: MidiaRow[]; archivedView: boolean
+  basePath?: string; title?: string; subtitle?: string; addLabel?: string
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const base = `/${orgSlug}/${basePath}`
 
   function changeSituacao(id: string, situacao: string) {
     startTransition(async () => { await setMidiaSituacao(orgSlug, id, situacao); router.refresh() })
@@ -34,20 +42,20 @@ export function MidiasClient({ orgSlug, midias, archivedView }: {
     <div className="p-6">
       <div className="flex items-center justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-lg font-semibold text-gray-900">Liberação de mídias — Simplificada</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Autorizações de mídia (todos os tipos)</p>
+          <h1 className="text-lg font-semibold text-gray-900">{title}</h1>
+          <p className="text-gray-500 text-sm mt-0.5">{subtitle}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 text-sm">
-            <Link href={`/${orgSlug}/midias/simplificada`}
+            <Link href={base}
               className={cn('px-2.5 py-1 rounded-md transition', !archivedView ? 'bg-gray-900 text-[#fff]' : 'text-gray-500 hover:text-gray-700')}>Ativas</Link>
-            <Link href={`/${orgSlug}/midias/simplificada?view=arquivadas`}
+            <Link href={`${base}?view=arquivadas`}
               className={cn('px-2.5 py-1 rounded-md transition', archivedView ? 'bg-gray-900 text-[#fff]' : 'text-gray-500 hover:text-gray-700')}>Arquivadas</Link>
           </div>
           {!archivedView && (
-            <Link href={`/${orgSlug}/midias/simplificada/nova`}
+            <Link href={`${base}/nova`}
               className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 transition">
-              <Plus className="w-4 h-4" /> Adicionar Mídia Simplificada
+              <Plus className="w-4 h-4" /> {addLabel}
             </Link>
           )}
         </div>
@@ -77,7 +85,7 @@ export function MidiasClient({ orgSlug, midias, archivedView }: {
                   <tr key={m.id} className="hover:bg-gray-50/50 transition">
                     <td className="px-4 py-3 text-sm text-gray-400">{m.numero ?? '—'}</td>
                     <td className="px-4 py-3 text-sm font-medium">
-                      <Link href={`/${orgSlug}/midias/simplificada/${m.id}`} className="text-gray-900 hover:text-indigo-600 transition">
+                      <Link href={`${base}/${m.id}`} className="text-gray-900 hover:text-indigo-600 transition">
                         {m.titulo}
                       </Link>
                     </td>
@@ -98,7 +106,7 @@ export function MidiasClient({ orgSlug, midias, archivedView }: {
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex items-center justify-end gap-1.5">
-                        <Link href={`/${orgSlug}/midias/simplificada/${m.id}`}
+                        <Link href={`${base}/${m.id}`}
                           className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar">
                           <Pencil className="w-3.5 h-3.5" />
                         </Link>

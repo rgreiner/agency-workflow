@@ -19,12 +19,18 @@ function readMidiaData(formData: FormData) {
   return data
 }
 
+/** Detalhe específico do tipo (inserções/peças/períodos/anúncio) chega como JSON. */
+function readDetalhe(formData: FormData): unknown {
+  try { return JSON.parse((formData.get('detalhe') as string) || '{}') } catch { return {} }
+}
+
 export async function createMidia(orgSlug: string, formData: FormData) {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const data = readMidiaData(formData)
+  const redirectTo = ((formData.get('redirect_to') as string) ?? '').trim()
   if (!data.workspace_id) return { error: 'Cliente obrigatório' }
   if (!data.veiculo_id) return { error: 'Veículo obrigatório' }
   if (!data.titulo) return { error: 'Título obrigatório' }
@@ -33,13 +39,14 @@ export async function createMidia(orgSlug: string, formData: FormData) {
     .from('organizations').select('id').eq('slug', orgSlug).single()
   if (!org) return { error: 'Organização não encontrada' }
 
+  const payload = { ...data, detalhe: readDetalhe(formData) }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any).rpc('create_midia', {
-    p_user_id: user.id, p_org_id: org.id, p_data: data,
+    p_user_id: user.id, p_org_id: org.id, p_data: payload,
   })
   if (error) return { error: error.message }
 
-  redirect(`/${orgSlug}/midias/simplificada`)
+  redirect(redirectTo || `/${orgSlug}/midias/simplificada`)
 }
 
 export async function updateMidia(orgSlug: string, midiaId: string, formData: FormData) {
@@ -48,15 +55,18 @@ export async function updateMidia(orgSlug: string, midiaId: string, formData: Fo
   if (!user) return { error: 'Não autenticado' }
 
   const data = readMidiaData(formData)
+  const redirectTo = ((formData.get('redirect_to') as string) ?? '').trim()
   if (!data.titulo) return { error: 'Título obrigatório' }
 
+  const payload = { ...data, detalhe: readDetalhe(formData) }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any).rpc('update_midia', {
-    p_user_id: user.id, p_midia_id: midiaId, p_data: data,
+    p_user_id: user.id, p_midia_id: midiaId, p_data: payload,
   })
   if (error) return { error: error.message }
-  revalidatePath(`/${orgSlug}/midias/simplificada`)
-  redirect(`/${orgSlug}/midias/simplificada`)
+  const dest = redirectTo || `/${orgSlug}/midias/simplificada`
+  revalidatePath(dest)
+  redirect(dest)
 }
 
 export async function setMidiaSituacao(orgSlug: string, midiaId: string, situacao: string) {
