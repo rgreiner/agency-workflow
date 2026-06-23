@@ -33,7 +33,7 @@ export default async function FeePage({
     <ProducaoClient
       orgSlug={orgSlug} items={items} archivedView={archivedView}
       basePath="producao/fee" title="Liberação de Produção — FEE"
-      subtitle="Contratos recorrentes (fee mensal)" addLabel="Adicionar Fee" showPrint={false}
+      subtitle="Contratos recorrentes (fee mensal)" addLabel="Adicionar Fee"
     />
   )
 }
