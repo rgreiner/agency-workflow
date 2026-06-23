@@ -10,7 +10,7 @@ import { getUsuario } from '@/lib/auth/server'
 
 export const runtime = 'nodejs'
 
-const ALLOWED_BUCKETS = new Set(['avatars', 'org-logos'])
+const ALLOWED_BUCKETS = new Set(['avatars', 'org-logos', 'orcamentos'])
 const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'])
 const MAX_BYTES = 2 * 1024 * 1024 // 2 MB
 

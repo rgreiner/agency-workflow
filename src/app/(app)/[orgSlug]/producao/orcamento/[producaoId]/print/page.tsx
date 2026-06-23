@@ -12,7 +12,7 @@ function dataExtenso(d?: string | null): string {
 }
 
 interface Opcao { fornecedor_id?: string; n_orc?: string; pgto?: string; quant?: string; valor_unit?: string; selecionado?: boolean }
-interface ItemOrc { nome?: string; descricao?: string; opcoes?: Opcao[] }
+interface ItemOrc { nome?: string; descricao?: string; opcoes?: Opcao[]; imagem?: string }
 
 export default async function OrcamentoPrintPage({
   params,
@@ -106,8 +106,16 @@ export default async function OrcamentoPrintPage({
             const opcoes = it.opcoes ?? []
             return (
               <div key={i} className="mb-6">
-                <p className="font-bold text-gray-900 mb-1">{it.nome || '—'}</p>
-                {it.descricao && <p className="text-gray-600 whitespace-pre-line mb-2">{it.descricao}</p>}
+                <div className="flex items-start gap-3 mb-1">
+                  {it.imagem && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={it.imagem} alt="" className="w-28 h-20 object-cover rounded border border-gray-200 shrink-0" />
+                  )}
+                  <div>
+                    <p className="font-bold text-gray-900">{it.nome || '—'}</p>
+                    {it.descricao && <p className="text-gray-600 whitespace-pre-line">{it.descricao}</p>}
+                  </div>
+                </div>
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="text-left text-gray-500 border-b border-gray-200">

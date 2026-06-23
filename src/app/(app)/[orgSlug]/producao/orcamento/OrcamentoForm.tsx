@@ -6,11 +6,12 @@ import { ArrowLeft, Check, Loader2, Plus, Trash2, CircleCheck, Circle } from 'lu
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { MIDIA_SITUACAO_OPTIONS, formatBRL, parseMoney } from '@/lib/midia'
+import { ItemImageField } from '@/components/ui/ItemImageField'
 import type { ClienteOpt, MemberOpt } from '../../midias/simplificada/MidiaForm'
 import type { FornecedorOpt } from '@/lib/midia-selectors'
 
 export interface Opcao { fornecedor_id: string; n_orc: string; pgto: string; quant: string; valor_unit: string; selecionado: boolean }
-export interface ItemOrc { nome: string; descricao: string; job: string; opcoes: Opcao[] }
+export interface ItemOrc { nome: string; descricao: string; job: string; opcoes: Opcao[]; imagem?: string }
 export interface OrcamentoValues {
   workspace_id: string; campaign_id: string; faturar: string; emissao: string; validade_dias: string; bv_pct: string
   codigo_identificador: string; nota_fiscal: string; titulo: string; honorarios_pct: string
@@ -138,12 +139,17 @@ export function OrcamentoForm({
           </div>
           {form.itens.map((it, ii) => (
             <div key={ii} className={cardCls}>
-              <div className="flex items-center gap-2 mb-3">
-                <input value={it.nome} onChange={e => patchItem(ii, { nome: e.target.value })} placeholder="Nome do item (ex.: WordPress, Camisetas Polo)" className={cn(inputCls, 'font-medium')} />
-                {form.itens.length > 1 && <button type="button" onClick={() => delItem(ii)} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>}
+              <div className="flex items-start gap-3 mb-3">
+                <ItemImageField value={it.imagem} onChange={url => patchItem(ii, { imagem: url })} />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <input value={it.nome} onChange={e => patchItem(ii, { nome: e.target.value })} placeholder="Nome do item (ex.: WordPress, Camisetas Polo)" className={cn(inputCls, 'font-medium')} />
+                    {form.itens.length > 1 && <button type="button" onClick={() => delItem(ii)} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>}
+                  </div>
+                  <label className={cn(labelCls, 'mt-2')}>Descrição</label>
+                  <textarea rows={2} value={it.descricao} onChange={e => patchItem(ii, { descricao: e.target.value })} className={cn(inputCls, 'resize-none')} />
+                </div>
               </div>
-              <label className={labelCls}>Descrição</label>
-              <textarea rows={2} value={it.descricao} onChange={e => patchItem(ii, { descricao: e.target.value })} className={cn(inputCls, 'resize-none mb-3')} />
 
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Opções (fornecedores)</span>
