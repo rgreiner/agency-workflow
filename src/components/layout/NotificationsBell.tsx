@@ -53,6 +53,10 @@ export function NotificationsBell({ orgSlug }: { orgSlug: string }) {
       setItems(prev => prev.map(x => x.id === n.id ? { ...x, readAt: new Date().toISOString() } : x))
       markNotificationRead(n.id)
     }
+    if (n.type === 'drive_sync' && n.workspaceId && n.campaignId) {
+      router.push(`/${orgSlug}/workspaces/${n.workspaceId}/campaigns/${n.campaignId}?drive=sync`)
+      return
+    }
     if (n.workspaceId && n.campaignId && n.activityId) {
       router.push(`/${orgSlug}/workspaces/${n.workspaceId}/campaigns/${n.campaignId}/activities/${n.activityId}`)
     }

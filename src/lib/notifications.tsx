@@ -1,4 +1,4 @@
-import { MessageSquare, ArrowRightLeft, UserPlus, LogIn, AtSign } from 'lucide-react'
+import { MessageSquare, ArrowRightLeft, UserPlus, LogIn, AtSign, FolderSync } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { STATUS_CONFIG } from '@/types'
 import type { NotificationItem } from '@/app/actions/notifications'
@@ -16,6 +16,7 @@ export function messageOf(n: NotificationItem): string {
     case 'new_comment':    return `${actor} comentou${n.data?.preview ? `: ${n.data.preview}` : ''}`
     case 'mention':        return `${actor} ${n.data?.all ? 'mencionou todos' : 'mencionou você'}${n.data?.preview ? `: ${n.data.preview}` : ''}`
     case 'assigned':       return 'Você foi associado a esta tarefa'
+    case 'drive_sync':     return 'Pasta do Drive vinculada — revise o que criar/vincular'
     default:               return 'Atualização'
   }
 }
@@ -25,6 +26,7 @@ export function NotifIcon({ type, className = 'w-3.5 h-3.5' }: { type: string; c
   if (type === 'mention')        return <AtSign className={cn(className, 'text-pink-500')} />
   if (type === 'assigned')       return <UserPlus className={cn(className, 'text-violet-500')} />
   if (type === 'entered_status') return <LogIn className={cn(className, 'text-emerald-500')} />
+  if (type === 'drive_sync')     return <FolderSync className={cn(className, 'text-amber-500')} />
   return <ArrowRightLeft className={cn(className, 'text-indigo-500')} />
 }
 

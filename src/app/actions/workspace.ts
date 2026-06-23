@@ -131,6 +131,11 @@ export async function setCampaignDrive(orgSlug: string, workspaceId: string, cam
     p_user_id: user.id, p_campaign_id: campaignId, p_drive_folder_id: folderId,
   })
   if (error) return { error: error.message }
+  // Link válido salvo → avisa na Caixa de entrada pra revisar a sincronização.
+  if (folderId) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).rpc('notify_drive_sync', { p_user_id: user.id, p_campaign_id: campaignId })
+  }
   revalidatePath(`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}`)
   return {}
 }

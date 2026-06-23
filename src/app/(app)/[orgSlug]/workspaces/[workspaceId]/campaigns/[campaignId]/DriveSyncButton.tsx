@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { FolderSync, X, Loader2, Check, Link2, FolderPlus, FolderInput, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -16,7 +16,7 @@ function Checkbox({ on, onClick }: { on: boolean; onClick: () => void }) {
   )
 }
 
-export function DriveSyncButton({ orgSlug, campaignId }: { orgSlug: string; campaignId: string }) {
+export function DriveSyncButton({ orgSlug, campaignId, autoOpen = false }: { orgSlug: string; campaignId: string; autoOpen?: boolean }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -27,6 +27,13 @@ export function DriveSyncButton({ orgSlug, campaignId }: { orgSlug: string; camp
   const [linkSel, setLinkSel] = useState<Set<string>>(new Set())   // activityId (casados)
   const [createSel, setCreateSel] = useState<Set<string>>(new Set()) // activityId (jobs sem pasta)
   const [jobSel, setJobSel] = useState<Set<string>>(new Set())     // folderId (pastas sem job)
+
+  // Abre a sincronização sozinho quando vem da notificação (?drive=sync).
+  const didAuto = useRef(false)
+  useEffect(() => {
+    if (autoOpen && !didAuto.current) { didAuto.current = true; abrir() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpen])
 
   async function abrir() {
     setOpen(true); setLoading(true); setData(null)

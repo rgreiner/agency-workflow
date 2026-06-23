@@ -11,11 +11,12 @@ export default async function CampaignPage({
   searchParams,
 }: {
   params: Promise<{ orgSlug: string; workspaceId: string; campaignId: string }>
-  searchParams: Promise<{ view?: string }>
+  searchParams: Promise<{ view?: string; drive?: string }>
 }) {
   const { orgSlug, workspaceId, campaignId } = await params
-  const { view } = await searchParams
+  const { view, drive } = await searchParams
   const archivedView = view === 'arquivadas'
+  const autoOpenSync = drive === 'sync'
   const supabase = await createClient()
 
   const { data: campaign } = await supabase
@@ -42,7 +43,7 @@ export default async function CampaignPage({
       newActivityCampaign={{ workspaceId, campaignId }}
       secondaryActions={
         <div className="flex items-center gap-2">
-          {campaign.drive_folder_id && <DriveSyncButton orgSlug={orgSlug} campaignId={campaignId} />}
+          {campaign.drive_folder_id && <DriveSyncButton orgSlug={orgSlug} campaignId={campaignId} autoOpen={autoOpenSync} />}
           <ImportSpecsButton orgSlug={orgSlug} campaignId={campaignId} />
         </div>
       }

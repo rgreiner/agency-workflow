@@ -61,17 +61,20 @@ export async function getNotifications(
     const act = n.activity as unknown as {
       title: string; campaign_id: string; campaigns: { workspace_id: string } | null
     } | null
+    const d = (n.data as Record<string, unknown>) ?? {}
+    // Notificações de campanha (ex.: drive_sync) não têm activity → usam o data.
+    const title = act?.title ?? (typeof d.campanha === 'string' ? d.campanha : null) ?? 'Atualização'
     return {
       id: n.id,
       type: n.type,
-      data: (n.data as Record<string, unknown>) ?? {},
+      data: d,
       readAt: n.read_at,
       createdAt: n.created_at,
       actorName: actor?.full_name ?? null,
-      title: act?.title ?? 'Tarefa',
+      title,
       activityId: n.activity_id,
-      campaignId: act?.campaign_id ?? null,
-      workspaceId: act?.campaigns?.workspace_id ?? null,
+      campaignId: act?.campaign_id ?? (typeof d.campaignId === 'string' ? d.campaignId : null),
+      workspaceId: act?.campaigns?.workspace_id ?? (typeof d.workspaceId === 'string' ? d.workspaceId : null),
     }
   })
 
