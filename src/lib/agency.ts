@@ -9,9 +9,17 @@ export const AGENCY = {
   cidade: 'Cascavel/PR',
 }
 
-// Observações padrão do rodapé (instruções de NF ao fornecedor/veículo).
+// Texto legal padrão da PRODUÇÃO (Pedido de Produção, Orçamento) — instruções de NF.
 export const DOC_NF_NOTES = [
-  { text: 'Enviar NF com valor total para o e-mail financeiro@amexcom.com.br', highlight: true },
+  { text: 'Enviar NF com valor total para o e-mail financeiro@oneaone.com.br', highlight: true },
   { text: 'Enviar NF com prazo mínimo de 30 dias úteis para o vencimento', highlight: false },
   { text: 'Colocar número desta autorização na NF', highlight: true },
+]
+
+// Texto legal padrão da MÍDIA (autorizações). Renderizado sob "Observações sobre faturamento".
+export const DOC_MIDIA_NOTES = [
+  { text: 'O faturamento deve obrigatoriamente seguir as informações fiéis desta autorização;', highlight: false },
+  { text: 'Enviar NF com valor total para o e-mail financeiro@oneaone.com.br (o faturamento só é pago mediante envio para este e-mail, caso contrário o pagamento não será efetuado);', highlight: true },
+  { text: 'Colocar número desta autorização na NF na descrição do serviço/produto;', highlight: false },
+  { text: 'Enviar NF com prazo mínimo de 30 dias úteis para o vencimento.', highlight: false },
 ]

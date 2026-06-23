@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { PrintToolbar } from '@/components/ui/PrintToolbar'
-import { AGENCY, DOC_NF_NOTES } from '@/lib/agency'
+import { AGENCY, DOC_MIDIA_NOTES } from '@/lib/agency'
 import {
   formatBRL, formatDateBR, labelOf, parseMoney,
   MIDIA_TIPO_OPTIONS, MIDIA_PRAZO_OPTIONS, MIDIA_FATURAMENTO_OPTIONS,
@@ -144,8 +144,8 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
           {/* Texto legal / observações de faturamento */}
           <div className="border-l-2 border-gray-400 pl-2 mb-2"><span className="font-semibold text-gray-700">Observações sobre faturamento</span></div>
           <ul className="list-disc pl-5 space-y-1 mb-2 text-gray-700">
-            {DOC_NF_NOTES.map((n, i) => (
-              <li key={i} className={n.highlight ? 'bg-yellow-200 inline-block px-0.5 font-medium' : ''}>{n.text}</li>
+            {DOC_MIDIA_NOTES.map((n, i) => (
+              <li key={i}><span className={n.highlight ? 'bg-yellow-200 px-0.5 font-medium' : ''}>{n.text}</span></li>
             ))}
           </ul>
           {m.texto_legal && <p className="text-gray-600 whitespace-pre-line mb-2">{m.texto_legal}</p>}
