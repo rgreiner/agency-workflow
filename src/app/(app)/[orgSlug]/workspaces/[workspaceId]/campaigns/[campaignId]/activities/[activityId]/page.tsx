@@ -199,7 +199,7 @@ export default async function ActivityPage({
         <div className="flex-1 lg:overflow-y-auto">
           <div className="px-4 md:px-8 py-6 max-w-3xl">
 
-            {/* Title + description */}
+            {/* Título + meta (status/datas/prioridade/responsáveis) + briefing */}
             <ActivityHeader
               activityId={activityId}
               path={path}
@@ -207,55 +207,54 @@ export default async function ActivityPage({
               description={activity.description}
               canManage={isOrgMember}
               isOrgMember={isOrgMember}
+              meta={
+                <>
+                  {/* Status */}
+                  <StatusChanger
+                    activityId={activityId}
+                    currentStatus={activity.status}
+                    path={path}
+                    compact
+                  />
+
+                  {/* Datas */}
+                  <DateRangeEditor
+                    activityId={activityId}
+                    path={path}
+                    startDate={activity.start_date ?? null}
+                    dueDate={activity.due_date}
+                    canEdit={isOrgMember}
+                  />
+
+                  {/* Prioridade */}
+                  <FieldEditor
+                    activityId={activityId} path={path}
+                    field="priority" value={activity.priority} canEdit={isOrgMember}
+                    type="select"
+                    options={[
+                      { value: 'low',    label: 'Baixa'   },
+                      { value: 'medium', label: 'Média'   },
+                      { value: 'high',   label: 'Alta'    },
+                      { value: 'urgent', label: 'Urgente' },
+                    ]}
+                    display={
+                      <span className={cn('text-xs font-medium px-2.5 py-1 rounded-lg border', priorityCfg.bgColor, priorityCfg.color, 'border-transparent')}>
+                        {priorityCfg.label}
+                      </span>
+                    }
+                  />
+
+                  {/* Responsáveis */}
+                  <AssigneeSelector
+                    activityId={activityId}
+                    assignedIds={assignedIds}
+                    members={members}
+                    path={path}
+                    compact
+                  />
+                </>
+              }
             />
-
-            {/* Meta strip */}
-            <div className="flex items-center gap-3 mt-5 flex-wrap">
-
-              {/* Status */}
-              <StatusChanger
-                activityId={activityId}
-                currentStatus={activity.status}
-                path={path}
-                compact
-              />
-
-              {/* Dates */}
-              <DateRangeEditor
-                activityId={activityId}
-                path={path}
-                startDate={activity.start_date ?? null}
-                dueDate={activity.due_date}
-                canEdit={isOrgMember}
-              />
-
-              {/* Priority */}
-              <FieldEditor
-                activityId={activityId} path={path}
-                field="priority" value={activity.priority} canEdit={isOrgMember}
-                type="select"
-                options={[
-                  { value: 'low',    label: 'Baixa'   },
-                  { value: 'medium', label: 'Média'   },
-                  { value: 'high',   label: 'Alta'    },
-                  { value: 'urgent', label: 'Urgente' },
-                ]}
-                display={
-                  <span className={cn('text-xs font-medium px-2.5 py-1 rounded-lg border', priorityCfg.bgColor, priorityCfg.color, 'border-transparent')}>
-                    {priorityCfg.label}
-                  </span>
-                }
-              />
-
-              {/* Assignees */}
-              <AssigneeSelector
-                activityId={activityId}
-                assignedIds={assignedIds}
-                members={members}
-                path={path}
-                compact
-              />
-            </div>
 
             {/* Atualiza a tarefa sozinha (revisão em 2º plano, mudanças de outros);
                 mais rápido enquanto a revisão de Redação está rodando. */}

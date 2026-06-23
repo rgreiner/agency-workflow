@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, type ReactNode } from 'react'
 import { Pencil, Check, X, Loader2 } from 'lucide-react'
 import { updateActivityField } from '@/app/actions/activity'
 import { toast } from 'sonner'
@@ -12,9 +12,11 @@ interface Props {
   description: string | null
   canManage: boolean
   isOrgMember: boolean
+  /** Faixa de status/datas/prioridade/responsáveis, renderizada entre título e briefing. */
+  meta?: ReactNode
 }
 
-export function ActivityHeader({ activityId, path, title, description, canManage, isOrgMember }: Props) {
+export function ActivityHeader({ activityId, path, title, description, canManage, isOrgMember, meta }: Props) {
   const [editTitle, setEditTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(title)
   const [editDesc, setEditDesc] = useState(false)
@@ -83,6 +85,9 @@ export function ActivityHeader({ activityId, path, title, description, canManage
           </>
         )}
       </div>
+
+      {/* Meta (status, datas, prioridade, responsáveis) — entre título e briefing */}
+      {meta && <div className="flex items-center gap-3 flex-wrap mb-4">{meta}</div>}
 
       {/* Description */}
       <div className="group/desc flex items-start gap-2">
