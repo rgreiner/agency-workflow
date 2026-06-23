@@ -272,6 +272,7 @@ export async function addComment(
   content: string,
   mentionIds: string[] = [],
   mentionAll = false,
+  replyTo: string | null = null,
 ) {
   const supabase = await createClient()
   const user = await getUsuario()
@@ -283,8 +284,23 @@ export async function addComment(
     p_content: content,
     p_mention_ids: mentionIds,
     p_mention_all: mentionAll,
+    p_reply_to: replyTo,
   })
 
+  if (error) return { error: error.message }
+  revalidatePath(path)
+}
+
+/** Liga/desliga uma reação (emoji) do usuário num comentário. */
+export async function toggleCommentReaction(path: string, commentId: string, emoji: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('toggle_comment_reaction', {
+    p_user_id: user.id, p_comment_id: commentId, p_emoji: emoji,
+  })
   if (error) return { error: error.message }
   revalidatePath(path)
 }

@@ -14,6 +14,8 @@ import { AssigneeSelector } from './AssigneeSelector'
 import { FieldEditor } from './FieldEditor'
 import { ActivityHeader } from './ActivityHeader'
 import { ShareJobButton } from './ShareJobButton'
+import { ReactionBar } from './ReactionBar'
+import { ReplyButton } from './ReplyButton'
 import { DateRangeEditor } from '@/components/ui/DateRangeEditor'
 import { Avatar } from '@/components/ui/Avatar'
 import { MachinePath } from '@/components/ui/MachinePath'
@@ -56,6 +58,25 @@ export default async function ActivityPage({
     .eq('activity_id', activityId)
     .order('created_at', { ascending: true })
 
+  // Reações por comentário + mapa p/ resolver o comentário citado (responder).
+  const commentIds = (comments ?? []).map(c => c.id)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any
+  const { data: reactionsRaw } = commentIds.length
+    ? await sb.from('activity_comment_reactions').select('comment_id, user_id, emoji').in('comment_id', commentIds)
+    : { data: [] }
+  const reactionsByComment = new Map<string, { emoji: string; userId: string }[]>()
+  for (const r of (reactionsRaw ?? []) as { comment_id: string; user_id: string; emoji: string }[]) {
+    const arr = reactionsByComment.get(r.comment_id) ?? []
+    arr.push({ emoji: r.emoji, userId: r.user_id })
+    reactionsByComment.set(r.comment_id, arr)
+  }
+  const commentsById = new Map<string, { author: string; content: string }>()
+  ;(comments ?? []).forEach(c => {
+    const p = c.profiles as unknown as { full_name: string | null } | null
+    commentsById.set(c.id, { author: p?.full_name ?? 'Usuário', content: c.content })
+  })
+
   const { data: campaign } = await supabase
     .from('campaigns')
     .select('name, drive_folder_id, workspaces(org_id, name)')
@@ -96,7 +117,7 @@ export default async function ActivityPage({
 
   // Merge comments + history into one feed, sorted ascending
   type FeedItem =
-    | { kind: 'comment'; id: string; at: string; profile: { full_name: string | null; avatar_url: string | null } | null; content: string }
+    | { kind: 'comment'; id: string; at: string; profile: { full_name: string | null; avatar_url: string | null } | null; content: string; replyTo: string | null }
     | { kind: 'status';  id: string; at: string; profile: { full_name: string | null; avatar_url: string | null } | null; from: string | null; to: string; comment: string | null }
     | { kind: 'field';   id: string; at: string; profile: { full_name: string | null; avatar_url: string | null } | null; field: string; oldVal: string | null; newVal: string | null }
 
@@ -114,6 +135,7 @@ export default async function ActivityPage({
       at: c.created_at,
       profile: c.profiles as { full_name: string | null; avatar_url: string | null } | null,
       content: c.content,
+      replyTo: (c as { reply_to?: string | null }).reply_to ?? null,
     })),
     ...(history ?? []).map(h => ({
       kind: 'status' as const,
@@ -427,7 +449,17 @@ export default async function ActivityPage({
                           <span className="text-xs font-semibold text-gray-800">{item.profile?.full_name ?? 'Usuário'}</span>
                           <span className="text-[10px] text-gray-500">{formatDate(item.at)}</span>
                         </div>
+                        {item.replyTo && commentsById.has(item.replyTo) && (
+                          <div className="mb-1.5 border-l-2 border-indigo-200 pl-2 py-0.5 bg-gray-50 rounded-r text-xs text-gray-500">
+                            <span className="font-medium text-gray-600">{commentsById.get(item.replyTo)!.author}</span>
+                            <span className="block line-clamp-2">{commentsById.get(item.replyTo)!.content}</span>
+                          </div>
+                        )}
                         <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{item.content}</p>
+                        <div className="flex items-center justify-between gap-3">
+                          <ReactionBar path={path} commentId={item.id} currentUserId={user?.id ?? ''} reactions={reactionsByComment.get(item.id) ?? []} />
+                          <div className="mt-2 shrink-0"><ReplyButton id={item.id} author={item.profile?.full_name ?? 'Usuário'} preview={item.content.slice(0, 80)} /></div>
+                        </div>
                       </div>
                     </div>
                   </div>

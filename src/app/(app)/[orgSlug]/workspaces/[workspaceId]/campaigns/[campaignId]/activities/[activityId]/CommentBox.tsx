@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useRef, useTransition } from 'react'
+import { useState, useRef, useTransition, useEffect } from 'react'
 import { addComment } from '@/app/actions/activity'
-import { Send, AtSign, Users, UserCheck } from 'lucide-react'
+import { Send, AtSign, Users, UserCheck, Reply, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -45,8 +45,20 @@ export function CommentBox({ activityId, path, members = [], assignedIds = [] }:
   const [mentionStart, setMentionStart] = useState(-1) // -1 = autocomplete fechado
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
+  const [replyTo, setReplyTo] = useState<{ id: string; author: string; preview: string } | null>(null)
   const tracked = useRef<Mentionable[]>([])
   const taRef = useRef<HTMLTextAreaElement>(null)
+
+  // "Responder" num comentário (disparado pelo ReplyButton do feed).
+  useEffect(() => {
+    function onReply(e: Event) {
+      const d = (e as CustomEvent).detail as { id: string; author: string; preview: string }
+      setReplyTo(d)
+      taRef.current?.focus()
+    }
+    window.addEventListener('flow:reply', onReply)
+    return () => window.removeEventListener('flow:reply', onReply)
+  }, [])
 
   const q = norm(query)
   const memberOpts = members.filter(m => norm(m.name).includes(q)).slice(0, 6)
@@ -90,9 +102,9 @@ export function CommentBox({ activityId, path, members = [], assignedIds = [] }:
       ...(mentionAssigned ? assignedIds : []),
     ]))
     startTransition(async () => {
-      const result = await addComment(path, activityId, text, ids, mentionAll)
+      const result = await addComment(path, activityId, text, ids, mentionAll, replyTo?.id ?? null)
       if (result?.error) { setError(result.error); toast.error(result.error) }
-      else { setContent(''); tracked.current = []; setMentionStart(-1); setError('') }
+      else { setContent(''); tracked.current = []; setMentionStart(-1); setError(''); setReplyTo(null) }
     })
   }
 
@@ -110,6 +122,14 @@ export function CommentBox({ activityId, path, members = [], assignedIds = [] }:
 
   return (
     <form onSubmit={handleSubmit}>
+      {replyTo && (
+        <div className="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-200 text-xs">
+          <Reply className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+          <span className="text-gray-500 shrink-0">Respondendo a <span className="font-medium text-gray-700">{replyTo.author}</span>:</span>
+          <span className="flex-1 min-w-0 truncate text-gray-500">{replyTo.preview}</span>
+          <button type="button" onClick={() => setReplyTo(null)} className="text-gray-400 hover:text-gray-600 shrink-0" title="Cancelar resposta"><X className="w-3.5 h-3.5" /></button>
+        </div>
+      )}
       <div className="relative flex gap-2 items-end">
         {open && (
           <div className="pop-in absolute bottom-full mb-2 left-0 w-64 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 z-50 max-h-60 overflow-y-auto">
