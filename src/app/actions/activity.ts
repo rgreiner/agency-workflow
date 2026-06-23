@@ -291,6 +291,28 @@ export async function addComment(
   revalidatePath(path)
 }
 
+/** Salva os links livres ("Mídia") do job — array [{label, url}]. */
+export async function setActivityExtraLinks(
+  path: string,
+  activityId: string,
+  links: { label: string; url: string }[],
+) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const clean = (links ?? [])
+    .map(l => ({ label: (l.label ?? '').trim(), url: (l.url ?? '').trim() }))
+    .filter(l => l.url)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('set_activity_extra_links', {
+    p_user_id: user.id, p_activity_id: activityId, p_links: clean,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(path)
+}
+
 /** Liga/desliga uma reação (emoji) do usuário num comentário. */
 export async function toggleCommentReaction(path: string, commentId: string, emoji: string) {
   const supabase = await createClient()

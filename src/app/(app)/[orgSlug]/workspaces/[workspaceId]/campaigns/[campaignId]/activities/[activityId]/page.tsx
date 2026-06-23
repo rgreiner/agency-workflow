@@ -16,6 +16,7 @@ import { ActivityHeader } from './ActivityHeader'
 import { ShareJobButton } from './ShareJobButton'
 import { ReactionBar } from './ReactionBar'
 import { ReplyButton } from './ReplyButton'
+import { ExtraLinks } from './ExtraLinks'
 import { DateRangeEditor } from '@/components/ui/DateRangeEditor'
 import { Avatar } from '@/components/ui/Avatar'
 import { MachinePath } from '@/components/ui/MachinePath'
@@ -170,6 +171,10 @@ export default async function ActivityPage({
   const overdue = isOverdue(activity.due_date)
 
   const path = `/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}/activities/${activityId}`
+
+  // extra_links é coluna nova (não tipada nos types gerados) → acesso por cast.
+  const extraLinksRaw = (activity as { extra_links?: unknown }).extra_links
+  const extraLinks = Array.isArray(extraLinksRaw) ? (extraLinksRaw as { label: string; url: string }[]) : []
 
   // "Drive" (a pasta) NÃO entra aqui — é o caminho da máquina (G:\ / Mac), logo
   // acima. Estes são os links web do Google Drive.
@@ -420,6 +425,8 @@ export default async function ActivityPage({
 
               </div>
             </div>
+
+            <ExtraLinks path={path} activityId={activityId} canEdit={isOrgMember} links={extraLinks} />
           </div>
         </div>
 
