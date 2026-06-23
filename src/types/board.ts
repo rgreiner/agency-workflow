@@ -1,6 +1,6 @@
 // ── Board element types ───────────────────────────────────────────────────────
 
-export type BoardElementType = 'note' | 'text' | 'image'
+export type BoardElementType = 'note' | 'text' | 'image' | 'color' | 'link' | 'frame'
 
 export interface BaseElement {
   id: string
@@ -31,7 +31,25 @@ export interface ImageElement extends BaseElement {
   caption: string
 }
 
-export type BoardElement = NoteElement | TextElement | ImageElement
+export interface ColorElement extends BaseElement {
+  type: 'color'
+  color: string   // hex
+  name: string
+}
+
+export interface LinkElement extends BaseElement {
+  type: 'link'
+  url: string
+  title: string
+}
+
+export interface FrameElement extends BaseElement {
+  type: 'frame'
+  title: string
+  color: string   // cor da borda/cabeçalho
+}
+
+export type BoardElement = NoteElement | TextElement | ImageElement | ColorElement | LinkElement | FrameElement
 
 export interface Arrow {
   id: string
@@ -68,5 +86,11 @@ export function createElement(type: BoardElementType, x: number, y: number): Boa
       return { id, type: 'text',  x, y, w: 320, h: 56,  content: '', size: 'body', bold: false, italic: false, align: 'left' }
     case 'image':
       return { id, type: 'image', x, y, w: 240, h: 200, url: '', caption: '' }
+    case 'color':
+      return { id, type: 'color', x, y, w: 150, h: 170, color: '#0047cc', name: '' }
+    case 'link':
+      return { id, type: 'link',  x, y, w: 280, h: 72,  url: '', title: '' }
+    case 'frame':
+      return { id, type: 'frame', x, y, w: 380, h: 300, title: 'Grupo', color: '#94a3b8' }
   }
 }

@@ -11,10 +11,14 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { NoteEl } from './elements/NoteEl'
 import { TextEl } from './elements/TextEl'
 import { ImageEl } from './elements/ImageEl'
+import { ColorEl } from './elements/ColorEl'
+import { LinkEl } from './elements/LinkEl'
+import { FrameEl } from './elements/FrameEl'
 import {
   ChevronLeft, Check, Loader2,
   MousePointer2, StickyNote, Type, ImageIcon, ArrowRight,
   Trash2, ZoomIn, ZoomOut, Maximize2, Pencil, X,
+  Palette, Link2, Frame,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -24,7 +28,7 @@ const MIN_SCALE = 0.15
 const MAX_SCALE = 4.0
 const GRID_SIZE = 24
 
-type Tool       = 'select' | 'note' | 'text' | 'image' | 'arrow'
+type Tool       = 'select' | 'note' | 'text' | 'image' | 'link' | 'color' | 'frame' | 'arrow'
 type SaveStatus = 'idle' | 'saving' | 'saved'
 type Port       = 'top' | 'right' | 'bottom' | 'left'
 type Pt         = { x: number; y: number }
@@ -189,7 +193,7 @@ function CanvasEl({
         borderRadius: 10,
         cursor: isArrowTool ? 'crosshair' : editing ? 'default' : 'grab',
         userSelect: editing ? 'text' : 'none',
-        zIndex: selected ? 100 : isHovered ? 50 : 1,
+        zIndex: el.type === 'frame' ? (selected ? 100 : 0) : selected ? 100 : isHovered ? 50 : 1,
         overflow: 'visible',
         animation: 'board-pop 0.16s ease-out',
         transition: 'filter 0.15s ease',
@@ -268,6 +272,9 @@ const TOOLS = [
   { id: 'note',   icon: StickyNote,    label: 'Nota  (N)'       },
   { id: 'text',   icon: Type,          label: 'Texto  (T)'      },
   { id: 'image',  icon: ImageIcon,     label: 'Imagem  (I)'     },
+  { id: 'link',   icon: Link2,         label: 'Link  (L)'       },
+  { id: 'color',  icon: Palette,       label: 'Cor  (C)'        },
+  { id: 'frame',  icon: Frame,         label: 'Grupo / caixa  (F)' },
   { id: 'arrow',  icon: ArrowRight,    label: 'Seta  (A)'       },
 ] as const
 
@@ -401,7 +408,9 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
     const rect = canvasRef.current!.getBoundingClientRect()
     const wx = (screenX - rect.left - panRef.current.x) / scaleRef.current
     const wy = (screenY - rect.top  - panRef.current.y) / scaleRef.current
-    const el = createElement(type, wx - (type === 'note' ? 100 : type === 'image' ? 120 : 160), wy - 75)
+    const el = createElement(type, 0, 0)
+    el.x = wx - el.w / 2
+    el.y = wy - el.h / 2
     setElements(prev => {
       const next = [...prev, el]
       elementsRef.current = next
@@ -567,6 +576,9 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
       if (e.key === 'n' || e.key === 'N') setTool('note')
       if (e.key === 't' || e.key === 'T') setTool('text')
       if (e.key === 'i' || e.key === 'I') setTool('image')
+      if (e.key === 'l' || e.key === 'L') setTool('link')
+      if (e.key === 'c' || e.key === 'C') setTool('color')
+      if (e.key === 'f' || e.key === 'F') setTool('frame')
       if (e.key === 'a' || e.key === 'A') setTool('arrow')
     }
     document.addEventListener('keydown', onKey)
@@ -845,6 +857,27 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
                 )}
                 {el.type === 'image' && (
                   <ImageEl
+                    el={el}
+                    selected={selectedId === el.id}
+                    editing={editingId === el.id}
+                    onUpdate={u => updateEl(el.id, u)}
+                    onStopEdit={() => setEditingId(null)}
+                  />
+                )}
+                {el.type === 'color' && (
+                  <ColorEl el={el} selected={selectedId === el.id} onUpdate={u => updateEl(el.id, u)} />
+                )}
+                {el.type === 'link' && (
+                  <LinkEl
+                    el={el}
+                    selected={selectedId === el.id}
+                    editing={editingId === el.id}
+                    onUpdate={u => updateEl(el.id, u)}
+                    onStopEdit={() => setEditingId(null)}
+                  />
+                )}
+                {el.type === 'frame' && (
+                  <FrameEl
                     el={el}
                     selected={selectedId === el.id}
                     editing={editingId === el.id}
