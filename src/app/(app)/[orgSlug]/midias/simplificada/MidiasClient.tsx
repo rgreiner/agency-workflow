@@ -3,7 +3,7 @@
 import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Archive, ArchiveRestore, Megaphone, Pencil } from 'lucide-react'
+import { Plus, Archive, ArchiveRestore, Megaphone, Pencil, Printer } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { setMidiaSituacao, setMidiaArchived } from '@/app/actions/midia'
@@ -120,6 +120,10 @@ export function MidiasClient({
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex items-center justify-end gap-1.5">
+                        <Link href={`${base}/${m.id}/print`}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Imprimir / PDF">
+                          <Printer className="w-3.5 h-3.5" />
+                        </Link>
                         <Link href={editHref(m)}
                           className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar">
                           <Pencil className="w-3.5 h-3.5" />
