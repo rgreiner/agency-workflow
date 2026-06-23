@@ -6,6 +6,7 @@ import { updateWorkspace, deleteWorkspace, setWorkspaceArchived } from '@/app/ac
 import { Settings, X, Trash2, Archive, ArchiveRestore } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { ClientForm, type ClientFormValues } from '../ClientForm'
+import type { ContatoData } from '@/components/ui/ContatoBlocks'
 
 interface Props {
   orgSlug: string
@@ -13,9 +14,10 @@ interface Props {
   name: string
   archived?: boolean
   initial: Partial<ClientFormValues>
+  initialContato?: ContatoData
 }
 
-export function WorkspaceEditButton({ orgSlug, workspaceId, name, archived = false, initial }: Props) {
+export function WorkspaceEditButton({ orgSlug, workspaceId, name, archived = false, initial, initialContato }: Props) {
   const [open, setOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -60,6 +62,7 @@ export function WorkspaceEditButton({ orgSlug, workspaceId, name, archived = fal
             <div className="px-6 py-5 overflow-y-auto">
               <ClientForm
                 initial={initial}
+                initialContato={initialContato}
                 submitLabel="Salvar"
                 onSubmit={(fd) => updateWorkspace(orgSlug, workspaceId, fd)}
                 onSuccess={() => { setOpen(false); router.refresh() }}

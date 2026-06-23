@@ -28,7 +28,14 @@ function readClientData(formData: FormData) {
     address_city: get('address_city'),
     address_state: get('address_state'),
     payment_terms: get('payment_terms'),
+    atividade: get('atividade'),
   }
+}
+
+/** Blocos de contato (jsonb) enviados como JSON pelo ClientForm. */
+function readContato(formData: FormData) {
+  const j = (k: string) => { try { return JSON.parse((formData.get(k) as string) || '[]') } catch { return [] } }
+  return { enderecos: j('enderecos'), telefones: j('telefones'), emails: j('emails'), contas_bancarias: j('contas_bancarias') }
 }
 
 export async function createWorkspace(orgSlug: string, formData: FormData) {
@@ -60,7 +67,7 @@ export async function createWorkspace(orgSlug: string, formData: FormData) {
   // Salva os demais dados cadastrais (fiscais/contato/endereço).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: e2 } = await (supabase as any).rpc('update_workspace_cadastro', {
-    p_user_id: user.id, p_workspace_id: workspaceId, p_data: data,
+    p_user_id: user.id, p_workspace_id: workspaceId, p_data: { ...data, ...readContato(formData) },
   })
   if (e2) return { error: e2.message }
 
@@ -142,7 +149,7 @@ export async function updateWorkspace(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any).rpc('update_workspace_cadastro', {
-    p_user_id: user.id, p_workspace_id: workspaceId, p_data: data,
+    p_user_id: user.id, p_workspace_id: workspaceId, p_data: { ...data, ...readContato(formData) },
   })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/workspaces/${workspaceId}`)

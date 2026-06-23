@@ -22,7 +22,7 @@ export default async function WorkspacePage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: workspace } = await (supabase as any)
     .from('workspaces')
-    .select('id, name, color, description, archived, legal_name, trade_name, tax_id, state_registration, city_registration, finance_email, phone, contact_name, address_zip, address_street, address_number, address_complement, address_district, address_city, address_state, payment_terms')
+    .select('id, name, color, description, archived, legal_name, trade_name, tax_id, state_registration, city_registration, finance_email, phone, contact_name, address_zip, address_street, address_number, address_complement, address_district, address_city, address_state, payment_terms, atividade, enderecos, telefones, emails, contas_bancarias')
     .eq('id', workspaceId).single()
   if (!workspace) return null
 
@@ -72,6 +72,13 @@ export default async function WorkspacePage({
               address_city: workspace.address_city ?? '',
               address_state: workspace.address_state ?? '',
               payment_terms: workspace.payment_terms ?? '',
+              atividade: workspace.atividade ?? '',
+            }}
+            initialContato={{
+              enderecos: workspace.enderecos ?? [],
+              telefones: workspace.telefones ?? [],
+              emails: workspace.emails ?? [],
+              contas_bancarias: workspace.contas_bancarias ?? [],
             }}
           />
         }

@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Check, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ContatoBlocks, emptyContato, type ContatoData } from '@/components/ui/ContatoBlocks'
 
 export interface ClientFormValues {
   name: string
@@ -24,6 +25,7 @@ export interface ClientFormValues {
   address_city: string
   address_state: string
   payment_terms: string
+  atividade: string
 }
 
 const EMPTY: ClientFormValues = {
@@ -31,7 +33,7 @@ const EMPTY: ClientFormValues = {
   legal_name: '', trade_name: '', tax_id: '', state_registration: '', city_registration: '',
   finance_email: '', phone: '', contact_name: '',
   address_zip: '', address_street: '', address_number: '', address_complement: '',
-  address_district: '', address_city: '', address_state: '', payment_terms: '',
+  address_district: '', address_city: '', address_state: '', payment_terms: '', atividade: '',
 }
 
 const COLORS = [
@@ -45,6 +47,7 @@ const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 
 interface Props {
   initial?: Partial<ClientFormValues>
+  initialContato?: ContatoData
   submitLabel?: string
   onSubmit: (fd: FormData) => Promise<{ error?: string } | void>
   onSuccess?: () => void
@@ -53,8 +56,9 @@ interface Props {
   footerLeft?: React.ReactNode
 }
 
-export function ClientForm({ initial, submitLabel = 'Salvar', onSubmit, onSuccess, onCancel, footerLeft }: Props) {
+export function ClientForm({ initial, initialContato, submitLabel = 'Salvar', onSubmit, onSuccess, onCancel, footerLeft }: Props) {
   const [form, setForm] = useState<ClientFormValues>({ ...EMPTY, ...initial })
+  const [contato, setContato] = useState<ContatoData>(initialContato ?? emptyContato())
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
 
@@ -83,6 +87,10 @@ export function ClientForm({ initial, submitLabel = 'Salvar', onSubmit, onSucces
     if (!form.name.trim()) { setError('Nome obrigatório'); return }
     const fd = new FormData()
     Object.entries(form).forEach(([k, v]) => fd.set(k, v))
+    fd.set('enderecos', JSON.stringify(contato.enderecos))
+    fd.set('telefones', JSON.stringify(contato.telefones))
+    fd.set('emails', JSON.stringify(contato.emails))
+    fd.set('contas_bancarias', JSON.stringify(contato.contas_bancarias))
     startTransition(async () => {
       const res = await onSubmit(fd)
       if (res?.error) { setError(res.error); return }
@@ -157,7 +165,10 @@ export function ClientForm({ initial, submitLabel = 'Salvar', onSubmit, onSucces
       <div>
         <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Comercial</h3>
         <div className="space-y-4">
-          {field('payment_terms', 'Condição / prazo de pagamento padrão', { placeholder: 'Ex.: 30 dias úteis' })}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {field('atividade', 'Atividade', { placeholder: 'Ex.: Indústria, Serviços' })}
+            {field('payment_terms', 'Condição / prazo de pagamento padrão', { placeholder: 'Ex.: 30 dias úteis' })}
+          </div>
           <div>
             <label className={labelCls}>Observações</label>
             <textarea
@@ -167,6 +178,11 @@ export function ClientForm({ initial, submitLabel = 'Salvar', onSubmit, onSucces
             />
           </div>
         </div>
+      </div>
+
+      {/* Contatos (múltiplos) */}
+      <div className="border-t border-gray-100 pt-4">
+        <ContatoBlocks value={contato} onChange={setContato} />
       </div>
 
       {/* Rodapé */}
