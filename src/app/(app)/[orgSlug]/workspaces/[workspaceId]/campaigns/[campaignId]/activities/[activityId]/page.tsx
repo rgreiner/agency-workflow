@@ -13,6 +13,7 @@ import { CommentBox } from './CommentBox'
 import { AssigneeSelector } from './AssigneeSelector'
 import { FieldEditor } from './FieldEditor'
 import { ActivityHeader } from './ActivityHeader'
+import { ShareJobButton } from './ShareJobButton'
 import { DateRangeEditor } from '@/components/ui/DateRangeEditor'
 import { Avatar } from '@/components/ui/Avatar'
 import { MachinePath } from '@/components/ui/MachinePath'
@@ -188,6 +189,7 @@ export default async function ActivityPage({
               <AlertTriangle className="w-3.5 h-3.5" /> Atrasada
             </span>
           )}
+          <ShareJobButton orgSlug={orgSlug} activityId={activityId} title={activity.title} />
           <span className="hidden md:inline">Criada {formatDate(activity.created_at)}</span>
         </div>
       </div>
