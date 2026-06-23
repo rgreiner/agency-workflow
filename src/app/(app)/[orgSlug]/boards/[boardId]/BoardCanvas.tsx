@@ -6,7 +6,7 @@ import { createElement } from '@/types/board'
 import { updateBoardTitle, deleteBoard } from '@/app/actions/boards'
 import { createClient } from '@/lib/supabase/client'
 import { uploadFile } from '@/lib/storage/upload-client'
-import { downscaleImage } from '@/lib/image-resize'
+import { downscaleImage, extForType } from '@/lib/image-resize'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { NoteEl } from './elements/NoteEl'
 import { TextEl } from './elements/TextEl'
@@ -418,7 +418,7 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
     setSaveStatus('saving')
     try {
       const small = await downscaleImage(file)
-      const url = await uploadFile('boards', `${crypto.randomUUID()}.webp`, small)
+      const url = await uploadFile('boards', `${crypto.randomUUID()}.${extForType(small.type)}`, small)
       const el = createElement('image', wx - 120, wy - 100) as ImageElement
       el.url = url
       setElements(prev => {

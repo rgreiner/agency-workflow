@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import type { ImageElement } from '@/types/board'
 import { ImageIcon, Link2, Upload, Loader2 } from 'lucide-react'
 import { uploadFile } from '@/lib/storage/upload-client'
-import { downscaleImage } from '@/lib/image-resize'
+import { downscaleImage, extForType } from '@/lib/image-resize'
 
 interface Props {
   el: ImageElement
@@ -57,7 +57,7 @@ export function ImageEl({ el, editing, selected, onUpdate, onStopEdit }: Props) 
     setUploading(true)
     try {
       const small = await downscaleImage(file)
-      const url = await uploadFile('boards', `${crypto.randomUUID()}.webp`, small)
+      const url = await uploadFile('boards', `${crypto.randomUUID()}.${extForType(small.type)}`, small)
       onUpdate({ url })
       onStopEdit()
     } catch {
