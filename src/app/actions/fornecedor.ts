@@ -6,7 +6,11 @@ import { revalidatePath } from 'next/cache'
 
 function readData(formData: FormData) {
   const get = (k: string) => ((formData.get(k) as string) ?? '').trim()
-  return { name: get('name'), tipo: get('tipo'), tax_id: get('tax_id'), notes: get('notes') }
+  const j = (k: string) => { try { return JSON.parse((formData.get(k) as string) || '[]') } catch { return [] } }
+  return {
+    name: get('name'), tipo: get('tipo'), tax_id: get('tax_id'), notes: get('notes'),
+    enderecos: j('enderecos'), telefones: j('telefones'), emails: j('emails'), contas_bancarias: j('contas_bancarias'),
+  }
 }
 
 export async function createFornecedor(orgSlug: string, formData: FormData) {

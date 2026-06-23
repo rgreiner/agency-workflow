@@ -6,9 +6,11 @@ import Link from 'next/link'
 import { Plus, X, Check, Loader2, Archive, ArchiveRestore, Pencil, Truck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createFornecedor, updateFornecedor, setFornecedorArchived } from '@/app/actions/fornecedor'
+import { ContatoBlocks, type ContatoData } from '@/components/ui/ContatoBlocks'
 
 export interface Fornecedor {
   id: string; name: string; tipo: string | null; tax_id: string | null; notes: string | null; archived: boolean
+  enderecos?: ContatoData['enderecos']; telefones?: ContatoData['telefones']; emails?: ContatoData['emails']; contas_bancarias?: ContatoData['contas_bancarias']
 }
 
 const inputCls = 'w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent'
@@ -101,6 +103,9 @@ function FornecedorModal({ orgSlug, fornecedor, onClose }: { orgSlug: string; fo
   const [form, setForm] = useState({
     name: fornecedor?.name ?? '', tipo: fornecedor?.tipo ?? '', tax_id: fornecedor?.tax_id ?? '', notes: fornecedor?.notes ?? '',
   })
+  const [contato, setContato] = useState<ContatoData>({
+    enderecos: fornecedor?.enderecos ?? [], telefones: fornecedor?.telefones ?? [], emails: fornecedor?.emails ?? [], contas_bancarias: fornecedor?.contas_bancarias ?? [],
+  })
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -108,6 +113,8 @@ function FornecedorModal({ orgSlug, fornecedor, onClose }: { orgSlug: string; fo
     if (!form.name.trim()) { setError('Nome obrigatório'); return }
     const fd = new FormData()
     fd.set('name', form.name); fd.set('tipo', form.tipo); fd.set('tax_id', form.tax_id); fd.set('notes', form.notes)
+    fd.set('enderecos', JSON.stringify(contato.enderecos)); fd.set('telefones', JSON.stringify(contato.telefones))
+    fd.set('emails', JSON.stringify(contato.emails)); fd.set('contas_bancarias', JSON.stringify(contato.contas_bancarias))
     startTransition(async () => {
       const res = fornecedor ? await updateFornecedor(orgSlug, fornecedor.id, fd) : await createFornecedor(orgSlug, fd)
       if (res?.error) { setError(res.error); return }
@@ -117,7 +124,7 @@ function FornecedorModal({ orgSlug, fornecedor, onClose }: { orgSlug: string; fo
 
   return (
     <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="modal-card w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-200">
+      <div className="modal-card w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-xl border border-gray-200">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h2 className="text-base font-semibold text-gray-900">{fornecedor ? 'Editar fornecedor' : 'Novo fornecedor'}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X className="w-5 h-5" /></button>
@@ -131,6 +138,7 @@ function FornecedorModal({ orgSlug, fornecedor, onClose }: { orgSlug: string; fo
             <div><label className={labelCls}>CNPJ</label><input value={form.tax_id} onChange={e => setForm(f => ({ ...f, tax_id: e.target.value }))} className={inputCls} /></div>
           </div>
           <div><label className={labelCls}>Observações</label><textarea rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className={cn(inputCls, 'resize-none')} /></div>
+          <div className="border-t border-gray-100 pt-4"><ContatoBlocks value={contato} onChange={setContato} /></div>
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
             <button type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition">

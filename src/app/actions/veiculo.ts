@@ -6,12 +6,17 @@ import { revalidatePath } from 'next/cache'
 
 function readVeiculoData(formData: FormData) {
   const get = (k: string) => ((formData.get(k) as string) ?? '').trim()
+  const j = (k: string) => { try { return JSON.parse((formData.get(k) as string) || '[]') } catch { return [] } }
   return {
     name: get('name'),
     type: get('type'),
     tax_id: get('tax_id'),
     commission_pct: get('commission_pct'),
     notes: get('notes'),
+    enderecos: j('enderecos'),
+    telefones: j('telefones'),
+    emails: j('emails'),
+    contas_bancarias: j('contas_bancarias'),
   }
 }
 

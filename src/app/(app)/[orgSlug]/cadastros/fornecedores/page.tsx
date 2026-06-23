@@ -18,7 +18,7 @@ export default async function FornecedoresPage({
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: raw } = await (supabase as any)
-    .from('fornecedores').select('id, name, tipo, tax_id, notes, archived')
+    .from('fornecedores').select('id, name, tipo, tax_id, notes, archived, enderecos, telefones, emails, contas_bancarias')
     .eq('org_id', org.id).eq('archived', archivedView).order('name', { ascending: true })
 
   const fornecedores = (raw ?? []) as Fornecedor[]

@@ -7,6 +7,7 @@ import { Plus, X, Check, Loader2, Archive, ArchiveRestore, Pencil, Tv } from 'lu
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { createVeiculo, updateVeiculo, setVeiculoArchived } from '@/app/actions/veiculo'
+import { ContatoBlocks, type ContatoData } from '@/components/ui/ContatoBlocks'
 
 export interface Veiculo {
   id: string
@@ -16,6 +17,10 @@ export interface Veiculo {
   commission_pct: number | null
   notes: string | null
   archived: boolean
+  enderecos?: ContatoData['enderecos']
+  telefones?: ContatoData['telefones']
+  emails?: ContatoData['emails']
+  contas_bancarias?: ContatoData['contas_bancarias']
 }
 
 const TYPE_OPTIONS = [
@@ -149,6 +154,9 @@ function VeiculoModal({ orgSlug, veiculo, onClose }: {
     commission_pct: veiculo?.commission_pct != null ? String(veiculo.commission_pct).replace('.', ',') : '20',
     notes: veiculo?.notes ?? '',
   })
+  const [contato, setContato] = useState<ContatoData>({
+    enderecos: veiculo?.enderecos ?? [], telefones: veiculo?.telefones ?? [], emails: veiculo?.emails ?? [], contas_bancarias: veiculo?.contas_bancarias ?? [],
+  })
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -160,6 +168,10 @@ function VeiculoModal({ orgSlug, veiculo, onClose }: {
     fd.set('tax_id', form.tax_id)
     fd.set('commission_pct', form.commission_pct.replace(',', '.'))
     fd.set('notes', form.notes)
+    fd.set('enderecos', JSON.stringify(contato.enderecos))
+    fd.set('telefones', JSON.stringify(contato.telefones))
+    fd.set('emails', JSON.stringify(contato.emails))
+    fd.set('contas_bancarias', JSON.stringify(contato.contas_bancarias))
     startTransition(async () => {
       const res = veiculo
         ? await updateVeiculo(orgSlug, veiculo.id, fd)
@@ -172,8 +184,8 @@ function VeiculoModal({ orgSlug, veiculo, onClose }: {
 
   return (
     <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="modal-card w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-200">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div className="modal-card w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-xl border border-gray-200">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white">
           <h2 className="text-base font-semibold text-gray-900">{veiculo ? 'Editar veículo' : 'Novo veículo'}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X className="w-5 h-5" /></button>
         </div>
@@ -210,6 +222,10 @@ function VeiculoModal({ orgSlug, veiculo, onClose }: {
             <label className={labelCls}>Observações</label>
             <textarea rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
               className={cn(inputCls, 'resize-none')} />
+          </div>
+
+          <div className="border-t border-gray-100 pt-4">
+            <ContatoBlocks value={contato} onChange={setContato} />
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
