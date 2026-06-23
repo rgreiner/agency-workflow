@@ -34,7 +34,7 @@ function emptyValues(today: string, defaultResponsavelId: string): MidiaValues {
     workspace_id: '', campaign_id: '', veiculo_id: '', tipo: 'impressa_jornal', titulo: '',
     emissao: today, job: '', aut_veiculo: '', codigo_identificador: '', nota_fiscal: '',
     pecas: '', praca: '', abrangencia: 'local',
-    valor: '', desconto_pct: '20', faturamento: 'valor_bruto', prazo: 'a_vista', data_base: today, dias_agencia: '7',
+    valor: '', desconto_pct: '20', faturamento: 'valor_bruto', prazo: '15_dfm', data_base: today, dias_agencia: '7',
     primeira_veiculacao: '', ultima_veiculacao: '', contato: '', responsavel_id: defaultResponsavelId, situacao: 'em_aberto',
     observacao: '', texto_legal: '',
   }

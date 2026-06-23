@@ -3,7 +3,7 @@ import { getUsuario } from '@/lib/auth/server'
 import { notFound } from 'next/navigation'
 import { getMergedStatusConfig, PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity, type StatusOverride } from '@/types'
 import { cn, formatDate, isOverdue } from '@/lib/utils'
-import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink } from 'lucide-react'
+import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink, X } from 'lucide-react'
 import Link from 'next/link'
 import { DriveProvisioningNotice } from './DriveProvisioningNotice'
 import { StatusChanger } from './StatusChanger'
@@ -191,6 +191,13 @@ export default async function ActivityPage({
           )}
           <ShareJobButton orgSlug={orgSlug} activityId={activityId} title={activity.title} />
           <span className="hidden md:inline">Criada {formatDate(activity.created_at)}</span>
+          <Link
+            href={`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}`}
+            title="Fechar"
+            className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </Link>
         </div>
       </div>
 

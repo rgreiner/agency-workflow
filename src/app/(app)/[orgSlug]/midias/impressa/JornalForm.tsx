@@ -47,7 +47,7 @@ function emptyValues(today: string, responsavelId: string): JornalValues {
     mes: String(Number(m)), ano: y, entregar_por: '', ja_publicado_em: '', cores: '', edicao: '',
     abrangencia: 'estadual', observacao: '',
     negociacao: 'valor_fechado', valor: '',
-    desconto_pct: '20', faturamento: 'valor_bruto', prazo: 'a_vista', data_base: today, dias_agencia: '7',
+    desconto_pct: '20', faturamento: 'valor_bruto', prazo: '15_dfm', data_base: today, dias_agencia: '7',
     primeira_veiculacao: '', ultima_veiculacao: '', contato: '', responsavel_id: responsavelId, situacao: 'em_aberto',
     texto_legal: '', dias: {},
   }

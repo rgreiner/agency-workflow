@@ -36,7 +36,7 @@ function emptyValues(today: string, responsavelId: string): DigitalValues {
     workspace_id: '', campaign_id: '', veiculo_id: '', titulo: '',
     emissao: today, job: '', aut_veiculo: '', codigo_identificador: '', nota_fiscal: '',
     praca: '', abrangencia: 'estadual',
-    desconto_pct: '20', faturamento: 'liquido_contra_cliente', prazo: 'a_vista', data_base: today, dias_agencia: '7',
+    desconto_pct: '20', faturamento: 'liquido_contra_cliente', prazo: '15_dfm', data_base: today, dias_agencia: '7',
     primeira_veiculacao: '', ultima_veiculacao: '', contato: '', responsavel_id: responsavelId, situacao: 'em_aberto',
     observacao: '', texto_legal: '', pecas: [newPeca()], insercoes: [newInsercao()],
   }

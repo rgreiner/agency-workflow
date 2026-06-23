@@ -47,7 +47,7 @@ function emptyValues(today: string, responsavelId: string): ImpressaValues {
     workspace_id: '', campaign_id: '', veiculo_id: '', titulo: '',
     emissao: today, job: '', aut_veiculo: '', codigo_identificador: '', nota_fiscal: '',
     revista: '', periodo: '',
-    desconto_pct: '20', faturamento: 'valor_bruto', prazo: 'a_vista', data_base: today, dias_agencia: '7',
+    desconto_pct: '20', faturamento: 'valor_bruto', prazo: '15_dfm', data_base: today, dias_agencia: '7',
     primeira_veiculacao: '', ultima_veiculacao: '', contato: '', responsavel_id: responsavelId, situacao: 'em_aberto',
     observacao: '', texto_legal: '', insercoes: [emptyInsercao(today)],
   }

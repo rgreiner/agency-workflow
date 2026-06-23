@@ -4,8 +4,10 @@ import { useState, useTransition, useRef, useEffect } from 'react'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { updateActivityStatus } from '@/app/actions/activity'
 import { cn } from '@/lib/utils'
-import { ChevronDown, Check, Loader2 } from 'lucide-react'
+import { ChevronDown, Check, Loader2, Search } from 'lucide-react'
 import { toast } from 'sonner'
+
+const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim()
 
 interface Props {
   activityId: string
@@ -18,6 +20,7 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
   const [selected, setSelected] = useState(currentStatus)
   const [comment, setComment] = useState('')
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const [isPending, startTransition] = useTransition()
   const ref = useRef<HTMLDivElement>(null)
 
@@ -69,7 +72,7 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
       <div ref={ref} className="relative">
         <button
           type="button"
-          onClick={() => setOpen(o => !o)}
+          onClick={() => { setOpen(o => !o); setQuery('') }}
           aria-haspopup="listbox"
           aria-expanded={open}
           aria-label={`Status: ${selectedCfg.label} — alterar`}
@@ -86,9 +89,22 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
             style={{ transformOrigin: 'top left' }}
             className="pop-in absolute top-full mt-1.5 left-0 w-60 bg-white rounded-xl border border-gray-200 shadow-lg z-50 overflow-hidden"
           >
+            <div className="p-1.5 border-b border-gray-100">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="Buscar status…"
+                  className="w-full pl-7 pr-2 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
             <div className="max-h-72 overflow-y-auto py-1">
               {['internal', 'external', 'done'].map(group => {
-                const items = statusConfig.filter(s => s.group === group)
+                const q = norm(query)
+                const items = statusConfig.filter(s => s.group === group && (!q || norm(s.label).includes(q)))
                 if (!items.length) return null
                 const label = group === 'internal' ? 'Trabalho interno' : group === 'external' ? 'Cliente / Fornecedores' : 'Encerrado'
                 return (
@@ -116,6 +132,9 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
                   </div>
                 )
               })}
+              {norm(query) !== '' && !statusConfig.some(s => norm(s.label).includes(norm(query))) && (
+                <p className="px-3 py-3 text-xs text-gray-400 text-center">Nenhum status encontrado</p>
+              )}
             </div>
           </div>
         )}

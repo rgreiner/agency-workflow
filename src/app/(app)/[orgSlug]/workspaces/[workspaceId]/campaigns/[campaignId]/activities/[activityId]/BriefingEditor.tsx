@@ -11,7 +11,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import {
   Bold, Italic, Strikethrough, Heading2, Heading3,
-  List, ListOrdered, Quote, Check, Loader2, Pencil,
+  List, ListOrdered, Quote, Link2, Check, Loader2, Pencil,
 } from 'lucide-react'
 import { updateActivityField } from '@/app/actions/activity'
 import { cn } from '@/lib/utils'
@@ -54,6 +54,15 @@ export function BriefingEditor({ activityId, path, description, canEdit }: {
     setTimeout(() => editor?.commands.focus('end'), 30)
   }
 
+  function setLink() {
+    if (!editor) return
+    const prev = (editor.getAttributes('link').href as string) ?? ''
+    const url = window.prompt('Cole o link (URL):', prev)
+    if (url === null) return
+    if (url.trim() === '') { editor.chain().focus().extendMarkRange('link').unsetLink().run(); return }
+    editor.chain().focus().extendMarkRange('link').setLink({ href: url.trim() }).run()
+  }
+
   function save() {
     if (!editor) return
     const html = editor.getHTML()
@@ -79,6 +88,8 @@ export function BriefingEditor({ activityId, path, description, canEdit }: {
           <Btn onClick={() => editor?.chain().focus().toggleBulletList().run()} active={!!editor?.isActive('bulletList')} title="Lista"><List className="w-3.5 h-3.5" /></Btn>
           <Btn onClick={() => editor?.chain().focus().toggleOrderedList().run()} active={!!editor?.isActive('orderedList')} title="Lista numerada"><ListOrdered className="w-3.5 h-3.5" /></Btn>
           <Btn onClick={() => editor?.chain().focus().toggleBlockquote().run()} active={!!editor?.isActive('blockquote')} title="Citação"><Quote className="w-3.5 h-3.5" /></Btn>
+          <Sep />
+          <Btn onClick={setLink} active={!!editor?.isActive('link')} title="Link"><Link2 className="w-3.5 h-3.5" /></Btn>
         </div>
 
         <div className="rich-text px-3 py-2.5 max-h-[420px] overflow-y-auto">

@@ -76,6 +76,10 @@ export function InboxClient({ orgSlug, initial }: { orgSlug: string; initial: No
   const shown = filter === 'nao_lidas' ? items.filter(n => !n.readAt) : items
   const groups = groupByDay(shown)
   const selCount = selected.size
+  const allShownSelected = shown.length > 0 && shown.every(n => selected.has(n.id))
+  function toggleSelectAll() {
+    setSelected(allShownSelected ? new Set() : new Set(shown.map(n => n.id)))
+  }
 
   return (
     <div className="p-6">
@@ -125,6 +129,17 @@ export function InboxClient({ orgSlug, initial }: { orgSlug: string; initial: No
             <X className="w-4 h-4" />
           </button>
         </div>
+      )}
+
+      {/* Selecionar todas */}
+      {shown.length > 0 && (
+        <button onClick={toggleSelectAll}
+          className="flex items-center gap-2 mb-3 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors">
+          <span className={cn('w-4 h-4 rounded border flex items-center justify-center shrink-0 transition', allShownSelected ? 'bg-indigo-600 border-indigo-600 text-[#fff]' : 'border-gray-300')}>
+            {allShownSelected && <Check className="w-3 h-3" strokeWidth={3} />}
+          </span>
+          {allShownSelected ? 'Desmarcar todas' : `Selecionar todas (${shown.length})`}
+        </button>
       )}
 
       {/* Lista */}
