@@ -23,13 +23,20 @@ export function MidiasClient({
   title = 'Liberação de mídias — Simplificada',
   subtitle = 'Autorizações de mídia (todos os tipos)',
   addLabel = 'Adicionar Mídia Simplificada',
+  addOptions,
+  editHrefFor,
 }: {
   orgSlug: string; midias: MidiaRow[]; archivedView: boolean
   basePath?: string; title?: string; subtitle?: string; addLabel?: string
+  /** Vários botões de "Adicionar" (ex.: Jornal/Revista). Se ausente, usa addLabel → base/nova. */
+  addOptions?: { label: string; href: string }[]
+  /** Link de edição por linha (ex.: Jornal vai pra rota diferente). Default base/id. */
+  editHrefFor?: (m: MidiaRow) => string
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const base = `/${orgSlug}/${basePath}`
+  const editHref = (m: MidiaRow) => (editHrefFor ? editHrefFor(m) : `${base}/${m.id}`)
 
   function changeSituacao(id: string, situacao: string) {
     startTransition(async () => { await setMidiaSituacao(orgSlug, id, situacao); router.refresh() })
@@ -52,12 +59,19 @@ export function MidiasClient({
             <Link href={`${base}?view=arquivadas`}
               className={cn('px-2.5 py-1 rounded-md transition', archivedView ? 'bg-gray-900 text-[#fff]' : 'text-gray-500 hover:text-gray-700')}>Arquivadas</Link>
           </div>
-          {!archivedView && (
+          {!archivedView && (addOptions && addOptions.length > 0 ? (
+            addOptions.map(opt => (
+              <Link key={opt.href} href={opt.href}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 transition">
+                <Plus className="w-4 h-4" /> {opt.label}
+              </Link>
+            ))
+          ) : (
             <Link href={`${base}/nova`}
               className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 transition">
               <Plus className="w-4 h-4" /> {addLabel}
             </Link>
-          )}
+          ))}
         </div>
       </div>
 
@@ -85,7 +99,7 @@ export function MidiasClient({
                   <tr key={m.id} className="hover:bg-gray-50/50 transition">
                     <td className="px-4 py-3 text-sm text-gray-400">{m.numero ?? '—'}</td>
                     <td className="px-4 py-3 text-sm font-medium">
-                      <Link href={`${base}/${m.id}`} className="text-gray-900 hover:text-indigo-600 transition">
+                      <Link href={editHref(m)} className="text-gray-900 hover:text-indigo-600 transition">
                         {m.titulo}
                       </Link>
                     </td>
@@ -106,7 +120,7 @@ export function MidiasClient({
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex items-center justify-end gap-1.5">
-                        <Link href={`${base}/${m.id}`}
+                        <Link href={editHref(m)}
                           className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar">
                           <Pencil className="w-3.5 h-3.5" />
                         </Link>

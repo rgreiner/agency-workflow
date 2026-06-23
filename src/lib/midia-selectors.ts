@@ -1,16 +1,10 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
-import { createMidia } from '@/app/actions/midia'
-import type { ClienteOpt, VeiculoOpt, MemberOpt } from '../../simplificada/MidiaForm'
-import { ImpressaForm } from '../ImpressaForm'
+import type { ClienteOpt, VeiculoOpt, MemberOpt } from '@/app/(app)/[orgSlug]/midias/simplificada/MidiaForm'
 
-export default async function NovaImpressaPage({
-  params,
-}: {
-  params: Promise<{ orgSlug: string }>
-}) {
-  const { orgSlug } = await params
+/** Carrega os seletores (clientes+campanhas, veículos, membros) usados nos forms de mídia. */
+export async function loadMidiaSelectors(orgSlug: string) {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) redirect('/login')
@@ -40,17 +34,5 @@ export default async function NovaImpressaPage({
   })).filter((m: MemberOpt) => m.id)
 
   const today = new Date().toISOString().slice(0, 10)
-
-  return (
-    <ImpressaForm
-      clientes={clientes}
-      veiculos={veiculos}
-      members={members}
-      defaultResponsavelId={user.id}
-      today={today}
-      redirectTo={`/${orgSlug}/midias/impressa`}
-      submitLabel="Gravar"
-      onSubmit={createMidia.bind(null, orgSlug)}
-    />
-  )
+  return { supabase, orgId: org.id as string, userId: user.id as string, clientes, veiculos, members, today }
 }

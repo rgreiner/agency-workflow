@@ -42,7 +42,10 @@ export default async function MidiasImpressaPage({
       basePath="midias/impressa"
       title="Liberação de mídias — Impressa"
       subtitle="Jornal e revista"
-      addLabel="Adicionar Revista"
+      addOptions={[
+        { label: 'Jornal', href: `/${orgSlug}/midias/impressa/novo/jornal` },
+        { label: 'Revista', href: `/${orgSlug}/midias/impressa/novo/revista` },
+      ]}
     />
   )
 }
