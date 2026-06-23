@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { PrintToolbar } from '@/components/ui/PrintToolbar'
 import { AGENCY, DOC_NF_NOTES } from '@/lib/agency'
 import {
-  formatBRL, formatDateBR, labelOf,
+  formatBRL, formatDateBR, labelOf, parseMoney,
   MIDIA_TIPO_OPTIONS, MIDIA_PRAZO_OPTIONS, MIDIA_FATURAMENTO_OPTIONS,
 } from '@/lib/midia'
 
@@ -60,6 +60,14 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
   const desc = Math.round(valor * descPct) / 100
   const tipoLabel = labelOf(MIDIA_TIPO_OPTIONS, m.tipo).replace('Mídia ', '')
   const venc = vencimentoVeiculo(m.prazo, m.data_base)
+
+  // Produção na PI (só Mídia Externa, quando informada)
+  const det = m.detalhe ?? {}
+  const prodValor = parseMoney(String(det.producao_valor ?? ''))
+  const prodQtd = parseInt(String(det.producao_quantidade ?? '1'), 10) || 1
+  const prodTotal = prodValor * prodQtd
+  const prodComissao = prodTotal * (parseMoney(String(det.producao_comissao_pct ?? '')) / 100)
+  const showProducao = m.tipo === 'externa' && prodTotal > 0
   const enderecoCliente = [
     ws?.address_street, ws?.address_number ? `nº ${ws.address_number}` : '', ws?.address_complement,
     ws?.address_district, [ws?.address_city, ws?.address_state].filter(Boolean).join('/'),
@@ -116,6 +124,22 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
               <tr><td className="text-gray-500">{labelOf(MIDIA_FATURAMENTO_OPTIONS, m.faturamento)}</td><td className="text-right font-semibold">{formatBRL(valor)}</td></tr>
             </tbody>
           </table>
+
+          {/* Produção (Mídia Externa) */}
+          {showProducao && (
+            <>
+              <div className="border-l-2 border-gray-400 pl-2 mb-2"><span className="font-semibold text-gray-700">Produção</span></div>
+              <table className="w-full sm:w-2/3 mb-6">
+                <tbody className="[&_td]:py-1.5 [&_tr]:border-b [&_tr]:border-gray-100">
+                  <tr><td className="text-gray-500">Tipo</td><td className="text-right">{det.producao_tipo === 'no_veiculo' ? 'No veículo' : det.producao_tipo === 'de_terceiros' ? 'De terceiros' : '—'}</td></tr>
+                  <tr><td className="text-gray-500">Quantidade</td><td className="text-right">{prodQtd}</td></tr>
+                  <tr><td className="text-gray-500">Valor unitário</td><td className="text-right">{formatBRL(prodValor)}</td></tr>
+                  <tr><td className="text-gray-500">Total produção</td><td className="text-right font-semibold">{formatBRL(prodTotal)}</td></tr>
+                  {prodComissao > 0 && <tr><td className="text-gray-500">Comissão produção</td><td className="text-right">{formatBRL(prodComissao)}</td></tr>}
+                </tbody>
+              </table>
+            </>
+          )}
 
           {/* Texto legal / observações de faturamento */}
           <div className="border-l-2 border-gray-400 pl-2 mb-2"><span className="font-semibold text-gray-700">Observações sobre faturamento</span></div>

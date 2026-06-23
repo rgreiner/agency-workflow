@@ -17,6 +17,7 @@ export interface ExternaValues {
   emissao: string; job: string; aut_veiculo: string; codigo_identificador: string; nota_fiscal: string
   mes: string; ano: string; bisemana: string; periodo: string; praca: string; abrangencia: string; especie: string
   negociacao: string; producao_tipo: string; pedido_producao: string
+  producao_valor: string; producao_comissao_pct: string; producao_quantidade: string
   custo: string; desconto_exibicao: string
   desconto_pct: string; faturamento: string; prazo: string; data_base: string; dias_agencia: string
   primeira_veiculacao: string; ultima_veiculacao: string; contato: string; responsavel_id: string; situacao: string
@@ -47,6 +48,7 @@ function emptyValues(today: string, responsavelId: string): ExternaValues {
     emissao: today, job: '', aut_veiculo: '', codigo_identificador: '', nota_fiscal: '',
     mes: String(Number(m)), ano: y, bisemana: 'outro', periodo: '', praca: '', abrangencia: 'estadual', especie: 'Outdoor',
     negociacao: 'custos_normais', producao_tipo: 'no_veiculo', pedido_producao: '',
+    producao_valor: '', producao_comissao_pct: '', producao_quantidade: '',
     custo: '', desconto_exibicao: '0',
     desconto_pct: '20', faturamento: 'valor_bruto', prazo: '15_dfm', data_base: today, dias_agencia: '7',
     primeira_veiculacao: '', ultima_veiculacao: '', contato: '', responsavel_id: responsavelId, situacao: 'em_aberto',
@@ -78,6 +80,9 @@ export function ExternaForm({
   const valor = parseMoney(form.custo) * (1 - parseMoney(form.desconto_exibicao) / 100)
   const comissao = valor * (parseMoney(form.desconto_pct) / 100)
   const pagador = FATURAMENTO_PAGADOR[form.faturamento] ?? 'cliente'
+  const producaoQtd = parseInt(form.producao_quantidade || '1', 10) || 1
+  const producaoTotal = parseMoney(form.producao_valor) * producaoQtd
+  const producaoComissao = producaoTotal * (parseMoney(form.producao_comissao_pct) / 100)
 
   const bisemanaOptions = useMemo(() => {
     const yy = (form.ano || '2026').slice(-2)
@@ -111,6 +116,7 @@ export function ExternaForm({
     fd.set('detalhe', JSON.stringify({
       mes: form.mes, ano: form.ano, bisemana: form.bisemana, periodo: form.periodo, especie: form.especie,
       negociacao: form.negociacao, producao_tipo: form.producao_tipo, pedido_producao: form.pedido_producao,
+      producao_valor: form.producao_valor, producao_comissao_pct: form.producao_comissao_pct, producao_quantidade: form.producao_quantidade,
       custo: form.custo, desconto_exibicao: form.desconto_exibicao, localizacoes: form.localizacoes,
     }))
 
@@ -190,6 +196,17 @@ export function ExternaForm({
             <div><label className={labelCls}>Produção — Tipo</label><Select value={form.producao_tipo} onChange={v => set('producao_tipo', v)} options={PRODUCAO_TIPO} /></div>
             <div><label className={labelCls}>Pedido de Produção</label><input value={form.pedido_producao} onChange={e => set('pedido_producao', e.target.value)} className={inputCls} /></div>
           </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+            <div><label className={labelCls}>Produção — Valor unit. (R$)</label><input inputMode="decimal" value={form.producao_valor} onChange={e => set('producao_valor', e.target.value)} placeholder="0,00" className={inputCls} /></div>
+            <div><label className={labelCls}>Produção — Comissão (%)</label><input inputMode="decimal" value={form.producao_comissao_pct} onChange={e => set('producao_comissao_pct', e.target.value)} placeholder="0" className={inputCls} /></div>
+            <div><label className={labelCls}>Produção — Quantidade</label><input inputMode="numeric" value={form.producao_quantidade} onChange={e => set('producao_quantidade', e.target.value)} placeholder="1" className={inputCls} /></div>
+          </div>
+          {producaoTotal > 0 && (
+            <div className="mt-3 rounded-xl bg-amber-50 border border-amber-100 px-4 py-2.5 text-sm text-amber-900">
+              Produção: <strong>{formatBRL(producaoTotal)}</strong>
+              {producaoComissao > 0 && <> · Comissão da produção: <strong>{formatBRL(producaoComissao)}</strong></>}
+            </div>
+          )}
         </div>
 
         {/* Custos de exibição / financeiro */}

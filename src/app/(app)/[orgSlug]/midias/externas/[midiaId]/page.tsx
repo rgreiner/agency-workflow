@@ -33,6 +33,7 @@ export default async function EditarExternaPage({
     praca: s(m.praca), abrangencia: s(m.abrangencia) || 'estadual', especie: s(det.especie) || 'Outdoor',
     negociacao: s(det.negociacao) || 'custos_normais', producao_tipo: s(det.producao_tipo) || 'no_veiculo',
     pedido_producao: s(det.pedido_producao),
+    producao_valor: s(det.producao_valor), producao_comissao_pct: s(det.producao_comissao_pct), producao_quantidade: s(det.producao_quantidade),
     custo: s(det.custo), desconto_exibicao: s(det.desconto_exibicao) || '0',
     desconto_pct: num2br(m.desconto_pct), faturamento: s(m.faturamento) || 'valor_bruto',
     prazo: s(m.prazo) || 'a_vista', data_base: s(m.data_base), dias_agencia: s(m.dias_agencia) || '7',
