@@ -25,21 +25,40 @@ type GroupKey = 'hoje' | 'atraso' | 'proximas' | 'semprazo' | 'concluidas'
 const startOfDay = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
 
 const GROUPS: { key: GroupKey; label: string; tone?: string }[] = [
-  { key: 'hoje', label: 'Hoje' },
   { key: 'atraso', label: 'Em atraso', tone: 'text-red-600' },
+  { key: 'hoje', label: 'Hoje' },
   { key: 'proximas', label: 'Próximas' },
   { key: 'semprazo', label: 'Sem prazo' },
   { key: 'concluidas', label: 'Concluídas' },
 ]
 
+// Versionar a chave quando os defaults mudarem (pref. de view por usuário).
+const STORAGE_KEY = 'flow:inbox-mytasks-collapsed:v1'
+const DEFAULT_COLLAPSED: Record<GroupKey, boolean> = {
+  atraso: false, hoje: false, proximas: false, semprazo: true, concluidas: true,
+}
+
 export function MyTasksPanel({ tasks }: { tasks: MyTask[] }) {
   const [mounted, setMounted] = useState(false)
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => setMounted(true), [])
+  const [collapsed, setCollapsed] = useState<Record<GroupKey, boolean>>(DEFAULT_COLLAPSED)
 
-  const [collapsed, setCollapsed] = useState<Record<GroupKey, boolean>>({
-    hoje: false, atraso: false, proximas: false, semprazo: true, concluidas: true,
-  })
+  // Recupera os grupos recolhidos salvos por este usuário (localStorage).
+  useEffect(() => {
+    setMounted(true)
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (raw) setCollapsed({ ...DEFAULT_COLLAPSED, ...JSON.parse(raw) })
+    } catch { /* ignora storage indisponível/corrompido */ }
+  }, [])
+
+  function toggle(key: GroupKey) {
+    setCollapsed(c => {
+      const next = { ...c, [key]: !c[key] }
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch { /* noop */ }
+      return next
+    })
+  }
 
   const buckets = useMemo(() => {
     const today0 = startOfDay(new Date())
@@ -82,7 +101,7 @@ export function MyTasksPanel({ tasks }: { tasks: MyTask[] }) {
             return (
               <div key={key}>
                 <button
-                  onClick={() => setCollapsed(c => ({ ...c, [key]: !c[key] }))}
+                  onClick={() => toggle(key)}
                   className="w-full flex items-center gap-1.5 px-1 py-1.5 text-xs font-semibold text-gray-500 hover:text-gray-700 transition-colors"
                 >
                   {isCollapsed ? <ChevronRight className="w-3.5 h-3.5 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 shrink-0" />}
