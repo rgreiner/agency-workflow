@@ -243,3 +243,13 @@ button:focus-visible,
   float: left;
   height: 0;
 }
+
+/* Impressão de documentos (Orçamento, Autorização de Mídia, etc.):
+   esconde toda a interface e imprime só o #print-doc. */
+@media print {
+  body * { visibility: hidden !important; }
+  #print-doc, #print-doc * { visibility: visible !important; }
+  #print-doc { position: absolute; left: 0; top: 0; width: 100%; padding: 0; }
+  .no-print { display: none !important; }
+  @page { margin: 16mm; }
+}
