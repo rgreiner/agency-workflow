@@ -164,3 +164,38 @@ export async function readRedacaoText(link: string): Promise<{ text: string; sou
   }
   return { text: parts.join('\n\n'), sources }
 }
+
+// ── Reconciliação campanha ↔ Drive ──────────────────────────────────────────
+
+/** Lista as subpastas (1 nível) de uma pasta. Pagina tudo. */
+export async function listSubfolders(parentId: string): Promise<{ id: string; name: string; link: string }[]> {
+  const drive = getDrive()
+  const out: { id: string; name: string; link: string }[] = []
+  let pageToken: string | undefined
+  do {
+    const r: drive_v3.Schema$FileList = (await drive.files.list({
+      q: `'${parentId}' in parents and mimeType = '${FOLDER_MIME}' and trashed = false`,
+      fields: 'nextPageToken, files(id, name, webViewLink)',
+      pageSize: 200, orderBy: 'name',
+      supportsAllDrives: true, includeItemsFromAllDrives: true,
+      pageToken,
+    })).data
+    for (const f of r.files ?? []) {
+      if (f.id) out.push({ id: f.id, name: f.name ?? '', link: f.webViewLink ?? folderLink(f.id) })
+    }
+    pageToken = r.nextPageToken ?? undefined
+  } while (pageToken)
+  return out
+}
+
+/** Descobre (sem criar) uma pasta de tarefa já existente: link, subpastas presentes e caminho. */
+export async function inspectTaskFolder(folderId: string): Promise<TaskFoldersResult> {
+  const subList = await listSubfolders(folderId)
+  const sub: Record<string, { id: string; link: string }> = {}
+  for (const name of SUBFOLDERS) {
+    const found = subList.find(s => s.name.trim().toLowerCase() === name.toLowerCase())
+    if (found) sub[name] = { id: found.id, link: found.link }
+  }
+  const drivePath = await buildDrivePath(folderId)
+  return { taskFolderId: folderId, taskFolderLink: folderLink(folderId), sub, drivePath }
+}
