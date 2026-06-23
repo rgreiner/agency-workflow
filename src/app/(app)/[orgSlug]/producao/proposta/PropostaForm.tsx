@@ -9,12 +9,14 @@ import { MIDIA_SITUACAO_OPTIONS, MIDIA_PRAZO_OPTIONS, formatBRL, parseMoney, lab
 import type { ClienteOpt, MemberOpt } from '../../midias/simplificada/MidiaForm'
 
 export interface ItemProposta { tipo: string; nome: string; descricao: string; quantidade: string; valor_unit: string; desconto: string; situacao: string }
+export interface ParcelaProposta { vencimento: string; valor: string }
 export interface PropostaValues {
   workspace_id: string; campaign_id: string; titulo: string; emissao: string; validade_dias: string
   agrupar_faturamento: string; prazo: string; data_base: string
   introducao: string; observacao: string; texto_legal: string
   contato: string; responsavel_id: string; situacao: string
   itens: ItemProposta[]
+  parcelas: ParcelaProposta[]
 }
 
 export const ITEM_TIPOS = [
@@ -38,7 +40,7 @@ function emptyValues(today: string, responsavelId: string): PropostaValues {
     agrupar_faturamento: 'na_proposta', prazo: 'a_vista', data_base: today,
     introducao: '', observacao: '', texto_legal: '',
     contato: '', responsavel_id: responsavelId, situacao: 'em_aberto',
-    itens: [newItem()],
+    itens: [newItem()], parcelas: [],
   }
 }
 
@@ -51,7 +53,7 @@ export function PropostaForm({
   onSubmit: (fd: FormData) => Promise<{ error?: string } | void>
 }) {
   const router = useRouter()
-  const [form, setForm] = useState<PropostaValues>({ ...emptyValues(today, defaultResponsavelId), ...initial, itens: initial?.itens?.length ? initial.itens : [newItem()] })
+  const [form, setForm] = useState<PropostaValues>({ ...emptyValues(today, defaultResponsavelId), ...initial, itens: initial?.itens?.length ? initial.itens : [newItem()], parcelas: initial?.parcelas ?? [] })
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
 
@@ -59,6 +61,9 @@ export function PropostaForm({
   const setItem = (i: number, k: keyof ItemProposta, v: string) => setForm(f => ({ ...f, itens: f.itens.map((it, idx) => idx === i ? { ...it, [k]: v } : it) }))
   const addItem = (tipo: string) => setForm(f => ({ ...f, itens: [...f.itens, newItem(tipo)] }))
   const delItem = (i: number) => setForm(f => ({ ...f, itens: f.itens.filter((_, idx) => idx !== i) }))
+  const setParc = (i: number, k: keyof ParcelaProposta, v: string) => setForm(f => ({ ...f, parcelas: f.parcelas.map((p, idx) => idx === i ? { ...p, [k]: v } : p) }))
+  const addParc = () => setForm(f => ({ ...f, parcelas: [...f.parcelas, { vencimento: f.data_base, valor: '' }] }))
+  const delParc = (i: number) => setForm(f => ({ ...f, parcelas: f.parcelas.filter((_, idx) => idx !== i) }))
 
   const totalGeral = useMemo(() => form.itens.reduce((s, it) => s + itemValor(it), 0), [form.itens])
   const aprovado = useMemo(() => form.itens.filter(it => it.situacao === 'aprovado').reduce((s, it) => s + itemValor(it), 0), [form.itens])
@@ -87,6 +92,7 @@ export function PropostaForm({
     fd.set('detalhe', JSON.stringify({
       agrupar_faturamento: form.agrupar_faturamento, prazo: form.prazo, data_base: form.data_base,
       introducao: form.introducao, itens: form.itens,
+      parcelas: form.parcelas.map(p => ({ vencimento: p.vencimento, valor: String(parseMoney(p.valor)), tipo: 'receber_cliente' })),
     }))
 
     startTransition(async () => {
@@ -174,6 +180,34 @@ export function PropostaForm({
             <div><label className={labelCls}>Prazo</label><Select value={form.prazo} onChange={v => set('prazo', v)} options={MIDIA_PRAZO_OPTIONS} /></div>
             <div><label className={labelCls}>Data Base</label><input type="date" value={form.data_base} onChange={e => set('data_base', e.target.value)} className={inputCls} /></div>
           </div>
+        </div>
+
+        {/* Cobrança / parcelas (proposta faturada nela mesma = job) */}
+        <div className={cardCls}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Cobrança (parcelas a receber)</h3>
+              <p className="text-xs text-gray-400 mt-0.5">Use quando a proposta é faturada nela mesma (job), sem gerar mídia/produção/fee.</p>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setForm(f => ({ ...f, parcelas: [{ vencimento: f.data_base, valor: String(totalGeral) }] }))} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition">1x (total)</button>
+              <button type="button" onClick={addParc} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition"><Plus className="w-3.5 h-3.5" /> Parcela</button>
+            </div>
+          </div>
+          {form.parcelas.length === 0 ? (
+            <p className="text-sm text-gray-400">Sem parcelas. Para um job, defina as parcelas aqui (viram lançamentos quando Faturada). Para gerar mídia/produção/fee, use “Gerar docs” na lista.</p>
+          ) : (
+            <div className="space-y-2">
+              {form.parcelas.map((p, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <input type="date" value={p.vencimento} onChange={e => setParc(i, 'vencimento', e.target.value)} className={cn(inputCls, 'sm:w-48')} />
+                  <input inputMode="decimal" value={p.valor} onChange={e => setParc(i, 'valor', e.target.value)} placeholder="0,00" className={cn(inputCls, 'sm:w-40 text-right')} />
+                  <span className="text-xs text-gray-400 flex-1">Receber do Cliente</span>
+                  <button type="button" onClick={() => delParc(i)} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Textos */}
