@@ -44,10 +44,10 @@ export function MyTasksPanel({ tasks }: { tasks: MyTask[] }) {
 
   // Recupera os grupos recolhidos salvos por este usuário (localStorage).
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true)
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (raw) setCollapsed({ ...DEFAULT_COLLAPSED, ...JSON.parse(raw) })
     } catch { /* ignora storage indisponível/corrompido */ }
   }, [])
