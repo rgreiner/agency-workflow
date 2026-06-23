@@ -34,6 +34,7 @@ export default async function PropostaPage({
       orgSlug={orgSlug} items={items} archivedView={archivedView}
       basePath="producao/proposta" title="Liberação de Produção — Proposta"
       subtitle="Propostas avulsas ao cliente (mídia, produção, serviço, fee)" addLabel="Adicionar Proposta"
+      gerarDocs
     />
   )
 }

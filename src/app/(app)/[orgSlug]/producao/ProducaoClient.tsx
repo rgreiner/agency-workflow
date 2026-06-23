@@ -3,10 +3,10 @@
 import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Archive, ArchiveRestore, Pencil, ClipboardList, Printer, Factory } from 'lucide-react'
+import { Plus, Archive, ArchiveRestore, Pencil, ClipboardList, Printer, Factory, Files } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
-import { setProducaoSituacao, setProducaoArchived, gerarPedidosDoOrcamento } from '@/app/actions/producao'
+import { setProducaoSituacao, setProducaoArchived, gerarPedidosDoOrcamento, gerarDocsDaProposta } from '@/app/actions/producao'
 import { MIDIA_SITUACAO_OPTIONS, MIDIA_SITUACAO_COLORS, labelOf, formatBRL } from '@/lib/midia'
 
 export interface ProducaoRow {
@@ -15,12 +15,14 @@ export interface ProducaoRow {
 }
 
 export function ProducaoClient({
-  orgSlug, items, archivedView, basePath, title, subtitle, addLabel, gerarPedidos = false, showPrint = true,
+  orgSlug, items, archivedView, basePath, title, subtitle, addLabel, gerarPedidos = false, gerarDocs = false, showPrint = true,
 }: {
   orgSlug: string; items: ProducaoRow[]; archivedView: boolean
   basePath: string; title: string; subtitle: string; addLabel: string
   /** Mostra "Gerar PPs" nos orçamentos aprovados. */
   gerarPedidos?: boolean
+  /** Mostra "Gerar docs" nas propostas aprovadas. */
+  gerarDocs?: boolean
   /** Mostra o botão de imprimir/PDF (false enquanto o tipo não tiver impressão). */
   showPrint?: boolean
 }) {
@@ -31,6 +33,12 @@ export function ProducaoClient({
   const changeSituacao = (id: string, s: string) => startTransition(async () => { await setProducaoSituacao(orgSlug, id, s, basePath); router.refresh() })
   const archive = (r: ProducaoRow) => startTransition(async () => { await setProducaoArchived(orgSlug, r.id, !r.archived, basePath); router.refresh() })
   const gerarPPs = (r: ProducaoRow) => startTransition(async () => { const res = await gerarPedidosDoOrcamento(orgSlug, r.id); if (res?.error) alert(res.error) })
+  const gerarDocsFn = (r: ProducaoRow) => startTransition(async () => {
+    const res = await gerarDocsDaProposta(orgSlug, r.id)
+    if (res?.error) { alert(res.error); return }
+    alert(`${res.count} documento(s) gerado(s) em rascunho${res.skipped ? ` (${res.skipped} serviço interno ignorado)` : ''}. Complete-os nas respectivas telas.`)
+    router.refresh()
+  })
 
   return (
     <div className="p-6">
@@ -87,6 +95,12 @@ export function ProducaoClient({
                           <button onClick={() => gerarPPs(r)} disabled={isPending} title="Gerar Pedidos de Produção das opções escolhidas"
                             className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-indigo-200 text-indigo-700 hover:bg-indigo-50 transition disabled:opacity-50">
                             <Factory className="w-3.5 h-3.5" /> Gerar PPs
+                          </button>
+                        )}
+                        {gerarDocs && r.situacao === 'aprovado' && (
+                          <button onClick={() => gerarDocsFn(r)} disabled={isPending} title="Gerar mídias/produções/fees em rascunho"
+                            className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-indigo-200 text-indigo-700 hover:bg-indigo-50 transition disabled:opacity-50">
+                            <Files className="w-3.5 h-3.5" /> Gerar docs
                           </button>
                         )}
                         {showPrint && <Link href={`${base}/${r.id}/print`} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Imprimir / PDF"><Printer className="w-3.5 h-3.5" /></Link>}

@@ -117,6 +117,57 @@ export async function gerarPedidosDoOrcamento(orgSlug: string, orcamentoId: stri
   redirect(`/${orgSlug}/producao/pedido`)
 }
 
+/** Gera rascunhos (mídia/pedido/fee) a partir dos itens aprovados de uma Proposta. */
+export async function gerarDocsDaProposta(orgSlug: string, propostaId: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { data: org } = await supabase.from('organizations').select('id').eq('slug', orgSlug).single()
+  if (!org) return { error: 'Organização não encontrada' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: prop } = await (supabase as any).from('producao').select('*').eq('id', propostaId).single()
+  if (!prop || prop.tipo !== 'proposta') return { error: 'Proposta não encontrada' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const itens: any[] = Array.isArray(prop.detalhe?.itens) ? prop.detalhe.itens : []
+  const aprovados = itens.filter(it => it.situacao === 'aprovado')
+  const target = aprovados.length ? aprovados : itens.filter(it => it.situacao !== 'cancelado')
+
+  const today = new Date().toISOString().slice(0, 10)
+  let count = 0, skipped = 0
+
+  for (const it of target) {
+    const quant = parseInt(it.quantidade || '1', 10) || 1
+    const valor = parseMoney(it.valor_unit || '') * quant * (1 - parseMoney(it.desconto || '') / 100)
+    const titulo = `${prop.titulo}${it.nome ? ` - ${it.nome}` : ''}`
+    const baseScalar = { workspace_id: prop.workspace_id, campaign_id: prop.campaign_id ?? '', titulo, valor: String(valor), situacao: 'em_aberto', emissao: today }
+    let res
+    if (it.tipo === 'midia') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      res = await (supabase as any).rpc('create_midia', { p_user_id: user.id, p_org_id: org.id, p_data: { ...baseScalar, tipo: 'outros', desconto_pct: '0', faturamento: 'valor_bruto', prazo: 'a_vista', dias_agencia: '7' } })
+    } else if (it.tipo === 'producao') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      res = await (supabase as any).rpc('create_producao', { p_user_id: user.id, p_org_id: org.id, p_data: { ...baseScalar, tipo: 'pedido', bv_pct: '15', detalhe: { fornecedor_id: '', entrega: '', prazo: 'a_vista', itens: [{ nome: it.nome ?? '', descricao: '', n_orc: '', quant: String(quant), valor: it.valor_unit ?? '' }], parcelas: [] } } })
+    } else if (it.tipo === 'fee') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      res = await (supabase as any).rpc('create_producao', { p_user_id: user.id, p_org_id: org.id, p_data: { ...baseScalar, tipo: 'fee', detalhe: { de: '', ate: '', num_parcelas: '', valor_mensal: it.valor_unit ?? '', parcelas: [] } } })
+    } else {
+      skipped++; continue  // serviço interno (sem doc-destino)
+    }
+    if (res?.error) return { error: res.error.message }
+    count++
+  }
+
+  if (count === 0) return { error: 'Nenhum item gerável (mídia/produção/fee) aprovado nesta proposta.' }
+
+  revalidatePath(`/${orgSlug}/midias/simplificada`)
+  revalidatePath(`/${orgSlug}/producao/pedido`)
+  revalidatePath(`/${orgSlug}/producao/fee`)
+  return { count, skipped }
+}
+
 export async function setProducaoSituacao(orgSlug: string, producaoId: string, situacao: string, basePath: string) {
   const supabase = await createClient()
   const user = await getUsuario()
