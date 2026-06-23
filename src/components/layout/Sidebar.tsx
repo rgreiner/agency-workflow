@@ -173,6 +173,23 @@ export function Sidebar({
     })
   }
 
+  // Seção "Operacional" recolhível como um todo (foco nos espaços × nas liberações).
+  const [operacionalOpen, setOperacionalOpen] = useState(true)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('sidebar-operacional-open')
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (raw != null) setOperacionalOpen(raw === '1')
+    } catch {}
+  }, [])
+  function toggleOperacional() {
+    setOperacionalOpen(prev => {
+      const next = !prev
+      try { localStorage.setItem('sidebar-operacional-open', next ? '1' : '0') } catch {}
+      return next
+    })
+  }
+
   // SSR sempre renderiza 'Ctrl K'; suppressHydrationWarning no <kbd> cobre o Mac.
   const shortcutLabel =
     typeof navigator !== 'undefined' && navigator.platform.toUpperCase().includes('MAC')
@@ -321,12 +338,19 @@ export function Sidebar({
           </Link>
         ))}
 
-        {/* ── Comercial / Financeiro / Cadastros ───────── */}
+        {/* ── Operacional (Mídia / Produção / Financeiro / Cadastros) ── */}
         <div className="mx-3 my-2 border-t border-gray-800" />
-        <div className="px-4 mb-1">
-          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Comercial</span>
-        </div>
-        {comercialGroups.map(g => (
+        <button
+          onClick={toggleOperacional}
+          className="w-full flex items-center gap-1 px-4 mb-1 group/op"
+          title={operacionalOpen ? 'Recolher Operacional' : 'Expandir Operacional'}
+        >
+          {operacionalOpen
+            ? <ChevronDown className="w-3 h-3 text-gray-600 group-hover/op:text-gray-400 transition-colors shrink-0" />
+            : <ChevronRight className="w-3 h-3 text-gray-600 group-hover/op:text-gray-400 transition-colors shrink-0" />}
+          <span className="text-[10px] font-semibold text-gray-500 group-hover/op:text-gray-400 uppercase tracking-wider transition-colors">Operacional</span>
+        </button>
+        {operacionalOpen && comercialGroups.map(g => (
           <NavGroup
             key={g.id}
             base={base}
