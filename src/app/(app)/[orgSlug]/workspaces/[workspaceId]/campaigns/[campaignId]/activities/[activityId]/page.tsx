@@ -477,6 +477,7 @@ export default async function ActivityPage({
               activityId={activityId}
               path={path}
               members={members.map(m => ({ id: m.userId, name: m.fullName ?? m.email }))}
+              assignedIds={assignedIds}
             />
           </div>
         </div>

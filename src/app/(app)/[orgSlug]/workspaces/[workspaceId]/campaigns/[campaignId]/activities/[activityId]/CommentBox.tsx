@@ -2,7 +2,7 @@
 
 import { useState, useRef, useTransition } from 'react'
 import { addComment } from '@/app/actions/activity'
-import { Send, AtSign, Users } from 'lucide-react'
+import { Send, AtSign, Users, UserCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -12,10 +12,13 @@ interface Props {
   activityId: string
   path: string
   members?: Mentionable[]
+  /** Ids dos responsáveis da tarefa — alvo do @atribuidos. */
+  assignedIds?: string[]
 }
 
 const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
 const ALL_OPTION: Mentionable = { id: '__all__', name: 'todos' }
+const ASSIGNED_OPTION: Mentionable = { id: '__assigned__', name: 'atribuidos' }
 
 /** Contexto de @menção na posição do cursor (ou null). */
 function mentionContext(text: string, cursor: number): { start: number; query: string } | null {
@@ -35,7 +38,7 @@ function mentionContext(text: string, cursor: number): { start: number; query: s
   return null
 }
 
-export function CommentBox({ activityId, path, members = [] }: Props) {
+export function CommentBox({ activityId, path, members = [], assignedIds = [] }: Props) {
   const [content, setContent] = useState('')
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
@@ -48,7 +51,8 @@ export function CommentBox({ activityId, path, members = [] }: Props) {
   const q = norm(query)
   const memberOpts = members.filter(m => norm(m.name).includes(q)).slice(0, 6)
   const showAll = q === '' || 'todos'.startsWith(q) || 'all'.startsWith(q)
-  const options = [...(showAll ? [ALL_OPTION] : []), ...memberOpts]
+  const showAssigned = assignedIds.length > 0 && (q === '' || 'atribuidos'.startsWith(q) || 'responsaveis'.startsWith(q) || 'assigned'.startsWith(q))
+  const options = [...(showAll ? [ALL_OPTION] : []), ...(showAssigned ? [ASSIGNED_OPTION] : []), ...memberOpts]
   const open = mentionStart >= 0 && options.length > 0
   const activeIdx = Math.min(active, options.length - 1)
 
@@ -64,11 +68,11 @@ export function CommentBox({ activityId, path, members = [] }: Props) {
     const ta = taRef.current
     if (!ta) return
     const cursor = ta.selectionStart ?? content.length
-    const token = opt.id === ALL_OPTION.id ? '@todos ' : `@${opt.name} `
+    const token = opt.id === ALL_OPTION.id ? '@todos ' : opt.id === ASSIGNED_OPTION.id ? '@atribuidos ' : `@${opt.name} `
     const before = content.slice(0, mentionStart)
     const after = content.slice(cursor)
     setContent(before + token + after)
-    if (opt.id !== ALL_OPTION.id && !tracked.current.some(t => t.id === opt.id)) {
+    if (opt.id !== ALL_OPTION.id && opt.id !== ASSIGNED_OPTION.id && !tracked.current.some(t => t.id === opt.id)) {
       tracked.current.push(opt)
     }
     setMentionStart(-1); setQuery('')
@@ -80,9 +84,11 @@ export function CommentBox({ activityId, path, members = [] }: Props) {
     const text = content.trim()
     if (!text) return
     const mentionAll = /(^|\s)@(todos|all)\b/i.test(text)
-    const ids = Array.from(new Set(
-      tracked.current.filter(m => text.includes('@' + m.name)).map(m => m.id)
-    ))
+    const mentionAssigned = /(^|\s)@atribuidos\b/i.test(text)
+    const ids = Array.from(new Set([
+      ...tracked.current.filter(m => text.includes('@' + m.name)).map(m => m.id),
+      ...(mentionAssigned ? assignedIds : []),
+    ]))
     startTransition(async () => {
       const result = await addComment(path, activityId, text, ids, mentionAll)
       if (result?.error) { setError(result.error); toast.error(result.error) }
@@ -123,6 +129,12 @@ export function CommentBox({ activityId, path, members = [] }: Props) {
                     <Users className="w-3.5 h-3.5 text-pink-500 shrink-0" />
                     <span className="font-medium">@todos</span>
                     <span className="text-xs text-gray-400 ml-auto">notificar todos</span>
+                  </>
+                ) : opt.id === ASSIGNED_OPTION.id ? (
+                  <>
+                    <UserCheck className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                    <span className="font-medium">@atribuidos</span>
+                    <span className="text-xs text-gray-400 ml-auto">notificar responsáveis</span>
                   </>
                 ) : (
                   <>
