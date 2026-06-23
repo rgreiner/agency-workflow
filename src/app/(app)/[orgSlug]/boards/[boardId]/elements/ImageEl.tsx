@@ -2,7 +2,9 @@
 
 import { useState, useRef, useEffect } from 'react'
 import type { ImageElement } from '@/types/board'
-import { ImageIcon, Link2 } from 'lucide-react'
+import { ImageIcon, Link2, Upload, Loader2 } from 'lucide-react'
+import { uploadFile } from '@/lib/storage/upload-client'
+import { downscaleImage } from '@/lib/image-resize'
 
 interface Props {
   el: ImageElement
@@ -46,8 +48,30 @@ export function ImageEl({ el, editing, selected, onUpdate, onStopEdit }: Props) 
     onStopEdit()
   }
 
+  const [uploading, setUploading] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  async function handleFile(file: File | undefined | null) {
+    if (!file || !file.type.startsWith('image/')) return
+    setUploading(true)
+    try {
+      const small = await downscaleImage(file)
+      const url = await uploadFile('boards', `${crypto.randomUUID()}.webp`, small)
+      onUpdate({ url })
+      onStopEdit()
+    } catch {
+      /* falha de upload — mantém o estado atual */
+    } finally {
+      setUploading(false)
+    }
+  }
+
   return (
     <div
+      onDragOver={e => { e.preventDefault(); e.stopPropagation(); if (!dragOver) setDragOver(true) }}
+      onDragLeave={e => { e.preventDefault(); setDragOver(false) }}
+      onDrop={e => { e.preventDefault(); e.stopPropagation(); setDragOver(false); handleFile(e.dataTransfer.files?.[0]) }}
       style={{
         width: '100%',
         height: '100%',
@@ -57,10 +81,29 @@ export function ImageEl({ el, editing, selected, onUpdate, onStopEdit }: Props) 
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        border: '1px solid #e2e8f0',
+        border: dragOver ? '2px dashed #6366f1' : '1px solid #e2e8f0',
         position: 'relative',
       }}
     >
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={e => { handleFile(e.target.files?.[0]); e.target.value = '' }}
+      />
+      {(uploading || dragOver) && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 20,
+          backgroundColor: 'rgba(238,242,255,0.85)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6,
+          color: '#4f46e5', fontSize: 11, fontWeight: 600, pointerEvents: 'none',
+        }}>
+          {uploading
+            ? <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Enviando…</>
+            : <><Upload size={18} /> Solte a imagem</>}
+        </div>
+      )}
       {/* ── Image area ── */}
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: '#f8fafc' }}>
         {el.url && !imgError ? (
@@ -92,7 +135,18 @@ export function ImageEl({ el, editing, selected, onUpdate, onStopEdit }: Props) 
             </div>
             {(editing || !el.url) ? (
               <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
-                <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>Cole uma URL de imagem</p>
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  onPointerDown={e => e.stopPropagation()}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
+                    borderRadius: 6, backgroundColor: '#4f46e5', color: '#fff', border: 'none',
+                    cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
+                  }}
+                >
+                  <Upload size={12} /> Enviar arquivo
+                </button>
+                <p style={{ fontSize: 10, color: '#94a3b8', margin: 0 }}>ou arraste a imagem / cole uma URL</p>
                 <div style={{ display: 'flex', width: '100%', maxWidth: 200, gap: 4 }}>
                   <input
                     ref={inputRef}
@@ -135,7 +189,7 @@ export function ImageEl({ el, editing, selected, onUpdate, onStopEdit }: Props) 
                 )}
               </div>
             ) : (
-              <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>Duplo clique para inserir imagem</p>
+              <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>Duplo clique ou arraste uma imagem</p>
             )}
           </div>
         )}

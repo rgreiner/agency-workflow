@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import type { BoardElement, BoardData, Arrow, BoardElementType } from '@/types/board'
+import type { BoardElement, BoardData, Arrow, BoardElementType, ImageElement } from '@/types/board'
 import { createElement } from '@/types/board'
 import { updateBoardTitle, deleteBoard } from '@/app/actions/boards'
 import { createClient } from '@/lib/supabase/client'
+import { uploadFile } from '@/lib/storage/upload-client'
+import { downscaleImage } from '@/lib/image-resize'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { NoteEl } from './elements/NoteEl'
 import { TextEl } from './elements/TextEl'
@@ -180,8 +182,8 @@ function CanvasEl({
         left: el.x, top: el.y, width: el.w, height: el.h,
         outline: selected
           ? '2px solid #6366f1'
-          : isArrowTool && isHovered
-          ? '2px dashed #6366f1'
+          : isHovered && !editing
+          ? '2px dashed #818cf8'
           : 'none',
         outlineOffset: 2,
         borderRadius: 10,
@@ -199,8 +201,8 @@ function CanvasEl({
     >
       {children}
 
-      {/* ── Connection port dots ── */}
-      {isArrowTool && isHovered && PORT_DOTS.map((dot, i) => (
+      {/* ── Connection port dots (aparecem no hover, em qualquer ferramenta) ── */}
+      {isHovered && !editing && PORT_DOTS.map((dot, i) => (
         <div
           key={i}
           onPointerDown={e => { e.stopPropagation(); onArrowStart(e) }}
@@ -406,6 +408,31 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
     setTool('select')
   }
 
+  // Cria um elemento de imagem a partir de um arquivo (arrastar-soltar / colar):
+  // faz downscale, sobe pro volume e posiciona no ponto (screenX, screenY).
+  async function dropImageFile(file: File, screenX: number, screenY: number) {
+    if (!file.type.startsWith('image/') || !canvasRef.current) return
+    const rect = canvasRef.current.getBoundingClientRect()
+    const wx = (screenX - rect.left - panRef.current.x) / scaleRef.current
+    const wy = (screenY - rect.top  - panRef.current.y) / scaleRef.current
+    setSaveStatus('saving')
+    try {
+      const small = await downscaleImage(file)
+      const url = await uploadFile('boards', `${crypto.randomUUID()}.webp`, small)
+      const el = createElement('image', wx - 120, wy - 100) as ImageElement
+      el.url = url
+      setElements(prev => {
+        const next = [...prev, el]
+        elementsRef.current = next
+        scheduleSave()
+        return next
+      })
+      setSelectedId(el.id)
+    } catch {
+      setSaveStatus('idle')
+    }
+  }
+
   // ── Arrow CRUD ───────────────────────────────────────────────────────────────
   function addArrow(fromId: string, toId: string) {
     if (fromId === toId) return
@@ -541,6 +568,21 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
     return () => document.removeEventListener('keydown', onKey)
   }, [selectedId, selectedArrowId, editingId]) // eslint-disable-line
 
+  // Colar imagem (Ctrl/Cmd+V) → cria elemento de imagem no centro do canvas.
+  useEffect(() => {
+    function onPaste(e: ClipboardEvent) {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return
+      const item = Array.from(e.clipboardData?.items ?? []).find(i => i.type.startsWith('image/'))
+      const file = item?.getAsFile()
+      if (!file) return
+      const rect = canvasRef.current?.getBoundingClientRect()
+      dropImageFile(file, rect ? rect.left + rect.width / 2 : 0, rect ? rect.top + rect.height / 2 : 0)
+    }
+    document.addEventListener('paste', onPaste)
+    return () => document.removeEventListener('paste', onPaste)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Zoom helpers ──────────────────────────────────────────────────────────────
   function zoomTo(ns: number) {
     if (!canvasRef.current) return
@@ -671,6 +713,8 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
           onPointerDown={onCanvasPointerDown}
           onPointerMove={onCanvasPointerMove}
           onPointerUp={onCanvasPointerUp}
+          onDragOver={e => { e.preventDefault() }}
+          onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) dropImageFile(f, e.clientX, e.clientY) }}
         >
           {/* World transform container */}
           <div style={{
@@ -807,7 +851,7 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
               <p style={{ fontSize: 15, fontWeight: 600, color: '#94a3b8', margin: 0 }}>Canvas vazio</p>
               <p style={{ fontSize: 13, color: '#cbd5e1', marginTop: 6, textAlign: 'center' }}>
-                Selecione uma ferramenta na barra lateral e clique aqui para começar
+                Escolha uma ferramenta e clique aqui — ou arraste/cole uma imagem direto no canvas
               </p>
             </div>
           )}
