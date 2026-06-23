@@ -22,3 +22,44 @@ export async function regerarLancamentos(orgSlug: string) {
   revalidatePath(`/${orgSlug}/financeiro/faturamento`)
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
 }
+
+/** Faturamento → "Lançar": cria o lançamento de uma mídia conferida. */
+export async function lancarMidia(orgSlug: string, midiaId: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('lancar_midia', {
+    p_user_id: user.id, p_midia_id: midiaId,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/faturamento`)
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+}
+
+export async function setLancamentoSituacao(orgSlug: string, lancamentoId: string, situacao: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('set_lancamento_situacao', {
+    p_user_id: user.id, p_lancamento_id: lancamentoId, p_situacao: situacao,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+}
+
+export async function setLancamentoFlags(orgSlug: string, lancamentoId: string, nf: boolean, boleto: boolean) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('set_lancamento_flags', {
+    p_user_id: user.id, p_lancamento_id: lancamentoId, p_nf: nf, p_boleto: boleto,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+}

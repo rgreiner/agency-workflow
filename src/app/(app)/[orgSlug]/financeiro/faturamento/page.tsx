@@ -1,6 +1,7 @@
 import { assertFinanceAccess } from '@/lib/finance'
-import { formatBRL, formatDateBR } from '@/lib/midia'
+import { formatBRL, FATURAMENTO_PAGADOR } from '@/lib/midia'
 import { GerarLancamentosButton } from './GerarLancamentosButton'
+import { LancarButton } from './LancarButton'
 import { Receipt } from 'lucide-react'
 
 export default async function FaturamentoPage({
@@ -11,56 +12,51 @@ export default async function FaturamentoPage({
   const { orgSlug } = await params
   const { supabase, orgId } = await assertFinanceAccess(orgSlug)
 
-  // Mídias faturadas
+  // Mídias faturadas (marcadas pela mídia/produção)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: docsRaw } = await (supabase as any)
     .from('midias')
-    .select('id, numero, titulo, valor, faturamento, workspaces(name), veiculos(name)')
+    .select('id, numero, titulo, valor, desconto_pct, faturamento, workspaces(name), veiculos(name)')
     .eq('org_id', orgId).eq('situacao', 'faturado').eq('archived', false)
     .order('numero', { ascending: false })
 
-  // Lançamentos gerados a partir de mídias
+  // Quais já foram lançadas (têm lançamento)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: lancRaw } = await (supabase as any)
-    .from('lancamentos')
-    .select('origem_id, tipo, contato_tipo, contato_nome, descricao, valor, vencimento, situacao')
-    .eq('org_id', orgId).eq('origem_tipo', 'midia')
+    .from('lancamentos').select('origem_id').eq('org_id', orgId).eq('origem_tipo', 'midia')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lancadas = new Set<string>((lancRaw ?? []).map((l: any) => l.origem_id))
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const lancByMidia = new Map<string, any>()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ;(lancRaw ?? []).forEach((l: any) => lancByMidia.set(l.origem_id, l))
+  const pendentes = ((docsRaw ?? []) as any[]).filter(d => !lancadas.has(d.id))
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const docs = (docsRaw ?? []) as any[]
-  const entradas = (lancRaw ?? [])
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((l: any) => l.tipo === 'entrada').reduce((s: number, l: any) => s + Number(l.valor ?? 0), 0)
-  const saidas = (lancRaw ?? [])
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((l: any) => l.tipo === 'saida').reduce((s: number, l: any) => s + Number(l.valor ?? 0), 0)
+  const comissaoDe = (d: any) => Math.round(Number(d.valor ?? 0) * Number(d.desconto_pct ?? 0)) / 100
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const totalDocs = docs.reduce((s: number, d: any) => s + Number(d.valor ?? 0), 0)
+  const pagadorDe = (d: any) => (FATURAMENTO_PAGADOR[d.faturamento] === 'veiculo'
+    ? `${d.veiculos?.name ?? '—'} (veículo)` : `${d.workspaces?.name ?? '—'} (cliente)`)
+
+  const totalComissao = pendentes.reduce((s, d) => s + comissaoDe(d), 0)
+  const totalDocs = pendentes.reduce((s, d) => s + Number(d.valor ?? 0), 0)
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between gap-3 mb-5">
+      <div className="flex items-center justify-between gap-3 mb-2">
         <div>
           <h1 className="text-lg font-semibold text-gray-900">Faturamento</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Mídias faturadas e a comissão que vai pro Financeiro</p>
+          <p className="text-gray-500 text-sm mt-0.5">Conferência: revise os valores e <strong>Lance</strong> pro Financeiro</p>
         </div>
-        <GerarLancamentosButton orgSlug={orgSlug} />
+        {pendentes.length > 0 && <GerarLancamentosButton orgSlug={orgSlug} />}
       </div>
 
-      {/* Resumo */}
-      <div className="grid grid-cols-3 gap-3 mb-5">
+      <div className="grid grid-cols-3 gap-3 my-5">
         <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs text-gray-400">Entradas das faturas</p>
-          <p className="text-lg font-semibold text-emerald-600 mt-1">{formatBRL(entradas)}</p>
+          <p className="text-xs text-gray-400">A conferir (documentos)</p>
+          <p className="text-lg font-semibold text-gray-900 mt-1">{pendentes.length}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs text-gray-400">Saídas das faturas</p>
-          <p className="text-lg font-semibold text-red-600 mt-1">{formatBRL(saidas)}</p>
+          <p className="text-xs text-gray-400">Comissão a lançar</p>
+          <p className="text-lg font-semibold text-emerald-600 mt-1">{formatBRL(totalComissao)}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-400">Total dos documentos</p>
@@ -68,7 +64,7 @@ export default async function FaturamentoPage({
         </div>
       </div>
 
-      {docs.length > 0 ? (
+      {pendentes.length > 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
           <table className="w-full min-w-[820px]">
             <thead>
@@ -80,35 +76,30 @@ export default async function FaturamentoPage({
                 <th className="text-right px-4 py-3">Valor doc.</th>
                 <th className="text-left px-4 py-3">Comissão (cobrar de)</th>
                 <th className="text-right px-4 py-3">Comissão</th>
-                <th className="text-left px-4 py-3">Vencimento</th>
+                <th className="w-24" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {docs.map(d => {
-                const l = lancByMidia.get(d.id)
-                return (
-                  <tr key={d.id} className="hover:bg-gray-50/50 transition">
-                    <td className="px-4 py-3 text-sm text-gray-400">{d.numero ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{d.titulo}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{d.workspaces?.name ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{d.veiculos?.name ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatBRL(Number(d.valor ?? 0))}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {l ? `${l.contato_nome ?? '—'} (${l.contato_tipo === 'veiculo' ? 'veículo' : 'cliente'})` : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-sm font-medium text-emerald-600 text-right">{l ? formatBRL(Number(l.valor ?? 0)) : '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{formatDateBR(l?.vencimento)}</td>
-                  </tr>
-                )
-              })}
+              {pendentes.map(d => (
+                <tr key={d.id} className="hover:bg-gray-50/50 transition">
+                  <td className="px-4 py-3 text-sm text-gray-400">{d.numero ?? '—'}</td>
+                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{d.titulo}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{d.workspaces?.name ?? '—'}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{d.veiculos?.name ?? '—'}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatBRL(Number(d.valor ?? 0))}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{pagadorDe(d)}</td>
+                  <td className="px-4 py-3 text-sm font-medium text-emerald-600 text-right">{formatBRL(comissaoDe(d))}</td>
+                  <td className="px-3 py-3 text-right"><LancarButton orgSlug={orgSlug} midiaId={d.id} /></td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       ) : (
         <div className="text-center py-24 bg-white rounded-xl border border-gray-200">
           <Receipt className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-          <h3 className="text-gray-900 font-medium">Nenhuma mídia faturada</h3>
-          <p className="text-gray-500 text-sm mt-1">Quando uma liberação de mídia for marcada como <strong>Faturado</strong>, ela aparece aqui com a comissão.</p>
+          <h3 className="text-gray-900 font-medium">Nada a conferir</h3>
+          <p className="text-gray-500 text-sm mt-1">Quando uma liberação de mídia for marcada como <strong>Faturado</strong>, ela aparece aqui pra você conferir e lançar.</p>
         </div>
       )}
     </div>
