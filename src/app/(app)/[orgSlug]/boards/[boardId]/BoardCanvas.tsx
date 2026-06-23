@@ -189,8 +189,11 @@ function CanvasEl({
         borderRadius: 10,
         cursor: isArrowTool ? 'crosshair' : editing ? 'default' : 'grab',
         userSelect: editing ? 'text' : 'none',
-        zIndex: selected ? 100 : 1,
+        zIndex: selected ? 100 : isHovered ? 50 : 1,
         overflow: 'visible',
+        animation: 'board-pop 0.16s ease-out',
+        transition: 'filter 0.15s ease',
+        filter: isHovered && !selected && !editing ? 'drop-shadow(0 6px 18px rgba(15,23,42,0.14))' : 'none',
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -215,6 +218,7 @@ function CanvasEl({
             boxShadow: '0 0 0 2px #6366f1',
             cursor: 'crosshair',
             zIndex: 300,
+            animation: 'board-dot-in 0.12s ease-out',
             ...dot.style,
           }}
         />
@@ -324,6 +328,7 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
   const [selectedId, setSelectedId]     = useState<string | null>(null)
   const [editingId, setEditingId]       = useState<string | null>(null)
   const [selectedArrowId, setSelectedArrowId] = useState<string | null>(null)
+  const [hoveredArrowId, setHoveredArrowId] = useState<string | null>(null)
   const [hoveredElId, setHoveredElId]   = useState<string | null>(null)
   const [drawingArrow, setDrawingArrow] = useState<{
     fromId: string; srcX: number; srcY: number; curX: number; curY: number
@@ -747,6 +752,8 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
                 if (!src || !tgt) return null
                 const { d, mid } = buildArrowPath(src, tgt)
                 const isSel = selectedArrowId === arrow.id
+                const isHov = hoveredArrowId === arrow.id
+                const active = isSel || isHov
                 return (
                   <g key={arrow.id}>
                     {/* Invisible wide hit area */}
@@ -757,15 +764,18 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
                       fill="none"
                       style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
                       onClick={() => { setSelectedArrowId(arrow.id); setSelectedId(null) }}
+                      onMouseEnter={() => setHoveredArrowId(arrow.id)}
+                      onMouseLeave={() => setHoveredArrowId(prev => prev === arrow.id ? null : prev)}
                     />
-                    {/* Visible curve */}
+                    {/* Visible curve — desenha ao surgir + realça no hover/seleção */}
                     <path
                       d={d}
-                      stroke={isSel ? '#6366f1' : '#94a3b8'}
-                      strokeWidth={isSel ? 2.5 : 1.5}
+                      pathLength={1}
+                      stroke={active ? '#6366f1' : '#94a3b8'}
+                      strokeWidth={isSel ? 2.5 : isHov ? 2 : 1.5}
                       fill="none"
-                      markerEnd={isSel ? 'url(#ah-sel)' : 'url(#ah-def)'}
-                      style={{ pointerEvents: 'none' }}
+                      markerEnd={active ? 'url(#ah-sel)' : 'url(#ah-def)'}
+                      style={{ pointerEvents: 'none', strokeDasharray: 1, animation: 'board-arrow-draw 0.4s ease-out', transition: 'stroke 0.12s, stroke-width 0.12s' }}
                     />
                     {/* Delete button at bezier midpoint */}
                     {isSel && (
@@ -783,7 +793,7 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
                 )
               })}
 
-              {/* Temporary arrow while drawing */}
+              {/* Temporary arrow while drawing — linha "viva" (marching ants) */}
               {drawingArrow && (
                 <path
                   d={tempPath(drawingArrow.srcX, drawingArrow.srcY, drawingArrow.curX, drawingArrow.curY)}
@@ -792,7 +802,7 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
                   strokeDasharray="7 4"
                   fill="none"
                   markerEnd="url(#ah-sel)"
-                  style={{ pointerEvents: 'none' }}
+                  style={{ pointerEvents: 'none', animation: 'board-dash-march 0.5s linear infinite' }}
                 />
               )}
             </svg>
@@ -868,7 +878,13 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
         onCancel={() => setConfirmDelete(false)}
       />
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes board-pop { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+        @keyframes board-dot-in { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes board-dash-march { to { stroke-dashoffset: -22; } }
+        @keyframes board-arrow-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+      `}</style>
     </div>
   )
 }
