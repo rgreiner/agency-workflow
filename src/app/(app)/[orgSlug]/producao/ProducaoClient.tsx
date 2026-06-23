@@ -3,10 +3,10 @@
 import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Archive, ArchiveRestore, Pencil, ClipboardList, Printer } from 'lucide-react'
+import { Plus, Archive, ArchiveRestore, Pencil, ClipboardList, Printer, Factory } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
-import { setProducaoSituacao, setProducaoArchived } from '@/app/actions/producao'
+import { setProducaoSituacao, setProducaoArchived, gerarPedidosDoOrcamento } from '@/app/actions/producao'
 import { MIDIA_SITUACAO_OPTIONS, MIDIA_SITUACAO_COLORS, labelOf, formatBRL } from '@/lib/midia'
 
 export interface ProducaoRow {
@@ -15,10 +15,12 @@ export interface ProducaoRow {
 }
 
 export function ProducaoClient({
-  orgSlug, items, archivedView, basePath, title, subtitle, addLabel,
+  orgSlug, items, archivedView, basePath, title, subtitle, addLabel, gerarPedidos = false,
 }: {
   orgSlug: string; items: ProducaoRow[]; archivedView: boolean
   basePath: string; title: string; subtitle: string; addLabel: string
+  /** Mostra "Gerar PPs" nos orçamentos aprovados. */
+  gerarPedidos?: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -26,6 +28,7 @@ export function ProducaoClient({
 
   const changeSituacao = (id: string, s: string) => startTransition(async () => { await setProducaoSituacao(orgSlug, id, s, basePath); router.refresh() })
   const archive = (r: ProducaoRow) => startTransition(async () => { await setProducaoArchived(orgSlug, r.id, !r.archived, basePath); router.refresh() })
+  const gerarPPs = (r: ProducaoRow) => startTransition(async () => { const res = await gerarPedidosDoOrcamento(orgSlug, r.id); if (res?.error) alert(res.error) })
 
   return (
     <div className="p-6">
@@ -78,6 +81,12 @@ export function ProducaoClient({
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex items-center justify-end gap-1.5">
+                        {gerarPedidos && r.situacao === 'aprovado' && (
+                          <button onClick={() => gerarPPs(r)} disabled={isPending} title="Gerar Pedidos de Produção das opções escolhidas"
+                            className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-indigo-200 text-indigo-700 hover:bg-indigo-50 transition disabled:opacity-50">
+                            <Factory className="w-3.5 h-3.5" /> Gerar PPs
+                          </button>
+                        )}
                         <Link href={`${base}/${r.id}/print`} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Imprimir / PDF"><Printer className="w-3.5 h-3.5" /></Link>
                         <Link href={`${base}/${r.id}`} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar"><Pencil className="w-3.5 h-3.5" /></Link>
                         <button onClick={() => archive(r)} disabled={isPending} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition disabled:opacity-50" title={r.archived ? 'Desarquivar' : 'Arquivar'}>

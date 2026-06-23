@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import { parseMoney } from '@/lib/midia'
 
 const FIELDS = [
   'tipo', 'workspace_id', 'campaign_id', 'titulo', 'faturar', 'emissao', 'validade_dias',
@@ -56,6 +57,64 @@ export async function updateProducao(orgSlug: string, producaoId: string, formDa
   const dest = redirectTo || `/${orgSlug}/producao/orcamento`
   revalidatePath(dest)
   redirect(dest)
+}
+
+/** Gera um Pedido de Produção por item (com opção escolhida) de um Orçamento aprovado. */
+export async function gerarPedidosDoOrcamento(orgSlug: string, orcamentoId: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { data: org } = await supabase.from('organizations').select('id').eq('slug', orgSlug).single()
+  if (!org) return { error: 'Organização não encontrada' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: orc } = await (supabase as any).from('producao').select('*').eq('id', orcamentoId).single()
+  if (!orc || orc.tipo !== 'orcamento') return { error: 'Orçamento não encontrado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const itens: any[] = Array.isArray(orc.detalhe?.itens) ? orc.detalhe.itens : []
+  let count = 0
+
+  for (const it of itens) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const opcoes: any[] = Array.isArray(it.opcoes) ? it.opcoes : []
+    const sel = opcoes.find(o => o.selecionado) ?? opcoes[0]
+    if (!sel || !sel.fornecedor_id) continue
+
+    const quant = parseInt(sel.quant || '1', 10) || 1
+    const valor = parseMoney(sel.valor_unit || '') * quant
+
+    const payload = {
+      tipo: 'pedido',
+      workspace_id: orc.workspace_id,
+      campaign_id: orc.campaign_id ?? '',
+      titulo: `${orc.titulo}${it.nome ? ` - ${it.nome}` : ''}`,
+      faturar: orc.faturar ?? 'contra_cliente',
+      emissao: new Date().toISOString().slice(0, 10),
+      bv_pct: String(orc.bv_pct ?? 15),
+      honorarios_pct: String(orc.honorarios_pct ?? 0),
+      valor: String(valor),
+      situacao: 'em_aberto',
+      detalhe: {
+        fornecedor_id: sel.fornecedor_id,
+        entrega: '',
+        prazo: 'a_vista',
+        orcamento_id: orcamentoId,
+        itens: [{ nome: it.nome ?? '', descricao: it.descricao ?? '', n_orc: sel.n_orc ?? '', quant: String(quant), valor: sel.valor_unit ?? '' }],
+        parcelas: [],
+      },
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).rpc('create_producao', { p_user_id: user.id, p_org_id: org.id, p_data: payload })
+    if (error) return { error: error.message }
+    count++
+  }
+
+  if (count === 0) return { error: 'Nenhum item com opção/fornecedor escolhido neste orçamento.' }
+
+  revalidatePath(`/${orgSlug}/producao/pedido`)
+  redirect(`/${orgSlug}/producao/pedido`)
 }
 
 export async function setProducaoSituacao(orgSlug: string, producaoId: string, situacao: string, basePath: string) {

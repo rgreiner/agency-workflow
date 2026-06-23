@@ -34,6 +34,7 @@ export default async function OrcamentoPage({
       orgSlug={orgSlug} items={items} archivedView={archivedView}
       basePath="producao/orcamento" title="Liberação de Produção — Orçamento"
       subtitle="Cotações de fornecedores para aprovação do cliente" addLabel="Adicionar Orçamento"
+      gerarPedidos
     />
   )
 }
