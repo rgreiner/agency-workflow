@@ -200,6 +200,8 @@ export type Database = {
           layout_url: string | null
           finalizacao_url: string | null
           orcamento: string | null
+          recurrence: string | null
+          recurrence_remaining: number | null
           drive_folder_id: string | null
           drive_path: string | null
           preview_url: string | null
@@ -230,6 +232,8 @@ export type Database = {
           layout_url?: string | null
           finalizacao_url?: string | null
           orcamento?: string | null
+          recurrence?: string | null
+          recurrence_remaining?: number | null
           drive_folder_id?: string | null
           drive_path?: string | null
           preview_url?: string | null
@@ -260,6 +264,8 @@ export type Database = {
           layout_url?: string | null
           finalizacao_url?: string | null
           orcamento?: string | null
+          recurrence?: string | null
+          recurrence_remaining?: number | null
           drive_folder_id?: string | null
           drive_path?: string | null
           preview_url?: string | null

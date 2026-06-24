@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { provisionActivitiesDrive } from '@/lib/drive-provision'
 import { scheduleRedacaoReview, isRedacaoAdvance } from '@/lib/redacao-gate'
+import { scheduleRecurrence, isConclusion } from '@/lib/recurrence-gate'
 
 export async function createActivity(
   orgSlug: string,
@@ -94,6 +95,9 @@ export async function updateActivityStatus(
   if (isRedacaoAdvance(fromStatus, newStatus)) {
     scheduleRedacaoReview({ supabase, userId: user.id, activityId, toStatus: newStatus })
   }
+  if (isConclusion(fromStatus, newStatus)) {
+    scheduleRecurrence({ supabase, userId: user.id, activityId })
+  }
   revalidatePath(path)
 }
 
@@ -172,6 +176,32 @@ export async function updateActivityDates(
   revalidatePath('/', 'layout')
 }
 
+/**
+ * Define a recorrência do prazo. `recurrence` = frequência ('weekly'|'monthly'|
+ * 'bimonthly'|'quarterly'|'semiannual'|'annual') ou null p/ desligar; `remaining`
+ * = quantas vezes ainda repete (null = sem limite).
+ */
+export async function setActivityRecurrence(
+  path: string,
+  activityId: string,
+  recurrence: string | null,
+  remaining: number | null,
+) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('set_activity_recurrence', {
+    p_user_id: user.id,
+    p_activity_id: activityId,
+    p_recurrence: recurrence,
+    p_remaining: remaining,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(path)
+}
+
 export async function setActivityArchived(
   path: string,
   activityId: string,
@@ -223,8 +253,12 @@ export async function bulkUpdateStatus(path: string, ids: string[], newStatus: s
   if (err) return { error: err.message }
 
   for (const id of ids) {
-    if (isRedacaoAdvance(fromMap.get(id) ?? null, newStatus)) {
+    const from = fromMap.get(id) ?? null
+    if (isRedacaoAdvance(from, newStatus)) {
       scheduleRedacaoReview({ supabase, userId: user.id, activityId: id, toStatus: newStatus })
+    }
+    if (isConclusion(from, newStatus)) {
+      scheduleRecurrence({ supabase, userId: user.id, activityId: id })
     }
   }
   revalidatePath(path)

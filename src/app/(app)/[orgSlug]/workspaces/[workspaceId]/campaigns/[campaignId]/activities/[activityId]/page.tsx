@@ -18,6 +18,7 @@ import { ReactionBar } from './ReactionBar'
 import { ReplyButton } from './ReplyButton'
 import { ExtraLinks } from './ExtraLinks'
 import { DateRangeEditor } from '@/components/ui/DateRangeEditor'
+import { RecurrenceEditor } from '@/components/ui/RecurrenceEditor'
 import { Avatar } from '@/components/ui/Avatar'
 import { MachinePath } from '@/components/ui/MachinePath'
 
@@ -259,6 +260,16 @@ export default async function ActivityPage({
                     path={path}
                     startDate={activity.start_date ?? null}
                     dueDate={activity.due_date}
+                    canEdit={isOrgMember}
+                  />
+
+                  {/* Recorrência do prazo */}
+                  <RecurrenceEditor
+                    key={`${activity.recurrence ?? ''}_${activity.recurrence_remaining ?? ''}`}
+                    activityId={activityId}
+                    path={path}
+                    recurrence={activity.recurrence ?? null}
+                    remaining={activity.recurrence_remaining ?? null}
                     canEdit={isOrgMember}
                   />
 
