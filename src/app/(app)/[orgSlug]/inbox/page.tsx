@@ -45,7 +45,9 @@ export default async function InboxPage({
           title: a.title,
           status: a.status,
           statusLabel: cfg?.label ?? a.status,
-          statusColor: cfg?.text ?? '#9ca3af',
+          // Cor de PREENCHIMENTO da pílula do status (bg) — é a cor "real" do
+          // status. Usar text deixava a bolinha branca quando o text da org = #fff.
+          statusColor: cfg?.bg ?? '#9ca3af',
           dueDate: a.due_date ?? null,
           href: camp?.workspace_id
             ? `/${orgSlug}/workspaces/${camp.workspace_id}/campaigns/${a.campaign_id}/activities/${a.id}`

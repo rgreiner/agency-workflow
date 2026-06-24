@@ -137,7 +137,7 @@ function TaskRow({ task, group }: { task: MyTask; group: GroupKey }) {
       href={task.href}
       className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-white transition-colors group"
     >
-      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: task.statusColor }} title={task.statusLabel} />
+      <span className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-inset ring-black/10" style={{ backgroundColor: task.statusColor }} title={task.statusLabel} />
       <span className="flex-1 min-w-0 text-sm text-gray-700 truncate group-hover:text-gray-900">{task.title}</span>
       {dateLabel && (
         <span className={cn('text-[11px] shrink-0', overdue ? 'text-red-500 font-medium' : 'text-gray-400')}>{dateLabel}</span>
