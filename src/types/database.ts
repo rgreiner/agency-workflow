@@ -202,6 +202,7 @@ export type Database = {
           orcamento: string | null
           recurrence: string | null
           recurrence_remaining: number | null
+          recurrence_reset_status: Database["public"]["Enums"]["activity_status"] | null
           drive_folder_id: string | null
           drive_path: string | null
           preview_url: string | null
@@ -234,6 +235,7 @@ export type Database = {
           orcamento?: string | null
           recurrence?: string | null
           recurrence_remaining?: number | null
+          recurrence_reset_status?: Database["public"]["Enums"]["activity_status"] | null
           drive_folder_id?: string | null
           drive_path?: string | null
           preview_url?: string | null
@@ -266,6 +268,7 @@ export type Database = {
           orcamento?: string | null
           recurrence?: string | null
           recurrence_remaining?: number | null
+          recurrence_reset_status?: Database["public"]["Enums"]["activity_status"] | null
           drive_folder_id?: string | null
           drive_path?: string | null
           preview_url?: string | null

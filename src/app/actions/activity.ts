@@ -179,13 +179,15 @@ export async function updateActivityDates(
 /**
  * Define a recorrência do prazo. `recurrence` = frequência ('weekly'|'monthly'|
  * 'bimonthly'|'quarterly'|'semiannual'|'annual') ou null p/ desligar; `remaining`
- * = quantas vezes ainda repete (null = sem limite).
+ * = quantas vezes ainda repete (null = sem limite); `resetStatus` = status p/ onde
+ * a tarefa volta ao recorrer (null = padrão 'briefing').
  */
 export async function setActivityRecurrence(
   path: string,
   activityId: string,
   recurrence: string | null,
   remaining: number | null,
+  resetStatus: string | null,
 ) {
   const supabase = await createClient()
   const user = await getUsuario()
@@ -197,6 +199,7 @@ export async function setActivityRecurrence(
     p_activity_id: activityId,
     p_recurrence: recurrence,
     p_remaining: remaining,
+    p_reset_status: resetStatus,
   })
   if (error) return { error: error.message }
   revalidatePath(path)

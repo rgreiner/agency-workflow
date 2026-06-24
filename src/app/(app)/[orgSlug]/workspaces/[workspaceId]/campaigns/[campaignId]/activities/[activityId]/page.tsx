@@ -265,11 +265,12 @@ export default async function ActivityPage({
 
                   {/* Recorrência do prazo */}
                   <RecurrenceEditor
-                    key={`${activity.recurrence ?? ''}_${activity.recurrence_remaining ?? ''}`}
+                    key={`${activity.recurrence ?? ''}_${activity.recurrence_remaining ?? ''}_${activity.recurrence_reset_status ?? ''}`}
                     activityId={activityId}
                     path={path}
                     recurrence={activity.recurrence ?? null}
                     remaining={activity.recurrence_remaining ?? null}
+                    resetStatus={activity.recurrence_reset_status ?? null}
                     canEdit={isOrgMember}
                   />
 

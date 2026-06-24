@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useTransition, useRef, useEffect } from 'react'
-import { Repeat, Loader2, Infinity as InfinityIcon, Check } from 'lucide-react'
+import { Repeat, Loader2, Infinity as InfinityIcon, Check, ChevronDown } from 'lucide-react'
 import { setActivityRecurrence } from '@/app/actions/activity'
+import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { Select } from '@/components/ui/Select'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -23,15 +24,21 @@ interface Props {
   path: string
   recurrence: string | null
   remaining: number | null
+  resetStatus: string | null
   canEdit: boolean
 }
 
-interface State { enabled: boolean; freq: string; noLimit: boolean; count: number }
+interface State { enabled: boolean; freq: string; noLimit: boolean; count: number; resetStatus: string }
 
-export function RecurrenceEditor({ activityId, path, recurrence, remaining, canEdit }: Props) {
+export function RecurrenceEditor({ activityId, path, recurrence, remaining, resetStatus, canEdit }: Props) {
   const [open, setOpen] = useState(false)
+  const [statusOpen, setStatusOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const popupRef = useRef<HTMLDivElement>(null)
+
+  const statusConfig = useStatusConfig()
+  // Status candidatos a "volta para" — exclui os de encerramento (Concluído).
+  const resetOptions = statusConfig.filter(s => s.group !== 'done')
 
   // Estado inicial vem das props; o pai passa um `key` que muda quando o servidor
   // revalida, remontando o componente com os novos valores (sem efeito de sync).
@@ -40,13 +47,14 @@ export function RecurrenceEditor({ activityId, path, recurrence, remaining, canE
     freq: recurrence || 'monthly',
     noLimit: recurrence ? remaining == null : false,
     count: remaining ?? 12,
+    resetStatus: resetStatus || 'briefing',
   })
 
   // Fecha ao clicar fora
   useEffect(() => {
     if (!open) return
     function onOut(e: MouseEvent) {
-      if (popupRef.current && !popupRef.current.contains(e.target as Node)) setOpen(false)
+      if (popupRef.current && !popupRef.current.contains(e.target as Node)) { setOpen(false); setStatusOpen(false) }
     }
     document.addEventListener('mousedown', onOut)
     return () => document.removeEventListener('mousedown', onOut)
@@ -60,10 +68,13 @@ export function RecurrenceEditor({ activityId, path, recurrence, remaining, canE
         activityId,
         next.enabled ? next.freq : null,
         next.enabled ? (next.noLimit ? null : Math.max(1, next.count)) : null,
+        next.enabled ? next.resetStatus : null,
       )
       if (result?.error) toast.error(result.error)
     })
   }
+
+  const resetCfg = statusConfig.find(s => s.value === state.resetStatus)
 
   // ── Não-editável: só mostra o selo quando há recorrência ──
   if (!canEdit) {
@@ -101,7 +112,7 @@ export function RecurrenceEditor({ activityId, path, recurrence, remaining, canE
           ref={popupRef}
           onClick={e => e.stopPropagation()}
           className="absolute top-full left-0 mt-1 z-50 bg-white rounded-2xl border border-gray-200 shadow-xl p-4"
-          style={{ width: 264 }}
+          style={{ width: 272 }}
         >
           {/* Toggle "é recorrente" */}
           <button
@@ -129,6 +140,36 @@ export function RecurrenceEditor({ activityId, path, recurrence, remaining, canE
                   options={FREQ_OPTIONS}
                   size="sm"
                 />
+              </div>
+
+              {/* Volta para (status) */}
+              <div className="relative">
+                <label className="block text-xs text-gray-500 mb-1">Volta para</label>
+                <button
+                  type="button"
+                  onClick={() => setStatusOpen(o => !o)}
+                  className="w-full flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-2 py-1.5 hover:border-indigo-300 transition"
+                >
+                  {resetCfg
+                    ? <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ backgroundColor: resetCfg.bg, color: resetCfg.text }}>{resetCfg.label}</span>
+                    : <span className="text-xs text-gray-400">Selecionar</span>}
+                  <ChevronDown className={cn('w-3.5 h-3.5 text-gray-400 transition-transform', statusOpen && 'rotate-180')} />
+                </button>
+                {statusOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-1 z-10 bg-white rounded-xl border border-gray-200 shadow-lg max-h-56 overflow-y-auto py-1">
+                    {resetOptions.map(s => (
+                      <button
+                        key={s.value}
+                        type="button"
+                        onClick={() => { setStatusOpen(false); save({ ...state, resetStatus: s.value }) }}
+                        className="w-full text-left px-2.5 py-1.5 flex items-center gap-2 hover:bg-gray-50 transition-colors"
+                      >
+                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ backgroundColor: s.bg, color: s.text }}>{s.label}</span>
+                        {state.resetStatus === s.value && <Check className="w-3.5 h-3.5 text-gray-400 ml-auto shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Repetições */}
@@ -163,7 +204,7 @@ export function RecurrenceEditor({ activityId, path, recurrence, remaining, canE
               </div>
 
               <p className="text-[11px] leading-snug text-gray-400 pt-1">
-                Ao concluir, a tarefa volta à pauta com o próximo prazo.
+                Ao concluir, a tarefa volta à pauta no status escolhido com o próximo prazo.
               </p>
             </div>
           )}
