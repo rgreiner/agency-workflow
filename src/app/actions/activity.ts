@@ -5,7 +5,7 @@ import { getUsuario } from '@/lib/auth/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { provisionActivitiesDrive } from '@/lib/drive-provision'
-import { scheduleRedacaoReview, isRedacaoAdvance } from '@/lib/redacao-gate'
+import { scheduleReview, reviewKindForAdvance } from '@/lib/review-gate'
 import { scheduleRecurrence, isConclusion } from '@/lib/recurrence-gate'
 
 export async function createActivity(
@@ -92,8 +92,9 @@ export async function updateActivityStatus(
 
   if (error) return { error: error.message }
 
-  if (isRedacaoAdvance(fromStatus, newStatus)) {
-    scheduleRedacaoReview({ supabase, userId: user.id, activityId, toStatus: newStatus })
+  const reviewKind = reviewKindForAdvance(fromStatus, newStatus)
+  if (reviewKind) {
+    scheduleReview({ supabase, userId: user.id, activityId, kind: reviewKind, toStatus: newStatus })
   }
   if (isConclusion(fromStatus, newStatus)) {
     scheduleRecurrence({ supabase, userId: user.id, activityId })
@@ -257,8 +258,9 @@ export async function bulkUpdateStatus(path: string, ids: string[], newStatus: s
 
   for (const id of ids) {
     const from = fromMap.get(id) ?? null
-    if (isRedacaoAdvance(from, newStatus)) {
-      scheduleRedacaoReview({ supabase, userId: user.id, activityId: id, toStatus: newStatus })
+    const reviewKind = reviewKindForAdvance(from, newStatus)
+    if (reviewKind) {
+      scheduleReview({ supabase, userId: user.id, activityId: id, kind: reviewKind, toStatus: newStatus })
     }
     if (isConclusion(from, newStatus)) {
       scheduleRecurrence({ supabase, userId: user.id, activityId: id })
@@ -365,25 +367,28 @@ export async function toggleCommentReaction(path: string, commentId: string, emo
 }
 
 /**
- * "Avançar mesmo assim" — o redador assume os apontamentos da revisão e avança a
- * tarefa para o status que tentou antes (redacao_review_target, ou 'design'),
- * via RPC direto p/ não re-disparar a revisão.
+ * "Avançar mesmo assim" — assume os apontamentos da revisão e avança a tarefa para
+ * o status que tentou antes (review_target), via RPC direto p/ não re-disparar a
+ * revisão. Quem clica fica registrado no comentário (responsabilização).
  */
-export async function confirmRedacaoErrors(path: string, activityId: string) {
+export async function confirmReviewErrors(path: string, activityId: string) {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const { data: act } = await supabase
-    .from('activities').select('redacao_review_target').eq('id', activityId).single()
-  const target = act?.redacao_review_target || 'design'
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .from('activities').select('review_target, review_kind').eq('id', activityId).single() as any
+  const target = act?.review_target || 'design'
+  const kind = act?.review_kind || 'redacao'
 
-  await supabase.rpc('set_redacao_review', {
-    p_user_id: user.id, p_activity_id: activityId, p_status: 'overridden', p_errors: null, p_target: null,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any).rpc('set_review', {
+    p_user_id: user.id, p_activity_id: activityId, p_kind: kind, p_status: 'overridden', p_errors: null, p_target: null,
   })
   await supabase.rpc('add_activity_comment', {
     p_user_id: user.id, p_activity_id: activityId,
-    p_content: '✋ Apontamentos da revisão assumidos pelo redador — avançando mesmo assim.',
+    p_content: '✋ Apontamentos da revisão assumidos — avançando mesmo assim.',
   })
 
   const { error } = await supabase.rpc('update_activity_status', {

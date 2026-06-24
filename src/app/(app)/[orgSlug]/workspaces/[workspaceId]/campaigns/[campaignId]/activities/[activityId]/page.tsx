@@ -7,7 +7,7 @@ import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, P
 import Link from 'next/link'
 import { DriveProvisioningNotice } from './DriveProvisioningNotice'
 import { StatusChanger } from './StatusChanger'
-import { RedacaoReviewBanner } from './RedacaoReviewBanner'
+import { ReviewBanner } from './ReviewBanner'
 import { AutoRefresh } from '@/components/ui/AutoRefresh'
 import { CommentBox } from './CommentBox'
 import { AssigneeSelector } from './AssigneeSelector'
@@ -305,15 +305,16 @@ export default async function ActivityPage({
             />
 
             {/* Atualiza a tarefa sozinha (revisão em 2º plano, mudanças de outros);
-                mais rápido enquanto a revisão de Redação está rodando. */}
-            <AutoRefresh fast={activity.redacao_review_status === 'reviewing'} />
+                mais rápido enquanto uma revisão está rodando. */}
+            <AutoRefresh fast={activity.review_status === 'reviewing'} />
 
-            {/* Revisão de Redação (IA) — "revisando…" / apontamentos + avançar mesmo assim */}
-            <RedacaoReviewBanner
+            {/* Revisão por IA (Redação/Design/Finalização) — "revisando…" / apontamentos + avançar mesmo assim */}
+            <ReviewBanner
               activityId={activityId}
               path={path}
-              status={activity.redacao_review_status ?? null}
-              errors={(activity.redacao_review_errors as unknown as { trecho: string; problema: string; sugestao: string; tipo?: string }[] | null) ?? null}
+              status={activity.review_status ?? null}
+              errors={(activity.review_errors as unknown as { trecho: string; problema: string; sugestao: string; tipo?: string }[] | null) ?? null}
+              kind={activity.review_kind ?? null}
               currentStatus={activity.status}
             />
 

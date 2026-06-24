@@ -206,10 +206,11 @@ export type Database = {
           drive_folder_id: string | null
           drive_path: string | null
           preview_url: string | null
-          redacao_review_status: string | null
-          redacao_review_errors: Json | null
-          redacao_review_target: string | null
-          redacao_review_at: string | null
+          review_status: string | null
+          review_errors: Json | null
+          review_target: string | null
+          review_at: string | null
+          review_kind: string | null
           id: string
           priority: Database["public"]["Enums"]["activity_priority"]
           sort_order: number
@@ -239,10 +240,11 @@ export type Database = {
           drive_folder_id?: string | null
           drive_path?: string | null
           preview_url?: string | null
-          redacao_review_status?: string | null
-          redacao_review_errors?: Json | null
-          redacao_review_target?: string | null
-          redacao_review_at?: string | null
+          review_status?: string | null
+          review_errors?: Json | null
+          review_target?: string | null
+          review_at?: string | null
+          review_kind?: string | null
           id?: string
           priority?: Database["public"]["Enums"]["activity_priority"]
           sort_order?: number
@@ -272,10 +274,11 @@ export type Database = {
           drive_folder_id?: string | null
           drive_path?: string | null
           preview_url?: string | null
-          redacao_review_status?: string | null
-          redacao_review_errors?: Json | null
-          redacao_review_target?: string | null
-          redacao_review_at?: string | null
+          review_status?: string | null
+          review_errors?: Json | null
+          review_target?: string | null
+          review_at?: string | null
+          review_kind?: string | null
           id?: string
           priority?: Database["public"]["Enums"]["activity_priority"]
           sort_order?: number

@@ -2,41 +2,51 @@
 
 import { useTransition } from 'react'
 import { AlertTriangle, Check, Loader2 } from 'lucide-react'
-import { confirmRedacaoErrors } from '@/app/actions/activity'
+import { confirmReviewErrors } from '@/app/actions/activity'
 import { toast } from 'sonner'
 
 interface ReviewError { trecho: string; problema: string; sugestao: string; tipo?: string }
 
+// kind → status do gate (onde a tarefa volta) + textos.
+const GATE: Record<string, { status: string; label: string; reviewing: string }> = {
+  redacao:     { status: 'redacao',     label: 'Redação',     reviewing: 'os textos de Redação' },
+  design:      { status: 'design',      label: 'Design',      reviewing: 'as peças de Design' },
+  finalizacao: { status: 'finalizacao', label: 'Finalização', reviewing: 'o arquivo de Finalização' },
+}
+
 interface Props {
   activityId: string
   path: string
-  /** activities.redacao_review_status */
+  /** activities.review_status */
   status: string | null
-  /** activities.redacao_review_errors */
+  /** activities.review_errors */
   errors: ReviewError[] | null
+  /** activities.review_kind */
+  kind: string | null
   /** activities.status (atual) */
   currentStatus: string
 }
 
-export function RedacaoReviewBanner({ activityId, path, status, errors, currentStatus }: Props) {
+export function ReviewBanner({ activityId, path, status, errors, kind, currentStatus }: Props) {
   const [pending, start] = useTransition()
+  const gate = (kind && GATE[kind]) || GATE.redacao
 
   // Revisão em andamento (a tarefa já avançou; a IA está checando em 2º plano).
   if (status === 'reviewing') {
     return (
       <div className="mt-4 flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm text-indigo-700">
         <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-        Revisando os textos de Redação…
+        Revisando {gate.reviewing}…
       </div>
     )
   }
 
-  // Apontamentos pendentes só importam enquanto a tarefa está (de volta) em Redação.
-  if (status !== 'errors' || currentStatus !== 'redacao' || !errors?.length) return null
+  // Apontamentos pendentes só importam enquanto a tarefa está (de volta) no gate.
+  if (status !== 'errors' || currentStatus !== gate.status || !errors?.length) return null
 
   function confirm() {
     start(async () => {
-      const r = await confirmRedacaoErrors(path, activityId)
+      const r = await confirmReviewErrors(path, activityId)
       if (r?.error) toast.error(r.error)
       else toast.success('Avançado com os apontamentos assumidos')
     })
@@ -48,7 +58,7 @@ export function RedacaoReviewBanner({ activityId, path, status, errors, currentS
         <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-amber-800">
-            A revisão encontrou {errors.length} {errors.length === 1 ? 'apontamento' : 'apontamentos'} de português
+            A revisão de {gate.label} encontrou {errors.length} {errors.length === 1 ? 'apontamento' : 'apontamentos'}
           </p>
           <p className="text-xs text-amber-700 mt-0.5">
             Os detalhes estão no comentário abaixo. Corrija e mova de novo, ou avance assumindo os apontamentos.
