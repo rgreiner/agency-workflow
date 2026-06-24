@@ -103,6 +103,8 @@ interface CanvasElProps {
   onSelect:     () => void
   onStartEdit:  () => void
   onUpdate:     (u: Partial<BoardElement>) => void
+  onDragStart:  () => void
+  onDragMove:   (x: number, y: number) => void
   onDelete:     () => void
   onArrowStart: (e: React.PointerEvent) => void
   onHoverEnter: () => void
@@ -112,7 +114,7 @@ interface CanvasElProps {
 
 function CanvasEl({
   el, selected, editing, scale, isArrowTool, isHovered,
-  onSelect, onStartEdit, onUpdate, onDelete, onArrowStart,
+  onSelect, onStartEdit, onUpdate, onDragStart, onDragMove, onDelete, onArrowStart,
   onHoverEnter, onHoverLeave, children,
 }: CanvasElProps) {
   const scaleRef = useRef(scale)
@@ -129,6 +131,7 @@ function CanvasEl({
     if (isArrowTool) { onArrowStart(e); return }
 
     onSelect()
+    onDragStart()
     dragging.current = true
     dragOrigin.current = { mx: e.clientX, my: e.clientY, ex: el.x, ey: el.y }
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -137,10 +140,10 @@ function CanvasEl({
   function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (!dragging.current) return
     const s = scaleRef.current
-    onUpdate({
-      x: dragOrigin.current.ex + (e.clientX - dragOrigin.current.mx) / s,
-      y: dragOrigin.current.ey + (e.clientY - dragOrigin.current.my) / s,
-    })
+    onDragMove(
+      dragOrigin.current.ex + (e.clientX - dragOrigin.current.mx) / s,
+      dragOrigin.current.ey + (e.clientY - dragOrigin.current.my) / s,
+    )
   }
 
   function handlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
@@ -193,7 +196,7 @@ function CanvasEl({
         borderRadius: 10,
         cursor: isArrowTool ? 'crosshair' : editing ? 'default' : 'grab',
         userSelect: editing ? 'text' : 'none',
-        zIndex: el.type === 'frame' ? (selected ? 100 : 0) : selected ? 100 : isHovered ? 50 : 1,
+        zIndex: el.type === 'frame' ? (selected ? 1 : 0) : selected ? 100 : isHovered ? 50 : 2,
         overflow: 'visible',
         animation: 'board-pop 0.16s ease-out',
         transition: 'filter 0.15s ease',
@@ -354,6 +357,7 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
   const arrowsRef       = useRef(arrows)
   const hoveredElIdRef  = useRef(hoveredElId)
   const drawingArrowRef = useRef(drawingArrow)
+  const dragChildIds    = useRef<Set<string>>(new Set())
 
   useEffect(() => { panRef.current   = pan },          [pan])
   useEffect(() => { scaleRef.current = scale },        [scale])
@@ -382,6 +386,41 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
   function updateEl(id: string, updates: Partial<BoardElement>) {
     setElements(prev => {
       const next = prev.map(el => el.id === id ? { ...el, ...updates } as BoardElement : el)
+      elementsRef.current = next
+      scheduleSave()
+      return next
+    })
+  }
+
+  // Início do arraste: se for um frame, captura os elementos "dentro" dele
+  // (centro do card no bbox do frame) para movê-los junto. Recalcula a cada
+  // arraste, então cards que entram/saem do frame são reconsiderados.
+  function beginDrag(el: BoardElement) {
+    if (el.type !== 'frame') { dragChildIds.current = new Set(); return }
+    const ids = new Set<string>()
+    for (const o of elementsRef.current) {
+      if (o.id === el.id) continue
+      const cx = o.x + o.w / 2
+      const cy = o.y + o.h / 2
+      if (cx >= el.x && cx <= el.x + el.w && cy >= el.y && cy <= el.y + el.h) ids.add(o.id)
+    }
+    dragChildIds.current = ids
+  }
+
+  // Move o elemento para (x, y). Se houver filhos capturados (frame), aplica o
+  // mesmo deslocamento incremental a eles — assim o grupo viaja junto.
+  function dragMove(id: string, x: number, y: number) {
+    setElements(prev => {
+      const cur = prev.find(e => e.id === id)
+      if (!cur) return prev
+      const dx = x - cur.x
+      const dy = y - cur.y
+      const kids = dragChildIds.current
+      const next = prev.map(el =>
+        el.id === id            ? { ...el, x, y }
+        : kids.has(el.id)       ? { ...el, x: el.x + dx, y: el.y + dy }
+        :                         el
+      )
       elementsRef.current = next
       scheduleSave()
       return next
@@ -832,6 +871,8 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
                 onSelect={() => { setSelectedId(el.id); setSelectedArrowId(null) }}
                 onStartEdit={() => setEditingId(el.id)}
                 onUpdate={updates => updateEl(el.id, updates)}
+                onDragStart={() => beginDrag(el)}
+                onDragMove={(x, y) => dragMove(el.id, x, y)}
                 onDelete={() => deleteEl(el.id)}
                 onArrowStart={e => startDrawingArrow(el.id, e.clientX, e.clientY)}
                 onHoverEnter={() => setHoveredElId(el.id)}
