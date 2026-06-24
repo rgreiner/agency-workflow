@@ -3,9 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import type { LinkElement } from '@/types/board'
 import { Link2, ExternalLink } from 'lucide-react'
-
-const href = (u: string) => (/^https?:\/\//i.test(u) ? u : `https://${u}`)
-function domainOf(u: string) { try { return new URL(href(u)).hostname.replace(/^www\./, '') } catch { return '' } }
+import { ensureHttp as href, domainOf } from '@/lib/url'
 
 interface Props {
   el: LinkElement

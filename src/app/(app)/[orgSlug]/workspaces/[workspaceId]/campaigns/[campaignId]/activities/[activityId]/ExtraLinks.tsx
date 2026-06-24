@@ -3,12 +3,11 @@
 import { useState, useTransition } from 'react'
 import { ExternalLink, Plus, Trash2, Pencil, Check, Loader2, Link2 } from 'lucide-react'
 import { setActivityExtraLinks } from '@/app/actions/activity'
+import { ensureHttp as href } from '@/lib/url'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
 interface LinkItem { label: string; url: string }
-
-const href = (u: string) => (/^https?:\/\//i.test(u) ? u : `https://${u}`)
 
 export function ExtraLinks({ path, activityId, links, canEdit }: {
   path: string
