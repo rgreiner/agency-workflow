@@ -165,6 +165,97 @@ export async function readRedacaoText(link: string): Promise<{ text: string; sou
   return { text: parts.join('\n\n'), sources }
 }
 
+// ── Leitura de peças (revisão multimodal: imagens / PDF) ────────────────────
+
+const PDF_MIME    = 'application/pdf'
+const SLIDES_MIME = 'application/vnd.google-apps.presentation'
+const IMAGE_MIME_RE = /^image\/(png|jpe?g|webp|gif)$/i
+
+// Limites p/ controlar custo/latência e os tetos das APIs de visão.
+const MAX_ASSETS      = 12
+const MAX_FILE_BYTES  = 8  * 1024 * 1024
+const MAX_TOTAL_BYTES = 24 * 1024 * 1024
+
+export interface DriveAsset {
+  name: string
+  mimeType: string   // image/png | image/jpeg | application/pdf
+  base64: string
+}
+
+function isReviewable(mime: string): boolean {
+  return IMAGE_MIME_RE.test(mime) || mime === PDF_MIME || mime === SLIDES_MIME
+}
+
+async function downloadBase64(fileId: string): Promise<{ base64: string; bytes: number }> {
+  const drive = getDrive()
+  const r = await drive.files.get(
+    { fileId, alt: 'media', supportsAllDrives: true },
+    { responseType: 'arraybuffer' },
+  )
+  const buf = Buffer.from(r.data as ArrayBuffer)
+  return { base64: buf.toString('base64'), bytes: buf.length }
+}
+
+async function exportBase64(fileId: string, mimeType: string): Promise<{ base64: string; bytes: number }> {
+  const drive = getDrive()
+  const r = await drive.files.export({ fileId, mimeType }, { responseType: 'arraybuffer' })
+  const buf = Buffer.from(r.data as ArrayBuffer)
+  return { base64: buf.toString('base64'), bytes: buf.length }
+}
+
+/**
+ * Baixa as peças (imagens / PDF; Google Slides é exportado como PDF) de um link
+ * do Drive — arquivo único OU pasta — em base64, p/ revisão por visão. Ignora o
+ * que não for imagem/PDF/apresentação. Respeita limites de quantidade/tamanho.
+ */
+export async function readReviewAssets(link: string): Promise<{ assets: DriveAsset[]; truncated: boolean }> {
+  const id = extractFolderId(link)
+  if (!id) return { assets: [], truncated: false }
+  const drive = getDrive()
+
+  const meta = (await drive.files.get({
+    fileId: id, fields: 'id, name, mimeType', supportsAllDrives: true,
+  })).data
+
+  const candidates: { id: string; name: string; mimeType: string }[] = []
+  if (meta.mimeType === FOLDER_MIME) {
+    let pageToken: string | undefined
+    do {
+      const r: drive_v3.Schema$FileList = (await drive.files.list({
+        q: `'${id}' in parents and trashed = false`,
+        fields: 'nextPageToken, files(id, name, mimeType)',
+        pageSize: 200, orderBy: 'name',
+        supportsAllDrives: true, includeItemsFromAllDrives: true, pageToken,
+      })).data
+      for (const f of r.files ?? []) {
+        if (f.id && f.mimeType && isReviewable(f.mimeType)) candidates.push({ id: f.id, name: f.name ?? '', mimeType: f.mimeType })
+      }
+      pageToken = r.nextPageToken ?? undefined
+    } while (pageToken)
+  } else if (meta.id && meta.mimeType && isReviewable(meta.mimeType)) {
+    candidates.push({ id: meta.id, name: meta.name ?? '', mimeType: meta.mimeType })
+  }
+
+  let truncated = candidates.length > MAX_ASSETS
+  const limited = candidates.slice(0, MAX_ASSETS)
+
+  const assets: DriveAsset[] = []
+  let total = 0
+  for (const c of limited) {
+    try {
+      const isSlides = c.mimeType === SLIDES_MIME
+      const data = isSlides ? await exportBase64(c.id, PDF_MIME) : await downloadBase64(c.id)
+      if (data.bytes > MAX_FILE_BYTES) { truncated = true; continue }
+      if (total + data.bytes > MAX_TOTAL_BYTES) { truncated = true; break }
+      total += data.bytes
+      assets.push({ name: c.name, mimeType: isSlides ? PDF_MIME : c.mimeType, base64: data.base64 })
+    } catch (e) {
+      console.error('[drive] download de peça falhou:', c.name, e)
+    }
+  }
+  return { assets, truncated }
+}
+
 // ── Reconciliação campanha ↔ Drive ──────────────────────────────────────────
 
 /** Lista as subpastas (1 nível) de uma pasta. Pagina tudo. */
