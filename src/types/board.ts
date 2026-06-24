@@ -1,6 +1,6 @@
 // ── Board element types ───────────────────────────────────────────────────────
 
-export type BoardElementType = 'note' | 'text' | 'image' | 'color' | 'link' | 'frame'
+export type BoardElementType = 'note' | 'text' | 'image' | 'color' | 'link' | 'frame' | 'checklist'
 
 export interface BaseElement {
   id: string
@@ -49,7 +49,19 @@ export interface FrameElement extends BaseElement {
   color: string   // cor da borda/cabeçalho
 }
 
-export type BoardElement = NoteElement | TextElement | ImageElement | ColorElement | LinkElement | FrameElement
+export interface ChecklistItem {
+  id: string
+  text: string
+  done: boolean
+}
+
+export interface ChecklistElement extends BaseElement {
+  type: 'checklist'
+  title: string
+  items: ChecklistItem[]
+}
+
+export type BoardElement = NoteElement | TextElement | ImageElement | ColorElement | LinkElement | FrameElement | ChecklistElement
 
 export interface Arrow {
   id: string
@@ -92,5 +104,7 @@ export function createElement(type: BoardElementType, x: number, y: number): Boa
       return { id, type: 'link',  x, y, w: 280, h: 72,  url: '', title: '' }
     case 'frame':
       return { id, type: 'frame', x, y, w: 380, h: 300, title: 'Grupo', color: '#94a3b8' }
+    case 'checklist':
+      return { id, type: 'checklist', x, y, w: 240, h: 190, title: 'Checklist', items: [{ id: crypto.randomUUID(), text: '', done: false }] }
   }
 }

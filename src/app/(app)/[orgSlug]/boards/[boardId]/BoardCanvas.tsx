@@ -14,11 +14,12 @@ import { ImageEl } from './elements/ImageEl'
 import { ColorEl } from './elements/ColorEl'
 import { LinkEl } from './elements/LinkEl'
 import { FrameEl } from './elements/FrameEl'
+import { ChecklistEl } from './elements/ChecklistEl'
 import {
   ChevronLeft, Check, Loader2,
   MousePointer2, StickyNote, Type, ImageIcon, ArrowRight,
   Trash2, ZoomIn, ZoomOut, Maximize2, Pencil, X,
-  Palette, Link2, Frame,
+  Palette, Link2, Frame, ListChecks,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -28,7 +29,7 @@ const MIN_SCALE = 0.15
 const MAX_SCALE = 4.0
 const GRID_SIZE = 24
 
-type Tool       = 'select' | 'note' | 'text' | 'image' | 'link' | 'color' | 'frame' | 'arrow'
+type Tool       = 'select' | 'note' | 'text' | 'image' | 'link' | 'color' | 'frame' | 'checklist' | 'arrow'
 type SaveStatus = 'idle' | 'saving' | 'saved'
 type Port       = 'top' | 'right' | 'bottom' | 'left'
 type Pt         = { x: number; y: number }
@@ -277,6 +278,7 @@ const TOOLS = [
   { id: 'image',  icon: ImageIcon,     label: 'Imagem  (I)'     },
   { id: 'link',   icon: Link2,         label: 'Link  (L)'       },
   { id: 'color',  icon: Palette,       label: 'Cor  (C)'        },
+  { id: 'checklist', icon: ListChecks, label: 'Checklist  (K)'  },
   { id: 'frame',  icon: Frame,         label: 'Grupo / caixa  (F)' },
   { id: 'arrow',  icon: ArrowRight,    label: 'Seta  (A)'       },
 ] as const
@@ -617,6 +619,7 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
       if (e.key === 'i' || e.key === 'I') setTool('image')
       if (e.key === 'l' || e.key === 'L') setTool('link')
       if (e.key === 'c' || e.key === 'C') setTool('color')
+      if (e.key === 'k' || e.key === 'K') setTool('checklist')
       if (e.key === 'f' || e.key === 'F') setTool('frame')
       if (e.key === 'a' || e.key === 'A') setTool('arrow')
     }
@@ -919,6 +922,15 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
                 )}
                 {el.type === 'frame' && (
                   <FrameEl
+                    el={el}
+                    selected={selectedId === el.id}
+                    editing={editingId === el.id}
+                    onUpdate={u => updateEl(el.id, u)}
+                    onStopEdit={() => setEditingId(null)}
+                  />
+                )}
+                {el.type === 'checklist' && (
+                  <ChecklistEl
                     el={el}
                     selected={selectedId === el.id}
                     editing={editingId === el.id}
