@@ -21,6 +21,16 @@ const KIND_LABEL: Record<ReviewKind, string> = {
 }
 const ORDER = STATUS_CONFIG.map(s => s.value as string)
 
+// Teto de tempo da revisão em 2º plano — evita ficar preso em "revisando…".
+const REVIEW_TIMEOUT_MS = 150_000
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`tempo esgotado em ${label} (${Math.round(ms / 1000)}s)`)), ms)),
+  ])
+}
+
 /** Qual revisão disparar ao mudar de status (ou null). Avanço = sair do gate p/ um status posterior. */
 export function reviewKindForAdvance(from: string | null | undefined, to: string): ReviewKind | null {
   for (const kind of Object.keys(GATE_STATUS) as ReviewKind[]) {
@@ -58,12 +68,11 @@ export function scheduleReview(params: {
 
     try {
       await setReview('reviewing', null, null)
-      const out = await runKind(kind, supabase, activityId)
+      const out = await withTimeout(runKind(kind, supabase, activityId), REVIEW_TIMEOUT_MS, `revisão de ${label}`)
 
-      if (!out) return // sem provider (não deveria, já checamos)
-      if (out.note) {
+      if (!out || out.note) {
         await setReview('clean', null, null)
-        await comment(`ℹ️ Revisão de ${label}: ${out.note} — nada para revisar.`)
+        await comment(`ℹ️ Revisão de ${label}: ${out?.note ?? 'sem provider de IA configurado'} — nada para revisar.`)
         return
       }
       if (out.clean) {
@@ -78,7 +87,16 @@ export function scheduleReview(params: {
       })
       await comment(formatErrorComment(label, out.errors, out.provider))
     } catch (e) {
+      // Nunca deixa preso em "revisando…": finaliza como 'failed' e leva o erro
+      // pro comentário (diagnóstico). A tarefa já avançou — segue manual.
+      const msg = e instanceof Error ? e.message : String(e)
       console.error(`[review:${kind}] falha no gate`, e)
+      try {
+        await setReview('failed', null, null)
+        await comment(`⚠️ A revisão de ${label} não pôde ser concluída automaticamente: ${msg}. A tarefa seguiu — confira manualmente.`)
+      } catch (e2) {
+        console.error(`[review:${kind}] falha ao registrar o erro da revisão`, e2)
+      }
     }
   })
 }

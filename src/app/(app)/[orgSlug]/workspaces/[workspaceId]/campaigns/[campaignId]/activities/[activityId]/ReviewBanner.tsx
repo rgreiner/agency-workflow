@@ -41,6 +41,16 @@ export function ReviewBanner({ activityId, path, status, errors, kind, currentSt
     )
   }
 
+  // Revisão não concluída (erro técnico) — avisa sem travar; detalhe no comentário.
+  if (status === 'failed') {
+    return (
+      <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-700">
+        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+        A revisão automática de {gate.label} não pôde ser concluída — veja o comentário e siga manualmente.
+      </div>
+    )
+  }
+
   // Apontamentos pendentes só importam enquanto a tarefa está (de volta) no gate.
   if (status !== 'errors' || currentStatus !== gate.status || !errors?.length) return null
 

@@ -171,10 +171,12 @@ const PDF_MIME    = 'application/pdf'
 const SLIDES_MIME = 'application/vnd.google-apps.presentation'
 const IMAGE_MIME_RE = /^image\/(png|jpe?g|webp|gif)$/i
 
-// Limites p/ controlar custo/latência e os tetos das APIs de visão.
+// Limites p/ controlar custo/latência e ficar abaixo dos tetos das APIs de visão.
+// base64 infla ~33%, então 12MB de binário ≈ 16MB no corpo do request (Gemini
+// inline aceita ~20MB de request total).
 const MAX_ASSETS      = 12
-const MAX_FILE_BYTES  = 8  * 1024 * 1024
-const MAX_TOTAL_BYTES = 24 * 1024 * 1024
+const MAX_FILE_BYTES  = 6  * 1024 * 1024
+const MAX_TOTAL_BYTES = 12 * 1024 * 1024
 
 export interface DriveAsset {
   name: string
