@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useTransition, type ReactNode, type Compon
 import Link from 'next/link'
 import { cn, isOverdue, daysUntil } from '@/lib/utils'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority } from '@/types'
-import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search, Flag, SignalLow, SignalMedium, SignalHigh, Copy, Archive, ArchiveRestore, X, Calendar, UserPlus, Minus, Circle, User, Bookmark } from 'lucide-react'
+import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search, Flag, SignalLow, SignalMedium, SignalHigh, Copy, Archive, ArchiveRestore, X, Calendar, UserPlus, Minus, Circle, User, Bookmark, Loader2 } from 'lucide-react'
 
 // Complexidade → ícone (1/2/3 barras)
 const COMPLEXITY_ICON = { simple: SignalLow, medium: SignalMedium, complex: SignalHigh } as const
@@ -13,7 +13,7 @@ import { DateRangeEditor } from '@/components/ui/DateRangeEditor'
 import { MachinePath } from '@/components/ui/MachinePath'
 import { MultiSelect } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
-import { updateActivityStatus, updateActivityField, setActivityArchived, bulkUpdateStatus, bulkUpdateField, bulkToggleAssignee, bulkSetArchived } from '@/app/actions/activity'
+import { updateActivityStatus, updateActivityField, setActivityArchived, bulkUpdateStatus, bulkUpdateField, bulkToggleAssignee, bulkSetArchived, createActivityInline } from '@/app/actions/activity'
 import { createClient } from '@/lib/supabase/client'
 import { getUsuarioClient } from '@/lib/auth/client'
 import { toast } from 'sonner'
@@ -836,6 +836,16 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                         </div>
                       )
                     })}
+
+                    {/* Adicionar tarefa inline no fim do grupo (já neste status) */}
+                    {!isArchivedView && (
+                      <GroupAddTask
+                        listPath={listPath}
+                        status={statusCfg.value}
+                        campMap={campMap}
+                        fixedCampaign={newActivityCampaign}
+                      />
+                    )}
                   </div>
                 )}
               </div>
@@ -1108,6 +1118,143 @@ function StatusDot({
 }
 
 // ── Botão "Nova atividade" sempre no topo (escolhe a campanha de destino) ───
+// ── "+ Tarefa" inline no fim de cada grupo de status ────────────────────────
+function GroupAddTask({
+  listPath,
+  status,
+  campMap,
+  fixedCampaign,
+}: {
+  listPath: string
+  status: string
+  campMap: Record<string, CampInfo>
+  fixedCampaign?: { workspaceId: string; campaignId: string }
+}) {
+  const [open, setOpen] = useState(false)
+  const [title, setTitle] = useState('')
+  const [camp, setCamp] = useState<{ id: string; label: string } | null>(null)
+  const [campOpen, setCampOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const [pending, startSave] = useTransition()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const campRef = useRef<HTMLDivElement>(null)
+
+  // Em página de campanha a campanha é fixa; na Lista global escolhe-se.
+  const campaignId = fixedCampaign?.campaignId ?? camp?.id ?? null
+  const canSave = !!title.trim() && !!campaignId
+
+  useEffect(() => {
+    if (!campOpen) return
+    function onOut(e: MouseEvent) {
+      if (campRef.current && !campRef.current.contains(e.target as Node)) setCampOpen(false)
+    }
+    document.addEventListener('mousedown', onOut)
+    return () => document.removeEventListener('mousedown', onOut)
+  }, [campOpen])
+
+  function close() { setOpen(false); setTitle(''); setCampOpen(false); setQ('') }
+
+  function submit() {
+    if (!canSave || !campaignId || pending) return
+    const t = title.trim()
+    startSave(async () => {
+      const r = await createActivityInline(listPath, campaignId, t, status)
+      if (r?.error) { toast.error(r.error); return }
+      toast.success('Tarefa criada')
+      setTitle('')            // mantém o grupo/campanha p/ adicionar a próxima
+      requestAnimationFrame(() => inputRef.current?.focus())
+    })
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="w-full flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-gray-400 hover:text-indigo-600 hover:bg-gray-50/60 transition"
+      >
+        <Plus className="w-3.5 h-3.5" /> Tarefa
+      </button>
+    )
+  }
+
+  const items = Object.entries(campMap)
+    .map(([id, c]) => ({ id, ...c }))
+    .sort((a, b) => a.client.localeCompare(b.client) || a.name.localeCompare(b.name))
+  const term = q.trim().toLowerCase()
+  const filtered = term ? items.filter(i => `${i.client} ${i.name}`.toLowerCase().includes(term)) : items
+
+  return (
+    <div className="flex items-center gap-2 px-4 py-2 bg-indigo-50/40">
+      {/* Seletor de campanha (só na Lista multi-campanha) */}
+      {!fixedCampaign && (
+        <div className="relative shrink-0" ref={campRef}>
+          <button
+            type="button"
+            onClick={() => setCampOpen(o => !o)}
+            className={cn(
+              'inline-flex items-center gap-1 max-w-[180px] text-xs rounded-lg border px-2.5 py-1.5 transition',
+              camp ? 'border-indigo-200 bg-white text-gray-700' : 'border-gray-200 bg-white text-gray-400 hover:border-indigo-300'
+            )}
+          >
+            <span className="truncate">{camp ? camp.label : 'Campanha'}</span>
+            <ChevronDown className="w-3.5 h-3.5 shrink-0 text-gray-400" />
+          </button>
+          {campOpen && (
+            <div className="pop-in absolute left-0 bottom-full mb-1 w-72 bg-white rounded-xl border border-gray-200 shadow-lg z-30 overflow-hidden">
+              <div className="p-2 border-b border-gray-100">
+                <div className="flex items-center gap-2 px-2 py-1.5 bg-gray-50 rounded-lg">
+                  <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  <input
+                    autoFocus value={q} onChange={e => setQ(e.target.value)}
+                    placeholder="Buscar campanha…"
+                    className="flex-1 bg-transparent text-sm text-gray-700 placeholder-gray-400 focus:outline-none"
+                  />
+                </div>
+              </div>
+              <div className="max-h-60 overflow-y-auto py-1">
+                {filtered.length === 0 ? (
+                  <p className="px-3 py-6 text-xs text-gray-400 text-center">Nenhuma campanha encontrada</p>
+                ) : filtered.map(i => (
+                  <button
+                    key={i.id}
+                    type="button"
+                    onClick={() => { setCamp({ id: i.id, label: `${i.client} / ${i.name}` }); setCampOpen(false); requestAnimationFrame(() => inputRef.current?.focus()) }}
+                    className="block w-full text-left px-3 py-2 hover:bg-gray-50 transition"
+                  >
+                    <span className="text-[11px] text-gray-400 block leading-tight">{i.client}</span>
+                    <span className="text-sm text-gray-800">{i.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <input
+        ref={inputRef}
+        autoFocus
+        value={title}
+        onChange={e => setTitle(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit() } if (e.key === 'Escape') close() }}
+        placeholder="Nome da tarefa…"
+        className="flex-1 min-w-0 text-sm bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      />
+      <button type="button" onClick={close} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 shrink-0">Cancelar</button>
+      <button
+        type="button"
+        onClick={submit}
+        disabled={!canSave || pending}
+        className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition shrink-0"
+      >
+        {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+        Salvar
+      </button>
+    </div>
+  )
+}
+
 function NewActivityButton({
   orgSlug,
   campMap,

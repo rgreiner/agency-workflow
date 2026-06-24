@@ -68,6 +68,46 @@ export async function createActivity(
   redirect(`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}/activities/${activityId}`)
 }
 
+/**
+ * Cria uma atividade inline (a partir da Lista, no fim de um grupo de status) —
+ * sem redirecionar; revalida o path p/ a nova linha aparecer no grupo certo.
+ */
+export async function createActivityInline(
+  path: string,
+  campaignId: string,
+  title: string,
+  status: string,
+) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const t = (title ?? '').trim()
+  if (!t) return { error: 'Título obrigatório' }
+
+  const { data: activityId, error } = await supabase.rpc('create_activity', {
+    p_user_id: user.id,
+    p_campaign_id: campaignId,
+    p_title: t,
+    p_description: '',
+    p_status: status || 'briefing',
+    p_priority: 'medium',
+    p_complexity: 'medium',
+    p_due_date: null,
+    p_estimated_hours: null,
+    p_start_date: null,
+  })
+  if (error) return { error: error.message }
+
+  // Cria as pastas no Drive em 2º plano (se a campanha tiver pasta vinculada).
+  await provisionActivitiesDrive(supabase, {
+    campaignId, userId: user.id, items: [{ activityId: activityId as string, title: t }],
+  })
+
+  revalidatePath(path)
+  return { id: activityId as string }
+}
+
 export async function updateActivityStatus(
   path: string,
   activityId: string,
