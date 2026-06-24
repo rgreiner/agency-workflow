@@ -28,11 +28,13 @@ import Link from 'next/link'
 const MIN_SCALE = 0.15
 const MAX_SCALE = 4.0
 const GRID_SIZE = 24
+const SNAP_PX   = 6   // distância de "grude" em pixels de tela (convertida p/ mundo pelo zoom)
 
 type Tool       = 'select' | 'note' | 'text' | 'image' | 'link' | 'color' | 'frame' | 'checklist' | 'arrow'
 type SaveStatus = 'idle' | 'saving' | 'saved'
 type Port       = 'top' | 'right' | 'bottom' | 'left'
 type Pt         = { x: number; y: number }
+type Guide      = { axis: 'x' | 'y'; pos: number; start: number; end: number }
 
 interface Props {
   boardId:      string
@@ -92,6 +94,40 @@ function tempPath(sx: number, sy: number, cx: number, cy: number) {
   return `M ${sx} ${sy} Q ${sx + dx / 2} ${sy + dy / 2 - cp * 0.3} ${cx} ${cy}`
 }
 
+// ── Snap / guias de alinhamento ─────────────────────────────────────────────────
+// Para a posição-alvo (x, y) de um elemento w×h, procura bordas/centros de outros
+// elementos a menos de `threshold` (mundo) e "gruda" no mais próximo por eixo,
+// devolvendo a posição ajustada + as linhas-guia a desenhar.
+type SnapBox = { x: number; y: number; w: number; h: number }
+
+function computeSnap(box: SnapBox, x: number, y: number, others: SnapBox[], threshold: number) {
+  const { w, h } = box
+  const dragXs = [x, x + w / 2, x + w]       // left, center, right
+  const dragYs = [y, y + h / 2, y + h]       // top, middle, bottom
+  let bX: { diff: number; pos: number; top: number; bottom: number } | null = null
+  let bY: { diff: number; pos: number; left: number; right: number } | null = null
+
+  for (const o of others) {
+    const oXs = [o.x, o.x + o.w / 2, o.x + o.w]
+    const oYs = [o.y, o.y + o.h / 2, o.y + o.h]
+    for (const d of dragXs) for (const c of oXs) {
+      const diff = c - d
+      if (Math.abs(diff) <= threshold && (!bX || Math.abs(diff) < Math.abs(bX.diff))) bX = { diff, pos: c, top: o.y, bottom: o.y + o.h }
+    }
+    for (const d of dragYs) for (const c of oYs) {
+      const diff = c - d
+      if (Math.abs(diff) <= threshold && (!bY || Math.abs(diff) < Math.abs(bY.diff))) bY = { diff, pos: c, left: o.x, right: o.x + o.w }
+    }
+  }
+
+  const sx = bX ? x + bX.diff : x
+  const sy = bY ? y + bY.diff : y
+  const guides: Guide[] = []
+  if (bX) guides.push({ axis: 'x', pos: bX.pos, start: Math.min(sy, bX.top), end: Math.max(sy + h, bX.bottom) })
+  if (bY) guides.push({ axis: 'y', pos: bY.pos, start: Math.min(sx, bY.left), end: Math.max(sx + w, bY.right) })
+  return { x: sx, y: sy, guides }
+}
+
 // ── Canvas element wrapper ─────────────────────────────────────────────────────
 
 interface CanvasElProps {
@@ -106,6 +142,7 @@ interface CanvasElProps {
   onUpdate:     (u: Partial<BoardElement>) => void
   onDragStart:  () => void
   onDragMove:   (x: number, y: number) => void
+  onDragEnd:    () => void
   onDelete:     () => void
   onArrowStart: (e: React.PointerEvent) => void
   onHoverEnter: () => void
@@ -115,7 +152,7 @@ interface CanvasElProps {
 
 function CanvasEl({
   el, selected, editing, scale, isArrowTool, isHovered,
-  onSelect, onStartEdit, onUpdate, onDragStart, onDragMove, onDelete, onArrowStart,
+  onSelect, onStartEdit, onUpdate, onDragStart, onDragMove, onDragEnd, onDelete, onArrowStart,
   onHoverEnter, onHoverLeave, children,
 }: CanvasElProps) {
   const scaleRef = useRef(scale)
@@ -148,7 +185,7 @@ function CanvasEl({
   }
 
   function handlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
-    if (dragging.current) { dragging.current = false; e.currentTarget.releasePointerCapture(e.pointerId) }
+    if (dragging.current) { dragging.current = false; onDragEnd(); e.currentTarget.releasePointerCapture(e.pointerId) }
   }
 
   // ── Resize ───────────────────────────────────────────────────────────────────
@@ -345,6 +382,7 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
   const [drawingArrow, setDrawingArrow] = useState<{
     fromId: string; srcX: number; srcY: number; curX: number; curY: number
   } | null>(null)
+  const [guides, setGuides]             = useState<Guide[]>([])
   const [pan, setPan]                   = useState({ x: 0, y: 0 })
   const [scale, setScale]               = useState(1)
   const [saveStatus, setSaveStatus]     = useState<SaveStatus>('idle')
@@ -409,17 +447,22 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
     dragChildIds.current = ids
   }
 
-  // Move o elemento para (x, y). Se houver filhos capturados (frame), aplica o
-  // mesmo deslocamento incremental a eles — assim o grupo viaja junto.
+  // Move o elemento para (x, y), aplicando snap às bordas/centros dos demais
+  // (mostra linhas-guia). Se houver filhos capturados (frame), aplica o mesmo
+  // deslocamento incremental a eles — assim o grupo viaja junto.
   function dragMove(id: string, x: number, y: number) {
+    const els = elementsRef.current
+    const cur = els.find(e => e.id === id)
+    if (!cur) return
+    const kids = dragChildIds.current
+    const others = els.filter(e => e.id !== id && !kids.has(e.id))
+    const snap = computeSnap(cur, x, y, others, SNAP_PX / scaleRef.current)
+    setGuides(snap.guides)
+    const dx = snap.x - cur.x
+    const dy = snap.y - cur.y
     setElements(prev => {
-      const cur = prev.find(e => e.id === id)
-      if (!cur) return prev
-      const dx = x - cur.x
-      const dy = y - cur.y
-      const kids = dragChildIds.current
       const next = prev.map(el =>
-        el.id === id            ? { ...el, x, y }
+        el.id === id            ? { ...el, x: snap.x, y: snap.y }
         : kids.has(el.id)       ? { ...el, x: el.x + dx, y: el.y + dy }
         :                         el
       )
@@ -427,6 +470,11 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
       scheduleSave()
       return next
     })
+  }
+
+  function endDrag() {
+    dragChildIds.current = new Set()
+    setGuides([])
   }
 
   function deleteEl(id: string) {
@@ -876,6 +924,7 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
                 onUpdate={updates => updateEl(el.id, updates)}
                 onDragStart={() => beginDrag(el)}
                 onDragMove={(x, y) => dragMove(el.id, x, y)}
+                onDragEnd={endDrag}
                 onDelete={() => deleteEl(el.id)}
                 onArrowStart={e => startDrawingArrow(el.id, e.clientX, e.clientY)}
                 onHoverEnter={() => setHoveredElId(el.id)}
@@ -940,6 +989,24 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
                 )}
               </CanvasEl>
             ))}
+
+            {/* ── Linhas-guia de alinhamento (por cima dos elementos) ── */}
+            {guides.length > 0 && (
+              <svg style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'visible', pointerEvents: 'none' }}>
+                {guides.map((g, i) => (
+                  <line
+                    key={i}
+                    x1={g.axis === 'x' ? g.pos : g.start}
+                    y1={g.axis === 'x' ? g.start : g.pos}
+                    x2={g.axis === 'x' ? g.pos : g.end}
+                    y2={g.axis === 'x' ? g.end : g.pos}
+                    stroke="#ec4899"
+                    strokeWidth={1}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ))}
+              </svg>
+            )}
           </div>
 
           {/* Empty state */}
