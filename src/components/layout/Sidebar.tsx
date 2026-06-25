@@ -60,6 +60,8 @@ interface SidebarProps {
   positionName?: string | null
   /** Permissão para ver/operar o grupo Financeiro. */
   canFinance?: boolean
+  /** Permissão para ver Mídias / Produção / Cadastros (Vendas). */
+  canVendas?: boolean
   collapsed: boolean
   onCollapse: () => void
   onExpand?: () => void
@@ -147,7 +149,7 @@ const VIEWS = [
 
 export function Sidebar({
   orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#6366f1',
-  positionName, canFinance = false, collapsed, onCollapse, onExpand,
+  positionName, canFinance = false, canVendas = false, collapsed, onCollapse, onExpand,
 }: SidebarProps) {
   const pathname = usePathname()
   const base = `/${orgSlug}`
@@ -155,9 +157,9 @@ export function Sidebar({
   const [mobileOpen, setMobileOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
 
-  // Grupos do Operacional. A seção inteira só aparece com permissão (canFinance =
-  // can_finance ou owner/admin) — ver o gate de render abaixo.
-  const comercialGroups = COMERCIAL_GROUPS
+  // Grupos do Operacional: Financeiro só com canFinance; os demais (Mídias/Produção/
+  // Cadastros) só com canVendas. A seção aparece se tiver ao menos uma permissão.
+  const comercialGroups = COMERCIAL_GROUPS.filter(g => (g.finance ? canFinance : canVendas))
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   useEffect(() => {
     try {
@@ -344,7 +346,7 @@ export function Sidebar({
         ))}
 
         {/* ── Operacional (Mídia / Produção / Financeiro / Cadastros) — só com permissão ── */}
-        {canFinance && (
+        {(canFinance || canVendas) && (
           <>
             <div className="mx-3 my-2 border-t border-gray-800" />
             <button

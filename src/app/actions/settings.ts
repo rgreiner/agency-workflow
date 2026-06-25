@@ -78,7 +78,8 @@ export async function updateMember(
   memberId: string,
   positionId: string | null,
   role: MemberRole,
-  canFinance?: boolean
+  canFinance?: boolean,
+  canVendas?: boolean,
 ) {
   const supabase = await createClient()
   const user = await getUsuario()
@@ -92,6 +93,7 @@ export async function updateMember(
     p_position_id: positionId,
     p_role: role,
     p_can_finance: canFinance ?? null,
+    p_can_vendas: canVendas ?? null,
   })
 
   if (error) return { error: error.message }

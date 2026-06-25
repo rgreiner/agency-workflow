@@ -1,6 +1,6 @@
-import { requireOperacional } from '@/lib/auth/operacional'
+import { requireFinanceiro } from '@/lib/auth/operacional'
 
-export default async function OperacionalLayout({
+export default async function FinanceiroLayout({
   children,
   params,
 }: {
@@ -8,6 +8,6 @@ export default async function OperacionalLayout({
   params: Promise<{ orgSlug: string }>
 }) {
   const { orgSlug } = await params
-  await requireOperacional(orgSlug)
+  await requireFinanceiro(orgSlug)
   return <>{children}</>
 }

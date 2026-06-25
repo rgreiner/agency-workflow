@@ -16,6 +16,7 @@ interface Props {
   position: { id: string; name: string; color: string } | null
   role: string
   canFinance: boolean
+  canVendas: boolean
   positions: { id: string; name: string; color: string }[]
   isAdmin: boolean
   isMe: boolean
@@ -26,40 +27,46 @@ interface Props {
 const ROLES = ['owner', 'admin', 'manager', 'member', 'viewer']
 
 export function MemberRow({
-  memberId, orgSlug, orgId, profile, position, role, canFinance,
+  memberId, orgSlug, orgId, profile, position, role, canFinance, canVendas,
   positions, isAdmin, isMe, isOwner, roleLabels,
 }: Props) {
   const [selectedPosition, setSelectedPosition] = useState(position?.id ?? '')
   const [selectedRole, setSelectedRole] = useState(role)
   const [selectedFinance, setSelectedFinance] = useState(canFinance)
+  const [selectedVendas, setSelectedVendas] = useState(canVendas)
   const [isDirty, setIsDirty] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [confirmRemove, setConfirmRemove] = useState(false)
 
-  function recomputeDirty(pos: string, r: string, fin: boolean) {
-    setIsDirty(pos !== (position?.id ?? '') || r !== role || fin !== canFinance)
+  function recomputeDirty(pos: string, r: string, fin: boolean, ven: boolean) {
+    setIsDirty(pos !== (position?.id ?? '') || r !== role || fin !== canFinance || ven !== canVendas)
   }
 
   function handlePositionChange(val: string) {
     setSelectedPosition(val)
-    recomputeDirty(val, selectedRole, selectedFinance)
+    recomputeDirty(val, selectedRole, selectedFinance, selectedVendas)
   }
 
   function handleRoleChange(val: string) {
     setSelectedRole(val)
-    recomputeDirty(selectedPosition, val, selectedFinance)
+    recomputeDirty(selectedPosition, val, selectedFinance, selectedVendas)
   }
 
   function handleFinanceChange(val: boolean) {
     setSelectedFinance(val)
-    recomputeDirty(selectedPosition, selectedRole, val)
+    recomputeDirty(selectedPosition, selectedRole, val, selectedVendas)
+  }
+
+  function handleVendasChange(val: boolean) {
+    setSelectedVendas(val)
+    recomputeDirty(selectedPosition, selectedRole, selectedFinance, val)
   }
 
   function handleSave() {
     startTransition(async () => {
       const result = await updateMember(
         orgSlug, orgId, memberId, selectedPosition || null,
-        selectedRole as import('@/types').MemberRole, selectedFinance,
+        selectedRole as import('@/types').MemberRole, selectedFinance, selectedVendas,
       )
       if (result?.error) {
         toast.error(result.error)
@@ -79,8 +86,9 @@ export function MemberRow({
   }
 
   const canEdit = isAdmin && !isOwner
-  // Owner/admin têm Financeiro implícito (acesso total).
+  // Owner/admin têm Financeiro e Vendas implícitos (acesso total).
   const financeImplicit = isOwner || selectedRole === 'admin'
+  const vendasImplicit = isOwner || selectedRole === 'admin'
 
   return (
     <tr className="hover:bg-gray-50/50 transition">
@@ -168,6 +176,38 @@ export function MemberRow({
             )} />
           </button>
         ) : canFinance ? (
+          <span className="inline-flex items-center gap-1 text-xs text-indigo-600">
+            <Check className="w-3.5 h-3.5" /> Sim
+          </span>
+        ) : (
+          <span className="text-xs text-gray-400">—</span>
+        )}
+      </td>
+
+      {/* Vendas (Mídias / Produção / Cadastros) */}
+      <td className="px-4 py-3">
+        {vendasImplicit ? (
+          <span className="inline-flex items-center gap-1 text-xs text-gray-400" title="Admins têm acesso ao Operacional">
+            <Check className="w-3.5 h-3.5" /> Sempre
+          </span>
+        ) : canEdit ? (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={selectedVendas}
+            onClick={() => handleVendasChange(!selectedVendas)}
+            className={cn(
+              'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
+              selectedVendas ? 'bg-indigo-600' : 'bg-gray-300'
+            )}
+            title="Ver Mídias / Produção / Cadastros"
+          >
+            <span className={cn(
+              'inline-block h-4 w-4 transform rounded-full bg-[#fff] transition-transform',
+              selectedVendas ? 'translate-x-4' : 'translate-x-0.5'
+            )} />
+          </button>
+        ) : canVendas ? (
           <span className="inline-flex items-center gap-1 text-xs text-indigo-600">
             <Check className="w-3.5 h-3.5" /> Sim
           </span>

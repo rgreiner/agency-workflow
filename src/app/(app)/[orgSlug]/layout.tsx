@@ -30,15 +30,18 @@ export default async function OrgLayout({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: membership } = await (supabase as any)
     .from('organization_members')
-    .select('role, can_finance, org_positions(name)')
+    .select('role, can_finance, can_vendas, org_positions(name)')
     .eq('org_id', org.id)
     .eq('user_id', user.id)
-    .single() as { data: { role: string; can_finance: boolean; org_positions: { name: string } | null } | null }
+    .single() as { data: { role: string; can_finance: boolean; can_vendas: boolean; org_positions: { name: string } | null } | null }
 
   if (!membership) redirect('/')
 
-  // Permissão de Financeiro: flag explícita ou implícita para owner/admin.
-  const canFinance = membership.can_finance || ['owner', 'admin'].includes(membership.role)
+  // Permissões do Operacional: flag explícita ou implícita p/ owner/admin.
+  // can_finance → submenus do Financeiro; can_vendas → Mídias/Produção/Cadastros.
+  const isAdminRole = ['owner', 'admin'].includes(membership.role)
+  const canFinance = membership.can_finance || isAdminRole
+  const canVendas = membership.can_vendas || isAdminRole
 
   // Nome do cargo do usuário (ex.: "Redação") — vira o rótulo da aba de trabalho
   // no menu superior. Sem cargo (ex.: owner "acesso total") → fallback "Atendimento".
@@ -114,6 +117,7 @@ export default async function OrgLayout({
         accentColor={accent}
         positionName={positionName}
         canFinance={canFinance}
+        canVendas={canVendas}
       >
         {children}
       </AppShell>

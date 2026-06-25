@@ -23,6 +23,8 @@ interface Props {
   positionName?: string | null
   /** Permissão para ver/operar o grupo Financeiro. */
   canFinance?: boolean
+  /** Permissão para ver Mídias / Produção / Cadastros (Vendas). */
+  canVendas?: boolean
   children: React.ReactNode
 }
 
@@ -32,7 +34,7 @@ interface Props {
  * a própria Sidebar mostra um botão flutuante para reabrir.
  */
 export function AppShell({
-  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, canFinance, children,
+  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, canFinance, canVendas, children,
 }: Props) {
   const [collapsed, setCollapsedState] = useState(false)
 
@@ -58,6 +60,7 @@ export function AppShell({
         accentColor={accentColor}
         positionName={positionName}
         canFinance={canFinance}
+        canVendas={canVendas}
         collapsed={collapsed}
         onCollapse={() => setCollapsed(true)}
         onExpand={() => setCollapsed(false)}

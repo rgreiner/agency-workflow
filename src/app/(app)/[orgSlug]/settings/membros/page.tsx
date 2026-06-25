@@ -44,6 +44,7 @@ export default async function MembrosPage({
     role: string
     position_id: string | null
     can_finance: boolean | null
+    can_vendas: boolean | null
     profiles: { id: string; full_name: string | null; email: string; avatar_url: string | null } | null
     org_positions: { id: string; name: string; color: string } | null
   }
@@ -51,7 +52,7 @@ export default async function MembrosPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: membersRaw } = await (supabase as any)
     .from('organization_members')
-    .select('id, role, position_id, can_finance, profiles!user_id(id, full_name, email, avatar_url), org_positions(id, name, color)')
+    .select('id, role, position_id, can_finance, can_vendas, profiles!user_id(id, full_name, email, avatar_url), org_positions(id, name, color)')
     .eq('org_id', org.id)
     .order('joined_at', { ascending: true })
   const members = (membersRaw ?? []) as MemberRowData[]
@@ -81,6 +82,7 @@ export default async function MembrosPage({
               <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Cargo</th>
               <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Papel</th>
               <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Financeiro</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Vendas</th>
               {isAdmin && <th className="w-10" />}
             </tr>
           </thead>
@@ -103,6 +105,7 @@ export default async function MembrosPage({
                   position={position}
                   role={m.role}
                   canFinance={m.can_finance ?? false}
+                  canVendas={m.can_vendas ?? false}
                   positions={positions ?? []}
                   isAdmin={isAdmin}
                   isMe={isMe}
