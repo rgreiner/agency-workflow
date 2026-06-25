@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
 import { updateMember, removeMember } from '@/app/actions/settings'
+import { ResetPasswordButton } from './ResetPasswordButton'
 import { Trash2, Check, Loader2, AlertTriangle, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -188,6 +189,9 @@ export function MemberRow({
               >
                 {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
               </button>
+            )}
+            {canEdit && !confirmRemove && profile && (
+              <ResetPasswordButton orgId={orgId} userId={profile.id} name={profile.full_name ?? profile.email} />
             )}
             {canEdit && !confirmRemove && (
               <button

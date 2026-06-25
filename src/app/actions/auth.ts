@@ -10,7 +10,8 @@ import { buscarUsuarioPorEmail, criarUsuario } from '@/lib/auth/usuarios'
 import { verificarSenha } from '@/lib/auth/password'
 import { criarTokenReset, consumirTokenReset, redefinirSenhaUsuario } from '@/lib/auth/reset'
 import { sendPasswordResetEmail } from '@/app/actions/email'
-import { iniciarSessao, encerrarSessao } from '@/lib/auth/server'
+import { iniciarSessao, encerrarSessao, getUsuario } from '@/lib/auth/server'
+import { createClient } from '@/lib/supabase/server'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
 
@@ -66,6 +67,50 @@ export async function redefinirSenha(token: string, formData: FormData): Promise
 
   await redefinirSenhaUsuario(userId, senha)
   redirect('/login?reset=ok')
+}
+
+// ── Reset pelo ADMIN (tela de Membros) ──────────────────────────────────────
+// Valida: quem chama é owner/admin da org; o alvo é membro; o alvo não é owner.
+async function podeResetarMembro(orgId: string, targetUserId: string): Promise<{ error?: string }> {
+  const me = await getUsuario()
+  if (!me) return { error: 'Não autenticado' }
+  const supabase = await createClient()
+  const { data: mine } = await supabase
+    .from('organization_members').select('role').eq('org_id', orgId).eq('user_id', me.id).single()
+  if (!mine || !['owner', 'admin'].includes(mine.role)) return { error: 'Sem permissão' }
+  const { data: tgt } = await supabase
+    .from('organization_members').select('role').eq('org_id', orgId).eq('user_id', targetUserId).single()
+  if (!tgt) return { error: 'Usuário não é membro desta organização' }
+  if (tgt.role === 'owner') return { error: 'Não dá pra redefinir a senha do proprietário por aqui.' }
+  return {}
+}
+
+/**
+ * Gera um link de redefinição (uso único, 1h) p/ o admin copiar e enviar
+ * (WhatsApp etc.). Independe de e-mail configurado.
+ */
+export async function adminGenerateResetLink(orgId: string, targetUserId: string): Promise<{ url?: string; error?: string }> {
+  const guard = await podeResetarMembro(orgId, targetUserId)
+  if (guard.error) return { error: guard.error }
+  try {
+    const token = await criarTokenReset(targetUserId)
+    return { url: `${SITE_URL}/redefinir-senha/${token}` }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Falha ao gerar o link' }
+  }
+}
+
+/** Define uma nova senha diretamente para o membro (mín. 8 caracteres). */
+export async function adminSetPassword(orgId: string, targetUserId: string, novaSenha: string): Promise<{ error?: string }> {
+  if (novaSenha.length < 8) return { error: 'A senha precisa ter ao menos 8 caracteres.' }
+  const guard = await podeResetarMembro(orgId, targetUserId)
+  if (guard.error) return { error: guard.error }
+  try {
+    await redefinirSenhaUsuario(targetUserId, novaSenha)
+    return {}
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Falha ao definir a senha' }
+  }
 }
 
 /**
