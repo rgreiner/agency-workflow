@@ -11,6 +11,7 @@
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 import { Search, X, Minus, Send, MessagesSquare } from 'lucide-react'
 import { sendChatMessage, getConversation, getChatOverview, markChatRead, touchPresence, type ChatMsg } from '@/app/actions/chat'
 
@@ -155,6 +156,7 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
     if (r?.error) {
       setMsgs(prev => ({ ...prev, [peer]: (prev[peer] ?? []).filter(m => m.id !== temp.id) }))
       setDraft(prev => ({ ...prev, [peer]: text }))
+      toast.error(`Não enviou: ${r.error}`)
       return
     }
     loadMessages(peer)
