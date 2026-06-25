@@ -29,7 +29,7 @@ export function InboxNavItem({ orgSlug }: { orgSlug: string }) {
     <Link
       href={`${base}/inbox`}
       className={cn(
-        'flex items-center gap-2.5 mx-2 px-2 py-1.5 rounded-lg text-sm transition',
+        'flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition',
         active ? 'bg-gray-800 text-gray-100' : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
       )}
     >

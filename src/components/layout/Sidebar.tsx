@@ -107,7 +107,7 @@ function NavGroup({ base, pathname, group, open, onToggle }: {
         type="button"
         onClick={onToggle}
         className={cn(
-          'flex items-center gap-2.5 mx-2 px-2 py-1.5 rounded-lg text-sm transition w-[calc(100%-1rem)]',
+          'flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition w-[calc(100%-1rem)]',
           anyActive ? 'text-gray-100' : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
         )}
       >
@@ -299,7 +299,7 @@ export function Sidebar({
         <button
           type="button"
           onClick={() => setPaletteOpen(true)}
-          className="flex items-center gap-2.5 mx-2 px-2 py-1.5 rounded-lg text-sm text-gray-400 hover:text-gray-100 hover:bg-gray-800/60 transition w-[calc(100%-1rem)]"
+          className="flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-gray-100 hover:bg-gray-800/60 transition w-[calc(100%-1rem)]"
         >
           <Search className="w-4 h-4 shrink-0" />
           <span className="flex-1 text-left">Buscar</span>
@@ -318,7 +318,7 @@ export function Sidebar({
         <Link
           href={`${base}/views/atendimento`}
           className={cn(
-            'flex items-center gap-2.5 mx-2 px-2 py-1.5 rounded-lg text-sm transition',
+            'flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition',
             pathname.startsWith(`${base}/views/atendimento`)
               ? 'bg-gray-800 text-gray-100'
               : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
@@ -334,7 +334,7 @@ export function Sidebar({
             key={id}
             href={`${base}/${href}`}
             className={cn(
-              'flex items-center gap-2.5 mx-2 px-2 py-1.5 rounded-lg text-sm transition',
+              'flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition',
               pathname.startsWith(`${base}/${href}`)
                 ? 'bg-gray-800 text-gray-100'
                 : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
@@ -351,13 +351,13 @@ export function Sidebar({
             <div className="mx-3 my-2 border-t border-gray-800" />
             <button
               onClick={toggleOperacional}
-              className="w-full flex items-center gap-1 px-4 mb-1 group/op"
+              className="w-full flex items-center gap-1 px-4 mb-1.5 group/op"
               title={operacionalOpen ? 'Recolher Operacional' : 'Expandir Operacional'}
             >
               {operacionalOpen
                 ? <ChevronDown className="w-3 h-3 text-gray-600 group-hover/op:text-gray-400 transition-colors shrink-0" />
                 : <ChevronRight className="w-3 h-3 text-gray-600 group-hover/op:text-gray-400 transition-colors shrink-0" />}
-              <span className="text-[10px] font-semibold text-gray-500 group-hover/op:text-gray-400 uppercase tracking-wider transition-colors">Operacional</span>
+              <span className="text-[11px] font-semibold text-gray-500 group-hover/op:text-gray-400 uppercase tracking-[0.08em] transition-colors">Operacional</span>
             </button>
             {operacionalOpen && comercialGroups.map(g => (
               <NavGroup
@@ -377,7 +377,7 @@ export function Sidebar({
         {/* Espaços */}
         <div>
           <div className="flex items-center justify-between px-4 mb-1.5">
-            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+            <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-[0.08em]">
               Espaços
             </span>
             <div className="flex items-center gap-1">
@@ -420,7 +420,7 @@ export function Sidebar({
                           : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
                       )}
                     >
-                      <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: ws.color || '#6366f1' }} />
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: ws.color || '#6366f1' }} />
                       <span className="truncate">{ws.name}</span>
                     </Link>
                     <Link

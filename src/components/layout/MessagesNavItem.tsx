@@ -22,7 +22,7 @@ export function MessagesNavItem() {
       type="button"
       onClick={() => window.dispatchEvent(new CustomEvent('flow:chat-toggle'))}
       className={cn(
-        'w-full flex items-center gap-2.5 mx-2 px-2 py-1.5 rounded-lg text-sm transition',
+        'w-full flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition',
         'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
       )}
       style={{ width: 'calc(100% - 1rem)' }}
