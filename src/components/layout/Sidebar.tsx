@@ -155,8 +155,9 @@ export function Sidebar({
   const [mobileOpen, setMobileOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
 
-  // Grupos comerciais (Financeiro só com permissão). Estado de abertura por dispositivo.
-  const comercialGroups = COMERCIAL_GROUPS.filter(g => (g.finance ? canFinance : true))
+  // Grupos do Operacional. A seção inteira só aparece com permissão (canFinance =
+  // can_finance ou owner/admin) — ver o gate de render abaixo.
+  const comercialGroups = COMERCIAL_GROUPS
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   useEffect(() => {
     try {
@@ -342,28 +343,32 @@ export function Sidebar({
           </Link>
         ))}
 
-        {/* ── Operacional (Mídia / Produção / Financeiro / Cadastros) ── */}
-        <div className="mx-3 my-2 border-t border-gray-800" />
-        <button
-          onClick={toggleOperacional}
-          className="w-full flex items-center gap-1 px-4 mb-1 group/op"
-          title={operacionalOpen ? 'Recolher Operacional' : 'Expandir Operacional'}
-        >
-          {operacionalOpen
-            ? <ChevronDown className="w-3 h-3 text-gray-600 group-hover/op:text-gray-400 transition-colors shrink-0" />
-            : <ChevronRight className="w-3 h-3 text-gray-600 group-hover/op:text-gray-400 transition-colors shrink-0" />}
-          <span className="text-[10px] font-semibold text-gray-500 group-hover/op:text-gray-400 uppercase tracking-wider transition-colors">Operacional</span>
-        </button>
-        {operacionalOpen && comercialGroups.map(g => (
-          <NavGroup
-            key={g.id}
-            base={base}
-            pathname={pathname}
-            group={g}
-            open={openGroups.has(g.id)}
-            onToggle={() => toggleGroup(g.id)}
-          />
-        ))}
+        {/* ── Operacional (Mídia / Produção / Financeiro / Cadastros) — só com permissão ── */}
+        {canFinance && (
+          <>
+            <div className="mx-3 my-2 border-t border-gray-800" />
+            <button
+              onClick={toggleOperacional}
+              className="w-full flex items-center gap-1 px-4 mb-1 group/op"
+              title={operacionalOpen ? 'Recolher Operacional' : 'Expandir Operacional'}
+            >
+              {operacionalOpen
+                ? <ChevronDown className="w-3 h-3 text-gray-600 group-hover/op:text-gray-400 transition-colors shrink-0" />
+                : <ChevronRight className="w-3 h-3 text-gray-600 group-hover/op:text-gray-400 transition-colors shrink-0" />}
+              <span className="text-[10px] font-semibold text-gray-500 group-hover/op:text-gray-400 uppercase tracking-wider transition-colors">Operacional</span>
+            </button>
+            {operacionalOpen && comercialGroups.map(g => (
+              <NavGroup
+                key={g.id}
+                base={base}
+                pathname={pathname}
+                group={g}
+                open={openGroups.has(g.id)}
+                onToggle={() => toggleGroup(g.id)}
+              />
+            ))}
+          </>
+        )}
 
         <div className="mx-3 my-2 border-t border-gray-800" />
 
