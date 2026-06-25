@@ -3,28 +3,28 @@
 /**
  * Messenger interno (chat 1:1). Dock global no canto inferior direito: janelas de
  * conversa (abrir/minimizar/fechar) + painel de contatos (aberto pela sidebar via
- * evento 'flow:chat-toggle'). Sem Realtime — usa polling (pausa com a aba oculta):
- *   · heartbeat de presença a cada 25s   · contatos/não-lidas a cada 12s
- *   · mensagens das conversas abertas a cada 4s
+ * evento 'flow:chat-toggle'). Sem Realtime — usa polling via SERVER ACTIONS (pausa
+ * com a aba oculta):
+ *   · heartbeat de presença 25s   · contatos/não-lidas 12s   · conversas abertas 4s
+ * As janelas abertas persistem no reload (localStorage) até fechar no X.
  * Emite 'flow:chat-unread' (total) p/ o badge da sidebar.
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { Search, X, Minus, Send, MessagesSquare } from 'lucide-react'
+import { sendChatMessage, getConversation, getChatOverview, markChatRead, touchPresence, type ChatMsg } from '@/app/actions/chat'
 
 interface Member { id: string; name: string; avatarUrl: string | null }
-interface Msg { id: string; sender_id: string; recipient_id: string; content: string; created_at: string; read_at: string | null; pending?: boolean }
-
-const ONLINE_MS = 70_000
+type Msg = ChatMsg & { pending?: boolean }
 
 export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string; members: Member[] }) {
-  const [supabase] = useState(() => createClient())
   const memberById = useMemo(() => Object.fromEntries(members.map(m => [m.id, m])), [members])
+  const memberIds = useMemo(() => members.map(m => m.id), [members])
+  const STORE = `flow:chat:${orgId}:${meId}`
 
   const [panelOpen, setPanelOpen] = useState(false)
   const [q, setQ] = useState('')
-  const [windows, setWindows] = useState<string[]>([])      // peers com janela aberta
+  const [windows, setWindows] = useState<string[]>([])
   const [minimized, setMinimized] = useState<Set<string>>(new Set())
   const [online, setOnline] = useState<Set<string>>(new Set())
   const [unread, setUnread] = useState<Record<string, number>>({})
@@ -38,34 +38,51 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
 
   const hidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden'
 
+  const loadMessages = useCallback(async (peer: string) => {
+    const data = await getConversation(orgId, peer)
+    setMsgs(prev => ({ ...prev, [peer]: data }))
+  }, [orgId])
+
+  const markRead = useCallback(async (peer: string) => {
+    await markChatRead(orgId, peer)
+    setUnread(prev => { const n = { ...prev }; delete n[peer]; return n })
+  }, [orgId])
+
+  // ── Restaura janelas abertas (persistidas) ────────────────────────────────
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORE)
+      if (raw) {
+        const s = JSON.parse(raw) as { windows?: string[]; minimized?: string[] }
+        const w = (s.windows ?? []).filter(id => memberById[id])
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setWindows(w)
+        setMinimized(new Set((s.minimized ?? []).filter(id => w.includes(id))))
+        for (const id of w) loadMessages(id)
+      }
+    } catch { /* storage indisponível */ }
+  }, [STORE, memberById, loadMessages])
+
+  // Persiste estado das janelas
+  useEffect(() => {
+    try { localStorage.setItem(STORE, JSON.stringify({ windows, minimized: [...minimized] })) } catch { /* noop */ }
+  }, [windows, minimized, STORE])
+
   // ── Heartbeat de presença ───────────────────────────────────────────────
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const beat = () => { if (!hidden()) (supabase as any).rpc('touch_presence').then(() => {}, () => {}) }
+    const beat = () => { if (!hidden()) touchPresence() }
     beat()
     const t = setInterval(beat, 25_000)
     return () => clearInterval(t)
-  }, [supabase])
+  }, [])
 
   // ── Presença + não-lidas ────────────────────────────────────────────────
   const loadOverview = useCallback(async () => {
     if (hidden()) return
-    const ids = members.map(m => m.id)
-    if (ids.length) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: pres } = await (supabase as any).from('user_presence').select('user_id, last_seen_at').in('user_id', ids)
-      const now = Date.now()
-      const set = new Set<string>()
-      for (const p of pres ?? []) if (now - new Date(p.last_seen_at).getTime() < ONLINE_MS) set.add(p.user_id)
-      setOnline(set)
-    }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: un } = await (supabase as any)
-      .from('chat_messages').select('sender_id').eq('recipient_id', meId).eq('org_id', orgId).is('read_at', null)
-    const tally: Record<string, number> = {}
-    for (const r of un ?? []) tally[r.sender_id] = (tally[r.sender_id] ?? 0) + 1
-    setUnread(tally)
-  }, [supabase, members, meId, orgId])
+    const { online: on, unread: un } = await getChatOverview(orgId, memberIds)
+    setOnline(new Set(on))
+    setUnread(un)
+  }, [orgId, memberIds])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -81,21 +98,6 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
   }, [unread])
 
   // ── Mensagens das conversas abertas (não minimizadas) ─────────────────────
-  const loadMessages = useCallback(async (peer: string) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data } = await (supabase as any)
-      .from('chat_messages').select('*').eq('org_id', orgId)
-      .or(`and(sender_id.eq.${meId},recipient_id.eq.${peer}),and(sender_id.eq.${peer},recipient_id.eq.${meId})`)
-      .order('created_at', { ascending: true }).limit(200)
-    setMsgs(prev => ({ ...prev, [peer]: (data ?? []) as Msg[] }))
-  }, [supabase, orgId, meId])
-
-  const markRead = useCallback(async (peer: string) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).rpc('mark_chat_read', { p_other_id: peer, p_org_id: orgId })
-    setUnread(prev => { const n = { ...prev }; delete n[peer]; return n })
-  }, [supabase, orgId])
-
   useEffect(() => {
     const tick = () => {
       if (hidden()) return
@@ -149,9 +151,8 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
     setDraft(prev => ({ ...prev, [peer]: '' }))
     const temp: Msg = { id: `tmp-${Date.now()}`, sender_id: meId, recipient_id: peer, content: text, created_at: new Date().toISOString(), read_at: null, pending: true }
     setMsgs(prev => ({ ...prev, [peer]: [...(prev[peer] ?? []), temp] }))
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any).rpc('send_chat_message', { p_recipient_id: peer, p_org_id: orgId, p_content: text })
-    if (error) {
+    const r = await sendChatMessage(orgId, peer, text)
+    if (r?.error) {
       setMsgs(prev => ({ ...prev, [peer]: (prev[peer] ?? []).filter(m => m.id !== temp.id) }))
       setDraft(prev => ({ ...prev, [peer]: text }))
       return
@@ -200,7 +201,7 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
                     placeholder="Escreva uma mensagem…"
                     className="flex-1 min-w-0 text-sm bg-gray-50 border border-gray-200 rounded-full px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
-                  <button onClick={() => send(peer)} disabled={!(draft[peer] ?? '').trim()} className="p-2 rounded-full bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 transition shrink-0">
+                  <button onClick={() => send(peer)} disabled={!(draft[peer] ?? '').trim()} className="p-2 rounded-full bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-40 transition shrink-0">
                     <Send className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -232,7 +233,7 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
                 <ChatAvatar member={m} online={online.has(m.id)} />
                 <span className="flex-1 min-w-0 text-sm text-gray-800 truncate">{m.name}</span>
                 {unread[m.id] > 0 && (
-                  <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center">{unread[m.id] > 99 ? '99+' : unread[m.id]}</span>
+                  <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-[#fff] text-[10px] font-semibold flex items-center justify-center">{unread[m.id] > 99 ? '99+' : unread[m.id]}</span>
                 )}
               </button>
             ))}
