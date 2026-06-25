@@ -171,6 +171,7 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
       const oa = online.has(a.id) ? 0 : 1, ob = online.has(b.id) ? 0 : 1
       return oa - ob || a.name.localeCompare(b.name)
     })
+  const totalUnread = Object.values(unread).reduce((a, b) => a + b, 0)
 
   return (
     <div className="fixed bottom-0 right-0 z-[60] flex items-end gap-3 p-3 pointer-events-none">
@@ -213,13 +214,13 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
         )
       })}
 
-      {/* Painel de contatos */}
-      {panelOpen && (
+      {/* Painel de contatos OU lançador (bolinha) — o messenger fica sempre no canto */}
+      {panelOpen ? (
         <div className="pointer-events-auto w-[300px] h-[440px] bg-white rounded-t-xl border border-gray-200 shadow-2xl flex flex-col overflow-hidden">
           <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-900 text-white">
             <MessagesSquare className="w-4 h-4" />
             <span className="text-sm font-semibold flex-1">Mensagens</span>
-            <button onClick={() => setPanelOpen(false)} className="p-1 rounded hover:bg-white/10"><X className="w-4 h-4" /></button>
+            <button onClick={() => setPanelOpen(false)} className="p-1 rounded hover:bg-white/10" title="Minimizar"><Minus className="w-4 h-4" /></button>
           </div>
           <div className="p-2 border-b border-gray-100">
             <div className="flex items-center gap-2 px-2 py-1.5 bg-gray-50 rounded-lg">
@@ -241,6 +242,21 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
             ))}
           </div>
         </div>
+      ) : (
+        /* Lançador minimizado — fica sempre no canto direito (clique reabre) */
+        <button
+          type="button"
+          onClick={() => setPanelOpen(true)}
+          title="Mensagens"
+          className="pointer-events-auto relative w-12 h-12 rounded-full bg-gray-900 text-[#fff] shadow-2xl flex items-center justify-center hover:bg-gray-800 transition"
+        >
+          <MessagesSquare className="w-5 h-5" />
+          {totalUnread > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-[#fff] text-[10px] font-semibold flex items-center justify-center ring-2 ring-white">
+              {totalUnread > 99 ? '99+' : totalUnread}
+            </span>
+          )}
+        </button>
       )}
     </div>
   )
