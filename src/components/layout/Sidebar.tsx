@@ -32,6 +32,7 @@ import {
 import { logout } from '@/app/actions/auth'
 import { ThemeToggle } from './ThemeToggle'
 import { InboxNavItem } from './InboxNavItem'
+import { MessagesNavItem } from './MessagesNavItem'
 import { CommandPalette } from './CommandPalette'
 
 interface Campaign {
@@ -306,6 +307,9 @@ export function Sidebar({
 
         {/* Caixa de entrada — antes dos espaços */}
         <InboxNavItem orgSlug={orgSlug} />
+
+        {/* Mensagens — abre o chat (dock no canto inferior direito) */}
+        <MessagesNavItem />
 
         {/* Trabalhar — tela de trabalho do cargo da pessoa (mostra o cargo, se houver) */}
         <Link

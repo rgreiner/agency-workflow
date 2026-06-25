@@ -4,6 +4,7 @@ import { getUsuario } from '@/lib/auth/server'
 import { AppShell } from '@/components/layout/AppShell'
 import { OrgSettingsProvider } from '@/components/providers/OrgSettingsProvider'
 import { UserPrefsProvider } from '@/components/providers/UserPrefsProvider'
+import { ChatDock } from '@/components/chat/ChatDock'
 
 export default async function OrgLayout({
   children,
@@ -72,6 +73,17 @@ export default async function OrgLayout({
     .eq('org_id', org.id)
     .single() as { data: { logo_url: string | null; accent_color: string; status_overrides: unknown[] } | null }
 
+  // Membros da org (p/ o chat) — exceto eu mesmo.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: membersRaw } = await (supabase as any)
+    .from('organization_members')
+    .select('user_id, profiles!user_id(id, full_name, avatar_url)')
+    .eq('org_id', org.id)
+  const chatMembers = ((membersRaw ?? []) as { profiles: { id: string; full_name: string | null; avatar_url: string | null } | { id: string; full_name: string | null; avatar_url: string | null }[] | null }[])
+    .map(m => (Array.isArray(m.profiles) ? m.profiles[0] : m.profiles))
+    .filter((p): p is { id: string; full_name: string | null; avatar_url: string | null } => !!p && p.id !== user.id)
+    .map(p => ({ id: p.id, name: p.full_name ?? 'Sem nome', avatarUrl: p.avatar_url ?? null }))
+
   const orgSettings = {
     orgId:           org.id,
     logoUrl:         rawSettings?.logo_url ?? null,
@@ -105,6 +117,9 @@ export default async function OrgLayout({
       >
         {children}
       </AppShell>
+
+      {/* Messenger interno — dock global no canto inferior direito */}
+      <ChatDock orgId={org.id} meId={user.id} members={chatMembers} />
       </UserPrefsProvider>
     </OrgSettingsProvider>
   )
