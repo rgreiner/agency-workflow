@@ -69,6 +69,18 @@ export async function redefinirSenha(token: string, formData: FormData): Promise
   redirect('/login?reset=ok')
 }
 
+/** Troca a própria senha (logado): confere a senha atual e grava a nova. */
+export async function alterarMinhaSenha(senhaAtual: string, novaSenha: string): Promise<{ error?: string }> {
+  const me = await getUsuario()
+  if (!me) return { error: 'Não autenticado' }
+  if (novaSenha.length < 8) return { error: 'A nova senha precisa ter ao menos 8 caracteres.' }
+  const usuario = await buscarUsuarioPorEmail(me.email)
+  const ok = usuario?.senha_hash ? await verificarSenha(senhaAtual, usuario.senha_hash) : false
+  if (!usuario || !ok) return { error: 'Senha atual incorreta.' }
+  await redefinirSenhaUsuario(usuario.id, novaSenha)
+  return {}
+}
+
 // ── Reset pelo ADMIN (tela de Membros) ──────────────────────────────────────
 // Valida: quem chama é owner/admin da org; o alvo é membro; o alvo não é owner.
 async function podeResetarMembro(orgId: string, targetUserId: string): Promise<{ error?: string }> {

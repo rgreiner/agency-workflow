@@ -248,7 +248,7 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
           type="button"
           onClick={() => setPanelOpen(true)}
           title="Mensagens"
-          className="pointer-events-auto relative w-12 h-12 rounded-full bg-gray-900 text-[#fff] shadow-2xl flex items-center justify-center hover:bg-gray-800 transition"
+          className="pointer-events-auto relative w-12 h-12 rounded-full bg-indigo-600 text-[#fff] shadow-2xl flex items-center justify-center hover:bg-indigo-700 transition"
         >
           <MessagesSquare className="w-5 h-5" />
           {totalUnread > 0 && (

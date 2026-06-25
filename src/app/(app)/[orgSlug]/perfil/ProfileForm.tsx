@@ -3,6 +3,7 @@
 import { useState, useRef, useTransition } from 'react'
 import { uploadFile } from '@/lib/storage/upload-client'
 import { updateProfile } from '@/app/actions/profile'
+import { alterarMinhaSenha } from '@/app/actions/auth'
 import { useOrgSettings } from '@/components/providers/OrgSettingsProvider'
 import { AvatarCropper } from '@/components/ui/AvatarCropper'
 import { toast } from 'sonner'
@@ -30,6 +31,22 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
   const [uploading, setUploading] = useState(false)
   const [cropFile, setCropFile] = useState<File | null>(null)
   const [isPending, startTransition] = useTransition()
+
+  // Troca de senha (logado)
+  const [pwAtual, setPwAtual] = useState('')
+  const [pwNova, setPwNova] = useState('')
+  const [pwConfirma, setPwConfirma] = useState('')
+  const [pwPending, startPw] = useTransition()
+
+  function handleChangePassword() {
+    if (pwNova.length < 8) { toast.error('A nova senha precisa ter ao menos 8 caracteres.'); return }
+    if (pwNova !== pwConfirma) { toast.error('As senhas não conferem.'); return }
+    startPw(async () => {
+      const r = await alterarMinhaSenha(pwAtual, pwNova)
+      if (r?.error) toast.error(r.error)
+      else { toast.success('Senha alterada!'); setPwAtual(''); setPwNova(''); setPwConfirma('') }
+    })
+  }
 
   const isFromGoogle = !!user.googleAvatar
   const accent = settings.accentColor
@@ -156,6 +173,52 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
                 className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-400 bg-gray-50 cursor-not-allowed"
               />
               <p className="text-[11px] text-gray-400 mt-1">Gerenciado pela sua conta Google.</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Senha */}
+        <div className="px-6 py-5">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Senha</p>
+          <div className="space-y-3">
+            <input
+              type="password"
+              value={pwAtual}
+              onChange={e => setPwAtual(e.target.value)}
+              placeholder="Senha atual"
+              autoComplete="current-password"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent"
+              style={{ '--tw-ring-color': accent } as React.CSSProperties}
+            />
+            <input
+              type="password"
+              value={pwNova}
+              onChange={e => setPwNova(e.target.value)}
+              placeholder="Nova senha (mín. 8)"
+              autoComplete="new-password"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent"
+              style={{ '--tw-ring-color': accent } as React.CSSProperties}
+            />
+            <input
+              type="password"
+              value={pwConfirma}
+              onChange={e => setPwConfirma(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleChangePassword() }}
+              placeholder="Confirmar nova senha"
+              autoComplete="new-password"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent"
+              style={{ '--tw-ring-color': accent } as React.CSSProperties}
+            />
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleChangePassword}
+                disabled={pwPending || !pwAtual || pwNova.length < 8 || pwNova !== pwConfirma}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-300 rounded-xl hover:bg-gray-50 transition text-gray-700 disabled:opacity-50"
+              >
+                {pwPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                Alterar senha
+              </button>
             </div>
           </div>
         </div>
