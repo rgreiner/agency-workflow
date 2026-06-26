@@ -3,11 +3,12 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, X, Check, Loader2, Archive, ArchiveRestore, Pencil, Tv } from 'lucide-react'
+import { Plus, X, Check, Loader2, Archive, ArchiveRestore, Pencil, Tv, FileText, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { createVeiculo, updateVeiculo, setVeiculoArchived } from '@/app/actions/veiculo'
 import { ContatoBlocks, type ContatoData } from '@/components/ui/ContatoBlocks'
+import { PdfField } from '@/components/ui/PdfField'
 
 export interface Veiculo {
   id: string
@@ -21,6 +22,8 @@ export interface Veiculo {
   telefones?: ContatoData['telefones']
   emails?: ContatoData['emails']
   contas_bancarias?: ContatoData['contas_bancarias']
+  midia_kit_url?: string | null
+  midia_kit_name?: string | null
 }
 
 const TYPE_OPTIONS = [
@@ -87,6 +90,7 @@ export function VeiculosClient({ orgSlug, veiculos, archivedView }: {
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Tipo</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">CNPJ</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-gray-400">Comissão</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Mídia kit</th>
                 <th className="w-20" />
               </tr>
             </thead>
@@ -100,6 +104,15 @@ export function VeiculosClient({ orgSlug, veiculos, archivedView }: {
                   <td className="px-4 py-3 text-sm text-gray-600">{v.type ? TYPE_LABEL[v.type] ?? v.type : '—'}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{v.tax_id || '—'}</td>
                   <td className="px-4 py-3 text-sm text-gray-600 text-right">{(v.commission_pct ?? 0).toString().replace('.', ',')}%</td>
+                  <td className="px-4 py-3 text-sm">
+                    {v.midia_kit_url ? (
+                      <a href={v.midia_kit_url} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-orange-600 hover:text-orange-700 transition"
+                        title={v.midia_kit_name ?? 'Abrir mídia kit'}>
+                        <FileText className="w-3.5 h-3.5" /> Abrir <ExternalLink className="w-3 h-3 opacity-60" />
+                      </a>
+                    ) : <span className="text-gray-300">—</span>}
+                  </td>
                   <td className="px-3 py-3">
                     <div className="flex items-center justify-end gap-1.5">
                       <button onClick={() => setEditing(v)}
@@ -153,6 +166,8 @@ function VeiculoModal({ orgSlug, veiculo, onClose }: {
     tax_id: veiculo?.tax_id ?? '',
     commission_pct: veiculo?.commission_pct != null ? String(veiculo.commission_pct).replace('.', ',') : '20',
     notes: veiculo?.notes ?? '',
+    midia_kit_url: veiculo?.midia_kit_url ?? '',
+    midia_kit_name: veiculo?.midia_kit_name ?? '',
   })
   const [contato, setContato] = useState<ContatoData>({
     enderecos: veiculo?.enderecos ?? [], telefones: veiculo?.telefones ?? [], emails: veiculo?.emails ?? [], contas_bancarias: veiculo?.contas_bancarias ?? [],
@@ -172,6 +187,8 @@ function VeiculoModal({ orgSlug, veiculo, onClose }: {
     fd.set('telefones', JSON.stringify(contato.telefones))
     fd.set('emails', JSON.stringify(contato.emails))
     fd.set('contas_bancarias', JSON.stringify(contato.contas_bancarias))
+    fd.set('midia_kit_url', form.midia_kit_url)
+    fd.set('midia_kit_name', form.midia_kit_name)
     startTransition(async () => {
       const res = veiculo
         ? await updateVeiculo(orgSlug, veiculo.id, fd)
@@ -222,6 +239,16 @@ function VeiculoModal({ orgSlug, veiculo, onClose }: {
             <label className={labelCls}>Observações</label>
             <textarea rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
               className={cn(inputCls, 'resize-none')} />
+          </div>
+
+          <div>
+            <label className={labelCls}>Mídia kit (PDF)</label>
+            <PdfField
+              value={form.midia_kit_url || undefined}
+              name={form.midia_kit_name || undefined}
+              onChange={(url, name) => setForm(f => ({ ...f, midia_kit_url: url, midia_kit_name: name }))}
+            />
+            <p className="text-[11px] text-gray-400 mt-1">Último mídia kit do veículo — ajuda a avaliar propostas. Abre em nova aba.</p>
           </div>
 
           <div className="border-t border-gray-100 pt-4">

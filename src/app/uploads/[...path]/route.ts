@@ -15,6 +15,7 @@ const TYPES: Record<string, string> = {
   webp: 'image/webp',
   gif: 'image/gif',
   svg: 'image/svg+xml',
+  pdf: 'application/pdf',
 }
 
 function uploadRoot(): string {

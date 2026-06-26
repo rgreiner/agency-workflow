@@ -17,6 +17,8 @@ function readVeiculoData(formData: FormData) {
     telefones: j('telefones'),
     emails: j('emails'),
     contas_bancarias: j('contas_bancarias'),
+    midia_kit_url: get('midia_kit_url'),
+    midia_kit_name: get('midia_kit_name'),
   }
 }
 

@@ -20,7 +20,7 @@ export default async function VeiculosPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: veiculosRaw } = await (supabase as any)
     .from('veiculos')
-    .select('id, name, type, tax_id, commission_pct, notes, archived, enderecos, telefones, emails, contas_bancarias')
+    .select('id, name, type, tax_id, commission_pct, notes, archived, enderecos, telefones, emails, contas_bancarias, midia_kit_url, midia_kit_name')
     .eq('org_id', org.id)
     .eq('archived', archivedView)
     .order('name', { ascending: true })
