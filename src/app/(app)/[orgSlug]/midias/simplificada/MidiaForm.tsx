@@ -25,7 +25,7 @@ export interface MidiaValues {
 }
 
 const inputCls =
-  'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent'
+  'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 const cardCls = 'bg-white rounded-2xl border border-gray-200 p-5'
 
@@ -203,9 +203,9 @@ export function MidiaForm({
             </div>
           </div>
 
-          <div className="mt-3 rounded-xl bg-indigo-50 border border-indigo-100 px-4 py-3 text-sm text-indigo-900">
+          <div className="mt-3 rounded-xl bg-orange-50 border border-orange-100 px-4 py-3 text-sm text-orange-900">
             Comissão da agência: <strong>{formatBRL(comissao)}</strong>
-            <span className="text-indigo-700"> — paga pelo {pagador === 'cliente' ? 'cliente' : 'veículo'}. Vira lançamento no Financeiro quando a situação for <strong>Faturado</strong>.</span>
+            <span className="text-orange-700"> — paga pelo {pagador === 'cliente' ? 'cliente' : 'veículo'}. Vira lançamento no Financeiro quando a situação for <strong>Faturado</strong>.</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
@@ -261,7 +261,7 @@ export function MidiaForm({
         <div className="flex justify-end gap-2 pb-10">
           <button type="button" onClick={() => router.back()} className="px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
           <button aria-label="Salvar" type="submit" disabled={isPending}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition">
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
             {submitLabel}
           </button>

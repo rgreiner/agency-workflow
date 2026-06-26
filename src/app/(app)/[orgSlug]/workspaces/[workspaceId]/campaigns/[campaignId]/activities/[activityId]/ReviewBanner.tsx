@@ -34,7 +34,7 @@ export function ReviewBanner({ activityId, path, status, errors, kind, currentSt
   // Revisão em andamento (a tarefa já avançou; a IA está checando em 2º plano).
   if (status === 'reviewing') {
     return (
-      <div className="mt-4 flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm text-indigo-700">
+      <div className="mt-4 flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-4 py-2.5 text-sm text-orange-700">
         <Loader2 className="w-4 h-4 animate-spin shrink-0" />
         Revisando {gate.reviewing}…
       </div>

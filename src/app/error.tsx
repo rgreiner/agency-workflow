@@ -37,7 +37,7 @@ export default function Error({
         <div className="flex items-center justify-center gap-2 mt-6">
           <button
             onClick={reset}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 transition"
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 transition"
           >
             <RotateCw className="w-4 h-4" /> Tentar de novo
           </button>

@@ -117,11 +117,11 @@ export function InboxClient({ orgSlug, initial }: { orgSlug: string; initial: No
 
       {/* Barra de seleção em lote */}
       {selCount > 0 && (
-        <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-indigo-50 border border-indigo-100 rounded-xl">
-          <span className="text-sm font-medium text-indigo-800">{selCount} selecionada{selCount !== 1 ? 's' : ''}</span>
+        <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-orange-50 border border-orange-100 rounded-xl">
+          <span className="text-sm font-medium text-orange-800">{selCount} selecionada{selCount !== 1 ? 's' : ''}</span>
           <div className="flex-1" />
           <button onClick={() => markRead([...selected])}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded-lg text-indigo-700 hover:bg-indigo-100 transition">
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded-lg text-orange-700 hover:bg-orange-100 transition">
             <Check className="w-4 h-4" /> Marcar como lida
           </button>
           <button onClick={() => remove([...selected])}
@@ -139,7 +139,7 @@ export function InboxClient({ orgSlug, initial }: { orgSlug: string; initial: No
       {shown.length > 0 && (
         <button onClick={toggleSelectAll}
           className="flex items-center gap-2 mb-3 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors">
-          <span className={cn('w-4 h-4 rounded border flex items-center justify-center shrink-0 transition', allShownSelected ? 'bg-indigo-600 border-indigo-600 text-[#fff]' : 'border-gray-300')}>
+          <span className={cn('w-4 h-4 rounded border flex items-center justify-center shrink-0 transition', allShownSelected ? 'bg-orange-600 border-orange-600 text-[#fff]' : 'border-gray-300')}>
             {allShownSelected && <Check className="w-3 h-3" strokeWidth={3} />}
           </span>
           {allShownSelected ? 'Desmarcar todas' : `Selecionar todas (${shown.length})`}
@@ -170,7 +170,7 @@ export function InboxClient({ orgSlug, initial }: { orgSlug: string; initial: No
                       key={n.id}
                       className={cn(
                         'group relative flex items-center gap-2 px-3 transition',
-                        isSel ? 'bg-indigo-50/70' : !n.readAt ? 'bg-indigo-50/40 hover:bg-gray-50' : 'hover:bg-gray-50'
+                        isSel ? 'bg-orange-50/70' : !n.readAt ? 'bg-orange-50/40 hover:bg-gray-50' : 'hover:bg-gray-50'
                       )}
                     >
                       {/* Checkbox (hover/selecionado) */}
@@ -179,7 +179,7 @@ export function InboxClient({ orgSlug, initial }: { orgSlug: string; initial: No
                         title="Selecionar"
                         className={cn(
                           'w-4 h-4 shrink-0 rounded border flex items-center justify-center transition',
-                          isSel ? 'bg-indigo-600 border-indigo-600 opacity-100'
+                          isSel ? 'bg-orange-600 border-orange-600 opacity-100'
                                 : 'border-gray-300 opacity-0 group-hover:opacity-100'
                         )}
                       >
@@ -200,7 +200,7 @@ export function InboxClient({ orgSlug, initial }: { orgSlug: string; initial: No
                       <div className="shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
                         {!n.readAt && (
                           <button onClick={() => markRead([n.id])} title="Marcar como lida"
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-white transition">
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-white transition">
                             <Check className="w-4 h-4" />
                           </button>
                         )}

@@ -105,7 +105,7 @@ export function ImportSpecsButton({ orgSlug, campaignId, campaigns }: {
                   onChange={e => setUrl(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') buscar() }}
                   placeholder="https://docs.google.com/spreadsheets/d/…"
-                  className="w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
                 <p className="text-xs text-gray-400">
                   A planilha precisa estar como <strong>&quot;qualquer pessoa com o link: Leitor&quot;</strong>.
@@ -114,7 +114,7 @@ export function ImportSpecsButton({ orgSlug, campaignId, campaigns }: {
                   <button
                     onClick={buscar}
                     disabled={!url.trim() || loading}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition"
                   >
                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                     Buscar planilha
@@ -138,7 +138,7 @@ export function ImportSpecsButton({ orgSlug, campaignId, campaigns }: {
                       <button
                         type="button"
                         onClick={() => setItems(items.map((x, i) => i === idx ? { ...x, include: !x.include } : x))}
-                        className={cn('mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition', it.include ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-300')}
+                        className={cn('mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition', it.include ? 'bg-orange-600 border-orange-600 text-white' : 'border-gray-300')}
                       >
                         {it.include && <Check className="w-3 h-3" strokeWidth={3} />}
                       </button>
@@ -160,7 +160,7 @@ export function ImportSpecsButton({ orgSlug, campaignId, campaigns }: {
                   <button
                     onClick={criar}
                     disabled={selected.length === 0 || pending}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition"
                   >
                     {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                     Criar {selected.length} atividade{selected.length !== 1 ? 's' : ''}

@@ -202,9 +202,9 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
                     onChange={e => setDraft(prev => ({ ...prev, [peer]: e.target.value }))}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); send(peer) } }}
                     placeholder="Escreva uma mensagem…"
-                    className="flex-1 min-w-0 text-sm bg-gray-50 border border-gray-200 rounded-full px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="flex-1 min-w-0 text-sm bg-gray-50 border border-gray-200 rounded-full px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-500"
                   />
-                  <button onClick={() => send(peer)} disabled={!(draft[peer] ?? '').trim()} aria-label="Enviar mensagem" className="p-2 rounded-full bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-40 transition shrink-0">
+                  <button onClick={() => send(peer)} disabled={!(draft[peer] ?? '').trim()} aria-label="Enviar mensagem" className="p-2 rounded-full bg-orange-600 text-[#fff] hover:bg-orange-700 disabled:opacity-40 transition shrink-0">
                     <Send className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -249,7 +249,7 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
           onClick={() => setPanelOpen(true)}
           title="Mensagens"
           aria-label={totalUnread > 0 ? `Mensagens (${totalUnread} não lidas)` : 'Mensagens'}
-          className="pointer-events-auto relative w-12 h-12 rounded-full bg-indigo-600 text-[#fff] shadow-2xl flex items-center justify-center hover:bg-indigo-700 transition"
+          className="pointer-events-auto relative w-12 h-12 rounded-full bg-orange-600 text-[#fff] shadow-2xl flex items-center justify-center hover:bg-orange-700 transition"
         >
           <MessagesSquare className="w-5 h-5" />
           {totalUnread > 0 && (
@@ -271,7 +271,7 @@ function ChatAvatar({ member, online }: { member: Member; online: boolean }) {
       {member.avatarUrl
         // eslint-disable-next-line @next/next/no-img-element
         ? <img src={member.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover" />
-        : <span className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 text-[11px] font-semibold flex items-center justify-center">{initials}</span>}
+        : <span className="w-7 h-7 rounded-full bg-orange-100 text-orange-700 text-[11px] font-semibold flex items-center justify-center">{initials}</span>}
       <span className={cn('absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-white', online ? 'bg-green-500' : 'bg-gray-300')} />
     </span>
   )
@@ -290,7 +290,7 @@ function MessageList({ msgs, meId }: { msgs: Msg[]; meId: string }) {
           <div key={m.id} className={cn('flex', mine ? 'justify-end' : 'justify-start')}>
             <span className={cn(
               'max-w-[80%] px-3 py-1.5 rounded-2xl text-sm break-words whitespace-pre-wrap',
-              mine ? 'bg-indigo-600 text-[#fff] rounded-br-sm' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm',
+              mine ? 'bg-orange-600 text-[#fff] rounded-br-sm' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm',
               m.pending && 'opacity-60',
             )}>
               {m.content}

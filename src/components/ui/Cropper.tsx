@@ -118,13 +118,13 @@ export function Cropper({
 
         <div className="flex items-center gap-2 mt-4">
           <ZoomIn className="w-4 h-4 text-gray-400 shrink-0" />
-          <input type="range" min={1} max={3} step={0.01} value={zoom} onChange={e => setZoom(Number(e.target.value))} className="flex-1 accent-indigo-600" aria-label="Zoom" />
+          <input type="range" min={1} max={3} step={0.01} value={zoom} onChange={e => setZoom(Number(e.target.value))} className="flex-1 accent-orange-600" aria-label="Zoom" />
         </div>
 
         <div className="flex items-center justify-end gap-2 mt-5">
           <button type="button" onClick={onCancel} className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors">Cancelar</button>
           <button aria-label="Salvar" type="button" onClick={confirm} disabled={saving || !img}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-50 transition">
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 disabled:opacity-50 transition">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} {confirmLabel}
           </button>
         </div>

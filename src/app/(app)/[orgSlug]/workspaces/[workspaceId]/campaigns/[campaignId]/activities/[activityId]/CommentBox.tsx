@@ -141,7 +141,7 @@ export function CommentBox({ activityId, path, members = [], assignedIds = [] }:
                 onMouseEnter={() => setActive(i)}
                 className={cn(
                   'w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors',
-                  i === activeIdx ? 'bg-indigo-50 text-indigo-900' : 'text-gray-700 hover:bg-gray-50'
+                  i === activeIdx ? 'bg-orange-50 text-orange-900' : 'text-gray-700 hover:bg-gray-50'
                 )}
               >
                 {opt.id === ALL_OPTION.id ? (
@@ -152,7 +152,7 @@ export function CommentBox({ activityId, path, members = [], assignedIds = [] }:
                   </>
                 ) : opt.id === ASSIGNED_OPTION.id ? (
                   <>
-                    <UserCheck className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                    <UserCheck className="w-3.5 h-3.5 text-orange-500 shrink-0" />
                     <span className="font-medium">@atribuidos</span>
                     <span className="text-xs text-gray-400 ml-auto">notificar responsáveis</span>
                   </>
@@ -175,13 +175,13 @@ export function CommentBox({ activityId, path, members = [], assignedIds = [] }:
           rows={2}
           aria-label="Comentário"
           placeholder="Adicione um comentário…  (@ menciona alguém · ⌘/Ctrl+Enter envia)"
-          className="flex-1 px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-y min-h-[44px]"
+          className="flex-1 px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-y min-h-[44px]"
         />
         <button
           type="submit"
           disabled={!content.trim() || isPending}
           aria-label="Enviar comentário"
-          className="px-4 py-2.5 bg-indigo-600 text-[#fff] rounded-xl hover:bg-indigo-700 transition disabled:opacity-40 disabled:cursor-not-allowed self-stretch"
+          className="px-4 py-2.5 bg-orange-600 text-[#fff] rounded-xl hover:bg-orange-700 transition disabled:opacity-40 disabled:cursor-not-allowed self-stretch"
         >
           <Send aria-hidden className="w-4 h-4" />
         </button>

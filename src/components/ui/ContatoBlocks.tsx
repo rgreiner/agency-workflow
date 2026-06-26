@@ -11,7 +11,7 @@ export interface ContatoData { enderecos: Endereco[]; telefones: Telefone[]; ema
 
 export const emptyContato = (): ContatoData => ({ enderecos: [], telefones: [], emails: [], contas_bancarias: [] })
 
-const cellCls = 'w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+const cellCls = 'w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500'
 const sect = 'text-xs font-semibold uppercase tracking-wide text-gray-400'
 const addBtn = 'inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition'
 

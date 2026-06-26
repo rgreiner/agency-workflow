@@ -48,7 +48,7 @@ export default async function WorkspacesPage({
           {!archivedView && (
             <Link
               href={`/${orgSlug}/workspaces/new`}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 transition"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition"
             >
               <Plus className="w-4 h-4" />
               Novo cliente
@@ -65,7 +65,7 @@ export default async function WorkspacesPage({
               <Link
                 key={ws.id}
                 href={`/${orgSlug}/workspaces/${ws.id}`}
-                className="bg-white rounded-xl border border-gray-200 p-6 hover:border-indigo-300 hover:shadow-sm transition group"
+                className="bg-white rounded-xl border border-gray-200 p-6 hover:border-orange-300 hover:shadow-sm transition group"
               >
                 <div className="flex items-start gap-3">
                   <div
@@ -75,7 +75,7 @@ export default async function WorkspacesPage({
                     <FolderOpen className="w-5 h-5" style={{ color: ws.color }} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-gray-900 group-hover:text-indigo-600 transition truncate">
+                    <h3 className="font-medium text-gray-900 group-hover:text-orange-600 transition truncate">
                       {ws.name}
                     </h3>
                     {ws.description && (
@@ -107,7 +107,7 @@ export default async function WorkspacesPage({
           {!archivedView && (
             <Link
               href={`/${orgSlug}/workspaces/new`}
-              className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 transition"
+              className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition"
             >
               <Plus className="w-4 h-4" />
               Novo cliente

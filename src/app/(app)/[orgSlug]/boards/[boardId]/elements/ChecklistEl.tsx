@@ -113,8 +113,8 @@ export function ChecklistEl({ el, editing, onUpdate, onStopEdit }: Props) {
                 flexShrink: 0, width: 17, height: 17, borderRadius: 5,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 cursor: 'pointer', padding: 0,
-                border: it.done ? '1.5px solid #6366f1' : '1.5px solid #cbd5e1',
-                backgroundColor: it.done ? '#6366f1' : '#ffffff',
+                border: it.done ? '1.5px solid #f97316' : '1.5px solid #cbd5e1',
+                backgroundColor: it.done ? '#f97316' : '#ffffff',
                 transition: 'background-color 0.12s, border-color 0.12s',
               }}
             >
@@ -175,7 +175,7 @@ export function ChecklistEl({ el, editing, onUpdate, onStopEdit }: Props) {
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '7px 14px', border: 'none', borderTop: '1px solid #f1f5f9',
             background: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
-            color: '#6366f1', fontFamily: 'inherit',
+            color: '#f97316', fontFamily: 'inherit',
           }}
         >
           <Plus size={14} /> Adicionar item

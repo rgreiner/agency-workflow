@@ -90,7 +90,7 @@ export function LinkEl({ el, editing, onUpdate, onStopEdit }: Props) {
             onPointerDown={e => e.stopPropagation()}
             onClick={e => e.stopPropagation()}
             title="Abrir link"
-            style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: 6, color: '#6366f1' }}
+            style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: 6, color: '#f97316' }}
           >
             <ExternalLink size={15} />
           </a>

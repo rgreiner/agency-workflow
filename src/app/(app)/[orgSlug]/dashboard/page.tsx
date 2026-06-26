@@ -312,7 +312,7 @@ export default async function DashboardPage({
                     {activity && camp && (
                       <Link
                         href={`/${orgSlug}/workspaces/${camp.workspaceId}/campaigns/${activity.campaign_id}/activities/${activity.id}`}
-                        className="text-xs text-gray-500 hover:text-indigo-600 transition truncate block mt-0.5"
+                        className="text-xs text-gray-500 hover:text-orange-600 transition truncate block mt-0.5"
                       >
                         {activity.title}
                       </Link>

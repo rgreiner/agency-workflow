@@ -75,7 +75,7 @@ export function NewPositionForm({ orgSlug }: Props) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="w-full flex items-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-indigo-300 hover:text-indigo-600 transition"
+        className="w-full flex items-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-orange-300 hover:text-orange-600 transition"
       >
         <Plus className="w-4 h-4" />
         Novo cargo
@@ -84,9 +84,9 @@ export function NewPositionForm({ orgSlug }: Props) {
   }
 
   return (
-    <div className="bg-white rounded-xl border-2 border-indigo-200 overflow-hidden">
-      <div className="px-4 py-3 bg-indigo-50 border-b border-indigo-100">
-        <p className="text-sm font-medium text-indigo-700">Novo cargo</p>
+    <div className="bg-white rounded-xl border-2 border-orange-200 overflow-hidden">
+      <div className="px-4 py-3 bg-orange-50 border-b border-orange-100">
+        <p className="text-sm font-medium text-orange-700">Novo cargo</p>
       </div>
 
       <div className="px-4 py-4 space-y-4">
@@ -104,7 +104,7 @@ export function NewPositionForm({ orgSlug }: Props) {
               onChange={e => setName(e.target.value)}
               placeholder="Ex: Redação, Design, Atendimento..."
               autoFocus
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 "
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 "
             />
           </div>
           <div>
@@ -151,9 +151,9 @@ export function NewPositionForm({ orgSlug }: Props) {
                       className={cn(
                         'w-3.5 h-3.5 rounded border flex items-center justify-center',
                         allChecked
-                          ? 'bg-indigo-600 border-indigo-600'
+                          ? 'bg-orange-600 border-orange-600'
                           : someChecked
-                          ? 'bg-indigo-200 border-indigo-400'
+                          ? 'bg-orange-200 border-orange-400'
                           : 'border-gray-300'
                       )}
                     >
@@ -201,7 +201,7 @@ export function NewPositionForm({ orgSlug }: Props) {
           <button
             onClick={handleSubmit}
             disabled={isPending}
-            className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-[#fff] text-xs font-medium rounded-lg hover:bg-indigo-700 transition disabled:opacity-50"
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-orange-600 text-[#fff] text-xs font-medium rounded-lg hover:bg-orange-700 transition disabled:opacity-50"
           >
             <Plus className="w-3.5 h-3.5" />
             Criar cargo

@@ -76,7 +76,7 @@ export function BriefingEditor({ activityId, path, description, canEdit }: {
 
   if (editing) {
     return (
-      <div className="rounded-xl border border-indigo-300 bg-white overflow-hidden">
+      <div className="rounded-xl border border-orange-300 bg-white overflow-hidden">
         <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-gray-100 flex-wrap">
           <Btn onClick={() => editor?.chain().focus().toggleBold().run()} active={!!editor?.isActive('bold')} title="Negrito"><Bold className="w-3.5 h-3.5" /></Btn>
           <Btn onClick={() => editor?.chain().focus().toggleItalic().run()} active={!!editor?.isActive('italic')} title="Itálico"><Italic className="w-3.5 h-3.5" /></Btn>
@@ -99,7 +99,7 @@ export function BriefingEditor({ activityId, path, description, canEdit }: {
         <div className="flex items-center justify-end gap-2 px-2 py-1.5 border-t border-gray-100 bg-gray-50/50">
           <button onClick={() => setEditing(false)} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">Cancelar</button>
           <button onClick={save} disabled={isPending}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-50 transition">
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 disabled:opacity-50 transition">
             {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Salvar
           </button>
         </div>
@@ -131,7 +131,7 @@ export function BriefingEditor({ activityId, path, description, canEdit }: {
 function Btn({ onClick, active, title, children }: { onClick: () => void; active: boolean; title: string; children: React.ReactNode }) {
   return (
     <button onClick={onClick} title={title}
-      className={cn('p-1.5 rounded transition-colors', active ? 'bg-indigo-100 text-indigo-700' : 'text-gray-400 hover:text-gray-800 hover:bg-gray-100')}>
+      className={cn('p-1.5 rounded transition-colors', active ? 'bg-orange-100 text-orange-700' : 'text-gray-400 hover:text-gray-800 hover:bg-gray-100')}>
       {children}
     </button>
   )

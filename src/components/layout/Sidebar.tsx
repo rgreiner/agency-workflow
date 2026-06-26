@@ -126,7 +126,7 @@ function NavGroup({ base, pathname, group, open, onToggle }: {
                 href={href}
                 className={cn(
                   'flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors',
-                  active ? 'bg-indigo-600/20 text-indigo-300' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/60'
+                  active ? 'bg-orange-600/20 text-orange-300' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/60'
                 )}
               >
                 <span className="truncate">{it.label}</span>
@@ -148,7 +148,7 @@ const VIEWS = [
 ]
 
 export function Sidebar({
-  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#6366f1',
+  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#f97316',
   positionName, canFinance = false, canVendas = false, collapsed, onCollapse, onExpand,
 }: SidebarProps) {
   const pathname = usePathname()
@@ -423,7 +423,7 @@ export function Sidebar({
                           : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
                       )}
                     >
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: ws.color || '#6366f1' }} />
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: ws.color || '#f97316' }} />
                       <span className="truncate">{ws.name}</span>
                     </Link>
                     <Link
@@ -447,7 +447,7 @@ export function Sidebar({
                             className={cn(
                               'flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors',
                               isActive
-                                ? 'bg-indigo-600/20 text-indigo-300'
+                                ? 'bg-orange-600/20 text-orange-300'
                                 : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/60'
                             )}
                           >

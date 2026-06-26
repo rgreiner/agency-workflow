@@ -48,7 +48,7 @@ export function ResetPasswordButton({ orgId, userId, name }: { orgId: string; us
         onClick={() => setOpen(true)}
         title="Redefinir senha"
         aria-label="Redefinir senha"
-        className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition"
+        className="p-1.5 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-50 transition"
       >
         <KeyRound className="w-3.5 h-3.5" />
       </button>
@@ -67,7 +67,7 @@ export function ResetPasswordButton({ orgId, userId, name }: { orgId: string; us
               <button
                 onClick={genLink}
                 disabled={pending}
-                className="w-full flex items-center justify-center gap-1.5 text-sm font-medium px-3 py-2.5 rounded-xl bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-50 transition"
+                className="w-full flex items-center justify-center gap-1.5 text-sm font-medium px-3 py-2.5 rounded-xl bg-orange-600 text-[#fff] hover:bg-orange-700 disabled:opacity-50 transition"
               >
                 {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
                 Gerar link de redefinição
@@ -97,12 +97,12 @@ export function ResetPasswordButton({ orgId, userId, name }: { orgId: string; us
                 onChange={e => setPw(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') setPassword() }}
                 placeholder="Nova senha (mín. 8)"
-                className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
               <button
                 onClick={setPassword}
                 disabled={pending || pw.length < 8}
-                className="px-3 py-2 rounded-lg bg-indigo-600 text-[#fff] text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 shrink-0"
+                className="px-3 py-2 rounded-lg bg-orange-600 text-[#fff] text-sm font-medium hover:bg-orange-700 disabled:opacity-50 shrink-0"
               >
                 {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Definir'}
               </button>

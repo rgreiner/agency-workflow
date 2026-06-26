@@ -42,14 +42,14 @@ export function ActivityHeader({ activityId, path, title, description, canManage
               aria-label="Título da tarefa"
               onChange={e => setTitleDraft(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') setEditTitle(false) }}
-              className="flex-1 text-xl font-semibold text-gray-900 border border-indigo-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              className="flex-1 text-xl font-semibold text-gray-900 border border-orange-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
               autoFocus
             />
             <button
               onClick={saveTitle}
               disabled={isPending}
               aria-label="Salvar título"
-              className="p-1.5 rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-50 shrink-0"
+              className="p-1.5 rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 disabled:opacity-50 shrink-0"
             >
               {isPending ? <Loader2 aria-hidden className="w-3.5 h-3.5 animate-spin" /> : <Check aria-hidden className="w-3.5 h-3.5" />}
             </button>

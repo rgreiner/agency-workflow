@@ -13,7 +13,7 @@ export interface Fornecedor {
   enderecos?: ContatoData['enderecos']; telefones?: ContatoData['telefones']; emails?: ContatoData['emails']; contas_bancarias?: ContatoData['contas_bancarias']
 }
 
-const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent'
+const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 
 export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
@@ -41,7 +41,7 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
             <Link href={`/${orgSlug}/cadastros/fornecedores?view=arquivados`} className={cn('px-2.5 py-1 rounded-md transition', archivedView ? 'bg-gray-900 text-[#fff]' : 'text-gray-500 hover:text-gray-700')}>Arquivados</Link>
           </div>
           {!archivedView && (
-            <button onClick={() => setCreating(true)} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 transition">
+            <button onClick={() => setCreating(true)} className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition">
               <Plus className="w-4 h-4" /> Adicionar fornecedor
             </button>
           )}
@@ -141,7 +141,7 @@ function FornecedorModal({ orgSlug, fornecedor, onClose }: { orgSlug: string; fo
           <div className="border-t border-gray-100 pt-4"><ContatoBlocks value={contato} onChange={setContato} /></div>
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
-            <button type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition">
+            <button type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
               {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Salvar
             </button>
           </div>

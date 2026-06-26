@@ -95,7 +95,7 @@ export function NotificationsBell({ orgSlug }: { orgSlug: string }) {
             {unread > 0 && (
               <button
                 onClick={markAll}
-                className="flex items-center gap-1 text-xs text-gray-400 hover:text-indigo-600 transition"
+                className="flex items-center gap-1 text-xs text-gray-400 hover:text-orange-600 transition"
               >
                 <CheckCheck className="w-3.5 h-3.5" /> Marcar todas
               </button>
@@ -121,7 +121,7 @@ export function NotificationsBell({ orgSlug }: { orgSlug: string }) {
                       onClick={() => openItem(n)}
                       className={cn(
                         'w-full flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-gray-50 transition',
-                        !n.readAt && 'bg-indigo-50/40'
+                        !n.readAt && 'bg-orange-50/40'
                       )}
                     >
                       <span className="mt-0.5 shrink-0"><NotifIcon type={n.type} /></span>
@@ -131,7 +131,7 @@ export function NotificationsBell({ orgSlug }: { orgSlug: string }) {
                       </span>
                       <span className="flex items-center gap-1.5 shrink-0 mt-0.5">
                         <span className="text-[10px] text-gray-400">{timeLabel(n.createdAt)}</span>
-                        {!n.readAt && <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />}
+                        {!n.readAt && <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />}
                       </span>
                     </button>
                   ))}

@@ -124,9 +124,9 @@ export function SingleDatePicker({ value, onChange, onClose }: SingleDatePickerP
                 className={cn(
                   'w-8 h-8 rounded-full text-sm transition flex items-center justify-center font-medium',
                   isSelected
-                    ? 'bg-indigo-600 text-[#fff]'
+                    ? 'bg-orange-600 text-[#fff]'
                     : isToday
-                    ? 'ring-2 ring-indigo-400 text-indigo-600'
+                    ? 'ring-2 ring-orange-400 text-orange-600'
                     : 'text-gray-700 hover:bg-gray-100'
                 )}
               >
@@ -268,17 +268,17 @@ export function DatePicker({ startDate, endDate, onStartChange, onEndChange, lab
             const isSelected = isStart || isEnd
             return (
               <div key={ymd} className={cn('relative h-9 flex items-center justify-center',
-                isMid && 'bg-indigo-50',
-                isStart && !isSingle && 'bg-gradient-to-r from-transparent to-indigo-50',
-                isEnd   && !isSingle && 'bg-gradient-to-l from-transparent to-indigo-50',
+                isMid && 'bg-orange-50',
+                isStart && !isSingle && 'bg-gradient-to-r from-transparent to-orange-50',
+                isEnd   && !isSingle && 'bg-gradient-to-l from-transparent to-orange-50',
               )}>
                 <button type="button" onClick={() => handleDayClick(ymd)}
                   onMouseEnter={() => phase === 'end' && setHovered(ymd)}
                   onMouseLeave={() => setHovered(null)}
                   className={cn('w-8 h-8 rounded-full text-sm transition flex items-center justify-center font-medium z-10 relative',
-                    isSelected ? 'bg-indigo-600 text-[#fff]'
-                    : isToday  ? 'ring-2 ring-indigo-400 text-indigo-600'
-                    : isMid    ? 'text-indigo-700 hover:bg-indigo-100'
+                    isSelected ? 'bg-orange-600 text-[#fff]'
+                    : isToday  ? 'ring-2 ring-orange-400 text-orange-600'
+                    : isMid    ? 'text-orange-700 hover:bg-orange-100'
                     : 'text-gray-700 hover:bg-gray-100'
                   )}>
                   {Number(ymd.split('-')[2])}
@@ -304,7 +304,7 @@ export function DatePicker({ startDate, endDate, onStartChange, onEndChange, lab
         className={cn(
           'w-full flex items-center gap-2.5 px-4 py-3 border rounded-xl text-sm transition text-left',
           'focus:outline-none',
-          open ? 'border-indigo-400 ring-2 ring-indigo-500' : 'border-gray-300 hover:border-gray-400',
+          open ? 'border-orange-400 ring-2 ring-orange-500' : 'border-gray-300 hover:border-gray-400',
           triggerText ? 'text-gray-900' : 'text-gray-400'
         )}
       >
@@ -368,9 +368,9 @@ export function DatePicker({ startDate, endDate, onStartChange, onEndChange, lab
                   className={cn(
                     'relative h-9 flex items-center justify-center',
                     // range background strip (middle days)
-                    isMid   && 'bg-indigo-50',
-                    isStart && !isSingle && 'bg-gradient-to-r from-transparent to-indigo-50',
-                    isEnd   && !isSingle && 'bg-gradient-to-l from-transparent to-indigo-50',
+                    isMid   && 'bg-orange-50',
+                    isStart && !isSingle && 'bg-gradient-to-r from-transparent to-orange-50',
+                    isEnd   && !isSingle && 'bg-gradient-to-l from-transparent to-orange-50',
                   )}
                 >
                   <button
@@ -381,11 +381,11 @@ export function DatePicker({ startDate, endDate, onStartChange, onEndChange, lab
                     className={cn(
                       'w-8 h-8 rounded-full text-sm transition flex items-center justify-center font-medium z-10 relative',
                       isSelected
-                        ? 'bg-indigo-600 text-[#fff]'
+                        ? 'bg-orange-600 text-[#fff]'
                         : isToday
-                        ? 'ring-2 ring-indigo-400 text-indigo-600'
+                        ? 'ring-2 ring-orange-400 text-orange-600'
                         : isMid
-                        ? 'text-indigo-700 hover:bg-indigo-100'
+                        ? 'text-orange-700 hover:bg-orange-100'
                         : 'text-gray-700 hover:bg-gray-100'
                     )}
                   >

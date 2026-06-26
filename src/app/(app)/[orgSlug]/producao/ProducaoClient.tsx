@@ -53,7 +53,7 @@ export function ProducaoClient({
             <Link href={`${base}?view=arquivados`} className={cn('px-2.5 py-1 rounded-md transition', archivedView ? 'bg-gray-900 text-[#fff]' : 'text-gray-500 hover:text-gray-700')}>Arquivados</Link>
           </div>
           {!archivedView && (
-            <Link href={`${base}/nova`} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 transition">
+            <Link href={`${base}/nova`} className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition">
               <Plus className="w-4 h-4" /> {addLabel}
             </Link>
           )}
@@ -79,7 +79,7 @@ export function ProducaoClient({
                 return (
                   <tr key={r.id} className="hover:bg-gray-50/50 transition">
                     <td className="px-4 py-3 text-sm text-gray-400">{r.numero ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm font-medium"><Link href={`${base}/${r.id}`} className="text-gray-900 hover:text-indigo-600 transition">{r.titulo}</Link></td>
+                    <td className="px-4 py-3 text-sm font-medium"><Link href={`${base}/${r.id}`} className="text-gray-900 hover:text-orange-600 transition">{r.titulo}</Link></td>
                     <td className="px-4 py-3 text-sm text-gray-600">{r.cliente}</td>
                     <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">{formatBRL(r.valor)}</td>
                     <td className="px-4 py-3">
@@ -93,13 +93,13 @@ export function ProducaoClient({
                       <div className="flex items-center justify-end gap-1.5">
                         {gerarPedidos && r.situacao === 'aprovado' && (
                           <button onClick={() => gerarPPs(r)} disabled={isPending} title="Gerar Pedidos de Produção das opções escolhidas"
-                            className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-indigo-200 text-indigo-700 hover:bg-indigo-50 transition disabled:opacity-50">
+                            className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-orange-200 text-orange-700 hover:bg-orange-50 transition disabled:opacity-50">
                             <Factory className="w-3.5 h-3.5" /> Gerar PPs
                           </button>
                         )}
                         {gerarDocs && r.situacao === 'aprovado' && (
                           <button onClick={() => gerarDocsFn(r)} disabled={isPending} title="Gerar mídias/produções/fees em rascunho"
-                            className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-indigo-200 text-indigo-700 hover:bg-indigo-50 transition disabled:opacity-50">
+                            className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-orange-200 text-orange-700 hover:bg-orange-50 transition disabled:opacity-50">
                             <Files className="w-3.5 h-3.5" /> Gerar docs
                           </button>
                         )}

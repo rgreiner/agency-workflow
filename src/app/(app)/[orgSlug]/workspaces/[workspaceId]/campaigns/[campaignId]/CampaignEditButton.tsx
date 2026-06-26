@@ -90,7 +90,7 @@ export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, des
                 <input
                   type="text" required value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  className="w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
               </div>
 
@@ -99,7 +99,7 @@ export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, des
                 <textarea
                   rows={2} value={form.description}
                   onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  className="w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
               </div>
 
@@ -121,7 +121,7 @@ export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, des
                   type="url" value={drive}
                   onChange={e => setDrive(e.target.value)}
                   placeholder="https://drive.google.com/drive/folders/…"
-                  className="w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
                 <p className="text-xs text-gray-400 mt-1">Novas tarefas criam pastas dentro dela automaticamente.</p>
               </div>
@@ -143,7 +143,7 @@ export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, des
                     Cancelar
                   </button>
                   <button type="submit" disabled={isPending}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition">
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
                     {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                     Salvar
                   </button>

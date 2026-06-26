@@ -515,13 +515,13 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
                 onChange={e => setSaveName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') saveCurrentFilter(); if (e.key === 'Escape') setSaveOpen(false) }}
                 placeholder="Nome do filtro"
-                className="w-full px-2.5 py-1.5 bg-gray-100 border border-transparent rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-2.5 py-1.5 bg-gray-100 border border-transparent rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
               <div className="flex justify-end gap-2 mt-2">
                 <button type="button" onClick={() => { setSaveOpen(false); setSaveName('') }}
                   className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Cancelar</button>
                 <button type="button" onClick={saveCurrentFilter} disabled={!saveName.trim()}
-                  className="text-xs font-medium px-3 py-1 rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-50 transition">Salvar</button>
+                  className="text-xs font-medium px-3 py-1 rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 disabled:opacity-50 transition">Salvar</button>
               </div>
             </div>
           )}
@@ -533,7 +533,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
           <span key={f.id}
             className={cn(
               'inline-flex items-center gap-1 rounded-full border pl-3 pr-1 py-1 text-xs transition',
-              isSavedActive(f) ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+              isSavedActive(f) ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
             )}>
             <button type="button" onClick={() => applySavedFilter(f)} className="max-w-[140px] truncate" title={f.name}>{f.name}</button>
             <button type="button" onClick={() => deleteSavedFilter(f.id)} title="Excluir filtro"
@@ -578,7 +578,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
               <div key={i}
                 className={cn(
                   'flex flex-col items-center justify-center text-xs border-r border-gray-100 shrink-0 py-1.5 select-none',
-                  isToday(day)    ? 'bg-indigo-600 text-[#fff]'
+                  isToday(day)    ? 'bg-orange-600 text-[#fff]'
                   : isWeekend(day) ? 'bg-gray-50 text-gray-400'
                   : 'text-gray-600'
                 )}

@@ -81,7 +81,7 @@ export function ImageEl({ el, editing, selected, onUpdate, onStopEdit }: Props) 
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        border: dragOver ? '2px dashed #6366f1' : '1px solid #e2e8f0',
+        border: dragOver ? '2px dashed #f97316' : '1px solid #e2e8f0',
         position: 'relative',
       }}
     >
@@ -97,7 +97,7 @@ export function ImageEl({ el, editing, selected, onUpdate, onStopEdit }: Props) 
           position: 'absolute', inset: 0, zIndex: 20,
           backgroundColor: 'rgba(238,242,255,0.85)',
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6,
-          color: '#4f46e5', fontSize: 11, fontWeight: 600, pointerEvents: 'none',
+          color: '#ea580c', fontSize: 11, fontWeight: 600, pointerEvents: 'none',
         }}>
           {uploading
             ? <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Enviando…</>
@@ -140,7 +140,7 @@ export function ImageEl({ el, editing, selected, onUpdate, onStopEdit }: Props) 
                   onPointerDown={e => e.stopPropagation()}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
-                    borderRadius: 6, backgroundColor: '#4f46e5', color: '#fff', border: 'none',
+                    borderRadius: 6, backgroundColor: '#ea580c', color: '#fff', border: 'none',
                     cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
                   }}
                 >
@@ -176,7 +176,7 @@ export function ImageEl({ el, editing, selected, onUpdate, onStopEdit }: Props) 
                     style={{
                       padding: '5px 8px',
                       borderRadius: 6,
-                      backgroundColor: '#4f46e5',
+                      backgroundColor: '#ea580c',
                       border: 'none',
                       cursor: 'pointer',
                     }}

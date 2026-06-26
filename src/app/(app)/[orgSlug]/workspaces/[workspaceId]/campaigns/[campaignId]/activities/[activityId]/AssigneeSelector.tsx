@@ -30,7 +30,7 @@ function MemberAvatar({ member, size = 'sm' }: { member: Member; size?: 'sm' | '
     <img src={member.avatarUrl} alt={member.fullName ?? member.email}
       className={cn(dim, 'rounded-full object-cover shrink-0')} />
   ) : (
-    <div className={cn(dim, 'rounded-full bg-indigo-100 text-indigo-600 font-semibold flex items-center justify-center shrink-0')}>
+    <div className={cn(dim, 'rounded-full bg-orange-100 text-orange-600 font-semibold flex items-center justify-center shrink-0')}>
       {initials}
     </div>
   )
@@ -100,7 +100,7 @@ export function AssigneeSelector({ activityId, assignedIds, members, path, compa
           <button
             onClick={() => setOpen(o => !o)}
             disabled={isPending}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-gray-300 text-gray-500 hover:border-indigo-400 hover:text-indigo-500 transition text-xs disabled:opacity-50"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-gray-300 text-gray-500 hover:border-orange-400 hover:text-orange-500 transition text-xs disabled:opacity-50"
           >
             {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}
             {selected.length === 0 ? 'Atribuir' : 'Adicionar'}

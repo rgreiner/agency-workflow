@@ -223,20 +223,20 @@ export function DateRangeEditor({ activityId, path, startDate, dueDate, canEdit,
           {overdue && <AlertCircle className="w-3 h-3 shrink-0" />}
           {overdue ? `${Math.abs(compactDays!)}d atraso` : compactDays === 0 ? 'Hoje' : compactDays === 1 ? 'Amanhã' : `${compactDays}d`}
         </span>
-      ) : <span className="text-xs text-gray-300 hover:text-indigo-500 transition">+ prazo</span>}
-      {isPending && <Loader2 className="w-3 h-3 text-indigo-500 animate-spin shrink-0" />}
+      ) : <span className="text-xs text-gray-300 hover:text-orange-500 transition">+ prazo</span>}
+      {isPending && <Loader2 className="w-3 h-3 text-orange-500 animate-spin shrink-0" />}
     </button>
   ) : (
     <button
       type="button"
       onClick={() => { setPhase('start'); setOpen(o => !o) }}
-      className="flex items-center gap-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 hover:border-indigo-300 hover:bg-indigo-50 transition"
+      className="flex items-center gap-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 hover:border-orange-300 hover:bg-orange-50 transition"
     >
       <Calendar className="w-3.5 h-3.5 text-gray-400 shrink-0" />
       <span className={cn(localStart || localEnd ? 'text-gray-700' : 'text-gray-400')}>
         {triggerLabel}
       </span>
-      {isPending && <Loader2 className="w-3 h-3 text-indigo-500 animate-spin shrink-0" />}
+      {isPending && <Loader2 className="w-3 h-3 text-orange-500 animate-spin shrink-0" />}
     </button>
   )
 
@@ -292,9 +292,9 @@ export function DateRangeEditor({ activityId, path, startDate, dueDate, canEdit,
               return (
                 <div key={ymd} className={cn(
                   'relative h-9 flex items-center justify-center',
-                  isMid   && 'bg-indigo-50',
-                  isStart && !isSingle && 'bg-gradient-to-r from-transparent to-indigo-50',
-                  isEnd   && !isSingle && 'bg-gradient-to-l from-transparent to-indigo-50',
+                  isMid   && 'bg-orange-50',
+                  isStart && !isSingle && 'bg-gradient-to-r from-transparent to-orange-50',
+                  isEnd   && !isSingle && 'bg-gradient-to-l from-transparent to-orange-50',
                 )}>
                   <button
                     type="button"
@@ -303,9 +303,9 @@ export function DateRangeEditor({ activityId, path, startDate, dueDate, canEdit,
                     onMouseLeave={() => setHovered(null)}
                     className={cn(
                       'w-8 h-8 rounded-full text-sm transition flex items-center justify-center font-medium z-10 relative',
-                      isSelected ? 'bg-indigo-600 text-[#fff]'
-                      : isToday  ? 'ring-2 ring-indigo-400 text-indigo-600'
-                      : isMid    ? 'text-indigo-700 hover:bg-indigo-100'
+                      isSelected ? 'bg-orange-600 text-[#fff]'
+                      : isToday  ? 'ring-2 ring-orange-400 text-orange-600'
+                      : isMid    ? 'text-orange-700 hover:bg-orange-100'
                       : 'text-gray-700 hover:bg-gray-100'
                     )}
                   >

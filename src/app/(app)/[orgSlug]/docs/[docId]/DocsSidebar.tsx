@@ -159,12 +159,12 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs }: {
               {/* Cabeçalho do grupo + criar */}
               <div className="group/h flex items-center gap-1.5 px-3 mb-1">
                 {g.workspaceId
-                  ? <span className="w-2 h-2 rounded-sm bg-indigo-400 shrink-0" />
+                  ? <span className="w-2 h-2 rounded-sm bg-orange-400 shrink-0" />
                   : <Building2 className="w-3 h-3 text-gray-400 shrink-0" />}
                 <span className="flex-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 truncate">{g.name}</span>
                 <div className="relative">
                   <button onClick={() => setMenu(menu === `grp:${g.key}` ? null : `grp:${g.key}`)}
-                    title="Adicionar" className="p-0.5 rounded text-gray-400 hover:text-indigo-600 hover:bg-gray-200/60 opacity-0 group-hover/h:opacity-100 transition">
+                    title="Adicionar" className="p-0.5 rounded text-gray-400 hover:text-orange-600 hover:bg-gray-200/60 opacity-0 group-hover/h:opacity-100 transition">
                     <Plus className="w-3.5 h-3.5" />
                   </button>
                   {menu === `grp:${g.key}` && (
@@ -194,12 +194,12 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs }: {
                           onChange={e => setRenameValue(e.target.value)}
                           onBlur={() => commitRename(f.id)}
                           onKeyDown={e => { if (e.key === 'Enter') commitRename(f.id); if (e.key === 'Escape') setRenamingId(null) }}
-                          className="flex-1 min-w-0 text-sm bg-white border border-indigo-300 rounded px-1 py-0.5 focus:outline-none" />
+                          className="flex-1 min-w-0 text-sm bg-white border border-orange-300 rounded px-1 py-0.5 focus:outline-none" />
                       ) : (
                         <button onClick={() => toggleFolder(f.id)} className="flex-1 min-w-0 text-left text-sm font-medium text-gray-700 truncate">{f.title}</button>
                       )}
                       <button onClick={() => newDoc(g.workspaceId, f.id)} title="Novo documento na pasta"
-                        className="p-0.5 rounded text-gray-400 hover:text-indigo-600 opacity-0 group-hover/f:opacity-100 transition shrink-0">
+                        className="p-0.5 rounded text-gray-400 hover:text-orange-600 opacity-0 group-hover/f:opacity-100 transition shrink-0">
                         <Plus className="w-3.5 h-3.5" />
                       </button>
                       <div className="relative shrink-0">
@@ -254,10 +254,10 @@ function DocRow({ doc, orgSlug, active, nested, inFolder, menuOpen, onMenu, fold
   onMove: (doc: Doc, folder: Doc | null) => void
 }) {
   return (
-    <div className={cn('group/d flex items-center gap-1 mx-1 rounded-lg', active ? 'bg-indigo-100' : 'hover:bg-gray-100')}>
+    <div className={cn('group/d flex items-center gap-1 mx-1 rounded-lg', active ? 'bg-orange-100' : 'hover:bg-gray-100')}>
       <Link href={`/${orgSlug}/docs/${doc.id}`}
-        className={cn('flex items-center gap-2 flex-1 min-w-0 px-2 py-1.5 text-sm', nested && 'pl-7', active ? 'text-indigo-800 font-medium' : 'text-gray-600')}>
-        <FileText className={cn('w-3.5 h-3.5 shrink-0', active ? 'text-indigo-500' : 'text-gray-400')} />
+        className={cn('flex items-center gap-2 flex-1 min-w-0 px-2 py-1.5 text-sm', nested && 'pl-7', active ? 'text-orange-800 font-medium' : 'text-gray-600')}>
+        <FileText className={cn('w-3.5 h-3.5 shrink-0', active ? 'text-orange-500' : 'text-gray-400')} />
         <span className="truncate">{doc.title || 'Sem título'}</span>
       </Link>
       <div className="relative shrink-0 pr-1">

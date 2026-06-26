@@ -61,10 +61,10 @@ export function FieldEditor({ activityId, path, field, value, canEdit, type = 't
           {canEdit && (
             <Pencil aria-hidden className="w-3 h-3 text-gray-400 opacity-0 group-hover/fe:opacity-100 transition shrink-0" />
           )}
-          {isPending && <Loader2 aria-hidden className="w-3 h-3 text-indigo-500 animate-spin shrink-0" />}
+          {isPending && <Loader2 aria-hidden className="w-3 h-3 text-orange-500 animate-spin shrink-0" />}
         </>
       )
-      const cls = `relative flex items-center gap-1.5 group/fe flex-1 min-w-0 rounded px-1 -ml-1 py-1 text-left ${canEdit ? 'cursor-pointer hover:bg-indigo-50 transition' : ''}`
+      const cls = `relative flex items-center gap-1.5 group/fe flex-1 min-w-0 rounded px-1 -ml-1 py-1 text-left ${canEdit ? 'cursor-pointer hover:bg-orange-50 transition' : ''}`
       return canEdit
         ? <button type="button" onClick={open} className={cls}>{inner}</button>
         : <div className={cls}>{inner}</div>
@@ -111,7 +111,7 @@ export function FieldEditor({ activityId, path, field, value, canEdit, type = 't
           if (e.key === 'Escape') cancel()
         }}
         onBlur={() => save()}
-        className="flex-1 min-w-0 text-xs border border-indigo-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+        className="flex-1 min-w-0 text-xs border border-orange-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
         placeholder={type === 'url' ? 'https://' : ''}
       />
     )
@@ -131,12 +131,12 @@ export function FieldEditor({ activityId, path, field, value, canEdit, type = 't
           <button
             onClick={open}
             aria-label="Editar"
-            className="p-1 rounded text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 opacity-0 group-hover/fe:opacity-100 focus-visible:opacity-100 transition shrink-0"
+            className="p-1 rounded text-gray-400 hover:text-orange-500 hover:bg-orange-50 opacity-0 group-hover/fe:opacity-100 focus-visible:opacity-100 transition shrink-0"
           >
             <Pencil aria-hidden className="w-3 h-3" />
           </button>
         )}
-        {isPending && <Loader2 aria-hidden className="w-3 h-3 text-indigo-500 animate-spin shrink-0" />}
+        {isPending && <Loader2 aria-hidden className="w-3 h-3 text-orange-500 animate-spin shrink-0" />}
       </div>
     )
   }
@@ -165,7 +165,7 @@ export function FieldEditor({ activityId, path, field, value, canEdit, type = 't
           value={draft}
           aria-label={`Editar ${field}`}
           onChange={e => setDraft(e.target.value)}
-          className="text-xs border border-indigo-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+          className="text-xs border border-orange-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white"
           autoFocus
         >
           {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -177,7 +177,7 @@ export function FieldEditor({ activityId, path, field, value, canEdit, type = 't
           aria-label={`Editar ${field}`}
           onChange={e => setDraft(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') cancel() }}
-          className="text-xs border border-indigo-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white w-36"
+          className="text-xs border border-orange-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white w-36"
           autoFocus
         />
       )}
@@ -185,7 +185,7 @@ export function FieldEditor({ activityId, path, field, value, canEdit, type = 't
         onClick={() => save()}
         disabled={isPending}
         aria-label="Salvar"
-        className="p-1 rounded bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-50"
+        className="p-1 rounded bg-orange-600 text-[#fff] hover:bg-orange-700 disabled:opacity-50"
       >
         {isPending ? <Loader2 aria-hidden className="w-3 h-3 animate-spin" /> : <Check aria-hidden className="w-3 h-3" />}
       </button>
@@ -217,7 +217,7 @@ function InlineSelect({ options, value, onChange, onBlur, onEscape }: {
       onChange={e => onChange(e.target.value)}
       onBlur={onBlur}
       onKeyDown={e => { if (e.key === 'Escape') onEscape() }}
-      className="flex-1 min-w-0 text-xs border border-indigo-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+      className="flex-1 min-w-0 text-xs border border-orange-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
     >
       {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>

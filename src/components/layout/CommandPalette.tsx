@@ -231,10 +231,10 @@ function PalettePanel({ orgSlug, workspaces, onClose }: Omit<Props, 'open'>) {
                       onMouseMove={() => setActiveIdx(idx)}
                       className={cn(
                         'w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors',
-                        active ? 'bg-indigo-50 text-indigo-900' : 'text-gray-700'
+                        active ? 'bg-orange-50 text-orange-900' : 'text-gray-700'
                       )}
                     >
-                      <Icon className={cn('w-4 h-4 shrink-0', active ? 'text-indigo-500' : 'text-gray-400')} />
+                      <Icon className={cn('w-4 h-4 shrink-0', active ? 'text-orange-500' : 'text-gray-400')} />
                       <span className="flex-1 truncate font-medium">{item.label}</span>
                       {item.archived && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 shrink-0">arquivada</span>
@@ -242,7 +242,7 @@ function PalettePanel({ orgSlug, workspaces, onClose }: Omit<Props, 'open'>) {
                       {item.hint && (
                         <span className="text-xs text-gray-400 truncate max-w-[120px]">{item.hint}</span>
                       )}
-                      {active && <CornerDownLeft className="w-3.5 h-3.5 text-indigo-400 shrink-0" />}
+                      {active && <CornerDownLeft className="w-3.5 h-3.5 text-orange-400 shrink-0" />}
                     </button>
                   )
                 })}
@@ -266,7 +266,7 @@ function PalettePanel({ orgSlug, workspaces, onClose }: Omit<Props, 'open'>) {
             onClick={() => setIncludeArchived(v => !v)}
             className={cn(
               'ml-auto flex items-center gap-1 px-2 py-0.5 rounded-md transition',
-              includeArchived ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600'
+              includeArchived ? 'bg-orange-50 text-orange-600' : 'text-gray-400 hover:text-gray-600'
             )}
           >
             <Archive className="w-3 h-3" />

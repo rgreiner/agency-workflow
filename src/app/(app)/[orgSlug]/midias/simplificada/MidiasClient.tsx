@@ -62,13 +62,13 @@ export function MidiasClient({
           {!archivedView && (addOptions && addOptions.length > 0 ? (
             addOptions.map(opt => (
               <Link key={opt.href} href={opt.href}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 transition">
+                className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition">
                 <Plus className="w-4 h-4" /> {opt.label}
               </Link>
             ))
           ) : (
             <Link href={`${base}/nova`}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 transition">
+              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition">
               <Plus className="w-4 h-4" /> {addLabel}
             </Link>
           ))}
@@ -99,7 +99,7 @@ export function MidiasClient({
                   <tr key={m.id} className="hover:bg-gray-50/50 transition">
                     <td className="px-4 py-3 text-sm text-gray-400">{m.numero ?? '—'}</td>
                     <td className="px-4 py-3 text-sm font-medium">
-                      <Link href={editHref(m)} className="text-gray-900 hover:text-indigo-600 transition">
+                      <Link href={editHref(m)} className="text-gray-900 hover:text-orange-600 transition">
                         {m.titulo}
                       </Link>
                     </td>

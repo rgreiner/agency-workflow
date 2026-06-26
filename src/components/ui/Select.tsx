@@ -81,7 +81,7 @@ export function Select({
         className={cn(
           'inline-flex items-center justify-between gap-2 w-full rounded-xl border border-transparent bg-gray-100 text-gray-700 transition',
           size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2.5 text-sm',
-          open ? 'bg-white ring-2 ring-indigo-200' : 'hover:bg-gray-200/60'
+          open ? 'bg-white ring-2 ring-orange-200' : 'hover:bg-gray-200/60'
         )}
       >
         <span className={cn('truncate', !selected && 'text-gray-400')}>{selected?.label ?? placeholder}</span>
@@ -111,11 +111,11 @@ export function Select({
                 onMouseMove={() => setActiveIdx(i)}
                 className={cn(
                   'w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-left transition-colors',
-                  active ? 'bg-indigo-50 text-indigo-900' : 'text-gray-700'
+                  active ? 'bg-orange-50 text-orange-900' : 'text-gray-700'
                 )}
               >
                 <span className="truncate">{o.label}</span>
-                {isSel && <Check className="w-3.5 h-3.5 text-indigo-500 shrink-0" />}
+                {isSel && <Check className="w-3.5 h-3.5 text-orange-500 shrink-0" />}
               </button>
             )
           })}
@@ -177,7 +177,7 @@ export function MultiSelect({
           'inline-flex items-center justify-between gap-2 w-full rounded-xl border border-transparent bg-gray-100 transition',
           values.length ? 'text-gray-800' : 'text-gray-700',
           size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2.5 text-sm',
-          open ? 'bg-white ring-2 ring-indigo-200' : 'hover:bg-gray-200/60'
+          open ? 'bg-white ring-2 ring-orange-200' : 'hover:bg-gray-200/60'
         )}
       >
         <span className="truncate">{label}</span>
@@ -214,7 +214,7 @@ export function MultiSelect({
               >
                 <span className={cn(
                   'w-4 h-4 rounded border flex items-center justify-center shrink-0',
-                  isSel ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'
+                  isSel ? 'bg-orange-600 border-orange-600' : 'border-gray-300'
                 )}>
                   {isSel && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
                 </span>

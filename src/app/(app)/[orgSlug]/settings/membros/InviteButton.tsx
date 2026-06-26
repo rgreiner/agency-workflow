@@ -75,7 +75,7 @@ export function InviteButton({ orgId, orgSlug }: Props) {
       <button
         onClick={handleOpen}
         disabled={loading}
-        className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-[#fff] bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 rounded-lg transition-colors"
+        className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-[#fff] bg-orange-600 hover:bg-orange-700 disabled:opacity-60 rounded-lg transition-colors"
       >
         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
         Convidar membro
@@ -105,7 +105,7 @@ export function InviteButton({ orgId, orgSlug }: Props) {
                 className={cn(
                   'flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition border-b-2',
                   tab === key
-                    ? 'text-indigo-600 border-indigo-600'
+                    ? 'text-orange-600 border-orange-600'
                     : 'text-gray-400 border-transparent hover:text-gray-600'
                 )}
               >
@@ -127,7 +127,7 @@ export function InviteButton({ orgId, orgSlug }: Props) {
                   />
                   <button aria-label="Copiar"
                     onClick={handleCopy}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition whitespace-nowrap"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-lg transition whitespace-nowrap"
                   >
                     {copied ? <><Check className="w-3.5 h-3.5" />Copiado!</> : <><Copy className="w-3.5 h-3.5" />Copiar</>}
                   </button>
@@ -158,7 +158,7 @@ export function InviteButton({ orgId, orgSlug }: Props) {
                     placeholder="nome@empresa.com"
                     autoFocus
                     required
-                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 "
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 "
                   />
                 </div>
                 {error && <p className="text-xs text-red-600">{error}</p>}
@@ -170,7 +170,7 @@ export function InviteButton({ orgId, orgSlug }: Props) {
                 <button
                   type="submit"
                   disabled={sending || !email.trim()}
-                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-[#fff] text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition"
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-orange-600 text-[#fff] text-sm font-medium rounded-lg hover:bg-orange-700 disabled:opacity-50 transition"
                 >
                   {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                   {sending ? 'Enviando...' : 'Enviar convite'}

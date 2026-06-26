@@ -13,7 +13,7 @@ export function ConviteLoginButton({ token }: ConviteLoginButtonProps) {
         name="nome"
         type="text"
         placeholder="Seu nome (se for criar a conta)"
-        className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
       />
       <input
         name="email"
@@ -21,7 +21,7 @@ export function ConviteLoginButton({ token }: ConviteLoginButtonProps) {
         autoComplete="email"
         required
         placeholder="E-mail"
-        className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
       />
       <input
         name="senha"
@@ -29,11 +29,11 @@ export function ConviteLoginButton({ token }: ConviteLoginButtonProps) {
         autoComplete="current-password"
         required
         placeholder="Senha"
-        className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
       />
       <button
         type="submit"
-        className="inline-flex items-center justify-center w-full px-6 py-3 text-sm font-medium text-[#fff] bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition-colors"
+        className="inline-flex items-center justify-center w-full px-6 py-3 text-sm font-medium text-[#fff] bg-orange-600 hover:bg-orange-700 rounded-xl shadow-sm transition-colors"
       >
         Entrar / criar conta
       </button>

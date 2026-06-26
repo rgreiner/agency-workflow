@@ -45,7 +45,7 @@ export const STATUS_CONFIG: StatusConfig[] = [
   { value: 'briefing',              label: 'Briefing',                 group: 'internal', color: 'text-purple-700',  bgColor: 'bg-purple-100',  bg: '#f3e8ff', text: '#7e22ce' },
   { value: 'pendente_cliente',      label: 'Pendente do cliente',      group: 'internal', color: 'text-orange-700',  bgColor: 'bg-orange-100',  bg: '#ffedd5', text: '#c2410c' },
   { value: 'planejamento',          label: 'Planejamento',             group: 'internal', color: 'text-blue-700',    bgColor: 'bg-blue-100',    bg: '#dbeafe', text: '#1d4ed8' },
-  { value: 'insight',               label: 'Insight',                  group: 'internal', color: 'text-indigo-700',  bgColor: 'bg-indigo-100',  bg: '#e0e7ff', text: '#4338ca' },
+  { value: 'insight',               label: 'Insight',                  group: 'internal', color: 'text-orange-700',  bgColor: 'bg-orange-100',  bg: '#e0e7ff', text: '#4338ca' },
   { value: 'redacao',               label: 'Redação',                  group: 'internal', color: 'text-cyan-700',    bgColor: 'bg-cyan-100',    bg: '#cffafe', text: '#0e7490' },
   { value: 'design',                label: 'Design',                   group: 'internal', color: 'text-pink-700',    bgColor: 'bg-pink-100',    bg: '#fce7f3', text: '#be185d' },
   { value: 'edicao',                label: 'Edição',                   group: 'internal', color: 'text-rose-700',    bgColor: 'bg-rose-100',    bg: '#ffe4e6', text: '#be123c' },

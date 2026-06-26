@@ -21,7 +21,7 @@ export function FrameEl({ el, editing, selected, onUpdate, onStopEdit }: Props) 
     <div style={{
       width: '100%', height: '100%', borderRadius: 12,
       border: `2px solid ${el.color}`,
-      backgroundColor: selected ? 'rgba(99,102,241,0.05)' : 'rgba(148,163,184,0.05)',
+      backgroundColor: selected ? 'rgba(249, 115, 22,0.05)' : 'rgba(148,163,184,0.05)',
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }}>
       <div style={{

@@ -56,13 +56,13 @@ export default function OnboardingStep2() {
         {/* Progress */}
         <div className="flex items-center gap-2 mb-8">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 text-xs font-semibold flex items-center justify-center">✓</div>
+            <div className="w-7 h-7 rounded-full bg-orange-100 text-orange-600 text-xs font-semibold flex items-center justify-center">✓</div>
             <span className="text-sm text-gray-400">Sua empresa</span>
           </div>
-          <div className="flex-1 h-px bg-indigo-200 mx-2" />
+          <div className="flex-1 h-px bg-orange-200 mx-2" />
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-indigo-600 text-[#fff] text-xs font-semibold flex items-center justify-center">2</div>
-            <span className="text-sm font-medium text-indigo-600">Seu perfil</span>
+            <div className="w-7 h-7 rounded-full bg-orange-600 text-[#fff] text-xs font-semibold flex items-center justify-center">2</div>
+            <span className="text-sm font-medium text-orange-600">Seu perfil</span>
           </div>
         </div>
 
@@ -81,7 +81,7 @@ export default function OnboardingStep2() {
               value={form.full_name}
               onChange={(e) => set('full_name', e.target.value)}
               placeholder="Ex: Rafael Greiner"
-              className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
               required
             />
           </div>
@@ -96,7 +96,7 @@ export default function OnboardingStep2() {
               value={form.role_title}
               onChange={(e) => set('role_title', e.target.value)}
               placeholder="Ex: Diretor de Arte, Atendimento, CEO..."
-              className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
               required
             />
           </div>
@@ -112,7 +112,7 @@ export default function OnboardingStep2() {
               value={form.phone}
               onChange={(e) => set('phone', maskPhone(e.target.value))}
               placeholder="(00) 00000-0000"
-              className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
             />
           </div>
 
@@ -129,7 +129,7 @@ export default function OnboardingStep2() {
             <button
               type="submit"
               disabled={!isValid || isPending}
-              className="flex-1 py-3 bg-indigo-600 text-[#fff] font-medium rounded-xl hover:bg-indigo-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex-1 py-3 bg-orange-600 text-[#fff] font-medium rounded-xl hover:bg-orange-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {isPending ? 'Criando conta...' : 'Criar conta'}
             </button>

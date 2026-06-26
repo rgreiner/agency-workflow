@@ -184,7 +184,7 @@ function Flag({ on, onClick, label }: { on: boolean; onClick: () => void; label:
   return (
     <button onClick={onClick} title={label}
       className={cn('inline-flex items-center justify-center w-7 h-7 rounded-lg border transition',
-        on ? 'bg-indigo-600 border-indigo-600 text-[#fff]' : 'border-gray-200 text-gray-300 hover:text-gray-500')}>
+        on ? 'bg-orange-600 border-orange-600 text-[#fff]' : 'border-gray-200 text-gray-300 hover:text-gray-500')}>
       <Icon className="w-3.5 h-3.5" />
     </button>
   )

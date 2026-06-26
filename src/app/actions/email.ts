@@ -62,7 +62,7 @@ export async function sendInviteEmail(
   <div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 16px; border: 1px solid #e5e7eb; overflow: hidden;">
 
     <!-- Header -->
-    <div style="background: #4f46e5; padding: 32px; text-align: center;">
+    <div style="background: #ea580c; padding: 32px; text-align: center;">
       <div style="width: 48px; height: 48px; background: rgba(255,255,255,0.2); border-radius: 12px; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center;">
         <span style="color: white; font-size: 22px; font-weight: 700;">${orgName.charAt(0).toUpperCase()}</span>
       </div>
@@ -77,12 +77,12 @@ export async function sendInviteEmail(
       </p>
 
       <a href="${inviteUrl}"
-         style="display: block; background: #4f46e5; color: white; text-decoration: none; text-align: center; padding: 14px 24px; border-radius: 10px; font-weight: 600; font-size: 15px;">
+         style="display: block; background: #ea580c; color: white; text-decoration: none; text-align: center; padding: 14px 24px; border-radius: 10px; font-weight: 600; font-size: 15px;">
         Aceitar convite
       </a>
 
       <p style="color: #9ca3af; font-size: 12px; margin: 20px 0 0; text-align: center;">
-        Ou acesse: <a href="${inviteUrl}" style="color: #6366f1;">${inviteUrl}</a>
+        Ou acesse: <a href="${inviteUrl}" style="color: #ea580c;">${inviteUrl}</a>
       </p>
     </div>
 
@@ -122,7 +122,7 @@ export async function sendPasswordResetEmail(
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9fafb; margin: 0; padding: 40px 16px;">
   <div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 16px; border: 1px solid #e5e7eb; overflow: hidden;">
 
-    <div style="background: #4f46e5; padding: 32px; text-align: center;">
+    <div style="background: #ea580c; padding: 32px; text-align: center;">
       <p style="color: rgba(255,255,255,0.85); margin: 0; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase;">Agency Workflow</p>
     </div>
 
@@ -133,12 +133,12 @@ export async function sendPasswordResetEmail(
       </p>
 
       <a href="${resetUrl}"
-         style="display: block; background: #4f46e5; color: white; text-decoration: none; text-align: center; padding: 14px 24px; border-radius: 10px; font-weight: 600; font-size: 15px;">
+         style="display: block; background: #ea580c; color: white; text-decoration: none; text-align: center; padding: 14px 24px; border-radius: 10px; font-weight: 600; font-size: 15px;">
         Criar nova senha
       </a>
 
       <p style="color: #9ca3af; font-size: 12px; margin: 20px 0 0; text-align: center;">
-        Ou acesse: <a href="${resetUrl}" style="color: #6366f1;">${resetUrl}</a>
+        Ou acesse: <a href="${resetUrl}" style="color: #ea580c;">${resetUrl}</a>
       </p>
       <p style="color: #9ca3af; font-size: 12px; margin: 12px 0 0; text-align: center;">
         Este link expira em 1 hora.

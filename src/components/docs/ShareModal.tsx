@@ -60,10 +60,10 @@ export function ShareModal({ visibility, sharedMemberIds, members, currentUserId
             onClick={() => setVis('org')}
             className={cn(
               'flex items-center gap-3 w-full px-4 py-3 rounded-xl border-2 transition text-left',
-              vis === 'org' ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'
+              vis === 'org' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'
             )}
           >
-            <Globe className={cn('w-5 h-5 shrink-0', vis === 'org' ? 'text-indigo-600' : 'text-gray-400')} />
+            <Globe className={cn('w-5 h-5 shrink-0', vis === 'org' ? 'text-orange-600' : 'text-gray-400')} />
             <div>
               <p className="text-sm font-medium text-gray-900">Todo o time</p>
               <p className="text-xs text-gray-500">Todos os membros da organização podem ver</p>
@@ -74,10 +74,10 @@ export function ShareModal({ visibility, sharedMemberIds, members, currentUserId
             onClick={() => setVis('custom')}
             className={cn(
               'flex items-center gap-3 w-full px-4 py-3 rounded-xl border-2 transition text-left',
-              vis === 'custom' ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'
+              vis === 'custom' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'
             )}
           >
-            <Lock className={cn('w-5 h-5 shrink-0', vis === 'custom' ? 'text-indigo-600' : 'text-gray-400')} />
+            <Lock className={cn('w-5 h-5 shrink-0', vis === 'custom' ? 'text-orange-600' : 'text-gray-400')} />
             <div>
               <p className="text-sm font-medium text-gray-900">Pessoas específicas</p>
               <p className="text-xs text-gray-500">Somente você e quem você escolher</p>
@@ -95,7 +95,7 @@ export function ShareModal({ visibility, sharedMemberIds, members, currentUserId
                     type="checkbox"
                     checked={selected.has(m.userId)}
                     onChange={() => toggle(m.userId)}
-                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
                   />
                   <div>
                     <p className="text-sm font-medium text-gray-800">{m.fullName ?? m.email}</p>
@@ -117,7 +117,7 @@ export function ShareModal({ visibility, sharedMemberIds, members, currentUserId
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex-1 px-4 py-2 text-sm font-medium text-[#fff] bg-indigo-600 rounded-xl hover:bg-indigo-700 transition disabled:opacity-60"
+            className="flex-1 px-4 py-2 text-sm font-medium text-[#fff] bg-orange-600 rounded-xl hover:bg-orange-700 transition disabled:opacity-60"
           >
             {saving ? 'Salvando…' : 'Salvar'}
           </button>

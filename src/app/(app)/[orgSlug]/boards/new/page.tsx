@@ -37,8 +37,8 @@ export default async function NewBoardPage({
       <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-3 p-6 border-b border-gray-100">
-          <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center">
-            <Layout className="w-5 h-5 text-indigo-500" />
+          <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center">
+            <Layout className="w-5 h-5 text-orange-500" />
           </div>
           <div>
             <h1 className="text-base font-semibold text-gray-900">Novo quadro visual</h1>
@@ -58,7 +58,7 @@ export default async function NewBoardPage({
               type="text"
               autoFocus
               placeholder="Ex: Briefing campanha dia dos pais"
-              className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
             />
           </div>
 
@@ -70,7 +70,7 @@ export default async function NewBoardPage({
               <select
                 id="workspace_id"
                 name="workspace_id"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
               >
                 <option value="">Sem cliente específico</option>
                 {workspaces.map(ws => (
@@ -89,7 +89,7 @@ export default async function NewBoardPage({
             </Link>
             <button
               type="submit"
-              className="flex-1 px-4 py-2.5 text-sm font-medium text-[#fff] bg-indigo-600 hover:bg-indigo-700 rounded-xl transition"
+              className="flex-1 px-4 py-2.5 text-sm font-medium text-[#fff] bg-orange-600 hover:bg-orange-700 rounded-xl transition"
             >
               Criar quadro
             </button>

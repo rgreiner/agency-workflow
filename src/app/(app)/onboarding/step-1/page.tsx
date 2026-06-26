@@ -60,8 +60,8 @@ export default function OnboardingStep1() {
         {/* Progress */}
         <div className="flex items-center gap-2 mb-8">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-indigo-600 text-[#fff] text-xs font-semibold flex items-center justify-center">1</div>
-            <span className="text-sm font-medium text-indigo-600">Sua empresa</span>
+            <div className="w-7 h-7 rounded-full bg-orange-600 text-[#fff] text-xs font-semibold flex items-center justify-center">1</div>
+            <span className="text-sm font-medium text-orange-600">Sua empresa</span>
           </div>
           <div className="flex-1 h-px bg-gray-200 mx-2" />
           <div className="flex items-center gap-2">
@@ -85,7 +85,7 @@ export default function OnboardingStep1() {
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
               placeholder="Ex: Minha Agência"
-              className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
               required
             />
             {form.name && (
@@ -108,7 +108,7 @@ export default function OnboardingStep1() {
                   onClick={() => set('company_type', t.value)}
                   className={`px-4 py-3 rounded-xl border text-sm font-medium transition text-left ${
                     form.company_type === t.value
-                      ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                      ? 'border-orange-600 bg-orange-50 text-orange-700'
                       : 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
                   }`}
                 >
@@ -131,7 +131,7 @@ export default function OnboardingStep1() {
                   onClick={() => set('company_size', s.value)}
                   className={`px-4 py-3 rounded-xl border text-sm font-medium transition text-left ${
                     form.company_size === s.value
-                      ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                      ? 'border-orange-600 bg-orange-50 text-orange-700'
                       : 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
                   }`}
                 >
@@ -154,7 +154,7 @@ export default function OnboardingStep1() {
                   onClick={() => set('segment', s.value)}
                   className={`px-3 py-3 rounded-xl border text-sm font-medium transition text-center ${
                     form.segment === s.value
-                      ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                      ? 'border-orange-600 bg-orange-50 text-orange-700'
                       : 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
                   }`}
                 >
@@ -167,7 +167,7 @@ export default function OnboardingStep1() {
           <button
             type="submit"
             disabled={!isValid}
-            className="w-full py-3 bg-indigo-600 text-[#fff] font-medium rounded-xl hover:bg-indigo-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full py-3 bg-orange-600 text-[#fff] font-medium rounded-xl hover:bg-orange-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Próximo →
           </button>

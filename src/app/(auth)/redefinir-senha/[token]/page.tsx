@@ -17,7 +17,7 @@ export default async function RedefinirSenhaPage({
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-10 w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-indigo-600 mb-4">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-orange-600 mb-4">
             <span className="text-white font-bold text-lg">AW</span>
           </div>
           <h1 className="text-2xl font-semibold text-gray-900">Nova senha</h1>
@@ -29,7 +29,7 @@ export default async function RedefinirSenhaPage({
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 leading-relaxed">
               Este link é inválido ou expirou. Solicite um novo link para redefinir a senha.
             </div>
-            <Link href="/recuperar-senha" className="block text-center text-sm text-indigo-600 hover:text-indigo-700">
+            <Link href="/recuperar-senha" className="block text-center text-sm text-orange-600 hover:text-orange-700">
               Solicitar novo link
             </Link>
           </div>
@@ -46,7 +46,7 @@ export default async function RedefinirSenhaPage({
                 autoComplete="new-password"
                 required
                 minLength={8}
-                className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
             </div>
 
@@ -61,7 +61,7 @@ export default async function RedefinirSenhaPage({
                 autoComplete="new-password"
                 required
                 minLength={8}
-                className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
             </div>
 
@@ -77,7 +77,7 @@ export default async function RedefinirSenhaPage({
 
             <button
               type="submit"
-              className="w-full px-4 py-3 rounded-xl text-white font-medium bg-indigo-600 hover:bg-indigo-700 transition"
+              className="w-full px-4 py-3 rounded-xl text-white font-medium bg-orange-600 hover:bg-orange-700 transition"
             >
               Redefinir senha
             </button>

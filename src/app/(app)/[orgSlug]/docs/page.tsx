@@ -57,7 +57,7 @@ export default async function DocsPage({
         <form action={handleCreate}>
           <button
             type="submit"
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 transition"
+            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition"
           >
             <Plus className="w-4 h-4" />
             Novo documento
@@ -88,7 +88,7 @@ export default async function DocsPage({
       {Object.entries(workspaceGroups).map(([wsId, group]) => (
         <section key={wsId} className="mb-8">
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-2.5 h-2.5 rounded-sm bg-indigo-400" />
+            <div className="w-2.5 h-2.5 rounded-sm bg-orange-400" />
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">{group.name}</h2>
           </div>
           <DocList docs={group.docs} orgSlug={orgSlug} />

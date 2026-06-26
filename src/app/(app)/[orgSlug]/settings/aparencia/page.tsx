@@ -21,11 +21,11 @@ function contrastColor(hex: string): string {
 }
 
 const ACCENT_PRESETS = [
-  '#6366f1', // indigo (default)
+  '#6366f1', // indigo
   '#8b5cf6', // violet
   '#ec4899', // pink
   '#ef4444', // red
-  '#f97316', // orange
+  '#f97316', // orange (default)
   '#eab308', // yellow
   '#22c55e', // green
   '#14b8a6', // teal
@@ -230,7 +230,7 @@ export default function AparenciaPage() {
                     type="text"
                     value={o.label ?? s.label}
                     onChange={e => setOverride(s.value, { label: e.target.value === s.label ? undefined : e.target.value })}
-                    className="flex-1 text-xs border border-transparent hover:border-gray-200 focus:border-indigo-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-transparent min-w-0"
+                    className="flex-1 text-xs border border-transparent hover:border-gray-200 focus:border-orange-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-orange-400 bg-transparent min-w-0"
                   />
                 </div>
 
@@ -276,7 +276,7 @@ export default function AparenciaPage() {
         <button
           onClick={handleSave}
           disabled={isPending}
-          className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-[#fff] text-sm font-semibold rounded-xl hover:bg-indigo-700 transition disabled:opacity-50"
+          className="flex items-center gap-2 px-5 py-2.5 bg-orange-600 text-[#fff] text-sm font-semibold rounded-xl hover:bg-orange-700 transition disabled:opacity-50"
         >
           {isPending && <Loader2 className="w-4 h-4 animate-spin" />}
           Salvar aparência

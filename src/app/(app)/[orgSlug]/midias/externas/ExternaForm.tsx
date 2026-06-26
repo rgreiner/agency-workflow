@@ -36,7 +36,7 @@ const ESPECIE = ['Outdoor', 'Busdoor', 'Painel', 'LED', 'Mobiliário Urbano', 'O
 const NEGOCIACAO = [{ value: 'custos_normais', label: 'Custos Normais' }, { value: 'valor_fechado', label: 'Valor Fechado' }]
 const PRODUCAO_TIPO = [{ value: 'no_veiculo', label: 'No Veículo' }, { value: 'de_terceiros', label: 'De Terceiros' }]
 
-const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent'
+const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 const cardCls = 'bg-white rounded-2xl border border-gray-200 p-5'
 
@@ -217,9 +217,9 @@ export function ExternaForm({
             <div><label className={labelCls}>Desconto exibição (%)</label><input inputMode="decimal" value={form.desconto_exibicao} onChange={e => set('desconto_exibicao', e.target.value)} className={inputCls} /></div>
             <div><label className={labelCls}>Desconto Padrão Agência (%)</label><input inputMode="decimal" value={form.desconto_pct} onChange={e => set('desconto_pct', e.target.value)} className={inputCls} /></div>
           </div>
-          <div className="mt-3 rounded-xl bg-indigo-50 border border-indigo-100 px-4 py-3 text-sm text-indigo-900">
+          <div className="mt-3 rounded-xl bg-orange-50 border border-orange-100 px-4 py-3 text-sm text-orange-900">
             Valor: <strong>{formatBRL(valor)}</strong> · Comissão da agência: <strong>{formatBRL(comissao)}</strong>
-            <span className="text-indigo-700"> (paga pelo {pagador === 'veiculo' ? 'veículo' : 'cliente'})</span>
+            <span className="text-orange-700"> (paga pelo {pagador === 'veiculo' ? 'veículo' : 'cliente'})</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
             <div><label className={labelCls}>Faturamento</label><Select value={form.faturamento} onChange={v => set('faturamento', v)} options={MIDIA_FATURAMENTO_OPTIONS} /></div>
@@ -252,7 +252,7 @@ export function ExternaForm({
 
         <div className="flex justify-end gap-2 pb-10">
           <button type="button" onClick={() => router.back()} className="px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
-          <button aria-label="Salvar" type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition">
+          <button aria-label="Salvar" type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-5 py-2.5 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{submitLabel}
           </button>
         </div>

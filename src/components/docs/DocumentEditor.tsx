@@ -320,7 +320,7 @@ function Btn({ onClick, active, title, children }: { onClick: () => void; active
       title={title}
       className={cn(
         'p-1.5 rounded transition-colors',
-        active ? 'bg-indigo-100 text-indigo-700' : 'text-gray-400 hover:text-gray-800 hover:bg-gray-100'
+        active ? 'bg-orange-100 text-orange-700' : 'text-gray-400 hover:text-gray-800 hover:bg-gray-100'
       )}
     >
       {children}

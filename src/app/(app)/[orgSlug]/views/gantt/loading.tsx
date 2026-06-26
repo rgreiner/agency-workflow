@@ -21,7 +21,7 @@ export default function GanttLoading() {
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="px-4 py-3 border-b border-gray-50 last:border-0">
             <div
-              className="h-6 bg-indigo-100/70 rounded-md"
+              className="h-6 bg-orange-100/70 rounded-md"
               style={{ width: `${25 + ((i * 17) % 45)}%`, marginLeft: `${(i * 13) % 40}%` }}
             />
           </div>

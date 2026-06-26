@@ -96,9 +96,9 @@ export function MachinePath({ winPath, compact = false, editable = false, activi
             else if (e.key === 'Escape') setEditing(false)
           }}
           placeholder={'G:\\Drives compartilhados\\...'}
-          className="flex-1 min-w-0 px-2 py-1 rounded-lg border border-gray-300 text-xs font-mono text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+          className="flex-1 min-w-0 px-2 py-1 rounded-lg border border-gray-300 text-xs font-mono text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-300"
         />
-        <button type="button" onClick={save} disabled={saving} title="Salvar" className="shrink-0 text-indigo-600 hover:text-indigo-700 disabled:opacity-50">
+        <button type="button" onClick={save} disabled={saving} title="Salvar" className="shrink-0 text-orange-600 hover:text-orange-700 disabled:opacity-50">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
         </button>
         <button type="button" onClick={() => setEditing(false)} title="Cancelar" className="shrink-0 text-gray-400 hover:text-gray-600">
@@ -111,7 +111,7 @@ export function MachinePath({ winPath, compact = false, editable = false, activi
   // ── Vazio ──
   if (!has) {
     return editable ? (
-      <button type="button" onClick={startEdit} className="text-xs text-gray-400 italic hover:text-indigo-500 transition-colors">
+      <button type="button" onClick={startEdit} className="text-xs text-gray-400 italic hover:text-orange-500 transition-colors">
         Clique para definir o caminho
       </button>
     ) : <span className="text-xs text-gray-300">—</span>
@@ -124,7 +124,7 @@ export function MachinePath({ winPath, compact = false, editable = false, activi
         type="button"
         onClick={copy}
         title="Clique para copiar"
-        className="flex items-center gap-1.5 min-w-0 text-xs text-gray-600 font-mono hover:text-indigo-600 transition-colors text-left"
+        className="flex items-center gap-1.5 min-w-0 text-xs text-gray-600 font-mono hover:text-orange-600 transition-colors text-left"
       >
         <span className="truncate">{display}</span>
         {copied

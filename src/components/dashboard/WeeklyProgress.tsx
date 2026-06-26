@@ -38,9 +38,9 @@ function getMotivation(done: number, total: number, overdue: number, myActiveCou
   if (overdue === 0 && pct >= 66) {
     return {
       icon: Flame,
-      color: 'text-indigo-600',
-      bg: 'bg-indigo-50',
-      bar: 'bg-indigo-500',
+      color: 'text-orange-600',
+      bg: 'bg-orange-50',
+      bar: 'bg-orange-500',
       msg: 'Você está voando! Quase lá.',
       sub: `${done} de ${total} tarefa${total !== 1 ? 's' : ''} concluída${done !== 1 ? 's' : ''} — mantenha o ritmo.`,
     }

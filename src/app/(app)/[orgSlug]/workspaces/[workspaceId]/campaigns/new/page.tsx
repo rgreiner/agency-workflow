@@ -56,7 +56,7 @@ export default function NewCampaignPage() {
             value={form.name}
             onChange={(e) => set('name', e.target.value)}
             placeholder="Ex: Lançamento Verão 2025"
-            className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
             required
           />
         </div>
@@ -71,7 +71,7 @@ export default function NewCampaignPage() {
             onChange={(e) => set('description', e.target.value)}
             placeholder="Objetivo, briefing geral..."
             rows={3}
-            className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+            className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
           />
         </div>
 
@@ -96,7 +96,7 @@ export default function NewCampaignPage() {
             value={form.drive_folder}
             onChange={(e) => set('drive_folder', e.target.value)}
             placeholder="https://drive.google.com/drive/folders/…"
-            className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
           />
           <p className="text-xs text-gray-400 mt-1">As tarefas desta campanha criarão pastas dentro dela automaticamente.</p>
         </div>
@@ -114,7 +114,7 @@ export default function NewCampaignPage() {
           <button
             type="submit"
             disabled={!form.name.trim() || isPending}
-            className="flex-1 py-3 bg-indigo-600 text-[#fff] font-medium rounded-xl hover:bg-indigo-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex-1 py-3 bg-orange-600 text-[#fff] font-medium rounded-xl hover:bg-orange-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {isPending ? 'Criando...' : 'Criar campanha'}
           </button>

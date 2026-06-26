@@ -97,7 +97,7 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   placeholder="Buscar status…"
-                  className="w-full pl-7 pr-2 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full pl-7 pr-2 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
               </div>
             </div>
@@ -188,14 +188,14 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
           onChange={e => setComment(e.target.value)}
           placeholder="Observação sobre a mudança (opcional)..."
           rows={2}
-          className="w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-700 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none mb-3"
+          className="w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-700 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none mb-3"
         />
       )}
 
       <button
         onClick={handleSave}
         disabled={!changed || isPending}
-        className="w-full py-2.5 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+        className="w-full py-2.5 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {isPending ? 'Salvando...' : 'Salvar status'}
       </button>

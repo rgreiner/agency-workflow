@@ -35,7 +35,7 @@ export default async function BoardsPage({
         </div>
         <Link
           href={`/${orgSlug}/boards/new`}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 transition"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition"
         >
           <Plus className="w-4 h-4" />
           Novo quadro
@@ -44,8 +44,8 @@ export default async function BoardsPage({
 
       {(!boards || boards.length === 0) ? (
         <div className="flex flex-col items-center justify-center py-24 bg-white rounded-2xl border border-gray-200">
-          <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4">
-            <Layout className="w-8 h-8 text-indigo-400" />
+          <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center mb-4">
+            <Layout className="w-8 h-8 text-orange-400" />
           </div>
           <p className="text-gray-900 font-medium">Nenhum quadro ainda</p>
           <p className="text-gray-500 text-sm mt-1 mb-6">
@@ -53,7 +53,7 @@ export default async function BoardsPage({
           </p>
           <Link
             href={`/${orgSlug}/boards/new`}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 transition"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition"
           >
             <Plus className="w-4 h-4" />
             Criar primeiro quadro
@@ -64,12 +64,12 @@ export default async function BoardsPage({
           {/* New board card */}
           <Link
             href={`/${orgSlug}/boards/new`}
-            className="group flex flex-col items-center justify-center h-40 rounded-2xl border-2 border-dashed border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition"
+            className="group flex flex-col items-center justify-center h-40 rounded-2xl border-2 border-dashed border-gray-200 hover:border-orange-300 hover:bg-orange-50/50 transition"
           >
-            <div className="w-10 h-10 rounded-xl bg-gray-100 group-hover:bg-indigo-100 flex items-center justify-center mb-2 transition">
-              <Plus className="w-5 h-5 text-gray-400 group-hover:text-indigo-500 transition" />
+            <div className="w-10 h-10 rounded-xl bg-gray-100 group-hover:bg-orange-100 flex items-center justify-center mb-2 transition">
+              <Plus className="w-5 h-5 text-gray-400 group-hover:text-orange-500 transition" />
             </div>
-            <span className="text-sm font-medium text-gray-400 group-hover:text-indigo-600 transition">
+            <span className="text-sm font-medium text-gray-400 group-hover:text-orange-600 transition">
               Novo quadro
             </span>
           </Link>
@@ -84,10 +84,10 @@ export default async function BoardsPage({
               <Link
                 key={board.id}
                 href={`/${orgSlug}/boards/${board.id}`}
-                className="group flex flex-col h-40 rounded-2xl border border-gray-200 bg-white hover:border-indigo-200 hover:shadow-md transition overflow-hidden"
+                className="group flex flex-col h-40 rounded-2xl border border-gray-200 bg-white hover:border-orange-200 hover:shadow-md transition overflow-hidden"
               >
                 {/* Preview area */}
-                <div className="flex-1 bg-gradient-to-br from-slate-50 to-indigo-50/30 relative overflow-hidden">
+                <div className="flex-1 bg-gradient-to-br from-slate-50 to-orange-50/30 relative overflow-hidden">
                   <div className="absolute top-3 left-3 w-16 h-10 bg-yellow-100 rounded-lg shadow-sm opacity-70" />
                   <div className="absolute top-4 left-24 w-20 h-8 bg-blue-100 rounded-lg shadow-sm opacity-70" />
                   <div className="absolute top-12 left-5 w-12 h-8 bg-pink-100 rounded-lg shadow-sm opacity-70" />
@@ -96,7 +96,7 @@ export default async function BoardsPage({
 
                 {/* Footer */}
                 <div className="px-3.5 py-3 border-t border-gray-100">
-                  <p className="text-sm font-semibold text-gray-900 truncate group-hover:text-indigo-600 transition">
+                  <p className="text-sm font-semibold text-gray-900 truncate group-hover:text-orange-600 transition">
                     {board.title}
                   </p>
                   <div className="flex items-center gap-1.5 mt-1">

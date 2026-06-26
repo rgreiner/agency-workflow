@@ -404,7 +404,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
             className={cn(
               'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded-lg border transition',
               onlyMine
-                ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                ? 'bg-orange-50 border-orange-200 text-orange-700'
                 : 'bg-white border-gray-200 text-gray-500 hover:text-gray-700 hover:border-gray-300'
             )}
           >
@@ -476,13 +476,13 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                 onChange={e => setSaveName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') saveCurrentFilter(); if (e.key === 'Escape') setSaveOpen(false) }}
                 placeholder="Nome do filtro"
-                className="w-full px-2.5 py-1.5 bg-gray-100 border border-transparent rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-2.5 py-1.5 bg-gray-100 border border-transparent rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
               <div className="flex justify-end gap-2 mt-2">
                 <button type="button" onClick={() => { setSaveOpen(false); setSaveName('') }}
                   className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Cancelar</button>
                 <button type="button" onClick={saveCurrentFilter} disabled={!saveName.trim()}
-                  className="text-xs font-medium px-3 py-1 rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-50 transition">Salvar</button>
+                  className="text-xs font-medium px-3 py-1 rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 disabled:opacity-50 transition">Salvar</button>
               </div>
             </div>
           )}
@@ -494,7 +494,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
           <span key={f.id}
             className={cn(
               'inline-flex items-center gap-1 rounded-full border pl-3 pr-1 py-1 text-xs transition',
-              isSavedActive(f) ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+              isSavedActive(f) ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
             )}>
             <button type="button" onClick={() => applySavedFilter(f)} className="max-w-[140px] truncate" title={f.name}>{f.name}</button>
             <button type="button" onClick={() => deleteSavedFilter(f.id)} title="Excluir filtro"
@@ -507,7 +507,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
 
       {/* ── Drop bar: todos os status como alvo durante o arraste ── */}
       {draggingId && (
-        <div className="hidden md:flex flex-wrap items-center gap-1.5 mb-4 p-3 bg-white rounded-xl border-2 border-dashed border-indigo-200 animate-[slideUp_0.15s_ease-out]">
+        <div className="hidden md:flex flex-wrap items-center gap-1.5 mb-4 p-3 bg-white rounded-xl border-2 border-dashed border-orange-200 animate-[slideUp_0.15s_ease-out]">
           <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider w-full mb-1">
             Solte em um status
           </span>
@@ -520,7 +520,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
               style={{ backgroundColor: s.bg, color: s.text }}
               className={cn(
                 'text-xs font-semibold px-2.5 py-1 rounded-full cursor-copy transition-transform',
-                dragOverStatus === s.value && 'scale-110 ring-2 ring-indigo-400 ring-offset-1'
+                dragOverStatus === s.value && 'scale-110 ring-2 ring-orange-400 ring-offset-1'
               )}
             >
               {s.label}
@@ -568,7 +568,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
               title="Colunas — mostrar, ocultar e reordenar"
               className={cn(
                 'flex items-center justify-center w-[22px] h-[22px] rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition',
-                pickerOpen && 'bg-indigo-50 text-indigo-600'
+                pickerOpen && 'bg-orange-50 text-orange-600'
               )}
             >
               <Columns3 className="w-4 h-4" />
@@ -601,7 +601,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                       <span>{col.label}</span>
                       <span className={cn(
                         'w-4 h-4 rounded border flex items-center justify-center transition',
-                        cols[col.key] ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'
+                        cols[col.key] ? 'bg-orange-600 border-orange-600' : 'border-gray-300'
                       )}>
                         {cols[col.key] && <Check className="w-2.5 h-2.5 text-white" />}
                       </span>
@@ -644,7 +644,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                 onDrop={e => { e.preventDefault(); handleDrop(statusCfg.value) }}
                 className={cn(
                   'bg-white rounded-xl border border-gray-200 shadow-sm transition-colors',
-                  draggingId && dragOverStatus === statusCfg.value && 'ring-2 ring-inset ring-indigo-300'
+                  draggingId && dragOverStatus === statusCfg.value && 'ring-2 ring-inset ring-orange-300'
                 )}
               >
 
@@ -756,7 +756,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                                     {camp.client} / {camp.name}
                                   </span>
                                 )}
-                                <span className="text-sm font-medium text-gray-900 group-hover:text-indigo-700 transition block truncate">
+                                <span className="text-sm font-medium text-gray-900 group-hover:text-orange-700 transition block truncate">
                                   {activity.title}
                                 </span>
                               </div>
@@ -781,7 +781,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                             className={cn(
                               'hidden md:flex items-center gap-2 px-4 py-2 group cursor-grab active:cursor-grabbing',
                               draggingId === activity.id && 'opacity-40',
-                              isSel && 'bg-indigo-50/60'
+                              isSel && 'bg-orange-50/60'
                             )}
                           >
                             {/* Checkbox de seleção */}
@@ -809,7 +809,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                                     {camp.client} / {camp.name}
                                   </span>
                                 )}
-                                <span className="text-sm font-medium text-gray-900 group-hover:text-indigo-700 transition truncate block">
+                                <span className="text-sm font-medium text-gray-900 group-hover:text-orange-700 transition truncate block">
                                   {activity.title}
                                 </span>
                               </Link>
@@ -827,7 +827,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                               type="button"
                               title={isArchivedView ? 'Desarquivar' : 'Arquivar'}
                               onClick={e => { e.preventDefault(); e.stopPropagation(); archiveActivity(activity.id, activity.title) }}
-                              className="p-1 rounded text-gray-300 hover:text-indigo-600 hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition shrink-0"
+                              className="p-1 rounded text-gray-300 hover:text-orange-600 hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition shrink-0"
                             >
                               {isArchivedView ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
                             </button>
@@ -888,7 +888,7 @@ function SelectBox({ checked, indeterminate, onChange, className }: {
       onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange() }}
       className={cn(
         'w-4 h-4 rounded border flex items-center justify-center shrink-0 transition',
-        checked || indeterminate ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-300 bg-white hover:border-gray-400',
+        checked || indeterminate ? 'bg-orange-600 border-orange-600 text-white' : 'border-gray-300 bg-white hover:border-gray-400',
         className,
       )}
     >
@@ -929,7 +929,7 @@ function BulkActionBar({
   }, [])
 
   // Campo de data com o mesmo visual dos demais inputs do app (claro e escuro).
-  const dateInputClass = 'mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 transition [color-scheme:light] dark:[color-scheme:dark]'
+  const dateInputClass = 'mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-300 transition [color-scheme:light] dark:[color-scheme:dark]'
 
   return (
     <div ref={ref} className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-[slideUp_0.15s_ease-out]">
@@ -975,7 +975,7 @@ function BulkActionBar({
                         <button key={m.userId} type="button"
                           onClick={() => setPickAssignees(prev => on ? prev.filter(x => x !== m.userId) : [...prev, m.userId])}
                           className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition text-left">
-                          <span className={cn('w-4 h-4 rounded border flex items-center justify-center shrink-0', on ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300')}>
+                          <span className={cn('w-4 h-4 rounded border flex items-center justify-center shrink-0', on ? 'bg-orange-600 border-orange-600' : 'border-gray-300')}>
                             {on && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                           </span>
                           <span className="text-sm text-gray-700 truncate">{m.fullName ?? m.email.split('@')[0]}</span>
@@ -986,7 +986,7 @@ function BulkActionBar({
                   <div className="flex items-center justify-end px-3 pt-2 mt-1 border-t border-gray-100">
                     <button type="button" disabled={pickAssignees.length === 0}
                       onClick={() => { const sel = pickAssignees; closeMenu(); onAssignees(sel) }}
-                      className="text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-50 transition">
+                      className="text-xs font-medium px-3 py-1.5 rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 disabled:opacity-50 transition">
                       Adicionar{pickAssignees.length > 0 ? ` (${pickAssignees.length})` : ''}
                     </button>
                   </div>
@@ -1017,7 +1017,7 @@ function BulkActionBar({
                   className="text-xs text-gray-500 hover:text-gray-700 transition">Remover datas</button>
                 <button type="button" disabled={!start && !due}
                   onClick={() => { const s = start || undefined; const d = due || undefined; closeMenu(); onDates(s, d) }}
-                  className="text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-50 transition">Aplicar</button>
+                  className="text-xs font-medium px-3 py-1.5 rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 disabled:opacity-50 transition">Aplicar</button>
               </div>
             </div>
           )}
@@ -1046,7 +1046,7 @@ function BarButton({ icon: Icon, label, onClick, active }: {
     <button type="button" onClick={onClick}
       className={cn(
         'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded-lg transition',
-        active ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-100'
+        active ? 'bg-orange-50 text-orange-700' : 'text-gray-600 hover:bg-gray-100'
       )}>
       <Icon className="w-4 h-4" />
       <span className="hidden sm:inline">{label}</span>
@@ -1171,7 +1171,7 @@ function GroupAddTask({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-gray-400 hover:text-indigo-600 hover:bg-gray-50/60 transition"
+        className="w-full flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-gray-400 hover:text-orange-600 hover:bg-gray-50/60 transition"
       >
         <Plus className="w-3.5 h-3.5" /> Tarefa
       </button>
@@ -1185,7 +1185,7 @@ function GroupAddTask({
   const filtered = term ? items.filter(i => `${i.client} ${i.name}`.toLowerCase().includes(term)) : items
 
   return (
-    <div className="flex items-center gap-2 px-4 py-2 bg-indigo-50/40">
+    <div className="flex items-center gap-2 px-4 py-2 bg-orange-50/40">
       {/* Seletor de campanha (só na Lista multi-campanha) */}
       {!fixedCampaign && (
         <div className="relative shrink-0" ref={campRef}>
@@ -1194,7 +1194,7 @@ function GroupAddTask({
             onClick={() => setCampOpen(o => !o)}
             className={cn(
               'inline-flex items-center gap-1 max-w-[180px] text-xs rounded-lg border px-2.5 py-1.5 transition',
-              camp ? 'border-indigo-200 bg-white text-gray-700' : 'border-gray-200 bg-white text-gray-400 hover:border-indigo-300'
+              camp ? 'border-orange-200 bg-white text-gray-700' : 'border-gray-200 bg-white text-gray-400 hover:border-orange-300'
             )}
           >
             <span className="truncate">{camp ? camp.label : 'Campanha'}</span>
@@ -1239,14 +1239,14 @@ function GroupAddTask({
         onChange={e => setTitle(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit() } if (e.key === 'Escape') close() }}
         placeholder="Nome da tarefa…"
-        className="flex-1 min-w-0 text-sm bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="flex-1 min-w-0 text-sm bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-500"
       />
       <button type="button" onClick={close} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 shrink-0">Cancelar</button>
       <button
         type="button"
         onClick={submit}
         disabled={!canSave || pending}
-        className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-50 transition shrink-0"
+        className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 disabled:opacity-50 transition shrink-0"
       >
         {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
         Salvar
@@ -1282,7 +1282,7 @@ function NewActivityButton({
     return (
       <Link
         href={`/${orgSlug}/workspaces/${fixedCampaign.workspaceId}/campaigns/${fixedCampaign.campaignId}/activities/new`}
-        className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 transition"
+        className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 transition"
       >
         <Plus className="w-4 h-4" />
         <span className="hidden sm:inline">Nova atividade</span>
@@ -1303,7 +1303,7 @@ function NewActivityButton({
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 transition"
+        className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 transition"
       >
         <Plus className="w-4 h-4" />
         <span className="hidden sm:inline">Nova atividade</span>
@@ -1354,7 +1354,7 @@ function DriveLink({ url, label }: { url: string; label: string }) {
         target="_blank"
         rel="noopener noreferrer"
         onClick={e => e.stopPropagation()}
-        className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 hover:underline min-w-0"
+        className="inline-flex items-center gap-1 text-xs text-orange-500 hover:text-orange-700 hover:underline min-w-0"
       >
         <ExternalLink className="w-3 h-3 shrink-0" />
         <span className="truncate">{label}</span>
@@ -1430,7 +1430,7 @@ function AssigneeCell({ activityId, assignedIds, members }: {
       >
         {assigned.length > 0
           ? <AvatarGroup users={assigned.map(m => ({ full_name: m.fullName, avatar_url: m.avatarUrl }))} />
-          : <span className="text-xs text-gray-300 hover:text-indigo-500 transition">+ atribuir</span>}
+          : <span className="text-xs text-gray-300 hover:text-orange-500 transition">+ atribuir</span>}
       </button>
       {open && (
         <div className="pop-in absolute left-0 top-7 z-30 w-56 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 max-h-64 overflow-y-auto">
@@ -1445,7 +1445,7 @@ function AssigneeCell({ activityId, assignedIds, members }: {
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggle(m.userId) }}
                 className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition text-left"
               >
-                <span className={cn('w-4 h-4 rounded border flex items-center justify-center shrink-0', on ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300')}>
+                <span className={cn('w-4 h-4 rounded border flex items-center justify-center shrink-0', on ? 'bg-orange-600 border-orange-600' : 'border-gray-300')}>
                   {on && <Check className="w-2.5 h-2.5 text-white" />}
                 </span>
                 <span className="text-sm text-gray-700 truncate">{m.fullName ?? m.email.split('@')[0]}</span>

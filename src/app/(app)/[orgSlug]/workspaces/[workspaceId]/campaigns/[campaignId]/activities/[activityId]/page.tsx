@@ -374,7 +374,7 @@ export default async function ActivityPage({
                         target="_blank"
                         rel="noopener noreferrer"
                         title="Abrir a pasta-raiz do job no Google Drive"
-                        className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 hover:underline shrink-0"
+                        className="inline-flex items-center gap-1 text-xs text-orange-500 hover:text-orange-700 hover:underline shrink-0"
                       >
                         <ExternalLink className="w-3 h-3 shrink-0" />
                         Abrir no Drive
@@ -396,7 +396,7 @@ export default async function ActivityPage({
                         {url ? (
                           <>
                             <a href={url} target="_blank" rel="noopener noreferrer"
-                              className="text-xs text-indigo-600 hover:underline truncate flex items-center gap-1">
+                              className="text-xs text-orange-600 hover:underline truncate flex items-center gap-1">
                               <ExternalLink className="w-3 h-3 shrink-0" />
                               {url.replace(/^https?:\/\//, '').slice(0, 40)}{url.length > 47 ? '…' : ''}
                             </a>
@@ -470,7 +470,7 @@ export default async function ActivityPage({
                           <span className="text-[10px] text-gray-500">{formatDate(item.at)}</span>
                         </div>
                         {item.replyTo && commentsById.has(item.replyTo) && (
-                          <div className="mb-1.5 border-l-2 border-indigo-200 pl-2 py-0.5 bg-gray-50 rounded-r text-xs text-gray-500">
+                          <div className="mb-1.5 border-l-2 border-orange-200 pl-2 py-0.5 bg-gray-50 rounded-r text-xs text-gray-500">
                             <span className="font-medium text-gray-600">{commentsById.get(item.replyTo)!.author}</span>
                             <span className="block line-clamp-2">{commentsById.get(item.replyTo)!.content}</span>
                           </div>

@@ -112,7 +112,7 @@ export function MemberRow({
           <select
             value={selectedPosition}
             onChange={(e) => handlePositionChange(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+            className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
           >
             <option value="">Sem cargo</option>
             {positions.map(p => (
@@ -120,7 +120,7 @@ export function MemberRow({
             ))}
           </select>
         ) : isOwner ? (
-          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-600">
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-orange-50 text-orange-600">
             Acesso total
           </span>
         ) : position ? (
@@ -141,7 +141,7 @@ export function MemberRow({
           <select
             value={selectedRole}
             onChange={(e) => handleRoleChange(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+            className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
           >
             {ROLES.filter(r => r !== 'owner').map(r => (
               <option key={r} value={r}>{roleLabels[r]}</option>
@@ -166,7 +166,7 @@ export function MemberRow({
             onClick={() => handleFinanceChange(!selectedFinance)}
             className={cn(
               'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-              selectedFinance ? 'bg-indigo-600' : 'bg-gray-300'
+              selectedFinance ? 'bg-orange-600' : 'bg-gray-300'
             )}
             title="Ver/operar Financeiro e Faturamento"
           >
@@ -176,7 +176,7 @@ export function MemberRow({
             )} />
           </button>
         ) : canFinance ? (
-          <span className="inline-flex items-center gap-1 text-xs text-indigo-600">
+          <span className="inline-flex items-center gap-1 text-xs text-orange-600">
             <Check className="w-3.5 h-3.5" /> Sim
           </span>
         ) : (
@@ -198,7 +198,7 @@ export function MemberRow({
             onClick={() => handleVendasChange(!selectedVendas)}
             className={cn(
               'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-              selectedVendas ? 'bg-indigo-600' : 'bg-gray-300'
+              selectedVendas ? 'bg-orange-600' : 'bg-gray-300'
             )}
             title="Ver Mídias / Produção / Cadastros"
           >
@@ -208,7 +208,7 @@ export function MemberRow({
             )} />
           </button>
         ) : canVendas ? (
-          <span className="inline-flex items-center gap-1 text-xs text-indigo-600">
+          <span className="inline-flex items-center gap-1 text-xs text-orange-600">
             <Check className="w-3.5 h-3.5" /> Sim
           </span>
         ) : (
@@ -224,7 +224,7 @@ export function MemberRow({
               <button
                 onClick={handleSave}
                 disabled={isPending}
-                className="p-1.5 rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 transition disabled:opacity-50"
+                className="p-1.5 rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 transition disabled:opacity-50"
                 title="Salvar"
               >
                 {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}

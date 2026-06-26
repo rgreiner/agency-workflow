@@ -80,7 +80,7 @@ export function RecurrenceEditor({ activityId, path, recurrence, remaining, rese
   if (!canEdit) {
     if (!recurrence) return null
     return (
-      <span className="flex items-center gap-1.5 text-xs bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-lg px-3 py-1.5">
+      <span className="flex items-center gap-1.5 text-xs bg-orange-50 border border-orange-100 text-orange-700 rounded-lg px-3 py-1.5">
         <Repeat className="w-3.5 h-3.5 shrink-0" />
         {FREQ_LABEL[recurrence] ?? 'Recorrente'} · {remaining == null ? '∞' : `${remaining}x`}
       </span>
@@ -96,15 +96,15 @@ export function RecurrenceEditor({ activityId, path, recurrence, remaining, rese
         className={cn(
           'flex items-center gap-1.5 text-xs rounded-lg px-3 py-1.5 transition',
           state.enabled
-            ? 'bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100'
-            : 'bg-gray-50 border border-gray-200 text-gray-400 hover:border-indigo-300 hover:bg-indigo-50',
+            ? 'bg-orange-50 border border-orange-200 text-orange-700 hover:bg-orange-100'
+            : 'bg-gray-50 border border-gray-200 text-gray-400 hover:border-orange-300 hover:bg-orange-50',
         )}
       >
         <Repeat className="w-3.5 h-3.5 shrink-0" />
         {state.enabled
           ? <span>{FREQ_LABEL[state.freq]} · {state.noLimit ? '∞' : `${state.count}x`}</span>
           : <span>Repetir</span>}
-        {isPending && <Loader2 className="w-3 h-3 text-indigo-500 animate-spin shrink-0" />}
+        {isPending && <Loader2 className="w-3 h-3 text-orange-500 animate-spin shrink-0" />}
       </button>
 
       {open && (
@@ -122,7 +122,7 @@ export function RecurrenceEditor({ activityId, path, recurrence, remaining, rese
           >
             <span className={cn(
               'w-9 h-5 rounded-full flex items-center px-0.5 transition shrink-0',
-              state.enabled ? 'bg-indigo-600 justify-end' : 'bg-gray-200 justify-start',
+              state.enabled ? 'bg-orange-600 justify-end' : 'bg-gray-200 justify-start',
             )}>
               <span className="w-4 h-4 rounded-full bg-white shadow" />
             </span>
@@ -148,7 +148,7 @@ export function RecurrenceEditor({ activityId, path, recurrence, remaining, rese
                 <button
                   type="button"
                   onClick={() => setStatusOpen(o => !o)}
-                  className="w-full flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-2 py-1.5 hover:border-indigo-300 transition"
+                  className="w-full flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-2 py-1.5 hover:border-orange-300 transition"
                 >
                   {resetCfg
                     ? <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ backgroundColor: resetCfg.bg, color: resetCfg.text }}>{resetCfg.label}</span>
@@ -184,7 +184,7 @@ export function RecurrenceEditor({ activityId, path, recurrence, remaining, rese
                     onChange={e => setState(s => ({ ...s, count: Math.max(1, Number(e.target.value) || 1) }))}
                     onBlur={() => !state.noLimit && save(state)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); save(state); setOpen(false) } }}
-                    className="w-16 text-sm border border-gray-200 rounded-lg px-2 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-300"
+                    className="w-16 text-sm border border-gray-200 rounded-lg px-2 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:bg-gray-50 disabled:text-gray-300"
                   />
                   <span className="text-sm text-gray-500">vezes</span>
                   <button
@@ -193,8 +193,8 @@ export function RecurrenceEditor({ activityId, path, recurrence, remaining, rese
                     className={cn(
                       'ml-auto flex items-center gap-1 text-xs rounded-lg px-2 py-1.5 transition border',
                       state.noLimit
-                        ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
-                        : 'bg-white border-gray-200 text-gray-500 hover:border-indigo-300',
+                        ? 'bg-orange-50 border-orange-200 text-orange-700'
+                        : 'bg-white border-gray-200 text-gray-500 hover:border-orange-300',
                     )}
                   >
                     {state.noLimit ? <Check className="w-3 h-3" /> : <InfinityIcon className="w-3.5 h-3.5" />}

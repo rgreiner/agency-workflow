@@ -45,7 +45,7 @@ export function ReactionBar({ path, commentId, currentUserId, reactions }: {
       {groups.map(g => (
         <button key={g.emoji} onClick={() => toggle(g.emoji)}
           className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-xs transition-colors',
-            g.mine ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50')}>
+            g.mine ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50')}>
           <span className="leading-none">{g.emoji}</span><span>{g.count}</span>
         </button>
       ))}

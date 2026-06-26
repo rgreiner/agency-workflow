@@ -16,7 +16,7 @@ const ROLE_COLORS: Record<string, string> = {
   owner: 'bg-purple-100 text-purple-700',
   admin: 'bg-red-100 text-red-700',
   manager: 'bg-blue-100 text-blue-700',
-  member: 'bg-indigo-100 text-indigo-700',
+  member: 'bg-orange-100 text-orange-700',
   viewer: 'bg-gray-100 text-gray-600',
 }
 
@@ -103,17 +103,17 @@ export default async function ConvitePage({
 
   // User is NOT logged in — show invite landing page
   const roleLabel = ROLE_LABELS[invite.role] ?? invite.role
-  const roleColor = ROLE_COLORS[invite.role] ?? 'bg-indigo-100 text-indigo-700'
+  const roleColor = ROLE_COLORS[invite.role] ?? 'bg-orange-100 text-orange-700'
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-purple-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo / branding */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-indigo-600 rounded-2xl shadow-lg mb-4">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-orange-600 rounded-2xl shadow-lg mb-4">
             <Users className="w-7 h-7 text-white" />
           </div>
-          <p className="text-sm font-medium text-indigo-600 tracking-wide uppercase">
+          <p className="text-sm font-medium text-orange-600 tracking-wide uppercase">
             Agency Workflow
           </p>
         </div>

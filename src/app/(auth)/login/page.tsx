@@ -12,7 +12,7 @@ export default async function LoginPage({
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-10 w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-indigo-600 mb-4">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-orange-600 mb-4">
             <span className="text-white font-bold text-lg">AW</span>
           </div>
           <h1 className="text-2xl font-semibold text-gray-900">Agency Workflow</h1>
@@ -38,7 +38,7 @@ export default async function LoginPage({
               type="email"
               autoComplete="email"
               required
-              className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
           </div>
 
@@ -47,7 +47,7 @@ export default async function LoginPage({
               <label htmlFor="senha" className="block text-sm font-medium text-gray-700">
                 Senha
               </label>
-              <Link href="/recuperar-senha" className="text-xs text-indigo-600 hover:text-indigo-700">
+              <Link href="/recuperar-senha" className="text-xs text-orange-600 hover:text-orange-700">
                 Esqueci a senha
               </Link>
             </div>
@@ -57,7 +57,7 @@ export default async function LoginPage({
               type="password"
               autoComplete="current-password"
               required
-              className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
           </div>
 
@@ -69,7 +69,7 @@ export default async function LoginPage({
 
           <button
             type="submit"
-            className="w-full px-4 py-3 rounded-xl text-white font-medium bg-indigo-600 hover:bg-indigo-700 transition"
+            className="w-full px-4 py-3 rounded-xl text-white font-medium bg-orange-600 hover:bg-orange-700 transition"
           >
             Entrar
           </button>

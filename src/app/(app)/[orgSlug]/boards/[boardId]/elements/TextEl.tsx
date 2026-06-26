@@ -100,7 +100,7 @@ export function TextEl({ el, editing, selected, onUpdate, onStopEdit }: Props) {
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: 5,
-                backgroundColor: el.size === s.value ? '#4f46e5' : 'transparent',
+                backgroundColor: el.size === s.value ? '#ea580c' : 'transparent',
                 color: el.size === s.value ? '#fff' : '#9ca3af',
                 fontSize: 11,
                 fontWeight: 700,
@@ -123,7 +123,7 @@ export function TextEl({ el, editing, selected, onUpdate, onStopEdit }: Props) {
               width: 26, height: 24,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               borderRadius: 5,
-              backgroundColor: el.bold ? '#4f46e5' : 'transparent',
+              backgroundColor: el.bold ? '#ea580c' : 'transparent',
               color: el.bold ? '#fff' : '#9ca3af',
               cursor: 'pointer', border: 'none',
             }}
@@ -139,7 +139,7 @@ export function TextEl({ el, editing, selected, onUpdate, onStopEdit }: Props) {
               width: 26, height: 24,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               borderRadius: 5,
-              backgroundColor: el.italic ? '#4f46e5' : 'transparent',
+              backgroundColor: el.italic ? '#ea580c' : 'transparent',
               color: el.italic ? '#fff' : '#9ca3af',
               cursor: 'pointer', border: 'none',
             }}
@@ -161,7 +161,7 @@ export function TextEl({ el, editing, selected, onUpdate, onStopEdit }: Props) {
                   width: 26, height: 24,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   borderRadius: 5,
-                  backgroundColor: el.align === align ? '#4f46e5' : 'transparent',
+                  backgroundColor: el.align === align ? '#ea580c' : 'transparent',
                   color: el.align === align ? '#fff' : '#9ca3af',
                   cursor: 'pointer', border: 'none',
                 }}

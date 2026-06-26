@@ -136,9 +136,9 @@ export default function NewActivityPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
 
         {/* Preview do título */}
-        <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">
-          <p className="text-xs text-indigo-400 mb-1 font-medium">Título gerado</p>
-          <p className={cn('font-mono text-sm font-semibold', fullTitle ? 'text-indigo-700' : 'text-indigo-300')}>
+        <div className="bg-orange-50 border border-orange-100 rounded-xl px-4 py-3">
+          <p className="text-xs text-orange-400 mb-1 font-medium">Título gerado</p>
+          <p className={cn('font-mono text-sm font-semibold', fullTitle ? 'text-orange-700' : 'text-orange-300')}>
             {fullTitle || `${date} - Veículo - Formato - Título da demanda`}
           </p>
         </div>
@@ -150,7 +150,7 @@ export default function NewActivityPage() {
           </label>
           <input type="text" value={date} onChange={(e) => setDate(e.target.value)}
             maxLength={6} placeholder="260515"
-            className="w-40 px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+            className="w-40 px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 font-mono focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent" />
         </div>
 
         {/* Veículo */}
@@ -169,7 +169,7 @@ export default function NewActivityPage() {
           {veiculo === 'Outro' && (
             <input type="text" value={veiculoCustom} onChange={(e) => setVeiculoCustom(e.target.value)}
               placeholder="Qual veículo?" autoFocus
-              className="mt-2 px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent w-full" />
+              className="mt-2 px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent w-full" />
           )}
         </div>
 
@@ -189,7 +189,7 @@ export default function NewActivityPage() {
           {formato === 'Outro' && (
             <input type="text" value={formatoCustom} onChange={(e) => setFormatoCustom(e.target.value)}
               placeholder="Qual formato?" autoFocus
-              className="mt-2 px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent w-full" />
+              className="mt-2 px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent w-full" />
           )}
         </div>
 
@@ -200,7 +200,7 @@ export default function NewActivityPage() {
           </label>
           <input type="text" value={titulo} onChange={(e) => setTitulo(e.target.value)}
             placeholder="Ex: Visita a Fruit Attraction 2026"
-            className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
             required />
         </div>
 
@@ -215,7 +215,7 @@ export default function NewActivityPage() {
                 type="button"
                 onClick={handleImproveWithAI}
                 disabled={isImprovingAI}
-                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-full border border-indigo-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-full border border-orange-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Sparkles className={cn('w-3 h-3', isImprovingAI && 'animate-pulse')} />
                 {isImprovingAI ? 'Melhorando...' : 'Melhorar com IA'}
@@ -226,7 +226,7 @@ export default function NewActivityPage() {
             onChange={(e) => setF('description', e.target.value)}
             placeholder="Descreva o objetivo, diretrizes e referências..."
             rows={4}
-            className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none" />
+            className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none" />
         </div>
 
         {/* Status inicial */}
@@ -294,7 +294,7 @@ export default function NewActivityPage() {
             <input type="number" name="estimated_hours" value={form.estimated_hours}
               onChange={(e) => setF('estimated_hours', e.target.value)}
               placeholder="Ex: 4" min="0.5" step="0.5"
-              className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+              className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent" />
           </div>
         </div>
 
@@ -310,10 +310,10 @@ export default function NewActivityPage() {
             <input type="url" name="drive_folder_url" value={form.drive_folder_url}
               onChange={(e) => setF('drive_folder_url', e.target.value)}
               placeholder="https://drive.google.com/drive/folders/... ou open?id=..."
-              className="w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white" />
+              className="w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white" />
             {driveUrl && (
               <a href={driveUrl} target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 mt-1.5 text-xs text-indigo-600 hover:underline">
+                className="inline-flex items-center gap-1 mt-1.5 text-xs text-orange-600 hover:underline">
                 <ExternalLink className="w-3 h-3" /> Abrir pasta no Drive
               </a>
             )}
@@ -331,7 +331,7 @@ export default function NewActivityPage() {
                 value={form[field as keyof typeof form]}
                 onChange={(e) => setF(field, e.target.value)}
                 placeholder={placeholder}
-                className="flex-1 px-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white" />
+                className="flex-1 px-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white" />
             </div>
           ))}
         </div>
@@ -344,7 +344,7 @@ export default function NewActivityPage() {
             Cancelar
           </button>
           <button type="submit" disabled={!titulo.trim() || isPending}
-            className="flex-1 py-3 bg-indigo-600 text-[#fff] font-medium rounded-xl hover:bg-indigo-700 transition disabled:opacity-40 disabled:cursor-not-allowed">
+            className="flex-1 py-3 bg-orange-600 text-[#fff] font-medium rounded-xl hover:bg-orange-700 transition disabled:opacity-40 disabled:cursor-not-allowed">
             {isPending ? 'Criando...' : 'Criar atividade'}
           </button>
         </div>
