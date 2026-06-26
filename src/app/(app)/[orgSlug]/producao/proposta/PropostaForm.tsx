@@ -135,7 +135,7 @@ export function PropostaForm({
             <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Itens</h3>
             <div className="flex flex-wrap gap-1.5">
               {ITEM_TIPOS.map(t => (
-                <button key={t.value} type="button" onClick={() => addItem(t.value)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition"><Plus className="w-3 h-3" /> {t.label}</button>
+                <button aria-label="Adicionar" key={t.value} type="button" onClick={() => addItem(t.value)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition"><Plus className="w-3 h-3" /> {t.label}</button>
               ))}
             </div>
           </div>
@@ -156,7 +156,7 @@ export function PropostaForm({
                     <td className="px-1 py-1"><input inputMode="decimal" value={it.desconto} onChange={e => setItem(i, 'desconto', e.target.value)} className={cn(cellCls, 'text-right')} /></td>
                     <td className="px-1 py-1"><Select size="sm" value={it.situacao} onChange={v => setItem(i, 'situacao', v)} options={MIDIA_SITUACAO_OPTIONS} /></td>
                     <td className="px-1 py-1 text-right font-medium whitespace-nowrap">{formatBRL(itemValor(it))}</td>
-                    <td className="px-1 py-1 text-right">{form.itens.length > 1 && <button type="button" onClick={() => delItem(i)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-3.5 h-3.5" /></button>}</td>
+                    <td className="px-1 py-1 text-right">{form.itens.length > 1 && <button aria-label="Remover" type="button" onClick={() => delItem(i)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-3.5 h-3.5" /></button>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -203,7 +203,7 @@ export function PropostaForm({
                   <input type="date" value={p.vencimento} onChange={e => setParc(i, 'vencimento', e.target.value)} className={cn(inputCls, 'sm:w-48')} />
                   <input inputMode="decimal" value={p.valor} onChange={e => setParc(i, 'valor', e.target.value)} placeholder="0,00" className={cn(inputCls, 'sm:w-40 text-right')} />
                   <span className="text-xs text-gray-400 flex-1">Receber do Cliente</span>
-                  <button type="button" onClick={() => delParc(i)} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>
+                  <button aria-label="Remover" type="button" onClick={() => delParc(i)} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>
                 </div>
               ))}
             </div>
@@ -227,7 +227,7 @@ export function PropostaForm({
 
         <div className="flex justify-end gap-2 pb-10">
           <button type="button" onClick={() => router.back()} className="px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
-          <button type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition">
+          <button aria-label="Salvar" type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition">
             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{submitLabel}
           </button>
         </div>

@@ -88,7 +88,7 @@ export function InviteButton({ orgId, orgSlug }: Props) {
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <p className="text-sm font-semibold text-gray-700">Convidar membro</p>
-            <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600">
+            <button aria-label="Fechar" onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -125,7 +125,7 @@ export function InviteButton({ orgId, orgSlug }: Props) {
                     value={inviteUrl}
                     className="flex-1 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 truncate focus:outline-none"
                   />
-                  <button
+                  <button aria-label="Copiar"
                     onClick={handleCopy}
                     className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition whitespace-nowrap"
                   >

@@ -183,7 +183,7 @@ export function ExternaForm({
               <div key={i} className="flex gap-2 items-center">
                 <input value={l.endereco} onChange={e => setLoc(i, 'endereco', e.target.value)} placeholder="Endereço / código do ponto" className={inputCls} />
                 <input value={l.cidade} onChange={e => setLoc(i, 'cidade', e.target.value)} placeholder="Cidade" className={inputCls} />
-                {form.localizacoes.length > 1 && <button type="button" onClick={() => delLoc(i)} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>}
+                {form.localizacoes.length > 1 && <button aria-label="Remover" type="button" onClick={() => delLoc(i)} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>}
               </div>
             ))}
           </div>
@@ -252,7 +252,7 @@ export function ExternaForm({
 
         <div className="flex justify-end gap-2 pb-10">
           <button type="button" onClick={() => router.back()} className="px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
-          <button type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition">
+          <button aria-label="Salvar" type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition">
             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{submitLabel}
           </button>
         </div>

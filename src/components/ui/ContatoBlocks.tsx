@@ -39,7 +39,7 @@ export function ContatoBlocks({ value, onChange }: { value: ContatoData; onChang
               <input value={e.numero} onChange={ev => setEnd(i, 'numero', ev.target.value)} placeholder="Nº" className={cn(cellCls, 'col-span-1')} />
               <input value={e.bairro} onChange={ev => setEnd(i, 'bairro', ev.target.value)} placeholder="Bairro" className={cn(cellCls, 'col-span-2')} />
               <input value={e.cidade} onChange={ev => setEnd(i, 'cidade', ev.target.value)} placeholder="Cidade" className={cn(cellCls, 'col-span-2')} />
-              <button type="button" onClick={() => onChange({ ...v, enderecos: v.enderecos.filter((_, idx) => idx !== i) })} className="col-span-1 text-gray-300 hover:text-red-500 transition justify-self-center"><Trash2 className="w-4 h-4" /></button>
+              <button aria-label="Remover" type="button" onClick={() => onChange({ ...v, enderecos: v.enderecos.filter((_, idx) => idx !== i) })} className="col-span-1 text-gray-300 hover:text-red-500 transition justify-self-center"><Trash2 className="w-4 h-4" /></button>
               <input value={e.complemento} onChange={ev => setEnd(i, 'complemento', ev.target.value)} placeholder="Complemento" className={cn(cellCls, 'col-span-5')} />
               <input value={e.uf} onChange={ev => setEnd(i, 'uf', ev.target.value)} placeholder="UF" className={cn(cellCls, 'col-span-2')} />
               <input value={e.cep} onChange={ev => setEnd(i, 'cep', ev.target.value)} placeholder="CEP" className={cn(cellCls, 'col-span-4')} />
@@ -58,7 +58,7 @@ export function ContatoBlocks({ value, onChange }: { value: ContatoData; onChang
               <div key={i} className="flex gap-2 items-center">
                 <input value={t.tipo} onChange={ev => setTel(i, 'tipo', ev.target.value)} placeholder="Tipo" className={cn(cellCls, 'w-28')} />
                 <input value={t.numero} onChange={ev => setTel(i, 'numero', ev.target.value)} placeholder="Número" className={cellCls} />
-                <button type="button" onClick={() => onChange({ ...v, telefones: v.telefones.filter((_, idx) => idx !== i) })} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>
+                <button aria-label="Remover" type="button" onClick={() => onChange({ ...v, telefones: v.telefones.filter((_, idx) => idx !== i) })} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>
               </div>
             ))}
           </div>
@@ -71,7 +71,7 @@ export function ContatoBlocks({ value, onChange }: { value: ContatoData; onChang
               <div key={i} className="flex gap-2 items-center">
                 <input value={e.tipo} onChange={ev => setEmail(i, 'tipo', ev.target.value)} placeholder="Tipo" className={cn(cellCls, 'w-28')} />
                 <input value={e.email} onChange={ev => setEmail(i, 'email', ev.target.value)} placeholder="email@..." className={cellCls} />
-                <button type="button" onClick={() => onChange({ ...v, emails: v.emails.filter((_, idx) => idx !== i) })} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>
+                <button aria-label="Remover" type="button" onClick={() => onChange({ ...v, emails: v.emails.filter((_, idx) => idx !== i) })} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>
               </div>
             ))}
           </div>
@@ -90,7 +90,7 @@ export function ContatoBlocks({ value, onChange }: { value: ContatoData; onChang
               <input value={c.conta} onChange={ev => setConta(i, 'conta', ev.target.value)} placeholder="Conta" className={cn(cellCls, 'col-span-2')} />
               <input value={c.tipo} onChange={ev => setConta(i, 'tipo', ev.target.value)} placeholder="Tipo" className={cn(cellCls, 'col-span-2')} />
               <input value={c.pix} onChange={ev => setConta(i, 'pix', ev.target.value)} placeholder="PIX" className={cn(cellCls, 'col-span-2')} />
-              <button type="button" onClick={() => onChange({ ...v, contas_bancarias: v.contas_bancarias.filter((_, idx) => idx !== i) })} className="col-span-1 text-gray-300 hover:text-red-500 transition justify-self-center"><Trash2 className="w-4 h-4" /></button>
+              <button aria-label="Remover" type="button" onClick={() => onChange({ ...v, contas_bancarias: v.contas_bancarias.filter((_, idx) => idx !== i) })} className="col-span-1 text-gray-300 hover:text-red-500 transition justify-self-center"><Trash2 className="w-4 h-4" /></button>
             </div>
           ))}
         </div>

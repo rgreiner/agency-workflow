@@ -195,7 +195,7 @@ export function ClientForm({ initial, initialContato, submitLabel = 'Salvar', on
               Cancelar
             </button>
           )}
-          <button type="submit" disabled={isPending}
+          <button aria-label="Salvar" type="submit" disabled={isPending}
             className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition">
             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
             {submitLabel}

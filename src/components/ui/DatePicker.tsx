@@ -311,7 +311,7 @@ export function DatePicker({ startDate, endDate, onStartChange, onEndChange, lab
         <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
         <span className="flex-1">{triggerText || placeholder}</span>
         {(startDate || endDate) && (
-          <button type="button" onClick={clearDates}
+          <button aria-label="Fechar" type="button" onClick={clearDates}
             className="text-gray-300 hover:text-gray-500 transition">
             <X className="w-3.5 h-3.5" />
           </button>

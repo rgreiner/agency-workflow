@@ -773,10 +773,10 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
                 style={{ fontSize: 14, fontWeight: 600, color: '#111827', border: '1.5px solid #6366f1', borderRadius: 7, padding: '3px 8px', outline: 'none', backgroundColor: '#fafafa', fontFamily: 'inherit', maxWidth: 400 }}
               />
               <button onClick={saveTitle} style={iconBtnStyle}><Check size={16} /></button>
-              <button onClick={() => { setTitleDraft(title); setEditingTitle(false) }} style={iconBtnStyle}><X size={16} /></button>
+              <button aria-label="Fechar" onClick={() => { setTitleDraft(title); setEditingTitle(false) }} style={iconBtnStyle}><X size={16} /></button>
             </div>
           ) : (
-            <button
+            <button aria-label="Editar"
               onClick={() => { setTitleDraft(title); setEditingTitle(true) }}
               style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: '3px 6px', borderRadius: 7, fontSize: 14, fontWeight: 600, color: '#111827', fontFamily: 'inherit' }}
               onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f3f4f6')}

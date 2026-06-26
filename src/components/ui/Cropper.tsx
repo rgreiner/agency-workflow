@@ -123,7 +123,7 @@ export function Cropper({
 
         <div className="flex items-center justify-end gap-2 mt-5">
           <button type="button" onClick={onCancel} className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors">Cancelar</button>
-          <button type="button" onClick={confirm} disabled={saving || !img}
+          <button aria-label="Salvar" type="button" onClick={confirm} disabled={saving || !img}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-50 transition">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} {confirmLabel}
           </button>

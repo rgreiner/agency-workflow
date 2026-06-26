@@ -76,7 +76,7 @@ export function ImportSpecsButton({ orgSlug, campaignId, campaigns }: {
                 )}
                 <h2 className="text-base font-semibold text-gray-900">Importar especificações</h2>
               </div>
-              <button onClick={() => { setOpen(false); reset() }} className="text-gray-400 hover:text-gray-600 transition">
+              <button aria-label="Fechar" onClick={() => { setOpen(false); reset() }} className="text-gray-400 hover:text-gray-600 transition">
                 <X className="w-5 h-5" />
               </button>
             </div>

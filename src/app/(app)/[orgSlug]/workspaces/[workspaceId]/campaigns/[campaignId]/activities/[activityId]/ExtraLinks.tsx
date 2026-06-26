@@ -52,7 +52,7 @@ export function ExtraLinks({ path, activityId, links, canEdit }: {
                 className="w-40 shrink-0 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               <input value={r.url} onChange={e => setRow(i, 'url', e.target.value)} placeholder="https://…"
                 className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              <button onClick={() => delRow(i)} className="text-gray-300 hover:text-red-500 transition-colors shrink-0"><Trash2 className="w-4 h-4" /></button>
+              <button aria-label="Remover" onClick={() => delRow(i)} className="text-gray-300 hover:text-red-500 transition-colors shrink-0"><Trash2 className="w-4 h-4" /></button>
             </div>
           ))}
           <div className="flex items-center justify-between pt-1">

@@ -144,7 +144,7 @@ export function OrcamentoForm({
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <input value={it.nome} onChange={e => patchItem(ii, { nome: e.target.value })} placeholder="Nome do item (ex.: WordPress, Camisetas Polo)" className={cn(inputCls, 'font-medium')} />
-                    {form.itens.length > 1 && <button type="button" onClick={() => delItem(ii)} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>}
+                    {form.itens.length > 1 && <button aria-label="Remover" type="button" onClick={() => delItem(ii)} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>}
                   </div>
                   <label className={cn(labelCls, 'mt-2')}>Descrição</label>
                   <textarea rows={2} value={it.descricao} onChange={e => patchItem(ii, { descricao: e.target.value })} className={cn(inputCls, 'resize-none')} />
@@ -175,7 +175,7 @@ export function OrcamentoForm({
                         <td className="px-1 py-1"><input value={o.quant} onChange={e => setOpcao(ii, oi, 'quant', e.target.value)} className={cn(cellCls, 'text-right')} /></td>
                         <td className="px-1 py-1"><input inputMode="decimal" value={o.valor_unit} onChange={e => setOpcao(ii, oi, 'valor_unit', e.target.value)} placeholder="0,00" className={cn(cellCls, 'text-right')} /></td>
                         <td className="px-1 py-1 text-right font-medium whitespace-nowrap">{formatBRL(opcaoTotal(o))}</td>
-                        <td className="px-1 py-1 text-right">{it.opcoes.length > 1 && <button type="button" onClick={() => delOpcao(ii, oi)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-3.5 h-3.5" /></button>}</td>
+                        <td className="px-1 py-1 text-right">{it.opcoes.length > 1 && <button aria-label="Remover" type="button" onClick={() => delOpcao(ii, oi)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-3.5 h-3.5" /></button>}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -209,7 +209,7 @@ export function OrcamentoForm({
 
         <div className="flex justify-end gap-2 pb-10">
           <button type="button" onClick={() => router.back()} className="px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
-          <button type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition">
+          <button aria-label="Salvar" type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition">
             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{submitLabel}
           </button>
         </div>

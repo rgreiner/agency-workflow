@@ -185,7 +185,7 @@ export function ImpressaForm({
                     <td className="px-1 py-1"><input inputMode="decimal" value={r.valor} onChange={e => setRow(i, 'valor', e.target.value)} placeholder="0,00" className={cn(cellCls, 'text-right')} /></td>
                     <td className="px-1 py-1"><input inputMode="decimal" value={r.desconto} onChange={e => setRow(i, 'desconto', e.target.value)} className={cn(cellCls, 'text-right')} /></td>
                     <td className="px-1 py-1 text-right text-gray-900 font-medium whitespace-nowrap">{formatBRL(rowTotal(r))}</td>
-                    <td className="px-1 py-1 text-right">{form.insercoes.length > 1 && <button type="button" onClick={() => delRow(i)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-3.5 h-3.5" /></button>}</td>
+                    <td className="px-1 py-1 text-right">{form.insercoes.length > 1 && <button aria-label="Remover" type="button" onClick={() => delRow(i)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-3.5 h-3.5" /></button>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -229,7 +229,7 @@ export function ImpressaForm({
 
         <div className="flex justify-end gap-2 pb-10">
           <button type="button" onClick={() => router.back()} className="px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
-          <button type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition">
+          <button aria-label="Salvar" type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition">
             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{submitLabel}
           </button>
         </div>

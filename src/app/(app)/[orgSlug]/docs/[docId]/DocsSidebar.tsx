@@ -203,7 +203,7 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs }: {
                         <Plus className="w-3.5 h-3.5" />
                       </button>
                       <div className="relative shrink-0">
-                        <button onClick={() => setMenu(menu === `fld:${f.id}` ? null : `fld:${f.id}`)}
+                        <button aria-label="Mais opções" onClick={() => setMenu(menu === `fld:${f.id}` ? null : `fld:${f.id}`)}
                           className="p-0.5 rounded text-gray-400 hover:text-gray-700 opacity-0 group-hover/f:opacity-100 transition">
                           <MoreHorizontal className="w-3.5 h-3.5" />
                         </button>
@@ -261,7 +261,7 @@ function DocRow({ doc, orgSlug, active, nested, inFolder, menuOpen, onMenu, fold
         <span className="truncate">{doc.title || 'Sem título'}</span>
       </Link>
       <div className="relative shrink-0 pr-1">
-        <button onClick={onMenu} className="p-0.5 rounded text-gray-400 hover:text-gray-700 opacity-0 group-hover/d:opacity-100 transition">
+        <button aria-label="Mais opções" onClick={onMenu} className="p-0.5 rounded text-gray-400 hover:text-gray-700 opacity-0 group-hover/d:opacity-100 transition">
           <MoreHorizontal className="w-3.5 h-3.5" />
         </button>
         {menuOpen && (

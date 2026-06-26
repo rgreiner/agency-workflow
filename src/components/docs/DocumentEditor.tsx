@@ -219,7 +219,7 @@ export function DocumentEditor({
               >
                 {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Excluir'}
               </button>
-              <button onClick={() => setConfirmDelete(false)} className="text-gray-400 hover:text-gray-600">
+              <button aria-label="Fechar" onClick={() => setConfirmDelete(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>

@@ -254,7 +254,7 @@ export function MemberRow({
                 >
                   {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Sim'}
                 </button>
-                <button
+                <button aria-label="Fechar"
                   onClick={() => setConfirmRemove(false)}
                   className="text-gray-400 hover:text-gray-600"
                 >

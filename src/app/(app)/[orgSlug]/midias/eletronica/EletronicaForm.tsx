@@ -192,7 +192,7 @@ export function EletronicaForm({
                     <td className="px-1 py-1"><input value={p.tipo} onChange={e => setPeca(i, 'tipo', e.target.value)} placeholder="Ex.: TV Aberta" className={cellCls} /></td>
                     <td className="px-1 py-1"><input value={p.descricao} onChange={e => setPeca(i, 'descricao', e.target.value)} placeholder="Ex.: VT" className={cellCls} /></td>
                     <td className="px-1 py-1"><input value={p.duracao} onChange={e => setPeca(i, 'duracao', e.target.value)} className={cn(cellCls, 'text-right')} /></td>
-                    <td className="px-1 py-1 text-right">{form.pecas.length > 1 && <button type="button" onClick={() => delPeca(i)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-3.5 h-3.5" /></button>}</td>
+                    <td className="px-1 py-1 text-right">{form.pecas.length > 1 && <button aria-label="Remover" type="button" onClick={() => delPeca(i)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-3.5 h-3.5" /></button>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -214,7 +214,7 @@ export function EletronicaForm({
                   <div className="w-40"><label className={labelCls}>Mês</label><Select size="sm" value={p.mes} onChange={v => setPeriodo(pi, { mes: v })} options={MESES} /></div>
                   <div className="w-28"><label className={labelCls}>Ano</label><Select size="sm" value={p.ano} onChange={v => setPeriodo(pi, { ano: v })} options={ANOS} /></div>
                   <div className="flex-1" />
-                  {form.periodos.length > 1 && <button type="button" onClick={() => delPeriodo(pi)} className="text-gray-300 hover:text-red-500 transition mt-4"><Trash2 className="w-4 h-4" /></button>}
+                  {form.periodos.length > 1 && <button aria-label="Remover" type="button" onClick={() => delPeriodo(pi)} className="text-gray-300 hover:text-red-500 transition mt-4"><Trash2 className="w-4 h-4" /></button>}
                 </div>
                 <div className="overflow-x-auto">
                   <table className="text-sm">
@@ -246,7 +246,7 @@ export function EletronicaForm({
                           <td className="px-1 py-1"><input inputMode="decimal" value={it.valor_unitario} onChange={e => setItem(pi, ii, 'valor_unitario', e.target.value)} placeholder="0,00" className={cn(cellCls, 'text-right')} /></td>
                           <td className="px-1 py-1"><input inputMode="decimal" value={it.desconto} onChange={e => setItem(pi, ii, 'desconto', e.target.value)} className={cn(cellCls, 'text-right')} /></td>
                           <td className="px-1 py-1 text-right font-medium whitespace-nowrap">{formatBRL(totalItem(it))}</td>
-                          <td className="px-1 py-1 text-right">{p.itens.length > 1 && <button type="button" onClick={() => delItem(pi, ii)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-3.5 h-3.5" /></button>}</td>
+                          <td className="px-1 py-1 text-right">{p.itens.length > 1 && <button aria-label="Remover" type="button" onClick={() => delItem(pi, ii)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-3.5 h-3.5" /></button>}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -298,7 +298,7 @@ export function EletronicaForm({
 
         <div className="flex justify-end gap-2 pb-10">
           <button type="button" onClick={() => router.back()} className="px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
-          <button type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition">
+          <button aria-label="Salvar" type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition">
             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{submitLabel}
           </button>
         </div>

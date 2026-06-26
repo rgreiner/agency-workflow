@@ -156,7 +156,7 @@ export function PedidoForm({
               <div key={i} className="border border-gray-100 rounded-xl p-3">
                 <div className="flex items-center gap-2 mb-2">
                   <input value={it.nome} onChange={e => setItem(i, 'nome', e.target.value)} placeholder="Item (ex.: FineArt, Vídeo)" className={cn(inputCls, 'font-medium')} />
-                  {form.itens.length > 1 && <button type="button" onClick={() => delItem(i)} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>}
+                  {form.itens.length > 1 && <button aria-label="Remover" type="button" onClick={() => delItem(i)} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>}
                 </div>
                 <textarea rows={2} value={it.descricao} onChange={e => setItem(i, 'descricao', e.target.value)} placeholder="Descrição" className={cn(inputCls, 'resize-none mb-2')} />
                 <div className="grid grid-cols-3 gap-3">
@@ -199,7 +199,7 @@ export function PedidoForm({
                   <input type="date" value={p.vencimento} onChange={e => setParc(i, 'vencimento', e.target.value)} className={cn(inputCls, 'sm:w-44')} />
                   <input inputMode="decimal" value={p.valor} onChange={e => setParc(i, 'valor', e.target.value)} placeholder="0,00" className={cn(inputCls, 'sm:w-36 text-right')} />
                   <div className="flex-1"><Select value={p.tipo} onChange={v => setParc(i, 'tipo', v)} options={PARCELA_TIPOS} /></div>
-                  <button type="button" onClick={() => delParc(i)} className="text-gray-300 hover:text-red-500 transition shrink-0 self-center"><Trash2 className="w-4 h-4" /></button>
+                  <button aria-label="Remover" type="button" onClick={() => delParc(i)} className="text-gray-300 hover:text-red-500 transition shrink-0 self-center"><Trash2 className="w-4 h-4" /></button>
                 </div>
               ))}
             </div>
@@ -221,7 +221,7 @@ export function PedidoForm({
 
         <div className="flex justify-end gap-2 pb-10">
           <button type="button" onClick={() => router.back()} className="px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
-          <button type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition">
+          <button aria-label="Salvar" type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition">
             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{submitLabel}
           </button>
         </div>
