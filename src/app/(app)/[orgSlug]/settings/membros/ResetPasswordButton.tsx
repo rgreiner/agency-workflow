@@ -47,17 +47,18 @@ export function ResetPasswordButton({ orgId, userId, name }: { orgId: string; us
       <button
         onClick={() => setOpen(true)}
         title="Redefinir senha"
+        aria-label="Redefinir senha"
         className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition"
       >
         <KeyRound className="w-3.5 h-3.5" />
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/30 p-4" onClick={close}>
-          <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-5" onClick={e => e.stopPropagation()}>
+        <div className="modal-backdrop fixed inset-0 z-[80] flex items-center justify-center bg-black/30 p-4" onClick={close}>
+          <div className="modal-card w-full max-w-sm bg-white rounded-2xl shadow-xl p-5" onClick={e => e.stopPropagation()}>
             <div className="flex items-start justify-between mb-1">
               <h3 className="text-sm font-semibold text-gray-900">Redefinir senha</h3>
-              <button onClick={close} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+              <button onClick={close} aria-label="Fechar" className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
             </div>
             <p className="text-xs text-gray-500 mb-4 truncate">{name}</p>
 
@@ -76,7 +77,7 @@ export function ResetPasswordButton({ orgId, userId, name }: { orgId: string; us
                 <p className="text-[11px] text-gray-500">Mande este link pra pessoa (expira em 1h, uso único):</p>
                 <div className="flex items-center gap-1.5">
                   <input readOnly value={link} className="flex-1 min-w-0 text-xs bg-gray-50 border border-gray-200 rounded-lg px-2 py-2 text-gray-600" />
-                  <button onClick={copy} className="p-2 rounded-lg bg-gray-900 text-[#fff] hover:bg-gray-800 shrink-0" title="Copiar">
+                  <button onClick={copy} aria-label="Copiar link" className="p-2 rounded-lg bg-gray-900 text-[#fff] hover:bg-gray-800 shrink-0" title="Copiar">
                     {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
                 </div>

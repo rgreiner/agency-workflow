@@ -181,7 +181,7 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
         if (!m) return null
         const isMin = minimized.has(peer)
         return (
-          <div key={peer} className="pointer-events-auto w-[320px] bg-white rounded-t-xl border border-gray-200 shadow-2xl flex flex-col overflow-hidden">
+          <div key={peer} className="pop-up pointer-events-auto w-[320px] bg-white rounded-t-xl border border-gray-200 shadow-2xl flex flex-col overflow-hidden">
             {/* Header */}
             <div className="flex items-center gap-2 px-3 py-2 bg-gray-900 text-white cursor-pointer" onClick={() => toggleMin(peer)}>
               <ChatAvatar member={m} online={online.has(peer)} />
@@ -189,8 +189,8 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
                 <p className="text-sm font-medium truncate">{m.name}</p>
                 <p className="text-[10px] text-gray-400">{online.has(peer) ? 'Online' : 'Offline'}</p>
               </div>
-              <button onClick={e => { e.stopPropagation(); toggleMin(peer) }} className="p-1 rounded hover:bg-white/10" title="Minimizar"><Minus className="w-4 h-4" /></button>
-              <button onClick={e => { e.stopPropagation(); closeConvo(peer) }} className="p-1 rounded hover:bg-white/10" title="Fechar"><X className="w-4 h-4" /></button>
+              <button onClick={e => { e.stopPropagation(); toggleMin(peer) }} aria-label="Minimizar conversa" className="p-1 rounded hover:bg-white/10" title="Minimizar"><Minus className="w-4 h-4" /></button>
+              <button onClick={e => { e.stopPropagation(); closeConvo(peer) }} aria-label="Fechar conversa" className="p-1 rounded hover:bg-white/10" title="Fechar"><X className="w-4 h-4" /></button>
             </div>
 
             {!isMin && (
@@ -204,7 +204,7 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
                     placeholder="Escreva uma mensagem…"
                     className="flex-1 min-w-0 text-sm bg-gray-50 border border-gray-200 rounded-full px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
-                  <button onClick={() => send(peer)} disabled={!(draft[peer] ?? '').trim()} className="p-2 rounded-full bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-40 transition shrink-0">
+                  <button onClick={() => send(peer)} disabled={!(draft[peer] ?? '').trim()} aria-label="Enviar mensagem" className="p-2 rounded-full bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-40 transition shrink-0">
                     <Send className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -216,11 +216,11 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
 
       {/* Painel de contatos OU lançador (bolinha) — o messenger fica sempre no canto */}
       {panelOpen ? (
-        <div className="pointer-events-auto w-[300px] h-[440px] bg-white rounded-t-xl border border-gray-200 shadow-2xl flex flex-col overflow-hidden">
+        <div className="pop-up pointer-events-auto w-[300px] h-[440px] bg-white rounded-t-xl border border-gray-200 shadow-2xl flex flex-col overflow-hidden">
           <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-900 text-white">
             <MessagesSquare className="w-4 h-4" />
             <span className="text-sm font-semibold flex-1">Mensagens</span>
-            <button onClick={() => setPanelOpen(false)} className="p-1 rounded hover:bg-white/10" title="Minimizar"><Minus className="w-4 h-4" /></button>
+            <button onClick={() => setPanelOpen(false)} aria-label="Minimizar mensagens" className="p-1 rounded hover:bg-white/10" title="Minimizar"><Minus className="w-4 h-4" /></button>
           </div>
           <div className="p-2 border-b border-gray-100">
             <div className="flex items-center gap-2 px-2 py-1.5 bg-gray-50 rounded-lg">
@@ -248,6 +248,7 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
           type="button"
           onClick={() => setPanelOpen(true)}
           title="Mensagens"
+          aria-label={totalUnread > 0 ? `Mensagens (${totalUnread} não lidas)` : 'Mensagens'}
           className="pointer-events-auto relative w-12 h-12 rounded-full bg-indigo-600 text-[#fff] shadow-2xl flex items-center justify-center hover:bg-indigo-700 transition"
         >
           <MessagesSquare className="w-5 h-5" />

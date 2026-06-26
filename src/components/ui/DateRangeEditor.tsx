@@ -249,7 +249,7 @@ export function DateRangeEditor({ activityId, path, startDate, dueDate, canEdit,
         <div
           ref={popupRef}
           onClick={(e) => e.stopPropagation()}
-          className="absolute top-full left-0 mt-1 z-50 bg-white rounded-2xl border border-gray-200 shadow-xl p-4"
+          className="pop-in absolute top-full left-0 mt-1 z-50 bg-white rounded-2xl border border-gray-200 shadow-xl p-4"
           style={{ minWidth: 300 }}
         >
           {/* Hint */}
