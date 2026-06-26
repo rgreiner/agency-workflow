@@ -14,7 +14,12 @@ export function InboxNavItem({ orgSlug }: { orgSlug: string }) {
   const [unread, setUnread] = useState(0)
 
   const load = useCallback(async () => {
-    try { setUnread(await getUnreadCount(orgSlug)) } catch { /* tenta de novo no próximo ciclo */ }
+    try {
+      const n = await getUnreadCount(orgSlug)
+      setUnread(n)
+      // Espelha p/ o título da aba (TabUnreadBadge), que soma inbox + chat.
+      window.dispatchEvent(new CustomEvent('flow:inbox-unread', { detail: n }))
+    } catch { /* tenta de novo no próximo ciclo */ }
   }, [orgSlug])
 
   // Carrega ao montar, a cada 30s, e ao navegar (ex.: após marcar lidas na página).

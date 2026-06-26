@@ -5,6 +5,7 @@ import { AppShell } from '@/components/layout/AppShell'
 import { OrgSettingsProvider } from '@/components/providers/OrgSettingsProvider'
 import { UserPrefsProvider } from '@/components/providers/UserPrefsProvider'
 import { ChatDock } from '@/components/chat/ChatDock'
+import { TabUnreadBadge } from '@/components/layout/TabUnreadBadge'
 
 export default async function OrgLayout({
   children,
@@ -124,6 +125,9 @@ export default async function OrgLayout({
 
       {/* Messenger interno — dock global no canto inferior direito */}
       <ChatDock orgId={org.id} meId={user.id} members={chatMembers} />
+
+      {/* Total de não-lidas (inbox + chat) no título da aba */}
+      <TabUnreadBadge />
       </UserPrefsProvider>
     </OrgSettingsProvider>
   )
