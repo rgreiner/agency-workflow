@@ -482,7 +482,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                 <button type="button" onClick={() => { setSaveOpen(false); setSaveName('') }}
                   className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Cancelar</button>
                 <button type="button" onClick={saveCurrentFilter} disabled={!saveName.trim()}
-                  className="text-xs font-medium px-3 py-1 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition">Salvar</button>
+                  className="text-xs font-medium px-3 py-1 rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-50 transition">Salvar</button>
               </div>
             </div>
           )}
@@ -986,7 +986,7 @@ function BulkActionBar({
                   <div className="flex items-center justify-end px-3 pt-2 mt-1 border-t border-gray-100">
                     <button type="button" disabled={pickAssignees.length === 0}
                       onClick={() => { const sel = pickAssignees; closeMenu(); onAssignees(sel) }}
-                      className="text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition">
+                      className="text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-50 transition">
                       Adicionar{pickAssignees.length > 0 ? ` (${pickAssignees.length})` : ''}
                     </button>
                   </div>
@@ -1017,7 +1017,7 @@ function BulkActionBar({
                   className="text-xs text-gray-500 hover:text-gray-700 transition">Remover datas</button>
                 <button type="button" disabled={!start && !due}
                   onClick={() => { const s = start || undefined; const d = due || undefined; closeMenu(); onDates(s, d) }}
-                  className="text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition">Aplicar</button>
+                  className="text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-50 transition">Aplicar</button>
               </div>
             </div>
           )}
@@ -1246,7 +1246,7 @@ function GroupAddTask({
         type="button"
         onClick={submit}
         disabled={!canSave || pending}
-        className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition shrink-0"
+        className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-50 transition shrink-0"
       >
         {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
         Salvar
@@ -1282,7 +1282,7 @@ function NewActivityButton({
     return (
       <Link
         href={`/${orgSlug}/workspaces/${fixedCampaign.workspaceId}/campaigns/${fixedCampaign.campaignId}/activities/new`}
-        className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition"
+        className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 transition"
       >
         <Plus className="w-4 h-4" />
         <span className="hidden sm:inline">Nova atividade</span>
@@ -1303,7 +1303,7 @@ function NewActivityButton({
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition"
+        className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 transition"
       >
         <Plus className="w-4 h-4" />
         <span className="hidden sm:inline">Nova atividade</span>

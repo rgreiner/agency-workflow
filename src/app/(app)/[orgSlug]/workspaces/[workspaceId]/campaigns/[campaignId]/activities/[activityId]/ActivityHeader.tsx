@@ -49,7 +49,7 @@ export function ActivityHeader({ activityId, path, title, description, canManage
               onClick={saveTitle}
               disabled={isPending}
               aria-label="Salvar título"
-              className="p-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 shrink-0"
+              className="p-1.5 rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-50 shrink-0"
             >
               {isPending ? <Loader2 aria-hidden className="w-3.5 h-3.5 animate-spin" /> : <Check aria-hidden className="w-3.5 h-3.5" />}
             </button>

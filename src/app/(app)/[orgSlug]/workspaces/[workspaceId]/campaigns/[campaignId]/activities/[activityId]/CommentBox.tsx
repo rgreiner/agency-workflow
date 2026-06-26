@@ -181,7 +181,7 @@ export function CommentBox({ activityId, path, members = [], assignedIds = [] }:
           type="submit"
           disabled={!content.trim() || isPending}
           aria-label="Enviar comentário"
-          className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition disabled:opacity-40 disabled:cursor-not-allowed self-stretch"
+          className="px-4 py-2.5 bg-indigo-600 text-[#fff] rounded-xl hover:bg-indigo-700 transition disabled:opacity-40 disabled:cursor-not-allowed self-stretch"
         >
           <Send aria-hidden className="w-4 h-4" />
         </button>

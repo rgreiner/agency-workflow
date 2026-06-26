@@ -75,7 +75,7 @@ export function InviteButton({ orgId, orgSlug }: Props) {
       <button
         onClick={handleOpen}
         disabled={loading}
-        className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 rounded-lg transition-colors"
+        className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-[#fff] bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 rounded-lg transition-colors"
       >
         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
         Convidar membro
@@ -170,7 +170,7 @@ export function InviteButton({ orgId, orgSlug }: Props) {
                 <button
                   type="submit"
                   disabled={sending || !email.trim()}
-                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition"
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-[#fff] text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition"
                 >
                   {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                   {sending ? 'Enviando...' : 'Enviar convite'}

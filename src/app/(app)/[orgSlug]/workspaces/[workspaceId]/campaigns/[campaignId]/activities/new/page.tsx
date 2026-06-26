@@ -344,7 +344,7 @@ export default function NewActivityPage() {
             Cancelar
           </button>
           <button type="submit" disabled={!titulo.trim() || isPending}
-            className="flex-1 py-3 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition disabled:opacity-40 disabled:cursor-not-allowed">
+            className="flex-1 py-3 bg-indigo-600 text-[#fff] font-medium rounded-xl hover:bg-indigo-700 transition disabled:opacity-40 disabled:cursor-not-allowed">
             {isPending ? 'Criando...' : 'Criar atividade'}
           </button>
         </div>

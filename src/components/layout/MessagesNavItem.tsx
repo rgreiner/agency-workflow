@@ -30,7 +30,7 @@ export function MessagesNavItem() {
       <MessagesSquare className="w-4 h-4 shrink-0" />
       <span className="flex-1 text-left">Mensagens</span>
       {unread > 0 && (
-        <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center">
+        <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-[#fff] text-[10px] font-semibold flex items-center justify-center">
           {unread > 99 ? '99+' : unread}
         </span>
       )}

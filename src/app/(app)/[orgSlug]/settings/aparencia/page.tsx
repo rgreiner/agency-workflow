@@ -276,7 +276,7 @@ export default function AparenciaPage() {
         <button
           onClick={handleSave}
           disabled={isPending}
-          className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition disabled:opacity-50"
+          className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-[#fff] text-sm font-semibold rounded-xl hover:bg-indigo-700 transition disabled:opacity-50"
         >
           {isPending && <Loader2 className="w-4 h-4 animate-spin" />}
           Salvar aparência

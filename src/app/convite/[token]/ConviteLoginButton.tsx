@@ -33,7 +33,7 @@ export function ConviteLoginButton({ token }: ConviteLoginButtonProps) {
       />
       <button
         type="submit"
-        className="inline-flex items-center justify-center w-full px-6 py-3 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition-colors"
+        className="inline-flex items-center justify-center w-full px-6 py-3 text-sm font-medium text-[#fff] bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition-colors"
       >
         Entrar / criar conta
       </button>

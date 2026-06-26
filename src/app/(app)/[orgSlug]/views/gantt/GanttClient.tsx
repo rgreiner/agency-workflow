@@ -521,7 +521,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
                 <button type="button" onClick={() => { setSaveOpen(false); setSaveName('') }}
                   className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Cancelar</button>
                 <button type="button" onClick={saveCurrentFilter} disabled={!saveName.trim()}
-                  className="text-xs font-medium px-3 py-1 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition">Salvar</button>
+                  className="text-xs font-medium px-3 py-1 rounded-lg bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-50 transition">Salvar</button>
               </div>
             </div>
           )}
@@ -578,7 +578,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
               <div key={i}
                 className={cn(
                   'flex flex-col items-center justify-center text-xs border-r border-gray-100 shrink-0 py-1.5 select-none',
-                  isToday(day)    ? 'bg-indigo-600 text-white'
+                  isToday(day)    ? 'bg-indigo-600 text-[#fff]'
                   : isWeekend(day) ? 'bg-gray-50 text-gray-400'
                   : 'text-gray-600'
                 )}

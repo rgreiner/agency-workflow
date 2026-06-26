@@ -70,7 +70,7 @@ export function ConfirmDialog({
           <button
             onClick={onConfirm}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition disabled:opacity-60"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[#fff] bg-red-600 hover:bg-red-700 rounded-lg transition disabled:opacity-60"
           >
             {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             {confirmLabel}

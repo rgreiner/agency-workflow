@@ -117,7 +117,7 @@ export function ShareModal({ visibility, sharedMemberIds, members, currentUserId
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex-1 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition disabled:opacity-60"
+            className="flex-1 px-4 py-2 text-sm font-medium text-[#fff] bg-indigo-600 rounded-xl hover:bg-indigo-700 transition disabled:opacity-60"
           >
             {saving ? 'Salvando…' : 'Salvar'}
           </button>

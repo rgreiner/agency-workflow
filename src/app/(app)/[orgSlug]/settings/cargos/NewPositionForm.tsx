@@ -201,7 +201,7 @@ export function NewPositionForm({ orgSlug }: Props) {
           <button
             onClick={handleSubmit}
             disabled={isPending}
-            className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition disabled:opacity-50"
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-[#fff] text-xs font-medium rounded-lg hover:bg-indigo-700 transition disabled:opacity-50"
           >
             <Plus className="w-3.5 h-3.5" />
             Criar cargo

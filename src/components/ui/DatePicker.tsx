@@ -124,7 +124,7 @@ export function SingleDatePicker({ value, onChange, onClose }: SingleDatePickerP
                 className={cn(
                   'w-8 h-8 rounded-full text-sm transition flex items-center justify-center font-medium',
                   isSelected
-                    ? 'bg-indigo-600 text-white'
+                    ? 'bg-indigo-600 text-[#fff]'
                     : isToday
                     ? 'ring-2 ring-indigo-400 text-indigo-600'
                     : 'text-gray-700 hover:bg-gray-100'
@@ -276,7 +276,7 @@ export function DatePicker({ startDate, endDate, onStartChange, onEndChange, lab
                   onMouseEnter={() => phase === 'end' && setHovered(ymd)}
                   onMouseLeave={() => setHovered(null)}
                   className={cn('w-8 h-8 rounded-full text-sm transition flex items-center justify-center font-medium z-10 relative',
-                    isSelected ? 'bg-indigo-600 text-white'
+                    isSelected ? 'bg-indigo-600 text-[#fff]'
                     : isToday  ? 'ring-2 ring-indigo-400 text-indigo-600'
                     : isMid    ? 'text-indigo-700 hover:bg-indigo-100'
                     : 'text-gray-700 hover:bg-gray-100'
@@ -381,7 +381,7 @@ export function DatePicker({ startDate, endDate, onStartChange, onEndChange, lab
                     className={cn(
                       'w-8 h-8 rounded-full text-sm transition flex items-center justify-center font-medium z-10 relative',
                       isSelected
-                        ? 'bg-indigo-600 text-white'
+                        ? 'bg-indigo-600 text-[#fff]'
                         : isToday
                         ? 'ring-2 ring-indigo-400 text-indigo-600'
                         : isMid

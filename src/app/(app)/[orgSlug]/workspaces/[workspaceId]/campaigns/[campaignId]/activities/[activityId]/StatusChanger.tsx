@@ -195,7 +195,7 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
       <button
         onClick={handleSave}
         disabled={!changed || isPending}
-        className="w-full py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+        className="w-full py-2.5 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {isPending ? 'Salvando...' : 'Salvar status'}
       </button>

@@ -185,7 +185,7 @@ export function FieldEditor({ activityId, path, field, value, canEdit, type = 't
         onClick={() => save()}
         disabled={isPending}
         aria-label="Salvar"
-        className="p-1 rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+        className="p-1 rounded bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-50"
       >
         {isPending ? <Loader2 aria-hidden className="w-3 h-3 animate-spin" /> : <Check aria-hidden className="w-3 h-3" />}
       </button>

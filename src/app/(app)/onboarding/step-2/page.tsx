@@ -61,7 +61,7 @@ export default function OnboardingStep2() {
           </div>
           <div className="flex-1 h-px bg-indigo-200 mx-2" />
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-semibold flex items-center justify-center">2</div>
+            <div className="w-7 h-7 rounded-full bg-indigo-600 text-[#fff] text-xs font-semibold flex items-center justify-center">2</div>
             <span className="text-sm font-medium text-indigo-600">Seu perfil</span>
           </div>
         </div>
@@ -129,7 +129,7 @@ export default function OnboardingStep2() {
             <button
               type="submit"
               disabled={!isValid || isPending}
-              className="flex-1 py-3 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex-1 py-3 bg-indigo-600 text-[#fff] font-medium rounded-xl hover:bg-indigo-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {isPending ? 'Criando conta...' : 'Criar conta'}
             </button>

@@ -248,7 +248,7 @@ export function PositionCard({ position, orgSlug }: Props) {
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition',
                 isDirty
-                  ? 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50'
+                  ? 'bg-indigo-600 text-[#fff] hover:bg-indigo-700 disabled:opacity-50'
                   : 'bg-gray-100 text-gray-300 cursor-not-allowed'
               )}
             >

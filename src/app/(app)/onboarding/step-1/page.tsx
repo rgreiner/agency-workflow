@@ -60,7 +60,7 @@ export default function OnboardingStep1() {
         {/* Progress */}
         <div className="flex items-center gap-2 mb-8">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-semibold flex items-center justify-center">1</div>
+            <div className="w-7 h-7 rounded-full bg-indigo-600 text-[#fff] text-xs font-semibold flex items-center justify-center">1</div>
             <span className="text-sm font-medium text-indigo-600">Sua empresa</span>
           </div>
           <div className="flex-1 h-px bg-gray-200 mx-2" />
@@ -167,7 +167,7 @@ export default function OnboardingStep1() {
           <button
             type="submit"
             disabled={!isValid}
-            className="w-full py-3 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full py-3 bg-indigo-600 text-[#fff] font-medium rounded-xl hover:bg-indigo-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Próximo →
           </button>

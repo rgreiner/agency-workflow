@@ -89,7 +89,7 @@ export default async function NewBoardPage({
             </Link>
             <button
               type="submit"
-              className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition"
+              className="flex-1 px-4 py-2.5 text-sm font-medium text-[#fff] bg-indigo-600 hover:bg-indigo-700 rounded-xl transition"
             >
               Criar quadro
             </button>

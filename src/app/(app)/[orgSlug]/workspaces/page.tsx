@@ -48,7 +48,7 @@ export default async function WorkspacesPage({
           {!archivedView && (
             <Link
               href={`/${orgSlug}/workspaces/new`}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 transition"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 transition"
             >
               <Plus className="w-4 h-4" />
               Novo cliente
@@ -107,7 +107,7 @@ export default async function WorkspacesPage({
           {!archivedView && (
             <Link
               href={`/${orgSlug}/workspaces/new`}
-              className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 transition"
+              className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-indigo-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-indigo-700 transition"
             >
               <Plus className="w-4 h-4" />
               Novo cliente
