@@ -286,6 +286,7 @@ export function Sidebar({
         {/* Close — mobile only */}
         <button
           onClick={() => setMobileOpen(false)}
+          aria-label="Fechar menu"
           className="md:hidden p-1.5 text-gray-600 hover:text-gray-300 transition"
         >
           <X className="w-4 h-4" />
@@ -406,6 +407,8 @@ export function Sidebar({
                   <div className="group flex items-center px-2">
                     <button
                       onClick={() => toggle(ws.id)}
+                      aria-label={`${isOpen ? 'Recolher' : 'Expandir'} ${ws.name}`}
+                      aria-expanded={isOpen}
                       className="p-1.5 rounded text-gray-600 hover:text-gray-300 transition-colors shrink-0"
                     >
                       <ChevronRight className={cn('w-3 h-3 transition-transform duration-150', isOpen && 'rotate-90')} />

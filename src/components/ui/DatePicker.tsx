@@ -90,14 +90,14 @@ export function SingleDatePicker({ value, onChange, onClose }: SingleDatePickerP
     >
       {/* Month nav */}
       <div className="flex items-center justify-between mb-3">
-        <button type="button" onClick={prevMonth}
+        <button type="button" onClick={prevMonth} aria-label="Mês anterior"
           className="p-1.5 rounded-lg hover:bg-gray-100 transition text-gray-500">
           <ChevronLeft className="w-4 h-4" />
         </button>
         <span className="text-sm font-semibold text-gray-800">
           {MONTHS[viewMonth]} {viewYear}
         </span>
-        <button type="button" onClick={nextMonth}
+        <button type="button" onClick={nextMonth} aria-label="Próximo mês"
           className="p-1.5 rounded-lg hover:bg-gray-100 transition text-gray-500">
           <ChevronRight className="w-4 h-4" />
         </button>
@@ -250,9 +250,9 @@ export function DatePicker({ startDate, endDate, onStartChange, onEndChange, lab
           {phase === 'start' ? 'Clique para definir o início' : 'Clique para definir o fim'}
         </p>
         <div className="flex items-center justify-between mb-3">
-          <button type="button" onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-gray-100 transition text-gray-500"><ChevronLeft className="w-4 h-4" /></button>
+          <button type="button" onClick={prevMonth} aria-label="Mês anterior" className="p-1.5 rounded-lg hover:bg-gray-100 transition text-gray-500"><ChevronLeft className="w-4 h-4" /></button>
           <span className="text-sm font-semibold text-gray-800">{MONTHS[viewMonth]} {viewYear}</span>
-          <button type="button" onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-gray-100 transition text-gray-500"><ChevronRight className="w-4 h-4" /></button>
+          <button type="button" onClick={nextMonth} aria-label="Próximo mês" className="p-1.5 rounded-lg hover:bg-gray-100 transition text-gray-500"><ChevronRight className="w-4 h-4" /></button>
         </div>
         <div className="grid grid-cols-7 mb-1">
           {WEEK_SHORT.map(w => <div key={w} className="text-center text-[11px] font-medium text-gray-400 py-1">{w}</div>)}
@@ -330,14 +330,14 @@ export function DatePicker({ startDate, endDate, onStartChange, onEndChange, lab
 
           {/* Month navigation */}
           <div className="flex items-center justify-between mb-3">
-            <button type="button" onClick={prevMonth}
+            <button type="button" onClick={prevMonth} aria-label="Mês anterior"
               className="p-1.5 rounded-lg hover:bg-gray-100 transition text-gray-500">
               <ChevronLeft className="w-4 h-4" />
             </button>
             <span className="text-sm font-semibold text-gray-800">
               {MONTHS[viewMonth]} {viewYear}
             </span>
-            <button type="button" onClick={nextMonth}
+            <button type="button" onClick={nextMonth} aria-label="Próximo mês"
               className="p-1.5 rounded-lg hover:bg-gray-100 transition text-gray-500">
               <ChevronRight className="w-4 h-4" />
             </button>

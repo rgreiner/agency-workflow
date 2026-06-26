@@ -50,7 +50,7 @@ export function ShareModal({ visibility, sharedMemberIds, members, currentUserId
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl border border-gray-200">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <h2 className="text-base font-semibold text-gray-900">Compartilhamento</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 transition">
+          <button aria-label="Fechar" onClick={onClose} className="text-gray-400 hover:text-gray-700 transition">
             <X className="w-4 h-4" />
           </button>
         </div>

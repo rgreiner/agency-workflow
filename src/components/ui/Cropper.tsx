@@ -100,7 +100,7 @@ export function Cropper({
       <div className="modal-card bg-white rounded-2xl shadow-xl p-5 max-w-full" style={{ width: frameW + 60 }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-          <button type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-600 transition-colors"><X className="w-4 h-4" /></button>
+          <button aria-label="Fechar" type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-600 transition-colors"><X className="w-4 h-4" /></button>
         </div>
 
         <div

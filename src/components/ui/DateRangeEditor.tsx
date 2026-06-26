@@ -259,14 +259,14 @@ export function DateRangeEditor({ activityId, path, startDate, dueDate, canEdit,
 
           {/* Month nav */}
           <div className="flex items-center justify-between mb-3">
-            <button type="button" onClick={prevMonth}
+            <button type="button" onClick={prevMonth} aria-label="Mês anterior"
               className="p-1.5 rounded-lg hover:bg-gray-100 transition text-gray-500">
               <ChevronLeft className="w-4 h-4" />
             </button>
             <span className="text-sm font-semibold text-gray-800">
               {MONTHS[viewMonth]} {viewYear}
             </span>
-            <button type="button" onClick={nextMonth}
+            <button type="button" onClick={nextMonth} aria-label="Próximo mês"
               className="p-1.5 rounded-lg hover:bg-gray-100 transition text-gray-500">
               <ChevronRight className="w-4 h-4" />
             </button>
