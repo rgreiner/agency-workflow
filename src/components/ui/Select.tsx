@@ -79,9 +79,9 @@ export function Select({
         aria-haspopup="listbox"
         aria-expanded={open}
         className={cn(
-          'inline-flex items-center justify-between gap-2 w-full rounded-lg border bg-white text-gray-700 transition',
-          size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2 text-sm',
-          open ? 'border-indigo-300 ring-2 ring-indigo-100' : 'border-gray-200 hover:border-gray-300'
+          'inline-flex items-center justify-between gap-2 w-full rounded-xl border border-transparent bg-gray-100 text-gray-700 transition',
+          size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2.5 text-sm',
+          open ? 'bg-white ring-2 ring-indigo-200' : 'hover:bg-gray-200/60'
         )}
       >
         <span className={cn('truncate', !selected && 'text-gray-400')}>{selected?.label ?? placeholder}</span>
@@ -93,7 +93,7 @@ export function Select({
           ref={listRef}
           role="listbox"
           className={cn(
-            'pop-in absolute z-50 mt-1.5 min-w-full max-h-72 overflow-y-auto bg-white rounded-xl border border-gray-200 shadow-lg py-1.5',
+            'pop-in absolute z-50 mt-1.5 min-w-full max-h-72 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-xl py-1.5',
             align === 'right' ? 'right-0' : 'left-0'
           )}
         >
@@ -174,10 +174,10 @@ export function MultiSelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         className={cn(
-          'inline-flex items-center justify-between gap-2 w-full rounded-lg border bg-white transition',
+          'inline-flex items-center justify-between gap-2 w-full rounded-xl border border-transparent bg-gray-100 transition',
           values.length ? 'text-gray-800' : 'text-gray-700',
-          size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2 text-sm',
-          open ? 'border-indigo-300 ring-2 ring-indigo-100' : 'border-gray-200 hover:border-gray-300'
+          size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2.5 text-sm',
+          open ? 'bg-white ring-2 ring-indigo-200' : 'hover:bg-gray-200/60'
         )}
       >
         <span className="truncate">{label}</span>
@@ -188,7 +188,7 @@ export function MultiSelect({
         <div
           role="listbox"
           className={cn(
-            'pop-in absolute z-50 mt-1.5 min-w-full max-h-72 overflow-y-auto bg-white rounded-xl border border-gray-200 shadow-lg py-1.5',
+            'pop-in absolute z-50 mt-1.5 min-w-full max-h-72 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-xl py-1.5',
             align === 'right' ? 'right-0' : 'left-0'
           )}
         >

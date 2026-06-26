@@ -175,7 +175,7 @@ export function CommentBox({ activityId, path, members = [], assignedIds = [] }:
           rows={2}
           aria-label="Comentário"
           placeholder="Adicione um comentário…  (@ menciona alguém · ⌘/Ctrl+Enter envia)"
-          className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-y min-h-[44px]"
+          className="flex-1 px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-y min-h-[44px]"
         />
         <button
           type="submit"

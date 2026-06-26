@@ -46,7 +46,7 @@ export default async function RedefinirSenhaPage({
                 autoComplete="new-password"
                 required
                 minLength={8}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
 
@@ -61,7 +61,7 @@ export default async function RedefinirSenhaPage({
                 autoComplete="new-password"
                 required
                 minLength={8}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
 

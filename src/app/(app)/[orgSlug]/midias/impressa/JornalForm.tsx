@@ -34,7 +34,7 @@ const ANOS = ['2024', '2025', '2026', '2027'].map(a => ({ value: a, label: a }))
 const NEGOCIACAO = [{ value: 'valor_fechado', label: 'Valor Fechado' }, { value: 'custos_normais', label: 'Custos Normais' }]
 const WD = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
 
-const inputCls = 'w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent'
+const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent'
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 const cardCls = 'bg-white rounded-2xl border border-gray-200 p-5'
 

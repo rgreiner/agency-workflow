@@ -81,7 +81,7 @@ export default function OnboardingStep2() {
               value={form.full_name}
               onChange={(e) => set('full_name', e.target.value)}
               placeholder="Ex: Rafael Greiner"
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               required
             />
           </div>
@@ -96,7 +96,7 @@ export default function OnboardingStep2() {
               value={form.role_title}
               onChange={(e) => set('role_title', e.target.value)}
               placeholder="Ex: Diretor de Arte, Atendimento, CEO..."
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               required
             />
           </div>
@@ -112,7 +112,7 @@ export default function OnboardingStep2() {
               value={form.phone}
               onChange={(e) => set('phone', maskPhone(e.target.value))}
               placeholder="(00) 00000-0000"
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             />
           </div>
 

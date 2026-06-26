@@ -476,7 +476,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                 onChange={e => setSaveName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') saveCurrentFilter(); if (e.key === 'Escape') setSaveOpen(false) }}
                 placeholder="Nome do filtro"
-                className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-2.5 py-1.5 bg-gray-100 border border-transparent rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
               <div className="flex justify-end gap-2 mt-2">
                 <button type="button" onClick={() => { setSaveOpen(false); setSaveName('') }}

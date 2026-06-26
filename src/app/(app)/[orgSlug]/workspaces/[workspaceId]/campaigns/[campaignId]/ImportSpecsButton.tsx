@@ -105,7 +105,7 @@ export function ImportSpecsButton({ orgSlug, campaignId, campaigns }: {
                   onChange={e => setUrl(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') buscar() }}
                   placeholder="https://docs.google.com/spreadsheets/d/…"
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
                 <p className="text-xs text-gray-400">
                   A planilha precisa estar como <strong>&quot;qualquer pessoa com o link: Leitor&quot;</strong>.

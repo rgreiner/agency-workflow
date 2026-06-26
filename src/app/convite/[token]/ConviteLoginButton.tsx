@@ -13,7 +13,7 @@ export function ConviteLoginButton({ token }: ConviteLoginButtonProps) {
         name="nome"
         type="text"
         placeholder="Seu nome (se for criar a conta)"
-        className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
       />
       <input
         name="email"
@@ -21,7 +21,7 @@ export function ConviteLoginButton({ token }: ConviteLoginButtonProps) {
         autoComplete="email"
         required
         placeholder="E-mail"
-        className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
       />
       <input
         name="senha"
@@ -29,7 +29,7 @@ export function ConviteLoginButton({ token }: ConviteLoginButtonProps) {
         autoComplete="current-password"
         required
         placeholder="Senha"
-        className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
       />
       <button
         type="submit"

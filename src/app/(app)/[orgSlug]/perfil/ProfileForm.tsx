@@ -117,7 +117,7 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium text-gray-700 disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 text-sm bg-gray-100 border border-transparent rounded-xl hover:bg-gray-50 transition font-medium text-gray-700 disabled:opacity-50"
               >
                 {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                 {uploading ? 'Enviando…' : 'Enviar foto'}
@@ -149,7 +149,7 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
                   value={fullName}
                   onChange={e => setFullName(e.target.value)}
                   placeholder="Seu nome"
-                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent"
+                  className="flex-1 px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent"
                   style={{ '--tw-ring-color': accent } as React.CSSProperties}
                 />
                 {isFromGoogle && fullName !== user.googleName && (
@@ -187,7 +187,7 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
               onChange={e => setPwAtual(e.target.value)}
               placeholder="Senha atual"
               autoComplete="current-password"
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent"
+              className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent"
               style={{ '--tw-ring-color': accent } as React.CSSProperties}
             />
             <input
@@ -196,7 +196,7 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
               onChange={e => setPwNova(e.target.value)}
               placeholder="Nova senha (mín. 8)"
               autoComplete="new-password"
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent"
+              className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent"
               style={{ '--tw-ring-color': accent } as React.CSSProperties}
             />
             <input
@@ -206,7 +206,7 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
               onKeyDown={e => { if (e.key === 'Enter') handleChangePassword() }}
               placeholder="Confirmar nova senha"
               autoComplete="new-password"
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent"
+              className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent"
               style={{ '--tw-ring-color': accent } as React.CSSProperties}
             />
             <div className="flex justify-end">
@@ -214,7 +214,7 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
                 type="button"
                 onClick={handleChangePassword}
                 disabled={pwPending || !pwAtual || pwNova.length < 8 || pwNova !== pwConfirma}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-300 rounded-xl hover:bg-gray-50 transition text-gray-700 disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-gray-100 border border-transparent rounded-xl hover:bg-gray-50 transition text-gray-700 disabled:opacity-50"
               >
                 {pwPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 Alterar senha
@@ -238,7 +238,7 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
                 value={driveGoogleEmail}
                 onChange={e => setDriveGoogleEmail(e.target.value)}
                 placeholder="voce@empresa.com.br"
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent"
+                className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent"
                 style={{ '--tw-ring-color': accent } as React.CSSProperties}
               />
             </div>
@@ -249,7 +249,7 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
                 value={driveMacUser}
                 onChange={e => setDriveMacUser(e.target.value)}
                 placeholder="ex.: rafaelgreiner"
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent"
+                className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent"
                 style={{ '--tw-ring-color': accent } as React.CSSProperties}
               />
               <p className="text-[11px] text-gray-400 mt-1">O nome da sua pasta em /Users (no Finder, sua pasta pessoal).</p>

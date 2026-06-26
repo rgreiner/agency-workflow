@@ -150,7 +150,7 @@ export default function NewActivityPage() {
           </label>
           <input type="text" value={date} onChange={(e) => setDate(e.target.value)}
             maxLength={6} placeholder="260515"
-            className="w-40 px-4 py-3 border border-gray-300 rounded-xl text-gray-900 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+            className="w-40 px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
         </div>
 
         {/* Veículo */}
@@ -169,7 +169,7 @@ export default function NewActivityPage() {
           {veiculo === 'Outro' && (
             <input type="text" value={veiculoCustom} onChange={(e) => setVeiculoCustom(e.target.value)}
               placeholder="Qual veículo?" autoFocus
-              className="mt-2 px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent w-full" />
+              className="mt-2 px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent w-full" />
           )}
         </div>
 
@@ -189,7 +189,7 @@ export default function NewActivityPage() {
           {formato === 'Outro' && (
             <input type="text" value={formatoCustom} onChange={(e) => setFormatoCustom(e.target.value)}
               placeholder="Qual formato?" autoFocus
-              className="mt-2 px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent w-full" />
+              className="mt-2 px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent w-full" />
           )}
         </div>
 
@@ -200,7 +200,7 @@ export default function NewActivityPage() {
           </label>
           <input type="text" value={titulo} onChange={(e) => setTitulo(e.target.value)}
             placeholder="Ex: Visita a Fruit Attraction 2026"
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             required />
         </div>
 
@@ -226,7 +226,7 @@ export default function NewActivityPage() {
             onChange={(e) => setF('description', e.target.value)}
             placeholder="Descreva o objetivo, diretrizes e referências..."
             rows={4}
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none" />
+            className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none" />
         </div>
 
         {/* Status inicial */}
@@ -294,7 +294,7 @@ export default function NewActivityPage() {
             <input type="number" name="estimated_hours" value={form.estimated_hours}
               onChange={(e) => setF('estimated_hours', e.target.value)}
               placeholder="Ex: 4" min="0.5" step="0.5"
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+              className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
           </div>
         </div>
 
@@ -310,7 +310,7 @@ export default function NewActivityPage() {
             <input type="url" name="drive_folder_url" value={form.drive_folder_url}
               onChange={(e) => setF('drive_folder_url', e.target.value)}
               placeholder="https://drive.google.com/drive/folders/... ou open?id=..."
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white" />
+              className="w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white" />
             {driveUrl && (
               <a href={driveUrl} target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 mt-1.5 text-xs text-indigo-600 hover:underline">
@@ -331,7 +331,7 @@ export default function NewActivityPage() {
                 value={form[field as keyof typeof form]}
                 onChange={(e) => setF(field, e.target.value)}
                 placeholder={placeholder}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white" />
+                className="flex-1 px-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white" />
             </div>
           ))}
         </div>

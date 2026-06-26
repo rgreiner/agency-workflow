@@ -452,15 +452,15 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
         <div className="flex items-center gap-2">
           <button
             onClick={() => { const d = new Date(); d.setDate(d.getDate() - 7); setViewStart(d) }}
-            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium text-gray-700">
+            className="px-3 py-1.5 text-sm bg-gray-100 border border-transparent rounded-xl hover:bg-gray-50 transition font-medium text-gray-700">
             Hoje
           </button>
           <button onClick={() => setViewStart(d => addDays(d, -7))}
-            className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+            className="p-1.5 bg-gray-100 border border-transparent rounded-xl hover:bg-gray-50 transition">
             <ChevronLeft className="w-4 h-4 text-gray-600" />
           </button>
           <button onClick={() => setViewStart(d => addDays(d, 7))}
-            className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+            className="p-1.5 bg-gray-100 border border-transparent rounded-xl hover:bg-gray-50 transition">
             <ChevronRight className="w-4 h-4 text-gray-600" />
           </button>
         </div>
@@ -515,7 +515,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
                 onChange={e => setSaveName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') saveCurrentFilter(); if (e.key === 'Escape') setSaveOpen(false) }}
                 placeholder="Nome do filtro"
-                className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-2.5 py-1.5 bg-gray-100 border border-transparent rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
               <div className="flex justify-end gap-2 mt-2">
                 <button type="button" onClick={() => { setSaveOpen(false); setSaveName('') }}

@@ -136,7 +136,7 @@ export default function AparenciaPage() {
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploading}
-                    className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 font-medium text-gray-700"
+                    className="flex items-center gap-2 px-4 py-2 text-sm bg-gray-100 border border-transparent rounded-xl hover:bg-gray-50 transition disabled:opacity-50 font-medium text-gray-700"
                   >
                     {uploading
                       ? <Loader2 className="w-4 h-4 animate-spin" />

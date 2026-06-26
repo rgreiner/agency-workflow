@@ -188,7 +188,7 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
           onChange={e => setComment(e.target.value)}
           placeholder="Observação sobre a mudança (opcional)..."
           rows={2}
-          className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-700 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none mb-3"
+          className="w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-700 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none mb-3"
         />
       )}
 

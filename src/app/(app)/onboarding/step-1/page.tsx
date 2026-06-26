@@ -85,7 +85,7 @@ export default function OnboardingStep1() {
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
               placeholder="Ex: Minha Agência"
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               required
             />
             {form.name && (

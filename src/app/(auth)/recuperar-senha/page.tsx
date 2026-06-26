@@ -41,7 +41,7 @@ export default async function RecuperarSenhaPage({
                 type="email"
                 autoComplete="email"
                 required
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
 
