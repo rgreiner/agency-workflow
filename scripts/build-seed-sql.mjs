@@ -27,6 +27,8 @@ const STATUS_MAP = {
   "aprovação do cliente": "aprovacao_cliente", "implantação off/orgânico": "implantacao_off",
   "edição": "edicao", "produção fornecedores": "producao_fornecedores", "insight": "insight",
   "revisão interna": "revisao_interna", "redação": "redacao", "validação do atendimento": "validacao_atendimento",
+  "briefing": "briefing", "orçamento": "orcamento", "validação de mídia": "validacao_midia",
+  "implantação digital": "implantacao_digital", "finalização": "finalizacao",
 };
 const STATUS_FALLBACK = "briefing";
 const PRIORITY_MAP = { "1": "urgent", "2": "high", "3": "medium", "4": "low" };
