@@ -4,7 +4,7 @@ import { Resend } from 'resend'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 
-const FROM = process.env.RESEND_FROM ?? 'Agency Workflow <onboarding@resend.dev>'
+const FROM = process.env.RESEND_FROM ?? 'Flow <onboarding@resend.dev>'
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
 
 // Instancia sob demanda — NUNCA no topo do módulo: `new Resend()` sem chave
@@ -66,14 +66,14 @@ export async function sendInviteEmail(
       <div style="width: 48px; height: 48px; background: rgba(255,255,255,0.2); border-radius: 12px; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center;">
         <span style="color: white; font-size: 22px; font-weight: 700;">${orgName.charAt(0).toUpperCase()}</span>
       </div>
-      <p style="color: rgba(255,255,255,0.8); margin: 0; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase;">Agency Workflow</p>
+      <p style="color: rgba(255,255,255,0.8); margin: 0; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase;">Flow</p>
     </div>
 
     <!-- Body -->
     <div style="padding: 32px;">
       <h1 style="font-size: 22px; font-weight: 700; color: #111827; margin: 0 0 8px;">Você foi convidado!</h1>
       <p style="color: #6b7280; font-size: 15px; margin: 0 0 24px; line-height: 1.5;">
-        <strong style="color: #374151;">${senderName}</strong> convidou você para entrar em <strong style="color: #374151;">${orgName}</strong> no Agency Workflow.
+        <strong style="color: #374151;">${senderName}</strong> convidou você para entrar em <strong style="color: #374151;">${orgName}</strong> no Flow.
       </p>
 
       <a href="${inviteUrl}"
@@ -114,7 +114,7 @@ export async function sendPasswordResetEmail(
   const { error } = await resend.emails.send({
     from: FROM,
     to: toEmail,
-    subject: 'Redefinir sua senha — Agency Workflow',
+    subject: 'Redefinir sua senha — Flow',
     html: `
 <!DOCTYPE html>
 <html>
@@ -123,7 +123,7 @@ export async function sendPasswordResetEmail(
   <div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 16px; border: 1px solid #e5e7eb; overflow: hidden;">
 
     <div style="background: #ea580c; padding: 32px; text-align: center;">
-      <p style="color: rgba(255,255,255,0.85); margin: 0; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase;">Agency Workflow</p>
+      <p style="color: rgba(255,255,255,0.85); margin: 0; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase;">Flow</p>
     </div>
 
     <div style="padding: 32px;">

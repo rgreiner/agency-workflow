@@ -18,7 +18,7 @@ export default async function RedefinirSenhaPage({
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-10 w-full max-w-md">
         <div className="mb-8 text-center">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-orange-600 mb-4">
-            <span className="text-white font-bold text-lg">AW</span>
+            <span className="text-[#fff] font-bold text-2xl">F</span>
           </div>
           <h1 className="text-2xl font-semibold text-gray-900">Nova senha</h1>
           <p className="text-gray-500 mt-1 text-sm">Escolha uma nova senha para sua conta</p>

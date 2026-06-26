@@ -11,13 +11,19 @@ export default async function LoginPage({
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-10 w-full max-w-md">
-        <div className="mb-8 text-center">
+        <div className="mb-6 text-center">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-orange-600 mb-4">
-            <span className="text-white font-bold text-lg">AW</span>
+            <span className="text-[#fff] font-bold text-2xl">F</span>
           </div>
-          <h1 className="text-2xl font-semibold text-gray-900">Agency Workflow</h1>
-          <p className="text-gray-500 mt-1 text-sm">Gestão de pauta e atividades</p>
+          <h1 className="text-2xl font-semibold text-gray-900">Flow</h1>
+          <p className="text-gray-500 mt-1 text-sm">One a One · Gestão de pauta, produção e mídia</p>
         </div>
+
+        <p className="mb-6 text-center text-sm text-gray-500 leading-relaxed">
+          Acesse com seu <span className="font-medium text-gray-700">e-mail e senha</span> da agência.
+          Esqueceu? Toque em <span className="font-medium text-orange-600">Esqueci a senha</span>.
+          Ainda sem acesso? Peça um convite ao administrador.
+        </p>
 
         {reset === 'ok' && (
           <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800">
@@ -69,7 +75,7 @@ export default async function LoginPage({
 
           <button
             type="submit"
-            className="w-full px-4 py-3 rounded-xl text-white font-medium bg-orange-600 hover:bg-orange-700 transition"
+            className="w-full px-4 py-3 rounded-xl text-[#fff] font-medium bg-orange-600 hover:bg-orange-700 transition"
           >
             Entrar
           </button>

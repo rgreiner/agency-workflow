@@ -111,10 +111,10 @@ export default async function ConvitePage({
         {/* Logo / branding */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 bg-orange-600 rounded-2xl shadow-lg mb-4">
-            <Users className="w-7 h-7 text-white" />
+            <Users className="w-7 h-7 text-[#fff]" />
           </div>
           <p className="text-sm font-medium text-orange-600 tracking-wide uppercase">
-            Agency Workflow
+            One a One · Flow
           </p>
         </div>
 
