@@ -21,22 +21,24 @@
 /* ── Tema escuro (classe .dark no <html>) ───────────────────────────────────
    As utilities do Tailwind v4 (bg-white, text-gray-900, border-gray-200,
    hover/opacidade…) referenciam var(--color-*). Invertendo a escala de cinza
-   aqui, o app inteiro vira escuro sem tocar em cada componente. Accent (indigo)
+   aqui, o app inteiro vira escuro sem tocar em cada componente. Accent (laranja)
    e cores de status (hex inline) ficam intactos. */
 .dark {
-  --background: #0d1117;
-  --foreground: #f0f6fc;
-  --color-white:    #161b22;
-  --color-gray-50:  #0d1117;
-  --color-gray-100: #1c222b;
-  --color-gray-200: #2a313c;
-  --color-gray-300: #3a424e;
-  --color-gray-400: #7d8794;
-  --color-gray-500: #97a1af;
-  --color-gray-600: #b3bcc9;
-  --color-gray-700: #ccd4de;
-  --color-gray-800: #e2e7ed;
-  --color-gray-900: #f0f6fc;
+  /* Base "B" — neutro QUENTE (charcoal, menos azul que o GitHub) p/ casar com o
+     accent laranja. R ≥ G ≥ B em toda a escala, croma baixo. */
+  --background: #171513;
+  --foreground: #f7f3ec;
+  --color-white:    #201d1a;
+  --color-gray-50:  #171513;
+  --color-gray-100: #272420;
+  --color-gray-200: #37332d;
+  --color-gray-300: #48433b;
+  --color-gray-400: #8a8378;
+  --color-gray-500: #a39c8f;
+  --color-gray-600: #beb7ab;
+  --color-gray-700: #d6d0c6;
+  --color-gray-800: #ebe6dd;
+  --color-gray-900: #f7f3ec;
 }
 
 /* Aba ativa do menu superior: no escuro o accent puro como texto (estilo inline)
@@ -47,19 +49,20 @@
   color: #fff !important;
 }
 
-/* A sidebar permanece escura no tema escuro (reset dos cinzas ao valor claro). */
+/* A sidebar permanece escura no tema escuro. Paleta QUENTE própria (charcoal),
+   pra casar com a base "B" do dark em vez do navy frio anterior. */
 .dark .sidebar-shell {
   --color-white:    #ffffff;
-  --color-gray-50:  #f9fafb;
-  --color-gray-100: #f3f4f6;
-  --color-gray-200: #e5e7eb;
-  --color-gray-300: #d1d5db;
-  --color-gray-400: #9ca3af;
-  --color-gray-500: #6b7280;
-  --color-gray-600: #4b5563;
-  --color-gray-700: #374151;
-  --color-gray-800: #1f2937;
-  --color-gray-900: #101828;
+  --color-gray-50:  #faf8f4;
+  --color-gray-100: #f2efe9;
+  --color-gray-200: #e3ded5;
+  --color-gray-300: #cbc6bd;
+  --color-gray-400: #9a9388;
+  --color-gray-500: #6b655b;
+  --color-gray-600: #4a443c;
+  --color-gray-700: #332e28;
+  --color-gray-800: #272320;
+  --color-gray-900: #1c1a17;
 }
 
 /* ── Polish (Emil) — micro-interações que compõem em todo o app ────────────── */
@@ -109,6 +112,23 @@
   @keyframes modalIn {
     from { opacity: 0; transform: scale(0.96) translateY(6px); }
   }
+}
+
+/* ── Sombras "soft / premium" (design "C") ──────────────────────────────────
+   Camadas suaves nas superfícies elevadas — vale p/ TODOS os dropdowns/popovers/
+   modais de uma vez (têm .pop-in/.pop-up/.modal-card). Fora do @media de motion
+   pra aplicar sempre; sem @layer pra vencer o shadow-xl do Tailwind. */
+.pop-in, .pop-up {
+  box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.10), 0 12px 28px -6px rgb(0 0 0 / 0.14);
+}
+.modal-card {
+  box-shadow: 0 8px 24px -4px rgb(0 0 0 / 0.13), 0 24px 60px -12px rgb(0 0 0 / 0.22);
+}
+.dark .pop-in, .dark .pop-up {
+  box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.42), 0 14px 32px -6px rgb(0 0 0 / 0.55);
+}
+.dark .modal-card {
+  box-shadow: 0 10px 30px -6px rgb(0 0 0 / 0.5), 0 30px 72px -16px rgb(0 0 0 / 0.62);
 }
 
 html,
@@ -211,7 +231,7 @@ button:focus-visible,
 .doc-editor .ProseMirror h3 { font-size: 1.25rem; font-weight: 600; color: var(--color-gray-800); margin: 1rem 0 0.375rem; }
 .doc-editor .ProseMirror ul, .doc-editor .ProseMirror ol { padding-left: 1.5rem; margin-bottom: 0.75rem; }
 .doc-editor .ProseMirror li { margin-bottom: 0.25rem; }
-.doc-editor .ProseMirror blockquote { border-left: 3px solid #a5b4fc; padding-left: 1rem; color: var(--color-gray-500); font-style: italic; margin: 1rem 0; }
+.doc-editor .ProseMirror blockquote { border-left: 3px solid #fdba74; padding-left: 1rem; color: var(--color-gray-500); font-style: italic; margin: 1rem 0; }
 .doc-editor .ProseMirror code { background: var(--color-gray-100); padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.875rem; font-family: monospace; color: #ea580c; }
 .doc-editor .ProseMirror pre { background: #1f2937; color: #f9fafb; padding: 1rem; border-radius: 0.75rem; margin: 1rem 0; overflow-x: auto; }
 .doc-editor .ProseMirror pre code { background: transparent; color: inherit; padding: 0; }
@@ -261,7 +281,7 @@ button:focus-visible,
 .rich-text ul { list-style: disc; }
 .rich-text ol { list-style: decimal; }
 .rich-text li { margin-bottom: 0.15rem; }
-.rich-text blockquote { border-left: 3px solid #a5b4fc; padding-left: 0.85rem; color: var(--color-gray-500); font-style: italic; margin: 0.6rem 0; }
+.rich-text blockquote { border-left: 3px solid #fdba74; padding-left: 0.85rem; color: var(--color-gray-500); font-style: italic; margin: 0.6rem 0; }
 .rich-text code { background: var(--color-gray-100); padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.8125rem; font-family: monospace; color: #ea580c; }
 .rich-text a { color: #ea580c; text-decoration: underline; }
 .rich-text hr { border: none; border-top: 1px solid var(--color-gray-200); margin: 0.9rem 0; }
