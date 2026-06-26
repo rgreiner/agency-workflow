@@ -4,9 +4,46 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { provisionActivitiesDrive } from '@/lib/drive-provision'
+import { provisionActivitiesDrive, moveActivityDrive } from '@/lib/drive-provision'
 import { scheduleReview, reviewKindForAdvance } from '@/lib/review-gate'
 import { scheduleRecurrence, isConclusion } from '@/lib/recurrence-gate'
+
+/**
+ * Move uma tarefa para outro projeto (campanha), inclusive de outro cliente da
+ * mesma org. Leva a pasta do Drive junto (reparent em 2º plano via moveActivityDrive).
+ */
+export async function moveActivity(activityId: string, newCampaignId: string, orgSlug: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // pasta + título atuais (antes de mover) p/ o reparent no Drive
+  const { data: act } = await supabase
+    .from('activities')
+    .select('title, drive_folder_id')
+    .eq('id', activityId)
+    .single()
+
+  // RPC novo (ainda não está nos tipos gerados) — cast como o resto do app.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('move_activity', {
+    p_user_id: user.id,
+    p_activity_id: activityId,
+    p_new_campaign_id: newCampaignId,
+  })
+  if (error) return { error: error.message }
+
+  await moveActivityDrive(supabase, {
+    activityId,
+    title: (act as { title: string } | null)?.title ?? '',
+    userId: user.id,
+    oldFolderId: (act as { drive_folder_id: string | null } | null)?.drive_folder_id ?? null,
+    newCampaignId,
+  })
+
+  revalidatePath(`/${orgSlug}`, 'layout')
+  return { ok: true as const }
+}
 
 export async function createActivity(
   orgSlug: string,

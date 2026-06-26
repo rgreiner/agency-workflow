@@ -21,6 +21,7 @@ import { DateRangeEditor } from '@/components/ui/DateRangeEditor'
 import { RecurrenceEditor } from '@/components/ui/RecurrenceEditor'
 import { Avatar } from '@/components/ui/Avatar'
 import { MachinePath } from '@/components/ui/MachinePath'
+import { MoveTaskProject } from './MoveTaskProject'
 
 export default async function ActivityPage({
   params,
@@ -90,6 +91,19 @@ export default async function ActivityPage({
 
   const ws = campaign?.workspaces as unknown as { org_id: string; name: string } | null
   const orgId = ws?.org_id
+
+  // Projetos (cliente → campanha) p/ o seletor de "mover tarefa" no breadcrumb.
+  const { data: projWs } = orgId ? await supabase
+    .from('workspaces')
+    .select('id, name, campaigns(id, name)')
+    .eq('org_id', orgId)
+    .eq('archived', false)
+    .eq('campaigns.archived', false)
+    .order('name') : { data: [] }
+  const moveProjects = (projWs ?? []).flatMap(w =>
+    ((w.campaigns as unknown as { id: string; name: string }[]) ?? []).map(c => ({
+      workspaceId: w.id, workspaceName: w.name, campaignId: c.id, campaignName: c.name,
+    })))
 
   const { data: membership } = (user && orgId) ? await supabase
     .from('organization_members')
@@ -206,9 +220,20 @@ export default async function ActivityPage({
           {ws?.name ?? 'Cliente'}
         </Link>
         <span className="text-gray-300 text-xs">/</span>
-        <Link href={`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}`} className="text-xs text-gray-500 hover:text-gray-600 transition">
-          {campaign?.name}
-        </Link>
+        {isOrgMember ? (
+          <MoveTaskProject
+            orgSlug={orgSlug}
+            activityId={activityId}
+            currentWorkspaceId={workspaceId}
+            currentCampaignId={campaignId}
+            currentCampaignName={campaign?.name ?? 'Projeto'}
+            projects={moveProjects}
+          />
+        ) : (
+          <Link href={`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}`} className="text-xs text-gray-500 hover:text-gray-600 transition">
+            {campaign?.name}
+          </Link>
+        )}
         <span className="text-gray-300 text-xs">/</span>
         <span className="text-xs text-gray-600 truncate max-w-xs">{activity.title}</span>
         <div className="ml-auto flex items-center gap-3 text-xs text-gray-500 shrink-0">

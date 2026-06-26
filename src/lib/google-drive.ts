@@ -114,6 +114,27 @@ export async function createTaskFolders(campaignFolderId: string, taskName: stri
   return { taskFolderId: task.id, taskFolderLink: task.link, sub, drivePath }
 }
 
+/**
+ * Move (reparenta) a pasta da tarefa pra dentro de outra pasta de campanha.
+ * No Drive, reparentar leva TODO o conteúdo junto (subpastas/arquivos/links) e o
+ * ID da pasta não muda — então os links já salvos na tarefa seguem válidos.
+ * Retorna o novo caminho local (drivePath) pra atualizar na atividade.
+ */
+export async function moveTaskFolder(taskFolderId: string, newParentId: string): Promise<{ drivePath: string }> {
+  const drive = getDrive()
+  const cur = (await drive.files.get({ fileId: taskFolderId, fields: 'parents', supportsAllDrives: true })).data
+  const removeParents = (cur.parents ?? []).join(',')
+  await drive.files.update({
+    fileId: taskFolderId,
+    addParents: newParentId,
+    removeParents: removeParents || undefined,
+    fields: 'id, parents',
+    supportsAllDrives: true,
+  })
+  const drivePath = await buildDrivePath(taskFolderId)
+  return { drivePath }
+}
+
 // ── Leitura de conteúdo (revisão de Redação) ────────────────────────────────
 
 const DOC_MIME    = 'application/vnd.google-apps.document'

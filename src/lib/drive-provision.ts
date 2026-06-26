@@ -2,7 +2,7 @@ import 'server-only'
 import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
-import { createTaskFolders, driveConfigured } from '@/lib/google-drive'
+import { createTaskFolders, moveTaskFolder, driveConfigured } from '@/lib/google-drive'
 
 const DEFAULT_PREFIX = 'G:\\Drives compartilhados\\'
 
@@ -64,6 +64,55 @@ export async function provisionActivitiesDrive(
       } catch (e) {
         console.error('[drive] provision falhou para', it.activityId, e)
       }
+    }
+  })
+}
+
+/**
+ * Ao mover a tarefa de projeto: leva a pasta do Drive junto (em 2º plano).
+ * - Se a tarefa já tem pasta → reparenta pro projeto destino (todo o conteúdo e
+ *   os links vão junto; só o caminho local muda).
+ * - Se ainda não tem pasta → provisiona uma nova no projeto destino.
+ * Se o projeto destino não tiver pasta vinculada, não mexe no Drive (move só no banco).
+ */
+export async function moveActivityDrive(
+  supabase: SupabaseClient<Database>,
+  params: { activityId: string; title: string; userId: string; oldFolderId: string | null; newCampaignId: string },
+) {
+  const cfg = await resolve(supabase, params.newCampaignId)
+  if (!cfg) return
+
+  after(async () => {
+    try {
+      if (params.oldFolderId) {
+        // reparenta a pasta existente — só o caminho local muda (sublinks seguem válidos)
+        const r = await moveTaskFolder(params.oldFolderId, cfg.folderId)
+        await supabase.rpc('set_activity_drive', {
+          p_user_id: params.userId,
+          p_activity_id: params.activityId,
+          p_drive_folder_id: null,
+          p_drive_path: joinLocalPath(cfg.prefix, r.drivePath),
+          p_drive_folder_url: null,
+          p_redacao_url: null,
+          p_finalizacao_url: null,
+          p_preview_url: null,
+        })
+      } else {
+        // tarefa sem pasta ainda → provisiona no destino
+        const r = await createTaskFolders(cfg.folderId, params.title)
+        await supabase.rpc('set_activity_drive', {
+          p_user_id: params.userId,
+          p_activity_id: params.activityId,
+          p_drive_folder_id: r.taskFolderId,
+          p_drive_path: joinLocalPath(cfg.prefix, r.drivePath),
+          p_drive_folder_url: r.taskFolderLink,
+          p_redacao_url: r.sub['Redação']?.link ?? null,
+          p_finalizacao_url: r.sub['Final']?.link ?? null,
+          p_preview_url: r.sub['Preview']?.link ?? null,
+        })
+      }
+    } catch (e) {
+      console.error('[drive] move falhou para', params.activityId, e)
     }
   })
 }
