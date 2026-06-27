@@ -92,6 +92,103 @@ export async function setLancamentoFlags(orgSlug: string, lancamentoId: string, 
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
 }
 
+// ── Lançamento manual ────────────────────────────────────────
+export interface LancamentoInput {
+  tipo?: string
+  contato_tipo?: string | null
+  contato_nome?: string | null
+  descricao?: string | null
+  valor?: string
+  vencimento?: string | null
+  competencia?: string | null
+  conta_id?: string | null
+  categoria?: string | null
+  centro_custo?: string | null
+  forma_pagamento?: string | null
+  observacao?: string | null
+  recorrente?: boolean
+}
+
+export async function createLancamento(orgSlug: string, data: LancamentoInput) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { data: org } = await supabase
+    .from('organizations').select('id').eq('slug', orgSlug).single()
+  if (!org) return { error: 'Organização não encontrada' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('create_lancamento', {
+    p_user_id: user.id, p_org_id: org.id, p_data: data,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+}
+
+export async function updateLancamento(orgSlug: string, lancamentoId: string, data: LancamentoInput) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('update_lancamento', {
+    p_user_id: user.id, p_lancamento_id: lancamentoId, p_data: data,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+}
+
+export async function deleteLancamento(orgSlug: string, lancamentoId: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('delete_lancamento', {
+    p_user_id: user.id, p_lancamento_id: lancamentoId,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+}
+
+export interface BaixaInput {
+  data_liquidacao?: string | null
+  conta_id?: string | null
+  forma_pagamento?: string | null
+  valor_realizado?: string | null
+  juros?: string
+  multa?: string
+  desconto?: string
+  tarifa?: string
+}
+
+export async function liquidarLancamento(orgSlug: string, lancamentoId: string, data: BaixaInput) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('liquidar_lancamento', {
+    p_user_id: user.id, p_lancamento_id: lancamentoId, p_data: data,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+}
+
+export async function reabrirLancamento(orgSlug: string, lancamentoId: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('reabrir_lancamento', {
+    p_user_id: user.id, p_lancamento_id: lancamentoId,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+}
+
 // ── Contas financeiras ───────────────────────────────────────
 export interface ContaInput {
   nome: string

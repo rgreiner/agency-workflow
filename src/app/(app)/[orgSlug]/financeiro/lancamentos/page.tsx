@@ -1,5 +1,6 @@
 import { assertFinanceAccess } from '@/lib/finance'
-import { LancamentosClient, type Lancamento } from './LancamentosClient'
+import { LancamentosClient, type Lancamento, type ContaRef } from './LancamentosClient'
+import type { FinanceCategoria, FinanceCentro } from '@/app/actions/financeiro'
 
 export default async function LancamentosPage({
   params,
@@ -10,14 +11,36 @@ export default async function LancamentosPage({
   const { supabase, orgId } = await assertFinanceAccess(orgSlug)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: raw } = await (supabase as any)
-    .from('lancamentos')
-    .select('id, tipo, origem_tipo, contato_nome, descricao, valor, vencimento, competencia, situacao, nf_emitida, boleto_gerado, revisar')
-    .eq('org_id', orgId)
-    .order('vencimento', { ascending: true, nullsFirst: false })
+  const sb = supabase as any
+  const [{ data: raw }, { data: contasRaw }, { data: settings }] = await Promise.all([
+    sb.from('lancamentos')
+      .select('id, tipo, origem_tipo, contato_nome, descricao, valor, vencimento, competencia, situacao, nf_emitida, boleto_gerado, revisar, conta_id, categoria, centro_custo, data_liquidacao, forma_pagamento, observacao')
+      .eq('org_id', orgId)
+      .order('vencimento', { ascending: true, nullsFirst: false }),
+    sb.from('contas_financeiras')
+      .select('id, nome, cor, ativo')
+      .eq('org_id', orgId)
+      .order('ordem', { ascending: true }),
+    sb.from('org_settings')
+      .select('finance_categorias, finance_centros_custo')
+      .eq('org_id', orgId)
+      .maybeSingle(),
+  ])
 
   const lancamentos = (raw ?? []) as Lancamento[]
+  const contas = ((contasRaw ?? []) as ContaRef[]).filter(c => c.ativo)
+  const categorias = (settings?.finance_categorias ?? []) as FinanceCategoria[]
+  const centros = (settings?.finance_centros_custo ?? []) as FinanceCentro[]
   const today = new Date().toISOString().slice(0, 10)
 
-  return <LancamentosClient orgSlug={orgSlug} lancamentos={lancamentos} today={today} />
+  return (
+    <LancamentosClient
+      orgSlug={orgSlug}
+      lancamentos={lancamentos}
+      contas={contas}
+      categorias={categorias}
+      centros={centros}
+      today={today}
+    />
+  )
 }
