@@ -1,6 +1,6 @@
 import { assertFinanceAccess } from '@/lib/finance'
 import { LancamentosClient, type Lancamento, type ContaRef } from './LancamentosClient'
-import type { FinanceCategoria, FinanceCentro } from '@/app/actions/financeiro'
+import type { FinanceCategoriaGrupo, FinanceCentro } from '@/app/actions/financeiro'
 
 export default async function LancamentosPage({
   params,
@@ -29,7 +29,7 @@ export default async function LancamentosPage({
 
   const lancamentos = (raw ?? []) as Lancamento[]
   const contas = ((contasRaw ?? []) as ContaRef[]).filter(c => c.ativo)
-  const categorias = (settings?.finance_categorias ?? []) as FinanceCategoria[]
+  const categorias = (settings?.finance_categorias ?? []) as FinanceCategoriaGrupo[]
   const centros = (settings?.finance_centros_custo ?? []) as FinanceCentro[]
   const today = new Date().toISOString().slice(0, 10)
 

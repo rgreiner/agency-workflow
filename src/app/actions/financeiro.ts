@@ -231,10 +231,19 @@ export async function updateConta(orgSlug: string, contaId: string, data: Partia
 }
 
 // ── Config: categorias / centros de custo ────────────────────
-export interface FinanceCategoria { nome: string; tipo: string; cor: string | null }
+// Categorias em árvore de 2 níveis (grupo → filhos), separadas por tipo
+// (entrada = receita | saida = despesa). Um grupo sem filhos é uma categoria
+// avulsa, selecionável diretamente.
+export interface FinanceCategoriaFilho { nome: string; cor: string | null }
+export interface FinanceCategoriaGrupo {
+  nome: string
+  tipo: string
+  cor: string | null
+  filhos: FinanceCategoriaFilho[]
+}
 export interface FinanceCentro { nome: string; cor: string | null }
 
-export async function setFinanceConfig(orgSlug: string, categorias: FinanceCategoria[], centros: FinanceCentro[]) {
+export async function setFinanceConfig(orgSlug: string, categorias: FinanceCategoriaGrupo[], centros: FinanceCentro[]) {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }

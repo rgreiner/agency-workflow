@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { CategoriasClient } from './CategoriasClient'
-import type { FinanceCategoria, FinanceCentro } from '@/app/actions/financeiro'
+import type { FinanceCategoriaGrupo, FinanceCentro } from '@/app/actions/financeiro'
 
 export default async function CategoriasPage({
   params,
@@ -21,7 +21,7 @@ export default async function CategoriasPage({
     .eq('org_id', org.id)
     .maybeSingle()
 
-  const categorias = (settings?.finance_categorias ?? []) as FinanceCategoria[]
+  const categorias = (settings?.finance_categorias ?? []) as FinanceCategoriaGrupo[]
   const centros = (settings?.finance_centros_custo ?? []) as FinanceCentro[]
 
   return <CategoriasClient orgSlug={orgSlug} categorias={categorias} centros={centros} />

@@ -9,7 +9,7 @@ import { Select } from '@/components/ui/Select'
 import {
   setLancamentoFlags, ressincronizarLancamento, marcarLancamentoRevisado,
   createLancamento, updateLancamento, deleteLancamento, liquidarLancamento, reabrirLancamento,
-  type FinanceCategoria, type FinanceCentro,
+  type FinanceCategoriaGrupo, type FinanceCentro,
 } from '@/app/actions/financeiro'
 
 export interface Lancamento {
@@ -57,7 +57,7 @@ const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 
 export function LancamentosClient({ orgSlug, lancamentos, contas, categorias, centros, today }: {
   orgSlug: string; lancamentos: Lancamento[]; contas: ContaRef[]
-  categorias: FinanceCategoria[]; centros: FinanceCentro[]; today: string
+  categorias: FinanceCategoriaGrupo[]; centros: FinanceCentro[]; today: string
 }) {
   const [mes, setMes] = useState(today.slice(0, 7))
   const [creating, setCreating] = useState(false)
@@ -263,7 +263,7 @@ const FORMA_OPTIONS = [
 
 function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onClose }: {
   orgSlug: string; lancamento: Lancamento | null; contas: ContaRef[]
-  categorias: FinanceCategoria[]; centros: FinanceCentro[]; onClose: () => void
+  categorias: FinanceCategoriaGrupo[]; centros: FinanceCentro[]; onClose: () => void
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -283,10 +283,15 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
     observacao: lancamento?.observacao ?? '',
   })
 
-  const catOptions = useMemo(() => [
-    { value: '', label: '—' },
-    ...categorias.filter(c => !c.tipo || c.tipo === 'ambos' || c.tipo === form.tipo).map(c => ({ value: c.nome, label: c.nome })),
-  ], [categorias, form.tipo])
+  const catOptions = useMemo(() => {
+    const opts: { value: string; label: string }[] = [{ value: '', label: '—' }]
+    for (const g of categorias) {
+      if (g.tipo !== form.tipo) continue
+      if (g.filhos.length === 0) opts.push({ value: g.nome, label: g.nome })
+      else for (const f of g.filhos) opts.push({ value: f.nome, label: f.nome })
+    }
+    return opts
+  }, [categorias, form.tipo])
   const contaOptions = useMemo(() => [{ value: '', label: '—' }, ...contas.map(c => ({ value: c.id, label: c.nome }))], [contas])
   const centroOptions = useMemo(() => [{ value: '', label: '—' }, ...centros.map(c => ({ value: c.nome, label: c.nome }))], [centros])
 
