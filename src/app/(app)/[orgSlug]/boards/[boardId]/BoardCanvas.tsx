@@ -19,7 +19,7 @@ import {
   ChevronLeft, Check, Loader2,
   MousePointer2, StickyNote, Type, ImageIcon, ArrowRight,
   Trash2, ZoomIn, ZoomOut, Maximize2, Pencil, X,
-  Palette, Link2, Frame, ListChecks,
+  Palette, Link2, Frame, ListChecks, Grid3x3,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -29,6 +29,7 @@ const MIN_SCALE = 0.15
 const MAX_SCALE = 4.0
 const GRID_SIZE = 24
 const SNAP_PX   = 6   // distância de "grude" em pixels de tela (convertida p/ mundo pelo zoom)
+const ZOOM_SPEED = 0.0016  // sensibilidade do zoom no scroll (menor = mais suave)
 
 type Tool       = 'select' | 'note' | 'text' | 'image' | 'link' | 'color' | 'frame' | 'checklist' | 'arrow'
 type SaveStatus = 'idle' | 'saving' | 'saved'
@@ -212,14 +213,6 @@ function CanvasEl({
     if (resizing.current) { resizing.current = false; e.currentTarget.releasePointerCapture(e.pointerId) }
   }
 
-  // Port dot positions (shown when arrow tool + hovering)
-  const PORT_DOTS: { style: React.CSSProperties }[] = [
-    { style: { top: '-7px',  left: '50%',              transform: 'translateX(-50%)' } }, // top
-    { style: { right: '-7px', top: '50%',              transform: 'translateY(-50%)' } }, // right
-    { style: { bottom: '-7px', left: '50%',            transform: 'translateX(-50%)' } }, // bottom
-    { style: { left: '-7px',  top: '50%',              transform: 'translateY(-50%)' } }, // left
-  ]
-
   return (
     <div
       style={{
@@ -248,26 +241,6 @@ function CanvasEl({
       onDoubleClick={e => { if (!isArrowTool) { e.stopPropagation(); onStartEdit() } }}
     >
       {children}
-
-      {/* ── Connection port dots (aparecem no hover, em qualquer ferramenta) ── */}
-      {isHovered && !editing && PORT_DOTS.map((dot, i) => (
-        <div
-          key={i}
-          onPointerDown={e => { e.stopPropagation(); onArrowStart(e) }}
-          style={{
-            position: 'absolute',
-            width: 12, height: 12,
-            backgroundColor: '#f97316',
-            borderRadius: '50%',
-            border: '2.5px solid #fff',
-            boxShadow: '0 0 0 2px #f97316',
-            cursor: 'crosshair',
-            zIndex: 300,
-            animation: 'board-dot-in 0.12s ease-out',
-            ...dot.style,
-          }}
-        />
-      ))}
 
       {/* ── Delete button ── */}
       {selected && !editing && !isArrowTool && (
@@ -388,10 +361,12 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
   const [saveStatus, setSaveStatus]     = useState<SaveStatus>('idle')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting]         = useState(false)
+  const [snapGrid, setSnapGrid]         = useState(false)   // alinhar à grade ao arrastar
 
   const canvasRef       = useRef<HTMLDivElement>(null)
   const panRef          = useRef(pan)
   const scaleRef        = useRef(scale)
+  const snapGridRef     = useRef(snapGrid)
   const saveTimer       = useRef<ReturnType<typeof setTimeout> | null>(null)
   const elementsRef     = useRef(elements)
   const arrowsRef       = useRef(arrows)
@@ -405,6 +380,7 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
   useEffect(() => { arrowsRef.current   = arrows },    [arrows])
   useEffect(() => { hoveredElIdRef.current  = hoveredElId },  [hoveredElId])
   useEffect(() => { drawingArrowRef.current = drawingArrow }, [drawingArrow])
+  useEffect(() => { snapGridRef.current     = snapGrid },     [snapGrid])
 
   // ── Auto-save ────────────────────────────────────────────────────────────────
   // scheduleSave reads from refs so it always has the latest data
@@ -456,13 +432,22 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
     if (!cur) return
     const kids = dragChildIds.current
     const others = els.filter(e => e.id !== id && !kids.has(e.id))
-    const snap = computeSnap(cur, x, y, others, SNAP_PX / scaleRef.current)
-    setGuides(snap.guides)
-    const dx = snap.x - cur.x
-    const dy = snap.y - cur.y
+    let nx: number, ny: number
+    if (snapGridRef.current) {
+      // Alinhar à grade: arredonda pro múltiplo de GRID_SIZE (sem guias de elemento).
+      nx = Math.round(x / GRID_SIZE) * GRID_SIZE
+      ny = Math.round(y / GRID_SIZE) * GRID_SIZE
+      setGuides([])
+    } else {
+      const snap = computeSnap(cur, x, y, others, SNAP_PX / scaleRef.current)
+      nx = snap.x; ny = snap.y
+      setGuides(snap.guides)
+    }
+    const dx = nx - cur.x
+    const dy = ny - cur.y
     setElements(prev => {
       const next = prev.map(el =>
-        el.id === id            ? { ...el, x: snap.x, y: snap.y }
+        el.id === id            ? { ...el, x: nx, y: ny }
         : kids.has(el.id)       ? { ...el, x: el.x + dx, y: el.y + dy }
         :                         el
       )
@@ -635,7 +620,8 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
     if (!canvas) return
     function onWheel(e: WheelEvent) {
       e.preventDefault()
-      const factor = e.deltaY < 0 ? 1.12 : 0.89
+      // Proporcional ao deltaY (suave no trackpad) e com teto por evento (não "salta").
+      const factor = Math.min(1.08, Math.max(0.92, Math.exp(-e.deltaY * ZOOM_SPEED)))
       const rect = canvas!.getBoundingClientRect()
       const mx = e.clientX - rect.left, my = e.clientY - rect.top
       const cur = scaleRef.current, p = panRef.current
@@ -733,7 +719,7 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
   // ── Canvas background ─────────────────────────────────────────────────────────
   const dotSpacing = GRID_SIZE * scale
   const bgStyle = {
-    backgroundImage: 'radial-gradient(circle, #cbd5e1 1px, transparent 1px)',
+    backgroundImage: 'radial-gradient(circle, #ddd6c8 1px, transparent 1px)',
     backgroundSize: `${dotSpacing}px ${dotSpacing}px`,
     backgroundPosition: `${pan.x % dotSpacing}px ${pan.y % dotSpacing}px`,
   }
@@ -794,6 +780,14 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
             {saveStatus === 'saved'  && <><Check size={13} color="#22c55e" /> Salvo</>}
           </div>
 
+          <button
+            onClick={() => setSnapGrid(s => !s)}
+            title={snapGrid ? 'Alinhar à grade: ligado' : 'Alinhar à grade: desligado'}
+            style={{ ...zoomBtnStyle, backgroundColor: snapGrid ? '#fff7ed' : '#ffffff', borderColor: snapGrid ? '#fed7aa' : '#e5e7eb' }}
+          >
+            <Grid3x3 size={14} color={snapGrid ? '#ea580c' : '#6b7280'} />
+          </button>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <button onClick={() => zoomTo(Math.max(MIN_SCALE, scaleRef.current * 0.8))} style={zoomBtnStyle} title="Diminuir zoom"><ZoomOut size={14} color="#6b7280" /></button>
             <button onClick={() => zoomTo(1)} style={{ ...zoomBtnStyle, minWidth: 48, fontSize: 11, fontWeight: 600, color: '#6b7280', fontFamily: 'inherit' }} title="Zoom 100%">{Math.round(scale * 100)}%</button>
@@ -816,7 +810,7 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
         {/* ── Canvas viewport ── */}
         <div
           ref={canvasRef}
-          style={{ flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: '#f8fafc', cursor: cursorStyle, ...bgStyle }}
+          style={{ flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: '#f7f5ef', cursor: cursorStyle, ...bgStyle }}
           onPointerDown={onCanvasPointerDown}
           onPointerMove={onCanvasPointerMove}
           onPointerUp={onCanvasPointerUp}
