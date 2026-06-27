@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { notFound } from 'next/navigation'
 import { DocumentEditor } from '@/components/docs/DocumentEditor'
-import { DocsSidebar } from './DocsSidebar'
+import { DocsSidebar } from '../DocsSidebar'
 
 export default async function DocPage({
   params,

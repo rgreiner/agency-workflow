@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { createDocument } from '@/app/actions/docs'
 import { FileText, Plus, Globe, Lock, Building2 } from 'lucide-react'
 import { formatDistanceToNow } from '@/lib/utils'
+import { DocsSidebar } from './DocsSidebar'
 
 export default async function DocsPage({
   params,
@@ -26,8 +27,16 @@ export default async function DocsPage({
     .eq('org_id', org.id)
     .order('updated_at', { ascending: false })
 
-  // Pastas são só estrutura (sidebar do editor); na listagem mostramos os
-  // documentos "achatados".
+  // Árvore lateral (pastas + docs) — a MESMA da tela de doc aberto, p/ a interface
+  // ficar consistente (as pastas aparecem já na tela inicial).
+  const { data: allDocs } = await supabase
+    .from('documents')
+    .select('id, title, visibility, workspace_id, parent_id, is_folder, workspaces(name)')
+    .eq('org_id', org.id)
+    .order('is_folder', { ascending: false })
+    .order('title', { ascending: true })
+
+  // Na listagem central mostramos os documentos "achatados" (recentes).
   const docs = (rawDocs ?? []).filter(d => !d.is_folder)
   const orgDocs = docs.filter(d => !d.workspace_id)
   const workspaceDocs = docs.filter(d => d.workspace_id)
@@ -47,7 +56,15 @@ export default async function DocsPage({
   }
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
+    <div className="flex h-full">
+      <DocsSidebar
+        orgSlug={orgSlug}
+        orgId={org.id}
+        currentDocId=""
+        docs={(allDocs ?? []) as unknown as Parameters<typeof DocsSidebar>[0]['docs']}
+      />
+      <div className="flex-1 min-w-0 overflow-y-auto">
+        <div className="p-8 max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -94,6 +111,8 @@ export default async function DocsPage({
           <DocList docs={group.docs} orgSlug={orgSlug} />
         </section>
       ))}
+        </div>
+      </div>
     </div>
   )
 }
