@@ -176,6 +176,21 @@ export async function liquidarLancamento(orgSlug: string, lancamentoId: string, 
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
 }
 
+export interface Anexo { url: string; nome: string; tipo: string }
+
+export async function setLancamentoAnexos(orgSlug: string, lancamentoId: string, anexos: Anexo[]) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('set_lancamento_anexos', {
+    p_user_id: user.id, p_lancamento_id: lancamentoId, p_anexos: anexos,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+}
+
 export async function reabrirLancamento(orgSlug: string, lancamentoId: string) {
   const supabase = await createClient()
   const user = await getUsuario()

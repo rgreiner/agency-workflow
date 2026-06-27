@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, ChevronRight, FileText, Receipt, Check, RotateCcw, AlertTriangle, RefreshCw, Plus, X, Loader2, Pencil, Trash2, ArrowDownCircle, ArrowUpCircle, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -9,8 +9,11 @@ import { Select } from '@/components/ui/Select'
 import {
   setLancamentoFlags, ressincronizarLancamento, marcarLancamentoRevisado,
   createLancamento, updateLancamento, deleteLancamento, liquidarLancamento, reabrirLancamento,
-  type FinanceCategoriaGrupo, type FinanceCentro,
+  setLancamentoAnexos,
+  type FinanceCategoriaGrupo, type FinanceCentro, type Anexo,
 } from '@/app/actions/financeiro'
+import { uploadFile } from '@/lib/storage/upload-client'
+import { Paperclip, ExternalLink } from 'lucide-react'
 
 export interface Lancamento {
   id: string
@@ -32,6 +35,11 @@ export interface Lancamento {
   data_liquidacao: string | null
   forma_pagamento: string | null
   observacao: string | null
+  juros: number | string | null
+  multa: number | string | null
+  desconto: number | string | null
+  tarifa: number | string | null
+  anexos: Anexo[] | null
 }
 
 export interface ContaRef { id: string; nome: string; cor: string | null; ativo: boolean }
@@ -305,6 +313,15 @@ function Card({ label, value, tone, highlight }: { label: string; value: number;
   )
 }
 
+function Info({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className="flex justify-between gap-2">
+      <dt className="text-gray-500">{label}</dt>
+      <dd className={cn('text-gray-800 text-right', strong && 'font-semibold')}>{value}</dd>
+    </div>
+  )
+}
+
 function Flag({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) {
   const Icon = label === 'NF' ? FileText : Receipt
   return (
@@ -359,6 +376,32 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
   }, [categorias, form.tipo])
   const contaOptions = useMemo(() => [{ value: '', label: '—' }, ...contas.map(c => ({ value: c.id, label: c.nome }))], [contas])
   const centroOptions = useMemo(() => [{ value: '', label: '—' }, ...centros.map(c => ({ value: c.nome, label: c.nome }))], [centros])
+
+  const liquidado = !!lancamento && (lancamento.situacao === 'pago' || lancamento.situacao === 'recebido')
+  const contaNome = lancamento?.conta_id ? contas.find(c => c.id === lancamento.conta_id)?.nome : null
+  const [anexos, setAnexos] = useState<Anexo[]>(lancamento?.anexos ?? [])
+  const [anexoTipo, setAnexoTipo] = useState('NF')
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  async function persistAnexos(next: Anexo[]) {
+    setAnexos(next)
+    if (lancamento) { await setLancamentoAnexos(orgSlug, lancamento.id, next); router.refresh() }
+  }
+  async function onPickFile(file: File) {
+    if (!lancamento) return
+    setUploading(true); setError('')
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'pdf'
+      const url = await uploadFile('lancamentos', `${crypto.randomUUID()}.${ext}`, file)
+      await persistAnexos([...anexos, { url, nome: file.name, tipo: anexoTipo }])
+    } catch (e) { setError(e instanceof Error ? e.message : 'Falha no upload') }
+    finally { setUploading(false) }
+  }
+  function reabrir() {
+    if (!lancamento) return
+    startTransition(async () => { await reabrirLancamento(orgSlug, lancamento.id); onClose(); router.refresh() })
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -463,6 +506,60 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
             <label className={labelCls}>Observação</label>
             <textarea rows={2} value={form.observacao} onChange={e => setForm(f => ({ ...f, observacao: e.target.value }))} className={cn(inputCls, 'resize-none')} />
           </div>
+
+          {liquidado && lancamento && (
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3.5">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-emerald-700">{lancamento.tipo === 'saida' ? 'Pago' : 'Recebido'}</span>
+                <button type="button" onClick={reabrir} disabled={isPending}
+                  className="text-xs text-gray-500 hover:text-gray-700 inline-flex items-center gap-1 disabled:opacity-50"><RotateCcw className="w-3 h-3" /> Reabrir</button>
+              </div>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                <Info label="Data" value={formatDateBR(lancamento.data_liquidacao)} />
+                <Info label="Valor realizado" value={formatBRL(Number(lancamento.valor_realizado ?? lancamento.valor ?? 0))} strong />
+                {contaNome && <Info label="Conta" value={contaNome} />}
+                {lancamento.forma_pagamento && <Info label="Forma" value={lancamento.forma_pagamento} />}
+                {Number(lancamento.juros ?? 0) > 0 && <Info label="Juros" value={formatBRL(Number(lancamento.juros))} />}
+                {Number(lancamento.multa ?? 0) > 0 && <Info label="Multa" value={formatBRL(Number(lancamento.multa))} />}
+                {Number(lancamento.desconto ?? 0) > 0 && <Info label="Desconto" value={formatBRL(Number(lancamento.desconto))} />}
+                {Number(lancamento.tarifa ?? 0) > 0 && <Info label="Tarifa" value={formatBRL(Number(lancamento.tarifa))} />}
+              </dl>
+            </div>
+          )}
+
+          {lancamento && (
+            <div className="border-t border-gray-100 pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-medium text-gray-600 inline-flex items-center gap-1.5"><Paperclip className="w-3.5 h-3.5" /> Anexos</label>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-28"><Select value={anexoTipo} onChange={setAnexoTipo} size="sm" options={[{ value: 'NF', label: 'NF' }, { value: 'Boleto', label: 'Boleto' }, { value: 'Outro', label: 'Outro' }]} /></div>
+                  <input ref={fileRef} type="file" accept=".pdf,image/*" className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) onPickFile(f); e.target.value = '' }} />
+                  <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition disabled:opacity-50">
+                    {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Anexar
+                  </button>
+                </div>
+              </div>
+              {anexos.length === 0 ? (
+                <p className="text-xs text-gray-400 py-1">Nenhum anexo. Anexe a NF, o boleto ou outro documento.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {anexos.map((a, i) => (
+                    <li key={i} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                      <FileText className="w-4 h-4 text-orange-600 shrink-0" />
+                      <span className="text-[10px] font-medium text-gray-500 bg-gray-200 rounded px-1.5 py-0.5 shrink-0">{a.tipo}</span>
+                      <a href={a.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 text-sm text-gray-700 truncate hover:text-orange-600 inline-flex items-center gap-1">
+                        <span className="truncate">{a.nome}</span><ExternalLink className="w-3 h-3 opacity-50 shrink-0" />
+                      </a>
+                      <button type="button" onClick={() => persistAnexos(anexos.filter((_, j) => j !== i))} aria-label="Remover"
+                        className="text-gray-400 hover:text-red-500 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
