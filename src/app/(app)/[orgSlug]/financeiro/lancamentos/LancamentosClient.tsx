@@ -8,7 +8,7 @@ import { formatBRL, formatDateBR } from '@/lib/midia'
 import { Select } from '@/components/ui/Select'
 import {
   setLancamentoFlags, ressincronizarLancamento, marcarLancamentoRevisado,
-  createLancamento, updateLancamento, deleteLancamento, liquidarLancamento, reabrirLancamento,
+  createLancamento, createLancamentosSerie, updateLancamento, deleteLancamento, liquidarLancamento, reabrirLancamento,
   setLancamentoAnexos,
   type FinanceCategoriaGrupo, type FinanceCentro, type Anexo,
 } from '@/app/actions/financeiro'
@@ -383,6 +383,8 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
   const [anexoTipo, setAnexoTipo] = useState('NF')
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const [modo, setModo] = useState('unico')          // unico | parcelado | recorrente
+  const [parcelas, setParcelas] = useState('2')
 
   async function persistAnexos(next: Anexo[]) {
     setAnexos(next)
@@ -420,10 +422,16 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
       forma_pagamento: form.forma_pagamento || null,
       observacao: form.observacao.trim() || null,
     }
+    const n = Math.max(parseInt(parcelas || '1', 10) || 1, 1)
+    const serie = !lancamento && modo !== 'unico'
+    if (serie && !form.vencimento) { setError('Defina o vencimento da 1ª ocorrência'); return }
+    if (serie && n < 2) { setError('Informe ao menos 2 ' + (modo === 'parcelado' ? 'parcelas' : 'repetições')); return }
     startTransition(async () => {
       const res = lancamento
         ? await updateLancamento(orgSlug, lancamento.id, data)
-        : await createLancamento(orgSlug, data)
+        : serie
+          ? await createLancamentosSerie(orgSlug, data, modo, n)
+          : await createLancamento(orgSlug, data)
       if (res?.error) { setError(res.error); return }
       onClose(); router.refresh()
     })
@@ -506,6 +514,33 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
             <label className={labelCls}>Observação</label>
             <textarea rows={2} value={form.observacao} onChange={e => setForm(f => ({ ...f, observacao: e.target.value }))} className={cn(inputCls, 'resize-none')} />
           </div>
+
+          {!lancamento && (
+            <div className="border-t border-gray-100 pt-4 space-y-3">
+              <div>
+                <label className={labelCls}>Repetição</label>
+                <Select value={modo} onChange={setModo} options={[
+                  { value: 'unico', label: 'Único' },
+                  { value: 'parcelado', label: 'Parcelado (divide o valor)' },
+                  { value: 'recorrente', label: 'Recorrente (repete o valor)' },
+                ]} />
+              </div>
+              {modo !== 'unico' && (
+                <div className="grid grid-cols-2 gap-3 items-start">
+                  <div>
+                    <label className={labelCls}>{modo === 'parcelado' ? 'Nº de parcelas' : 'Nº de meses'}</label>
+                    <input type="text" inputMode="numeric" value={parcelas}
+                      onChange={e => setParcelas(e.target.value.replace(/\D/g, ''))} className={inputCls} />
+                  </div>
+                  <p className="text-[11px] text-gray-400 pt-6">
+                    {modo === 'parcelado'
+                      ? 'Divide o valor em parcelas mensais a partir do vencimento (a última leva o resto).'
+                      : 'Repete o valor cheio todo mês a partir do vencimento.'}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {liquidado && lancamento && (
             <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3.5">

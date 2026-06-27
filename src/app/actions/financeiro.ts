@@ -126,6 +126,24 @@ export async function createLancamento(orgSlug: string, data: LancamentoInput) {
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
 }
 
+/** Cria uma série: modo 'parcelado' (divide o valor) ou 'recorrente' (repete) em N meses. */
+export async function createLancamentosSerie(orgSlug: string, data: LancamentoInput, modo: string, n: number) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { data: org } = await supabase
+    .from('organizations').select('id').eq('slug', orgSlug).single()
+  if (!org) return { error: 'Organização não encontrada' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('create_lancamentos_serie', {
+    p_user_id: user.id, p_org_id: org.id, p_data: data, p_modo: modo, p_n: n,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+}
+
 export async function updateLancamento(orgSlug: string, lancamentoId: string, data: LancamentoInput) {
   const supabase = await createClient()
   const user = await getUsuario()
