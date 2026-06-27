@@ -88,6 +88,8 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
   { id: 'financeiro', label: 'Financeiro', icon: Wallet, finance: true, items: [
     { label: 'Lançamentos', href: 'financeiro/lancamentos' },
     { label: 'Faturamento', href: 'financeiro/faturamento' },
+    { label: 'Contas',      href: 'financeiro/contas' },
+    { label: 'Categorias',  href: 'financeiro/categorias' },
   ] },
   { id: 'cadastros', label: 'Cadastros', icon: Users, items: [
     { label: 'Clientes',     href: 'workspaces' },
