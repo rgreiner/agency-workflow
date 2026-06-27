@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronLeft, ChevronRight, FileText, Receipt, Check, RotateCcw, AlertTriangle, RefreshCw, Plus, X, Loader2, Pencil, Trash2, ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText, Receipt, Check, RotateCcw, AlertTriangle, RefreshCw, Plus, X, Loader2, Pencil, Trash2, ArrowDownCircle, ArrowUpCircle, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
 import { Select } from '@/components/ui/Select'
@@ -19,6 +19,7 @@ export interface Lancamento {
   contato_nome: string | null
   descricao: string | null
   valor: number | string
+  valor_realizado: number | string | null
   vencimento: string | null
   competencia: string | null
   situacao: string                  // em_aberto | recebido | pago
@@ -49,6 +50,7 @@ function shiftMonth(ym: string, delta: number) {
 const isPago = (s: string) => s === 'pago' || s === 'recebido'
 const monthOf = (d: string | null) => (d ? d.slice(0, 7) : null)
 const val = (l: Lancamento) => Number(l.valor ?? 0)
+const realVal = (l: Lancamento) => Number(l.valor_realizado ?? l.valor ?? 0)
 const signed = (l: Lancamento) => (l.tipo === 'saida' ? -val(l) : val(l))
 /** "1.234,56" → "1234.56" (string p/ a RPC). Vazio → '0'. */
 const parseBR = (s: string) => { const t = s.trim().replace(/\./g, '').replace(',', '.'); return t === '' ? '0' : t }
@@ -60,19 +62,49 @@ export function LancamentosClient({ orgSlug, lancamentos, contas, categorias, ce
   categorias: FinanceCategoriaGrupo[]; centros: FinanceCentro[]; today: string
 }) {
   const [mes, setMes] = useState(today.slice(0, 7))
+  const [contaFilter, setContaFilter] = useState('')
+  const [query, setQuery] = useState('')
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Lancamento | null>(null)
   const [baixa, setBaixa] = useState<Lancamento | null>(null)
 
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return lancamentos.filter(l => {
+      if (contaFilter && l.conta_id !== contaFilter) return false
+      if (q && !`${l.contato_nome ?? ''} ${l.descricao ?? ''} ${l.categoria ?? ''}`.toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [lancamentos, contaFilter, query])
+
+  const liqMonth = (l: Lancamento) => monthOf(l.data_liquidacao ?? l.vencimento)
+
   const { atrasado, aVencer, pagos } = useMemo(() => {
-    const atrasado = lancamentos.filter(l => !isPago(l.situacao) && l.vencimento && l.vencimento < today)
-    const aVencer = lancamentos.filter(l => !isPago(l.situacao) && (!l.vencimento || (monthOf(l.vencimento) === mes && l.vencimento >= today)))
-    const pagos = lancamentos.filter(l => isPago(l.situacao) && monthOf(l.vencimento) === mes)
+    const atrasado = filtered.filter(l => !isPago(l.situacao) && l.vencimento && l.vencimento < today)
+    const aVencer = filtered.filter(l => !isPago(l.situacao) && (!l.vencimento || (monthOf(l.vencimento) === mes && l.vencimento >= today)))
+    const pagos = filtered.filter(l => isPago(l.situacao) && liqMonth(l) === mes)
     return { atrasado, aVencer, pagos }
-  }, [lancamentos, mes, today])
+  }, [filtered, mes, today])
+
+  // Resumo do mês (estilo Conta Azul): receita/despesa × em aberto/realizada.
+  const resumo = useMemo(() => {
+    const noMes = filtered.filter(l => (isPago(l.situacao) ? liqMonth(l) : monthOf(l.vencimento)) === mes)
+    const s = (arr: Lancamento[], real = false) => arr.reduce((t, l) => t + (real ? realVal(l) : val(l)), 0)
+    const recAberto = noMes.filter(l => l.tipo === 'entrada' && !isPago(l.situacao))
+    const recReal = noMes.filter(l => l.tipo === 'entrada' && isPago(l.situacao))
+    const despAberto = noMes.filter(l => l.tipo === 'saida' && !isPago(l.situacao))
+    const despReal = noMes.filter(l => l.tipo === 'saida' && isPago(l.situacao))
+    const receitaAberto = s(recAberto), receitaReal = s(recReal, true)
+    const despesaAberto = s(despAberto), despesaReal = s(despReal, true)
+    return {
+      receitaAberto, receitaReal, despesaAberto, despesaReal,
+      total: receitaReal + receitaAberto - despesaReal - despesaAberto,
+    }
+  }, [filtered, mes])
 
   const sum = (arr: Lancamento[]) => arr.reduce((s, l) => s + signed(l), 0)
   const revisarCount = lancamentos.filter(l => l.revisar).length
+  const contaFilterOptions = useMemo(() => [{ value: '', label: 'Todas as contas' }, ...contas.map(c => ({ value: c.id, label: c.nome }))], [contas])
 
   return (
     <div className="p-6">
@@ -92,6 +124,25 @@ export function LancamentosClient({ orgSlug, lancamentos, contas, categorias, ce
             <Plus className="w-4 h-4" /> Nova
           </button>
         </div>
+      </div>
+
+      {/* Filtros */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <div className="w-52"><Select value={contaFilter} onChange={setContaFilter} options={contaFilterOptions} /></div>
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar por contato, descrição ou categoria"
+            className="w-full pl-9 pr-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent" />
+        </div>
+      </div>
+
+      {/* Resumo do mês */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
+        <Card label="Receitas em aberto" value={resumo.receitaAberto} tone="emerald-soft" />
+        <Card label="Receitas realizadas" value={resumo.receitaReal} tone="emerald" />
+        <Card label="Despesas em aberto" value={resumo.despesaAberto} tone="red-soft" />
+        <Card label="Despesas realizadas" value={resumo.despesaReal} tone="red" />
+        <Card label={`Resultado de ${monthLabel(mes)}`} value={resumo.total} tone="total" highlight />
       </div>
 
       {revisarCount > 0 && (
@@ -237,6 +288,20 @@ function Row({ l, orgSlug, today, paid, conta, onEdit, onBaixa }: {
         </div>
       </td>
     </tr>
+  )
+}
+
+function Card({ label, value, tone, highlight }: { label: string; value: number; tone: string; highlight?: boolean }) {
+  const color = tone === 'emerald' ? 'text-emerald-600'
+    : tone === 'emerald-soft' ? 'text-emerald-500'
+    : tone === 'red' ? 'text-red-600'
+    : tone === 'red-soft' ? 'text-red-500'
+    : value >= 0 ? 'text-gray-900' : 'text-red-600'
+  return (
+    <div className={cn('rounded-xl border bg-white px-4 py-3', highlight ? 'border-gray-300 shadow-sm' : 'border-gray-200')}>
+      <p className="text-[11px] font-medium text-gray-400 mb-1">{label}</p>
+      <p className={cn('text-base font-semibold', color)}>{formatBRL(value)}</p>
+    </div>
   )
 }
 
