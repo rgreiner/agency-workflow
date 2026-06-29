@@ -11,7 +11,7 @@ const COMPLEXITY_ICON = { simple: SignalLow, medium: SignalMedium, complex: Sign
 import { AvatarGroup } from '@/components/ui/Avatar'
 import { DateRangeEditor } from '@/components/ui/DateRangeEditor'
 import { MachinePath } from '@/components/ui/MachinePath'
-import { MultiSelect } from '@/components/ui/Select'
+import { MultiSelect, Select } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { updateActivityStatus, updateActivityField, setActivityArchived, bulkUpdateStatus, bulkUpdateField, bulkToggleAssignee, bulkSetArchived, createActivityInline } from '@/app/actions/activity'
 import { createClient } from '@/lib/supabase/client'
@@ -42,8 +42,41 @@ function defaultCols(): Record<ColKey, boolean> {
 const defaultOrder = (): ColKey[] => COL_DEFS.map(c => c.key)
 
 // ── Filtros salvos (presets, por org no localStorage) ───────────────────────
-type SavedFilter = { id: string; name: string; workspaces: string[]; persons: string[]; statuses: string[] }
+type SavedFilter = { id: string; name: string; workspaces: string[]; persons: string[]; statuses: string[]; date?: string }
 const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every(x => b.includes(x))
+
+// ── Filtro de prazo (presets) ───────────────────────────────────────────────
+const DATE_FILTERS = [
+  { value: '',          label: 'Qualquer prazo' },
+  { value: 'overdue',   label: 'Atrasadas' },
+  { value: 'due3',      label: 'Atrasadas + 3 dias' },
+  { value: 'nextweek',  label: 'Próxima semana' },
+  { value: 'next15',    label: 'Próximos 15 dias' },
+  { value: 'noduedate', label: 'Sem prazo' },
+]
+function shiftYMD(base: string, days: number) {
+  const [y, m, d] = base.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10)
+}
+/** Próxima semana = segunda a domingo da semana seguinte. */
+function nextWeekRange(today: string): [string, string] {
+  const [y, m, d] = today.split('-').map(Number)
+  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay() // 0 dom … 6 sáb
+  const toMon = (1 - dow + 7) % 7
+  const start = shiftYMD(today, toMon === 0 ? 7 : toMon)
+  return [start, shiftYMD(start, 6)]
+}
+function matchesDateFilter(due: string | null, f: string, today: string): boolean {
+  if (!f) return true
+  if (f === 'noduedate') return !due
+  if (!due) return false
+  const d = due.slice(0, 10)
+  if (f === 'overdue') return d < today
+  if (f === 'due3') return d <= shiftYMD(today, 3)
+  if (f === 'next15') return d >= today && d <= shiftYMD(today, 15)
+  if (f === 'nextweek') { const [s, e] = nextWeekRange(today); return d >= s && d <= e }
+  return true
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -111,6 +144,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
   const [filterWorkspaces, setFilterWorkspaces] = useState<string[]>(initialWorkspace ? [initialWorkspace] : [])
   const [filterPersons,  setFilterPersons]  = useState<string[]>([])
   const [filterStatuses, setFilterStatuses] = useState<string[]>([])
+  const [filterDate, setFilterDate] = useState('')
   const [onlyMine, setOnlyMine] = useState(false)
   const me = getUsuarioClient()?.id ?? null
   const pickerRef = useRef<HTMLDivElement>(null)
@@ -208,15 +242,15 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
   function saveCurrentFilter() {
     const name = saveName.trim()
     if (!name) return
-    persistSaved([...saved, { id: `${Date.now()}`, name, workspaces: filterWorkspaces, persons: filterPersons, statuses: filterStatuses }])
+    persistSaved([...saved, { id: `${Date.now()}`, name, workspaces: filterWorkspaces, persons: filterPersons, statuses: filterStatuses, date: filterDate }])
     setSaveName(''); setSaveOpen(false)
   }
   function applySavedFilter(f: SavedFilter) {
-    setFilterWorkspaces(f.workspaces); setFilterPersons(f.persons); setFilterStatuses(f.statuses)
+    setFilterWorkspaces(f.workspaces); setFilterPersons(f.persons); setFilterStatuses(f.statuses); setFilterDate(f.date ?? '')
   }
   function deleteSavedFilter(id: string) { persistSaved(saved.filter(f => f.id !== id)) }
   function isSavedActive(f: SavedFilter) {
-    return sameSet(f.workspaces, filterWorkspaces) && sameSet(f.persons, filterPersons) && sameSet(f.statuses, filterStatuses)
+    return sameSet(f.workspaces, filterWorkspaces) && sameSet(f.persons, filterPersons) && sameSet(f.statuses, filterStatuses) && (f.date ?? '') === filterDate
   }
 
   function toggleCol(key: ColKey) {
@@ -259,6 +293,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
   ).sort((a, b) => a.name.localeCompare(b.name))
 
   // Filter activities by workspace if active, applying optimistic status overrides
+  const todayYMD = new Date().toISOString().slice(0, 10)
   const filteredActivities = activities
     .filter(a => !hidden.has(a.id))
     .map(a => overrides[a.id] ? { ...a, status: overrides[a.id] } : a)
@@ -266,7 +301,8 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
     .filter(a => filterWorkspaces.length === 0 || filterWorkspaces.includes(campMap[a.campaign_id]?.workspaceId ?? ''))
     .filter(a => filterPersons.length === 0 || a.assignedIds.some(id => filterPersons.includes(id)))
     .filter(a => filterStatuses.length === 0 || filterStatuses.includes(a.status))
-  const hasFilter = filterWorkspaces.length + filterPersons.length + filterStatuses.length > 0
+    .filter(a => matchesDateFilter(a.due_date, filterDate, todayYMD))
+  const hasFilter = filterWorkspaces.length + filterPersons.length + filterStatuses.length > 0 || !!filterDate
 
   // Colunas na ordem escolhida pelo usuário (com fallback p/ defs novas)
   const orderedCols = [...order, ...COL_DEFS.map(c => c.key).filter(k => !order.includes(k))]
@@ -448,9 +484,15 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
           allLabel="Todos os status"
           options={statusConfig.map(s => ({ value: s.value, label: s.label }))}
         />
+        <Select
+          value={filterDate}
+          onChange={setFilterDate}
+          className="w-44"
+          options={DATE_FILTERS}
+        />
         {hasFilter && (
           <button
-            onClick={() => { setFilterWorkspaces([]); setFilterPersons([]); setFilterStatuses([]) }}
+            onClick={() => { setFilterWorkspaces([]); setFilterPersons([]); setFilterStatuses([]); setFilterDate('') }}
             className="text-xs text-gray-400 hover:text-gray-600 transition px-2 py-1.5"
           >
             Limpar filtros
