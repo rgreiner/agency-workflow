@@ -284,6 +284,30 @@ export async function importarExtrato(orgSlug: string, rows: ExtratoRow[]) {
   return { result: data as { inserted: number; updated: number; total: number } }
 }
 
+/** Semeia contas, centros de custo e categorias a partir do extrato (não-destrutivo). */
+export async function seedFinanceFromExtrato(
+  orgSlug: string,
+  seed: { contas: unknown[]; centros: unknown[]; categorias: unknown[] },
+) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { data: org } = await supabase
+    .from('organizations').select('id').eq('slug', orgSlug).single()
+  if (!org) return { error: 'Organização não encontrada' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('seed_finance_from_extrato', {
+    p_user_id: user.id, p_org_id: org.id,
+    p_contas: seed.contas, p_centros: seed.centros, p_categorias: seed.categorias,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/contas`)
+  revalidatePath(`/${orgSlug}/financeiro/categorias`)
+  return { result: data as { contas: number; centros: number; categorias: number } }
+}
+
 /** Apaga todo o extrato importado da org. */
 export async function limparExtrato(orgSlug: string) {
   const supabase = await createClient()

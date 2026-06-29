@@ -4,8 +4,8 @@ import { useState, useRef, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Upload, FileSpreadsheet, Loader2, Check, AlertCircle, Trash2, X } from 'lucide-react'
 import { formatBRL } from '@/lib/midia'
-import { mapSheetToRows, summarize, type ExtratoRow } from '@/lib/extrato'
-import { importarExtrato, limparExtrato } from '@/app/actions/financeiro'
+import { mapSheetToRows, summarize, seedFromRows, type ExtratoRow, type SeedData } from '@/lib/extrato'
+import { importarExtrato, limparExtrato, seedFinanceFromExtrato } from '@/app/actions/financeiro'
 
 const CHUNK = 500
 
@@ -30,15 +30,17 @@ export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
   const [fileName, setFileName] = useState<string | null>(null)
   const [rows, setRows] = useState<ExtratoRow[] | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
+  const [seed, setSeed] = useState<SeedData | null>(null)
+  const [seedConfig, setSeedConfig] = useState(true)
   const [error, setError] = useState('')
   const [parsing, setParsing] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
-  const [done, setDone] = useState<{ inserted: number; updated: number } | null>(null)
+  const [done, setDone] = useState<{ inserted: number; updated: number; contas?: number; centros?: number; categorias?: number } | null>(null)
   const [clearing, startClear] = useTransition()
   const [confirmClear, setConfirmClear] = useState(false)
 
   async function onFile(file: File) {
-    setError(''); setDone(null); setRows(null); setPreview(null); setFileName(file.name)
+    setError(''); setDone(null); setRows(null); setPreview(null); setSeed(null); setFileName(file.name)
     setParsing(true)
     try {
       const XLSX = await import('xlsx')
@@ -51,6 +53,7 @@ export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
       if (res.rows.length === 0) { setError('Nenhuma linha encontrada no arquivo.'); setParsing(false); return }
       setRows(res.rows)
       setPreview(summarize(res.rows))
+      setSeed(seedFromRows(res.rows))
     } catch (e) {
       setError('Falha ao ler o arquivo: ' + (e instanceof Error ? e.message : String(e)))
     }
@@ -70,8 +73,17 @@ export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
       setProgress({ done: Math.min(i + CHUNK, rows.length), total: rows.length })
     }
     setProgress(null)
-    setDone({ inserted, updated })
-    setRows(null); setPreview(null); setFileName(null)
+
+    // Seed da config (contas / centros / categorias) — não-destrutivo
+    let seedCounts: { contas: number; centros: number; categorias: number } | undefined
+    if (seedConfig && seed) {
+      const res = await seedFinanceFromExtrato(orgSlug, seed)
+      if (res?.error) { setError('Lançamentos importados, mas o seed da config falhou: ' + res.error) }
+      else seedCounts = res?.result
+    }
+
+    setDone({ inserted, updated, ...seedCounts })
+    setRows(null); setPreview(null); setSeed(null); setFileName(null)
     if (inputRef.current) inputRef.current.value = ''
     router.refresh()
   }
@@ -144,9 +156,15 @@ export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
       )}
 
       {done && (
-        <p className="mt-4 text-sm text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 inline-flex items-center gap-2">
-          <Check className="w-4 h-4 shrink-0" /> Import concluído — {done.inserted.toLocaleString('pt-BR')} novos, {done.updated.toLocaleString('pt-BR')} atualizados.
-        </p>
+        <div className="mt-4 text-sm text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 inline-flex items-start gap-2">
+          <Check className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            Import concluído — {done.inserted.toLocaleString('pt-BR')} novos, {done.updated.toLocaleString('pt-BR')} atualizados.
+            {done.contas != null && (
+              <><br />Config criada: {done.contas} conta(s), {done.centros} centro(s) de custo, {done.categorias} categoria(s).</>
+            )}
+          </span>
+        </div>
       )}
 
       {/* preview + confirmar */}
@@ -160,6 +178,18 @@ export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
             <PreviewStat label="A pagar" value={preview.aPagar} tone="red" muted />
           </div>
           <p className="text-xs text-gray-400 mb-4">Período: {fmtDate(preview.periodo.de)} a {fmtDate(preview.periodo.ate)}</p>
+
+          {seed && (
+            <label className="flex items-start gap-2.5 mb-4 cursor-pointer select-none">
+              <input type="checkbox" checked={seedConfig} onChange={e => setSeedConfig(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
+              <span className="text-sm text-gray-600">
+                Também criar <strong>{seed.contas.length} contas</strong> (com saldo atual), <strong>{seed.centros.length} centros de custo</strong> e <strong>{seed.categorias.length} categorias</strong> a partir do arquivo.
+                <span className="block text-xs text-gray-400 mt-0.5">Não sobrescreve o que já existe — só adiciona o que falta.</span>
+              </span>
+            </label>
+          )}
+
           <button onClick={doImport}
             className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition">
             <Check className="w-4 h-4" /> Confirmar import

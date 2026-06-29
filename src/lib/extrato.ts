@@ -170,6 +170,65 @@ export const isIgnorado = (s: string | null) =>
 export const isTransferencia = (origem: string | null, categoria: string | null) =>
   origem === 'Transferência' || (categoria?.startsWith('Transferência') ?? false)
 
+// ── Seed da config do Financeiro a partir do extrato ─────────
+export interface SeedConta { nome: string; tipo: string; saldo_inicial: number; cor: string }
+export interface SeedCentro { nome: string; cor: string }
+export interface SeedCategoria { nome: string; tipo: string; cor: string }
+export interface SeedData { contas: SeedConta[]; centros: SeedCentro[]; categorias: SeedCategoria[] }
+
+const PALETA = ['#f97316', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#eab308', '#14b8a6', '#ef4444', '#6366f1', '#06b6d4']
+const corPara = (i: number) => PALETA[i % PALETA.length]
+
+function tipoConta(nome: string): string {
+  const n = nome.toLowerCase()
+  if (n.includes('fundo') || n.includes('reserva') || n.includes('aplica') || n.includes('crédito') || n.includes('credito')) return 'aplicacao'
+  if (n.includes('caixa') || n.includes('ajuste')) return 'caixa'
+  return 'banco'
+}
+
+// Categorias técnicas do extrato que não viram categoria de lançamento.
+const CAT_SISTEMA = new Set(['Saldo Inicial', 'Transferência de Entrada', 'Transferência de Saída'])
+
+/** Deriva contas (com saldo atual), centros de custo e categorias do extrato. */
+export function seedFromRows(rows: ExtratoRow[]): SeedData {
+  // saldo atual por conta = soma assinada dos realizados
+  const saldo = new Map<string, number>()
+  for (const r of rows) {
+    if (!r.conta || !isRealizado(r.situacao)) continue
+    const s = r.tipo === 'receita' ? Math.abs(r.valor ?? 0) : r.tipo === 'despesa' ? -Math.abs(r.valor ?? 0) : 0
+    saldo.set(r.conta, (saldo.get(r.conta) ?? 0) + s)
+  }
+  const contas: SeedConta[] = [...saldo.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([nome, v], i) => ({ nome, tipo: tipoConta(nome), saldo_inicial: Math.round(v * 100) / 100, cor: corPara(i) }))
+
+  // centros de custo distintos (= clientes)
+  const centrosSet = new Map<string, boolean>()
+  for (const r of rows) if (r.centro_custo) centrosSet.set(r.centro_custo, true)
+  const centros: SeedCentro[] = [...centrosSet.keys()]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+    .map((nome, i) => ({ nome, cor: corPara(i) }))
+
+  // categorias com tipo (entrada | saida | ambos)
+  const cat = new Map<string, { e: boolean; s: boolean }>()
+  for (const r of rows) {
+    if (!r.categoria || CAT_SISTEMA.has(r.categoria)) continue
+    const cur = cat.get(r.categoria) ?? { e: false, s: false }
+    if (r.tipo === 'receita') cur.e = true
+    if (r.tipo === 'despesa') cur.s = true
+    cat.set(r.categoria, cur)
+  }
+  const categorias: SeedCategoria[] = [...cat.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], 'pt-BR'))
+    .map(([nome, v], i) => ({
+      nome,
+      tipo: v.e && v.s ? 'ambos' : v.e ? 'entrada' : 'saida',
+      cor: corPara(i),
+    }))
+
+  return { contas, centros, categorias }
+}
+
 /** Resumo p/ o preview do import. */
 export function summarize(rows: ExtratoRow[]) {
   let recebido = 0, pago = 0, aReceber = 0, aPagar = 0
