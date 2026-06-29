@@ -4,6 +4,7 @@ import { getUsuario } from '@/lib/auth/server'
 import { getMergedStatusConfig, type StatusOverride } from '@/types'
 import { InboxClient } from './InboxClient'
 import { MyTasksPanel, type MyTask } from './MyTasksPanel'
+import { TodoPanel, type Todo } from './TodoPanel'
 
 export default async function InboxPage({
   params,
@@ -23,6 +24,20 @@ export default async function InboxPage({
   const { data: rawSettings } = await (supabase as any)
     .from('org_settings').select('status_overrides').eq('org_id', org?.id ?? '').single()
   const statusConfig = getMergedStatusConfig((rawSettings?.status_overrides ?? []) as StatusOverride[])
+
+  // To-do pessoal (anotações livres) deste usuário nesta org
+  let todos: Todo[] = []
+  if (user && org) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: td } = await (supabase as any)
+      .from('todos')
+      .select('id, texto, done, due_date')
+      .eq('user_id', user.id).eq('org_id', org.id)
+      .order('done', { ascending: true })
+      .order('due_date', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: true })
+    todos = (td ?? []) as Todo[]
+  }
 
   // Minhas tarefas = activities onde sou responsável (activity_assignees), não arquivadas
   let tasks: MyTask[] = []
@@ -64,6 +79,7 @@ export default async function InboxPage({
       </div>
       <aside className="w-full lg:w-[340px] shrink-0 border-t lg:border-t-0 lg:border-l border-gray-200 bg-gray-50/40 lg:overflow-y-auto">
         <MyTasksPanel tasks={tasks} />
+        <TodoPanel orgSlug={orgSlug} todos={todos} />
       </aside>
     </div>
   )
