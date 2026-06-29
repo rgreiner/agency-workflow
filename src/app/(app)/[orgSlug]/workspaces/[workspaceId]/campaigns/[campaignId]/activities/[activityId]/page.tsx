@@ -26,11 +26,14 @@ import { MoveTaskProject } from './MoveTaskProject'
 export default async function ActivityPage({
   params,
   searchParams,
+  modal = false,
 }: {
   params: Promise<{
     orgSlug: string; workspaceId: string; campaignId: string; activityId: string
   }>
   searchParams: Promise<{ from?: string }>
+  /** Renderizado dentro da modal (intercepting route) — esconde o X próprio. */
+  modal?: boolean
 }) {
   const { orgSlug, workspaceId, campaignId, activityId } = await params
   const { from } = await searchParams
@@ -250,13 +253,15 @@ export default async function ActivityPage({
           )}
           <ShareJobButton orgSlug={orgSlug} activityId={activityId} title={activity.title} />
           <span className="hidden md:inline">Criada {formatDate(activity.created_at)}</span>
-          <Link
-            href={closeHref}
-            title="Fechar"
-            className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </Link>
+          {!modal && (
+            <Link
+              href={closeHref}
+              title="Fechar"
+              className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </Link>
+          )}
         </div>
       </div>
 
