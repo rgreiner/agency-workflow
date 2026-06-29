@@ -182,7 +182,7 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
         if (!m) return null
         const isMin = minimized.has(peer)
         return (
-          <div key={peer} className="pop-up pointer-events-auto w-[320px] bg-white rounded-t-xl border border-gray-200 shadow-2xl flex flex-col overflow-hidden">
+          <div key={peer} className={cn('pop-up pointer-events-auto w-[320px] bg-white rounded-t-xl border border-gray-200 shadow-2xl flex flex-col overflow-hidden', !isMin && 'h-[440px] max-h-[80vh]')}>
             {/* Header */}
             <div className="flex items-center gap-2 px-3 py-2 bg-gray-900 text-white cursor-pointer" onClick={() => toggleMin(peer)}>
               <ChatAvatar member={m} online={online.has(peer)} />
@@ -283,7 +283,7 @@ function MessageList({ msgs, meId }: { msgs: Msg[]; meId: string }) {
   const endRef = useRef<HTMLDivElement>(null)
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [msgs.length])
   return (
-    <div className="flex-1 h-[300px] overflow-y-auto px-3 py-2 space-y-1.5 bg-gray-50/50">
+    <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1.5 bg-gray-50/50">
       {msgs.length === 0 && <p className="text-xs text-gray-400 text-center py-6">Diga olá 👋</p>}
       {msgs.map(m => {
         const mine = m.sender_id === meId

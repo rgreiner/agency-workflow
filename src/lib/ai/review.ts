@@ -39,8 +39,8 @@ export type ReviewPart =
   | { kind: 'text'; text: string }
   | { kind: 'media'; mimeType: string; base64: string }
 
-// Limite de caracteres de texto enviados ao modelo (controla custo/latência). ~6-8 páginas.
-const MAX_CHARS = 20000
+// Limite de caracteres de texto enviados ao modelo (controla custo/latência). ~12-16 páginas.
+const MAX_CHARS = 40000
 const PDF_MIME  = 'application/pdf'
 
 // ── Prompts ─────────────────────────────────────────────────────────────────
@@ -59,6 +59,8 @@ REGRAS IMPORTANTES (evitam falso positivo):
 - Quem decide o que é proposital é a pessoa; você só lista o que é erro evidente.
 
 Para cada erro informe: o trecho exato, o problema e a correção.
+Liste TODOS os erros claros que encontrar, do começo ao fim do material — não pare
+nos primeiros nem resuma; é melhor varrer tudo de uma vez do que apontar aos poucos.
 Se não houver nenhum erro claro, retorne a lista vazia.`
 
 const SYSTEM_TEXT_SPELL =
@@ -194,7 +196,7 @@ const ERROS_TOOL_SCHEMA = {
 async function runClaude(system: string, parts: ReviewPart[]): Promise<{ model: string; list: ReviewError[] }> {
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  const model = process.env.REVIEW_MODEL_CLAUDE || process.env.REDACAO_REVIEW_MODEL_CLAUDE || 'claude-haiku-4-5-20251001'
+  const model = process.env.REVIEW_MODEL_CLAUDE || process.env.REDACAO_REVIEW_MODEL_CLAUDE || 'claude-sonnet-4-6'
 
   const content = parts.map(p => {
     if (p.kind === 'text') return { type: 'text', text: p.text }
@@ -204,7 +206,7 @@ async function runClaude(system: string, parts: ReviewPart[]): Promise<{ model: 
 
   const msg = await client.messages.create({
     model,
-    max_tokens: 4096,
+    max_tokens: 8192,
     system,
     tools: [{ name: 'reportar_erros', description: 'Reporta os erros/divergências encontrados.', input_schema: ERROS_TOOL_SCHEMA }],
     tool_choice: { type: 'tool', name: 'reportar_erros' },
@@ -238,7 +240,7 @@ const GEMINI_RESPONSE_SCHEMA = {
 }
 
 async function runGemini(system: string, parts: ReviewPart[]): Promise<{ model: string; list: ReviewError[] }> {
-  const model = process.env.REVIEW_MODEL_GEMINI || process.env.REDACAO_REVIEW_MODEL_GEMINI || 'gemini-2.5-flash'
+  const model = process.env.REVIEW_MODEL_GEMINI || process.env.REDACAO_REVIEW_MODEL_GEMINI || 'gemini-2.5-pro'
   const { url, headers } = await geminiEndpoint(model)
 
   const gParts = parts.map(p => p.kind === 'text'
@@ -248,7 +250,7 @@ async function runGemini(system: string, parts: ReviewPart[]): Promise<{ model: 
   const body = {
     systemInstruction: { parts: [{ text: system }] },
     contents: [{ role: 'user', parts: gParts }],
-    generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: GEMINI_RESPONSE_SCHEMA },
+    generationConfig: { temperature: 0, maxOutputTokens: 8192, responseMimeType: 'application/json', responseSchema: GEMINI_RESPONSE_SCHEMA },
   }
 
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) })
