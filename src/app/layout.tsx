@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import "./globals.css";
+import { ThemeApplier } from "@/components/layout/ThemeApplier";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://flow.oneaone.com.br";
 const DESCRIPTION = "Gestão de pauta, produção e mídia para agências.";
@@ -43,6 +44,7 @@ export default function RootLayout({
             __html: `(function(){try{var t=localStorage.getItem('theme');var m=window.matchMedia('(prefers-color-scheme: dark)').matches;if(t==='dark'||(t!=='light'&&m)){document.documentElement.classList.add('dark')}}catch(e){}})()`,
           }}
         />
+        <ThemeApplier />
         {children}
       </body>
     </html>
