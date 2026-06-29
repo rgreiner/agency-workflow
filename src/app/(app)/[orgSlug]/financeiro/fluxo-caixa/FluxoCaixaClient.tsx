@@ -28,20 +28,16 @@ export function FluxoCaixaClient({ orgSlug, rows }: { orgSlug: string; rows: Flu
 
   const contas = useMemo(() => contasDistintas(rows), [rows])
   const anos = useMemo(() => anosDisponiveis(rows), [rows])
-  const anoMax = anos.length ? anos[anos.length - 1] : new Date().getFullYear()
 
-  // mês inicial = último mês com movimento
-  const ymMax = useMemo(() => {
-    let mx = ''
-    for (const r of rows) { const d = r.data_mov; if (d && d.slice(0, 7) > mx) mx = d.slice(0, 7) }
-    return mx || `${anoMax}-01`
-  }, [rows, anoMax])
-
-  const [ym, setYm] = useState(ymMax)
-  const [ano, setAno] = useState(anoMax)
+  // Abre sempre no mês/ano atual (não no último lançamento — há recorrências até 2032).
+  const now = new Date()
+  const [ym, setYm] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+  const [ano, setAno] = useState(now.getFullYear())
 
   const contaOpts = [{ value: '', label: 'Todas as contas' }, ...contas.map(c => ({ value: c, label: c }))]
-  const anoOpts = anos.map(a => ({ value: String(a), label: String(a) }))
+  const anoOpts = [...new Set([...anos, now.getFullYear()])]
+    .sort((a, b) => a - b)
+    .map(a => ({ value: String(a), label: String(a) }))
 
   const dadosDia = useMemo(() => fluxoDiario(rows, ym, conta || null), [rows, ym, conta])
   const dadosMes = useMemo(() => fluxoMensal(rows, ano, conta || null), [rows, ano, conta])
