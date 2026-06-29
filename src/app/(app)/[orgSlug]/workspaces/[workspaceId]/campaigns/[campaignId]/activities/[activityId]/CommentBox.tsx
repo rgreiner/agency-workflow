@@ -11,7 +11,7 @@ import Mention from '@tiptap/extension-mention'
 import { addComment } from '@/app/actions/activity'
 import { downscaleImage } from '@/lib/image-resize'
 import { uploadFile } from '@/lib/storage/upload-client'
-import { Send, Bold, Italic, ListChecks, ImagePlus, Reply, X, Loader2 } from 'lucide-react'
+import { Send, Bold, Italic, List, ListOrdered, ListChecks, ImagePlus, Reply, X, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -135,6 +135,8 @@ export function CommentBox({ activityId, path, members = [], assignedIds = [] }:
         <div className="flex items-center gap-0.5 px-2 py-1 border-b border-gray-100">
           <ToolBtn onClick={() => editor?.chain().focus().toggleBold().run()} active={!!editor?.isActive('bold')} title="Negrito"><Bold className="w-3.5 h-3.5" /></ToolBtn>
           <ToolBtn onClick={() => editor?.chain().focus().toggleItalic().run()} active={!!editor?.isActive('italic')} title="Itálico"><Italic className="w-3.5 h-3.5" /></ToolBtn>
+          <ToolBtn onClick={() => editor?.chain().focus().toggleBulletList().run()} active={!!editor?.isActive('bulletList')} title="Lista"><List className="w-3.5 h-3.5" /></ToolBtn>
+          <ToolBtn onClick={() => editor?.chain().focus().toggleOrderedList().run()} active={!!editor?.isActive('orderedList')} title="Lista numerada"><ListOrdered className="w-3.5 h-3.5" /></ToolBtn>
           <ToolBtn onClick={() => editor?.chain().focus().toggleTaskList().run()} active={!!editor?.isActive('taskList')} title="Checklist"><ListChecks className="w-3.5 h-3.5" /></ToolBtn>
           <ToolBtn onClick={() => fileRef.current?.click()} active={false} title="Imagem (ou cole/solte)"><ImagePlus className="w-3.5 h-3.5" /></ToolBtn>
           <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickImage} />
