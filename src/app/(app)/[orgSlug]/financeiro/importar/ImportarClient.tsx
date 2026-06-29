@@ -2,7 +2,7 @@
 
 import { useState, useRef, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Upload, FileSpreadsheet, Loader2, Check, AlertCircle, Trash2, X } from 'lucide-react'
+import { Upload, FileSpreadsheet, Loader2, Check, AlertCircle, Trash2, X, Wallet } from 'lucide-react'
 import { formatBRL } from '@/lib/midia'
 import { mapSheetToRows, summarize, seedFromRows, type ExtratoRow, type SeedData } from '@/lib/extrato'
 import { importarExtrato, limparExtrato, seedFinanceFromExtrato } from '@/app/actions/financeiro'
@@ -35,9 +35,20 @@ export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
   const [error, setError] = useState('')
   const [parsing, setParsing] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
-  const [done, setDone] = useState<{ inserted: number; updated: number; contas?: number; centros?: number; categorias?: number } | null>(null)
+  const [done, setDone] = useState<{ inserted: number; updated: number; contas?: number; contas_atualizadas?: number; centros?: number; categorias?: number } | null>(null)
   const [clearing, startClear] = useTransition()
   const [confirmClear, setConfirmClear] = useState(false)
+  const [seeding, startSeed] = useTransition()
+
+  function doSeedNow() {
+    setError(''); setDone(null)
+    startSeed(async () => {
+      const res = await seedFinanceFromExtrato(orgSlug)
+      if (res?.error) { setError(res.error); return }
+      setDone({ inserted: 0, updated: 0, ...res?.result })
+      router.refresh()
+    })
+  }
 
   async function onFile(file: File) {
     setError(''); setDone(null); setRows(null); setPreview(null); setSeed(null); setFileName(file.name)
@@ -74,10 +85,11 @@ export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
     }
     setProgress(null)
 
-    // Seed da config (contas / centros / categorias) — não-destrutivo
+    // Seed da config (contas / centros / categorias) — não-destrutivo, a partir da
+    // tabela já importada.
     let seedCounts: { contas: number; centros: number; categorias: number } | undefined
-    if (seedConfig && seed) {
-      const res = await seedFinanceFromExtrato(orgSlug, seed)
+    if (seedConfig) {
+      const res = await seedFinanceFromExtrato(orgSlug)
       if (res?.error) { setError('Lançamentos importados, mas o seed da config falhou: ' + res.error) }
       else seedCounts = res?.result
     }
@@ -122,10 +134,17 @@ export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
           </div>
         )}
         {totalAtual > 0 && (
-          <button onClick={() => setConfirmClear(true)}
-            className="ml-auto inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-600 transition">
-            <Trash2 className="w-3.5 h-3.5" /> Limpar tudo
-          </button>
+          <div className="ml-auto flex items-center gap-3">
+            <button onClick={doSeedNow} disabled={seeding}
+              className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-orange-600 transition disabled:opacity-50">
+              {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wallet className="w-3.5 h-3.5" />}
+              Gerar contas, centros e categorias
+            </button>
+            <button onClick={() => setConfirmClear(true)}
+              className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-600 transition">
+              <Trash2 className="w-3.5 h-3.5" /> Limpar tudo
+            </button>
+          </div>
         )}
       </div>
 
@@ -159,9 +178,11 @@ export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
         <div className="mt-4 text-sm text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 inline-flex items-start gap-2">
           <Check className="w-4 h-4 shrink-0 mt-0.5" />
           <span>
-            Import concluído — {done.inserted.toLocaleString('pt-BR')} novos, {done.updated.toLocaleString('pt-BR')} atualizados.
+            {(done.inserted > 0 || done.updated > 0) && (
+              <>Import concluído — {done.inserted.toLocaleString('pt-BR')} novos, {done.updated.toLocaleString('pt-BR')} atualizados.<br /></>
+            )}
             {done.contas != null && (
-              <><br />Config criada: {done.contas} conta(s), {done.centros} centro(s) de custo, {done.categorias} categoria(s).</>
+              <>Config: {done.contas} conta(s) criada(s){done.contas_atualizadas ? ` + ${done.contas_atualizadas} com saldo preenchido` : ''}, {done.centros} centro(s) de custo, {done.categorias} categoria(s).</>
             )}
           </span>
         </div>

@@ -284,11 +284,12 @@ export async function importarExtrato(orgSlug: string, rows: ExtratoRow[]) {
   return { result: data as { inserted: number; updated: number; total: number } }
 }
 
-/** Semeia contas, centros de custo e categorias a partir do extrato (não-destrutivo). */
-export async function seedFinanceFromExtrato(
-  orgSlug: string,
-  seed: { contas: unknown[]; centros: unknown[]; categorias: unknown[] },
-) {
+/**
+ * Semeia contas (com saldo atual), centros de custo e categorias a partir do extrato
+ * JÁ importado (extrato_importado). Não-destrutivo: só adiciona o que falta e preenche
+ * saldo de conta que esteja zerada. Pode rodar a qualquer momento.
+ */
+export async function seedFinanceFromExtrato(orgSlug: string) {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
@@ -298,14 +299,13 @@ export async function seedFinanceFromExtrato(
   if (!org) return { error: 'Organização não encontrada' }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any).rpc('seed_finance_from_extrato', {
+  const { data, error } = await (supabase as any).rpc('seed_finance_from_extrato_table', {
     p_user_id: user.id, p_org_id: org.id,
-    p_contas: seed.contas, p_centros: seed.centros, p_categorias: seed.categorias,
   })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/financeiro/contas`)
   revalidatePath(`/${orgSlug}/financeiro/categorias`)
-  return { result: data as { contas: number; centros: number; categorias: number } }
+  return { result: data as { contas: number; contas_atualizadas: number; centros: number; categorias: number } }
 }
 
 /** Apaga todo o extrato importado da org. */
