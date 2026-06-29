@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, Upload, BarChart3 } from 'lucide-react'
 import {
@@ -8,7 +8,7 @@ import {
   CartesianGrid, ReferenceLine,
 } from 'recharts'
 import { formatBRL } from '@/lib/midia'
-import { Select } from '@/components/ui/Select'
+import { Select, MultiSelect } from '@/components/ui/Select'
 import {
   fluxoDiario, fluxoMensal, contasDistintas, anosDisponiveis, type FluxoRow,
 } from '@/lib/fluxo-caixa'
@@ -24,7 +24,26 @@ const C = { receb: '#22c55e', pag: '#ef4444', recebL: '#a7f3d0', pagL: '#fecaca'
 
 export function FluxoCaixaClient({ orgSlug, rows }: { orgSlug: string; rows: FluxoRow[] }) {
   const [modo, setModo] = useState<'diario' | 'mensal'>('diario')
-  const [conta, setConta] = useState<string>('')
+
+  // Contas selecionadas por modo (vazio = todas). Persistido por org no localStorage —
+  // assim dá pra deixar os ativos de baixa liquidez fora do Diário e incluir no Mensal.
+  const SEL_KEY = `fluxo-caixa-contas:${orgSlug}`
+  const [contaSel, setContaSel] = useState<{ diario: string[]; mensal: string[] }>({ diario: [], mensal: [] })
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SEL_KEY)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (raw) setContaSel(JSON.parse(raw))
+    } catch {}
+  }, [SEL_KEY])
+  function setContasDoModo(vals: string[]) {
+    setContaSel(prev => {
+      const next = { ...prev, [modo]: vals }
+      try { localStorage.setItem(SEL_KEY, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+  const contasModo = contaSel[modo]
 
   const contas = useMemo(() => contasDistintas(rows), [rows])
   const anos = useMemo(() => anosDisponiveis(rows), [rows])
@@ -34,13 +53,13 @@ export function FluxoCaixaClient({ orgSlug, rows }: { orgSlug: string; rows: Flu
   const [ym, setYm] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
   const [ano, setAno] = useState(now.getFullYear())
 
-  const contaOpts = [{ value: '', label: 'Todas as contas' }, ...contas.map(c => ({ value: c, label: c }))]
+  const contaOpts = contas.map(c => ({ value: c, label: c }))
   const anoOpts = [...new Set([...anos, now.getFullYear()])]
     .sort((a, b) => a - b)
     .map(a => ({ value: String(a), label: String(a) }))
 
-  const dadosDia = useMemo(() => fluxoDiario(rows, ym, conta || null), [rows, ym, conta])
-  const dadosMes = useMemo(() => fluxoMensal(rows, ano, conta || null), [rows, ano, conta])
+  const dadosDia = useMemo(() => fluxoDiario(rows, ym, contaSel.diario), [rows, ym, contaSel.diario])
+  const dadosMes = useMemo(() => fluxoMensal(rows, ano, contaSel.mensal), [rows, ano, contaSel.mensal])
 
   function shiftMes(delta: number) {
     const [y, m] = ym.split('-').map(Number)
@@ -94,7 +113,12 @@ export function FluxoCaixaClient({ orgSlug, rows }: { orgSlug: string; rows: Flu
         ) : (
           <div className="w-32"><Select value={String(ano)} onChange={v => setAno(Number(v))} options={anoOpts} /></div>
         )}
-        <div className="w-56"><Select value={conta} onChange={setConta} options={contaOpts} /></div>
+        <div className="w-64">
+          <MultiSelect values={contasModo} onChange={setContasDoModo} options={contaOpts} allLabel="Todas as contas" />
+        </div>
+        {contasModo.length > 0 && (
+          <button onClick={() => setContasDoModo([])} className="text-xs text-gray-400 hover:text-gray-600 transition">Limpar</button>
+        )}
       </div>
 
       {/* gráfico */}

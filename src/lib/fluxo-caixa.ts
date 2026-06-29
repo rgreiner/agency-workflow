@@ -47,9 +47,16 @@ export interface DiaPonto {
   saldo: number          // linha (saldo acumulado real)
 }
 
-/** Diário: dia a dia de um mês (ym = 'YYYY-MM'), filtrado por conta (ou todas). */
-export function fluxoDiario(rows: FluxoRow[], ym: string, conta: string | null): DiaPonto[] {
-  const sel = conta ? rows.filter(r => r.conta === conta) : rows
+// Filtra por um conjunto de contas; null ou lista vazia = todas.
+function filtraContas(rows: FluxoRow[], contas: string[] | null): FluxoRow[] {
+  if (!contas || contas.length === 0) return rows
+  const set = new Set(contas)
+  return rows.filter(r => r.conta != null && set.has(r.conta))
+}
+
+/** Diário: dia a dia de um mês (ym = 'YYYY-MM'), filtrado por contas (ou todas). */
+export function fluxoDiario(rows: FluxoRow[], ym: string, contas: string[] | null): DiaPonto[] {
+  const sel = filtraContas(rows, contas)
   const [y, m] = ym.split('-').map(Number)
   const diasNoMes = new Date(y, m, 0).getDate()
   const monthStart = `${ym}-01`
@@ -92,9 +99,9 @@ export interface MesPonto {
   saldoPrevisto: number
 }
 
-/** Mensal previsto × realizado de um ano, filtrado por conta (ou todas). */
-export function fluxoMensal(rows: FluxoRow[], ano: number, conta: string | null): MesPonto[] {
-  const sel = conta ? rows.filter(r => r.conta === conta) : rows
+/** Mensal previsto × realizado de um ano, filtrado por contas (ou todas). */
+export function fluxoMensal(rows: FluxoRow[], ano: number, contas: string[] | null): MesPonto[] {
+  const sel = filtraContas(rows, contas)
   const recR = new Array(12).fill(0), pagR = new Array(12).fill(0)
   const recP = new Array(12).fill(0), pagP = new Array(12).fill(0)
 
