@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { Bell, Inbox, CheckCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -16,6 +16,7 @@ const POLL_MS = 30_000
 
 export function NotificationsBell({ orgSlug }: { orgSlug: string }) {
   const router = useRouter()
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<NotificationItem[]>([])
   const [unread, setUnread] = useState(0)
@@ -58,7 +59,8 @@ export function NotificationsBell({ orgSlug }: { orgSlug: string }) {
       return
     }
     if (n.workspaceId && n.campaignId && n.activityId) {
-      router.push(`/${orgSlug}/workspaces/${n.workspaceId}/campaigns/${n.campaignId}/activities/${n.activityId}`)
+      const from = pathname ? `?from=${encodeURIComponent(pathname)}` : ''
+      router.push(`/${orgSlug}/workspaces/${n.workspaceId}/campaigns/${n.campaignId}/activities/${n.activityId}${from}`)
     }
   }
 

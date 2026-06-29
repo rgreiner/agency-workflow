@@ -65,7 +65,7 @@ export default async function InboxPage({
           statusColor: cfg?.bg ?? '#9ca3af',
           dueDate: a.due_date ?? null,
           href: camp?.workspace_id
-            ? `/${orgSlug}/workspaces/${camp.workspace_id}/campaigns/${a.campaign_id}/activities/${a.id}`
+            ? `/${orgSlug}/workspaces/${camp.workspace_id}/campaigns/${a.campaign_id}/activities/${a.id}?from=${encodeURIComponent(`/${orgSlug}/inbox`)}`
             : `/${orgSlug}/views/lista`,
         } as MyTask
       })

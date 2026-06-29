@@ -50,7 +50,8 @@ export function InboxClient({ orgSlug, initial }: { orgSlug: string; initial: No
       return
     }
     if (n.workspaceId && n.campaignId && n.activityId) {
-      router.push(`/${orgSlug}/workspaces/${n.workspaceId}/campaigns/${n.campaignId}/activities/${n.activityId}`)
+      const from = encodeURIComponent(`/${orgSlug}/inbox`)
+      router.push(`/${orgSlug}/workspaces/${n.workspaceId}/campaigns/${n.campaignId}/activities/${n.activityId}?from=${from}`)
     }
   }
 
