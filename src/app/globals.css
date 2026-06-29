@@ -292,6 +292,15 @@ button:focus-visible,
   float: left;
   height: 0;
 }
+/* Checklist (TaskList) — edição e leitura */
+.rich-text ul[data-type="taskList"] { list-style: none; padding-left: 0; margin: 0 0 0.5rem; }
+.rich-text ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.5rem; }
+.rich-text ul[data-type="taskList"] li > label { margin-top: 0.15rem; }
+.rich-text ul[data-type="taskList"] li > label input[type="checkbox"] { cursor: pointer; accent-color: #ea580c; }
+.rich-text ul[data-type="taskList"] li[data-checked="true"] > div { text-decoration: line-through; color: var(--color-gray-400); }
+/* Imagens coladas/inseridas */
+.rich-text img { max-width: 100%; height: auto; border-radius: 0.5rem; margin: 0.4rem 0; }
+.rich-text .ProseMirror img.ProseMirror-selectednode { outline: 2px solid #fb923c; }
 
 /* Impressão de documentos (Orçamento, Autorização de Mídia, etc.):
    esconde toda a interface e imprime só o #print-doc. */

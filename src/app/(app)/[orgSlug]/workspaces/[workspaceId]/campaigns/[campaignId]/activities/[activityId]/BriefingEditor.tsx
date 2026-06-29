@@ -5,15 +5,20 @@
  * citação. Guarda HTML na coluna `description` (compatível com textos antigos em
  * texto puro). Edição inline com salvar/cancelar.
  */
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
+import Image from '@tiptap/extension-image'
 import {
   Bold, Italic, Strikethrough, Heading2, Heading3,
-  List, ListOrdered, Quote, Link2, Check, Loader2, Pencil,
+  List, ListOrdered, ListChecks, Quote, Link2, ImagePlus, Check, Loader2, Pencil,
 } from 'lucide-react'
 import { updateActivityField } from '@/app/actions/activity'
+import { downscaleImage } from '@/lib/image-resize'
+import { uploadFile } from '@/lib/storage/upload-client'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -37,16 +42,46 @@ export function BriefingEditor({ activityId, path, description, canEdit }: {
 }) {
   const [editing, setEditing] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
       StarterKit,
-      Placeholder.configure({ placeholder: 'Escreva o briefing… títulos, negrito, itálico, listas' }),
+      Placeholder.configure({ placeholder: 'Escreva o briefing… títulos, listas, checklist, imagens (cole/solte)' }),
+      TaskList,
+      TaskItem.configure({ nested: true }),
+      Image.configure({ inline: false }),
     ],
     content: toHTML(description),
     editable: true,
+    editorProps: {
+      handlePaste: (_view, event) => {
+        const imgs = Array.from(event.clipboardData?.files ?? []).filter(f => f.type.startsWith('image/'))
+        if (!imgs.length) return false
+        event.preventDefault(); imgs.forEach(insertImage); return true
+      },
+      handleDrop: (_view, event) => {
+        const imgs = Array.from((event as DragEvent).dataTransfer?.files ?? []).filter(f => f.type.startsWith('image/'))
+        if (!imgs.length) return false
+        event.preventDefault(); imgs.forEach(insertImage); return true
+      },
+    },
   })
+
+  // Cola/solta imagem → converte p/ WebP (downscale) → sobe → insere no editor.
+  async function insertImage(file: File) {
+    try {
+      const webp = await downscaleImage(file)
+      const url = await uploadFile('briefings', `${crypto.randomUUID()}.webp`, webp)
+      editor?.chain().focus().setImage({ src: url }).run()
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Falha ao enviar imagem') }
+  }
+  function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    if (f) insertImage(f)
+    e.target.value = ''
+  }
 
   function start() {
     editor?.commands.setContent(toHTML(description))
@@ -87,9 +122,12 @@ export function BriefingEditor({ activityId, path, description, canEdit }: {
           <Sep />
           <Btn onClick={() => editor?.chain().focus().toggleBulletList().run()} active={!!editor?.isActive('bulletList')} title="Lista"><List className="w-3.5 h-3.5" /></Btn>
           <Btn onClick={() => editor?.chain().focus().toggleOrderedList().run()} active={!!editor?.isActive('orderedList')} title="Lista numerada"><ListOrdered className="w-3.5 h-3.5" /></Btn>
+          <Btn onClick={() => editor?.chain().focus().toggleTaskList().run()} active={!!editor?.isActive('taskList')} title="Checklist"><ListChecks className="w-3.5 h-3.5" /></Btn>
           <Btn onClick={() => editor?.chain().focus().toggleBlockquote().run()} active={!!editor?.isActive('blockquote')} title="Citação"><Quote className="w-3.5 h-3.5" /></Btn>
           <Sep />
           <Btn onClick={setLink} active={!!editor?.isActive('link')} title="Link"><Link2 className="w-3.5 h-3.5" /></Btn>
+          <Btn onClick={() => fileRef.current?.click()} active={false} title="Imagem (ou cole/solte)"><ImagePlus className="w-3.5 h-3.5" /></Btn>
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickImage} />
         </div>
 
         <div className="rich-text px-3 py-2.5 max-h-[420px] overflow-y-auto">
