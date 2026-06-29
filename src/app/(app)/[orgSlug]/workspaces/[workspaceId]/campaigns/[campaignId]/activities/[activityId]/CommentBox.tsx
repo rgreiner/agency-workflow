@@ -1,13 +1,21 @@
 'use client'
 
-import { useState, useRef, useTransition, useEffect } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
+import { useEditor, EditorContent } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import Placeholder from '@tiptap/extension-placeholder'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
+import Image from '@tiptap/extension-image'
+import Mention from '@tiptap/extension-mention'
 import { addComment } from '@/app/actions/activity'
-import { Send, AtSign, Users, UserCheck, Reply, X } from 'lucide-react'
+import { downscaleImage } from '@/lib/image-resize'
+import { uploadFile } from '@/lib/storage/upload-client'
+import { Send, Bold, Italic, ListChecks, ImagePlus, Reply, X, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
 interface Mentionable { id: string; name: string }
-
 interface Props {
   activityId: string
   path: string
@@ -17,119 +25,103 @@ interface Props {
 }
 
 const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
-const ALL_OPTION: Mentionable = { id: '__all__', name: 'todos' }
-const ASSIGNED_OPTION: Mentionable = { id: '__assigned__', name: 'atribuidos' }
-
-/** Contexto de @menção na posição do cursor (ou null). */
-function mentionContext(text: string, cursor: number): { start: number; query: string } | null {
-  let i = cursor - 1
-  while (i >= 0) {
-    const ch = text[i]
-    if (ch === '@') {
-      if (i === 0 || /\s/.test(text[i - 1])) {
-        const query = text.slice(i + 1, cursor)
-        return /\s/.test(query) ? null : { start: i, query }
-      }
-      return null
-    }
-    if (/\s/.test(ch)) return null
-    i--
-  }
-  return null
-}
+type Opt = { id: string; label: string }
 
 export function CommentBox({ activityId, path, members = [], assignedIds = [] }: Props) {
-  const [content, setContent] = useState('')
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
-  const [mentionStart, setMentionStart] = useState(-1) // -1 = autocomplete fechado
-  const [query, setQuery] = useState('')
-  const [active, setActive] = useState(0)
   const [replyTo, setReplyTo] = useState<{ id: string; author: string; preview: string } | null>(null)
-  const tracked = useRef<Mentionable[]>([])
-  const taRef = useRef<HTMLTextAreaElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  function optionsFor(query: string): Opt[] {
+    const q = norm(query)
+    const list: Opt[] = []
+    if (q === '' || 'todos'.startsWith(q) || 'all'.startsWith(q)) list.push({ id: '__all__', label: 'todos' })
+    if (assignedIds.length && (q === '' || 'atribuidos'.startsWith(q) || 'responsaveis'.startsWith(q))) list.push({ id: '__assigned__', label: 'atribuidos' })
+    for (const m of members) if (norm(m.name).includes(q)) list.push({ id: m.id, label: m.name })
+    return list.slice(0, 8)
+  }
+
+  const editor = useEditor({
+    immediatelyRender: false,
+    extensions: [
+      StarterKit,
+      Placeholder.configure({ placeholder: 'Adicione um comentário…  (@ menciona · checklist e imagens · ⌘/Ctrl+Enter envia)' }),
+      TaskList,
+      TaskItem.configure({ nested: true }),
+      Image.configure({ inline: false }),
+      Mention.configure({
+        HTMLAttributes: { class: 'mention' },
+        suggestion: {
+          items: ({ query }) => optionsFor(query),
+          render: makeMentionPopup,
+        },
+      }),
+    ],
+    content: '',
+    editorProps: {
+      handleKeyDown: (_v, event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); submit(); return true }
+        return false
+      },
+      handlePaste: (_v, event) => {
+        const imgs = Array.from(event.clipboardData?.files ?? []).filter(f => f.type.startsWith('image/'))
+        if (!imgs.length) return false
+        event.preventDefault(); imgs.forEach(insertImage); return true
+      },
+      handleDrop: (_v, event) => {
+        const imgs = Array.from((event as DragEvent).dataTransfer?.files ?? []).filter(f => f.type.startsWith('image/'))
+        if (!imgs.length) return false
+        event.preventDefault(); imgs.forEach(insertImage); return true
+      },
+    },
+  })
 
   // "Responder" num comentário (disparado pelo ReplyButton do feed).
   useEffect(() => {
     function onReply(e: Event) {
       const d = (e as CustomEvent).detail as { id: string; author: string; preview: string }
       setReplyTo(d)
-      taRef.current?.focus()
+      editor?.commands.focus('end')
     }
     window.addEventListener('flow:reply', onReply)
     return () => window.removeEventListener('flow:reply', onReply)
-  }, [])
+  }, [editor])
 
-  // Auto-expandir a caixa conforme digita (até um máximo; depois rola).
-  useEffect(() => {
-    const ta = taRef.current
-    if (!ta) return
-    ta.style.height = 'auto'
-    ta.style.height = `${Math.min(ta.scrollHeight, 260)}px`
-  }, [content])
-
-  const q = norm(query)
-  const memberOpts = members.filter(m => norm(m.name).includes(q)).slice(0, 6)
-  const showAll = q === '' || 'todos'.startsWith(q) || 'all'.startsWith(q)
-  const showAssigned = assignedIds.length > 0 && (q === '' || 'atribuidos'.startsWith(q) || 'responsaveis'.startsWith(q) || 'assigned'.startsWith(q))
-  const options = [...(showAll ? [ALL_OPTION] : []), ...(showAssigned ? [ASSIGNED_OPTION] : []), ...memberOpts]
-  const open = mentionStart >= 0 && options.length > 0
-  const activeIdx = Math.min(active, options.length - 1)
-
-  function onChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    const text = e.target.value
-    setContent(text)
-    const ctx = mentionContext(text, e.target.selectionStart ?? text.length)
-    if (ctx) { setMentionStart(ctx.start); setQuery(ctx.query); setActive(0) }
-    else { setMentionStart(-1); setQuery('') }
+  async function insertImage(file: File) {
+    try {
+      const webp = await downscaleImage(file)
+      const url = await uploadFile('comments', `${crypto.randomUUID()}.webp`, webp)
+      editor?.chain().focus().setImage({ src: url }).run()
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Falha ao enviar imagem') }
   }
-
-  function selectOption(opt: Mentionable) {
-    const ta = taRef.current
-    if (!ta) return
-    const cursor = ta.selectionStart ?? content.length
-    const token = opt.id === ALL_OPTION.id ? '@todos ' : opt.id === ASSIGNED_OPTION.id ? '@atribuidos ' : `@${opt.name} `
-    const before = content.slice(0, mentionStart)
-    const after = content.slice(cursor)
-    setContent(before + token + after)
-    if (opt.id !== ALL_OPTION.id && opt.id !== ASSIGNED_OPTION.id && !tracked.current.some(t => t.id === opt.id)) {
-      tracked.current.push(opt)
-    }
-    setMentionStart(-1); setQuery('')
-    const pos = (before + token).length
-    requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(pos, pos) })
+  function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]; if (f) insertImage(f); e.target.value = ''
   }
 
   function submit() {
-    const text = content.trim()
-    if (!text) return
-    const mentionAll = /(^|\s)@(todos|all)\b/i.test(text)
-    const mentionAssigned = /(^|\s)@atribuidos\b/i.test(text)
-    const ids = Array.from(new Set([
-      ...tracked.current.filter(m => text.includes('@' + m.name)).map(m => m.id),
-      ...(mentionAssigned ? assignedIds : []),
-    ]))
+    if (!editor || editor.isEmpty) return
+    const html = editor.getHTML()
+    const ids: string[] = []
+    let mentionAll = false
+    editor.state.doc.descendants(node => {
+      if (node.type.name === 'mention') {
+        const id = node.attrs.id as string
+        if (id === '__all__') mentionAll = true
+        else if (id === '__assigned__') ids.push(...assignedIds)
+        else if (id) ids.push(id)
+      }
+    })
+    const uniqueIds = Array.from(new Set(ids))
     startTransition(async () => {
-      const result = await addComment(path, activityId, text, ids, mentionAll, replyTo?.id ?? null)
+      const result = await addComment(path, activityId, html, uniqueIds, mentionAll, replyTo?.id ?? null)
       if (result?.error) { setError(result.error); toast.error(result.error) }
-      else { setContent(''); tracked.current = []; setMentionStart(-1); setError(''); setReplyTo(null) }
+      else { editor.commands.clearContent(); setError(''); setReplyTo(null) }
     })
   }
 
-  function handleSubmit(e: React.FormEvent) { e.preventDefault(); submit() }
-
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (open) {
-      if (e.key === 'ArrowDown') { e.preventDefault(); setActive(a => Math.min(a + 1, options.length - 1)); return }
-      if (e.key === 'ArrowUp')   { e.preventDefault(); setActive(a => Math.max(a - 1, 0)); return }
-      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); selectOption(options[activeIdx]); return }
-      if (e.key === 'Escape')    { e.preventDefault(); setMentionStart(-1); return }
-    }
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); submit() }
-  }
-
   return (
-    <form onSubmit={handleSubmit}>
+    <div>
       {replyTo && (
         <div className="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-200 text-xs">
           <Reply className="w-3.5 h-3.5 text-gray-400 shrink-0" />
@@ -138,63 +130,85 @@ export function CommentBox({ activityId, path, members = [], assignedIds = [] }:
           <button type="button" onClick={() => setReplyTo(null)} className="text-gray-400 hover:text-gray-600 shrink-0" title="Cancelar resposta"><X className="w-3.5 h-3.5" /></button>
         </div>
       )}
-      <div className="relative flex gap-2 items-end">
-        {open && (
-          <div className="pop-in absolute bottom-full mb-2 left-0 w-64 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 z-50 max-h-60 overflow-y-auto">
-            {options.map((opt, i) => (
-              <button
-                key={opt.id}
-                type="button"
-                onMouseDown={(e) => { e.preventDefault(); selectOption(opt) }}
-                onMouseEnter={() => setActive(i)}
-                className={cn(
-                  'w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors',
-                  i === activeIdx ? 'bg-orange-50 text-orange-900' : 'text-gray-700 hover:bg-gray-50'
-                )}
-              >
-                {opt.id === ALL_OPTION.id ? (
-                  <>
-                    <Users className="w-3.5 h-3.5 text-pink-500 shrink-0" />
-                    <span className="font-medium">@todos</span>
-                    <span className="text-xs text-gray-400 ml-auto">notificar todos</span>
-                  </>
-                ) : opt.id === ASSIGNED_OPTION.id ? (
-                  <>
-                    <UserCheck className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                    <span className="font-medium">@atribuidos</span>
-                    <span className="text-xs text-gray-400 ml-auto">notificar responsáveis</span>
-                  </>
-                ) : (
-                  <>
-                    <AtSign className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                    <span className="truncate">{opt.name}</span>
-                  </>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
 
-        <textarea
-          ref={taRef}
-          value={content}
-          onChange={onChange}
-          onKeyDown={handleKeyDown}
-          rows={2}
-          aria-label="Comentário"
-          placeholder="Adicione um comentário…  (@ menciona alguém · ⌘/Ctrl+Enter envia)"
-          className="flex-1 px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none overflow-y-auto min-h-[44px] max-h-[260px]"
-        />
-        <button
-          type="submit"
-          disabled={!content.trim() || isPending}
-          aria-label="Enviar comentário"
-          className="px-4 py-2.5 bg-orange-600 text-[#fff] rounded-xl hover:bg-orange-700 transition disabled:opacity-40 disabled:cursor-not-allowed self-stretch"
-        >
-          <Send aria-hidden className="w-4 h-4" />
-        </button>
+      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-orange-500 focus-within:border-transparent">
+        <div className="flex items-center gap-0.5 px-2 py-1 border-b border-gray-100">
+          <ToolBtn onClick={() => editor?.chain().focus().toggleBold().run()} active={!!editor?.isActive('bold')} title="Negrito"><Bold className="w-3.5 h-3.5" /></ToolBtn>
+          <ToolBtn onClick={() => editor?.chain().focus().toggleItalic().run()} active={!!editor?.isActive('italic')} title="Itálico"><Italic className="w-3.5 h-3.5" /></ToolBtn>
+          <ToolBtn onClick={() => editor?.chain().focus().toggleTaskList().run()} active={!!editor?.isActive('taskList')} title="Checklist"><ListChecks className="w-3.5 h-3.5" /></ToolBtn>
+          <ToolBtn onClick={() => fileRef.current?.click()} active={false} title="Imagem (ou cole/solte)"><ImagePlus className="w-3.5 h-3.5" /></ToolBtn>
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickImage} />
+          <button
+            type="button" onClick={submit} disabled={isPending || !editor || editor.isEmpty}
+            aria-label="Enviar comentário"
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 transition disabled:opacity-40"
+          >
+            {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          </button>
+        </div>
+        <div className="rich-text px-3 py-2 max-h-[260px] overflow-y-auto">
+          <EditorContent editor={editor} />
+        </div>
       </div>
       {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
-    </form>
+    </div>
   )
+}
+
+function ToolBtn({ onClick, active, title, children }: { onClick: () => void; active: boolean; title: string; children: React.ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} title={title}
+      className={cn('p-1.5 rounded transition-colors', active ? 'bg-orange-100 text-orange-700' : 'text-gray-400 hover:text-gray-800 hover:bg-gray-100')}>
+      {children}
+    </button>
+  )
+}
+
+// ── Popup de @menção (DOM puro; sem dependência de tippy) ────────────────────
+function makeMentionPopup() {
+  let el: HTMLDivElement | null = null
+  let items: Opt[] = []
+  let active = 0
+  let command: (o: Opt) => void = () => {}
+
+  function paint() {
+    if (!el) return
+    el.innerHTML = ''
+    items.forEach((it, i) => {
+      const b = document.createElement('button')
+      b.type = 'button'
+      b.textContent = it.id === '__all__' ? '@todos' : it.id === '__assigned__' ? '@atribuidos' : it.label
+      b.style.cssText = `display:block;width:100%;text-align:left;padding:6px 10px;font-size:13px;border:0;background:${i === active ? '#fff7ed' : 'transparent'};color:${i === active ? '#9a3412' : '#374151'};cursor:pointer;border-radius:6px`
+      b.onmousedown = (e) => { e.preventDefault(); command(it) }
+      b.onmouseenter = () => { active = i; paint() }
+      el!.appendChild(b)
+    })
+  }
+  function position(rect: DOMRect | null) {
+    if (!el || !rect) return
+    el.style.left = `${rect.left}px`
+    el.style.top = `${rect.bottom + 6}px`
+  }
+  return {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onStart: (props: any) => {
+      items = props.items; command = props.command; active = 0
+      el = document.createElement('div')
+      el.style.cssText = 'position:fixed;z-index:80;min-width:180px;max-height:240px;overflow:auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:4px'
+      document.body.appendChild(el)
+      position(props.clientRect?.()); paint()
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onUpdate: (props: any) => { items = props.items; command = props.command; active = 0; position(props.clientRect?.()); paint() },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onKeyDown: (props: any) => {
+      const k = props.event.key
+      if (k === 'ArrowDown') { active = (active + 1) % Math.max(items.length, 1); paint(); return true }
+      if (k === 'ArrowUp') { active = (active - 1 + items.length) % Math.max(items.length, 1); paint(); return true }
+      if (k === 'Enter' || k === 'Tab') { if (items[active]) command(items[active]); return true }
+      if (k === 'Escape') { return true }
+      return false
+    },
+    onExit: () => { el?.remove(); el = null },
+  }
 }
