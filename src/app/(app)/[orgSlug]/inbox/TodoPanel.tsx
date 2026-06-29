@@ -6,7 +6,7 @@
  */
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, CheckSquare, Square, Loader2, NotebookPen } from 'lucide-react'
+import { Plus, Trash2, CheckSquare, Square, Loader2, NotebookPen, CalendarDays } from 'lucide-react'
 import { cn, formatDate } from '@/lib/utils'
 import { createTodo, toggleTodo, deleteTodo } from '@/app/actions/todos'
 
@@ -42,32 +42,36 @@ export function TodoPanel({ orgSlug, todos }: { orgSlug: string; todos: Todo[] }
         <span className="text-xs text-gray-400 ml-auto">{pendentes}</span>
       </div>
 
-      {/* Adicionar */}
-      <div className="mb-3 space-y-1.5">
-        <div className="flex items-center gap-1.5">
-          <input
-            value={texto}
-            onChange={e => setTexto(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') add() }}
-            placeholder="Nova anotação…"
-            className="flex-1 min-w-0 px-2.5 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-          />
-          <button
-            onClick={add}
-            disabled={pending || !texto.trim()}
-            title="Adicionar"
-            className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 transition disabled:opacity-50"
-          >
-            {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-          </button>
-        </div>
+      {/* Adicionar — tudo numa linha: texto · prazo (ícone) · enviar */}
+      <div className="mb-3 flex items-center gap-1.5">
         <input
-          type="date"
-          value={due}
-          onChange={e => setDue(e.target.value)}
-          title="Prazo (opcional)"
-          className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+          value={texto}
+          onChange={e => setTexto(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') add() }}
+          placeholder="Nova anotação…"
+          className="flex-1 min-w-0 px-2.5 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
         />
+        <label
+          title={due ? `Prazo: ${formatDate(due)}` : 'Definir prazo (opcional)'}
+          className={cn('relative shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-lg border cursor-pointer transition',
+            due ? 'border-orange-300 text-orange-600 bg-orange-50' : 'border-gray-200 text-gray-400 hover:text-gray-600')}
+        >
+          <CalendarDays className="w-4 h-4" />
+          <input
+            type="date"
+            value={due}
+            onChange={e => setDue(e.target.value)}
+            className="absolute inset-0 opacity-0 cursor-pointer"
+          />
+        </label>
+        <button
+          onClick={add}
+          disabled={pending || !texto.trim()}
+          title="Adicionar"
+          className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 transition disabled:opacity-50"
+        >
+          {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+        </button>
       </div>
 
       {/* Lista */}
