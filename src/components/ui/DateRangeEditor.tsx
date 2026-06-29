@@ -73,6 +73,20 @@ export function DateRangeEditor({ activityId, path, startDate, dueDate, canEdit,
 
   const [isPending, startTransition] = useTransition()
   const popupRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  // Alinhamento do popover p/ não estourar a tela (decidido no clique, sem flicker).
+  const [pos, setPos] = useState<{ right: boolean; up: boolean }>({ right: false, up: false })
+
+  function decidePos() {
+    const el = containerRef.current
+    if (!el || typeof window === 'undefined') return
+    const r = el.getBoundingClientRect()
+    const POPUP_W = 320, POPUP_H = 380
+    setPos({
+      right: r.left + POPUP_W > window.innerWidth - 8,
+      up: r.bottom + POPUP_H > window.innerHeight - 8 && r.top - POPUP_H > 8,
+    })
+  }
 
   const today = todayYMD()
   const initDate = origStart ? new Date(origStart + 'T00:00') : new Date()
@@ -214,7 +228,7 @@ export function DateRangeEditor({ activityId, path, startDate, dueDate, canEdit,
     <button
       type="button"
       title="Definir período (início → prazo)"
-      onClick={(e) => { e.stopPropagation(); setPhase('start'); setOpen(o => !o) }}
+      onClick={(e) => { e.stopPropagation(); decidePos(); setPhase('start'); setOpen(o => !o) }}
       className="flex items-center gap-1 text-left"
     >
       {localEnd ? (
@@ -229,7 +243,7 @@ export function DateRangeEditor({ activityId, path, startDate, dueDate, canEdit,
   ) : (
     <button
       type="button"
-      onClick={() => { setPhase('start'); setOpen(o => !o) }}
+      onClick={() => { decidePos(); setPhase('start'); setOpen(o => !o) }}
       className="flex items-center gap-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 hover:border-orange-300 hover:bg-orange-50 transition"
     >
       <Calendar className="w-3.5 h-3.5 text-gray-400 shrink-0" />
@@ -241,7 +255,7 @@ export function DateRangeEditor({ activityId, path, startDate, dueDate, canEdit,
   )
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       {trigger}
 
       {/* Calendar popup */}
@@ -249,7 +263,11 @@ export function DateRangeEditor({ activityId, path, startDate, dueDate, canEdit,
         <div
           ref={popupRef}
           onClick={(e) => e.stopPropagation()}
-          className="pop-in absolute top-full left-0 mt-1 z-50 bg-white rounded-2xl border border-gray-200 shadow-xl p-4"
+          className={cn(
+            'pop-in absolute z-50 bg-white rounded-2xl border border-gray-200 shadow-xl p-4',
+            pos.right ? 'right-0' : 'left-0',
+            pos.up ? 'bottom-full mb-1' : 'top-full mt-1',
+          )}
           style={{ minWidth: 300 }}
         >
           {/* Hint */}

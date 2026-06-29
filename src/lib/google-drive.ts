@@ -104,7 +104,9 @@ export interface TaskFoldersResult {
 
 /** Cria a pasta da tarefa + subpastas dentro da pasta da campanha. Idempotente. */
 export async function createTaskFolders(campaignFolderId: string, taskName: string): Promise<TaskFoldersResult> {
-  const safeName = taskName.trim().replace(/[\\/:*?"<>|]/g, '-') || 'Tarefa'
+  // O Drive aceita acentos e a maioria dos símbolos no nome — manter igual ao título.
+  // Só troco barras (\ /) por "-", que quebrariam o caminho (buildDrivePath usa "\").
+  const safeName = taskName.trim().replace(/[\\/]/g, '-') || 'Tarefa'
   const task = await ensureFolder(campaignFolderId, safeName)
   const sub: Record<string, { id: string; link: string }> = {}
   for (const name of SUBFOLDERS) {
