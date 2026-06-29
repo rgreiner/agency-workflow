@@ -40,39 +40,52 @@ export function RecurrenceEditor({ activityId, path, recurrence, remaining, rese
   // Status candidatos a "volta para" — exclui os de encerramento (Concluído).
   const resetOptions = statusConfig.filter(s => s.group !== 'done')
 
-  // Estado inicial vem das props; o pai passa um `key` que muda quando o servidor
-  // revalida, remontando o componente com os novos valores (sem efeito de sync).
-  const [state, setState] = useState<State>({
+  // Estado local; só persiste ao FECHAR a box (não a cada mudança) — assim dá
+  // pra ajustar os 3-4 itens sem a box fechar a cada alteração (cada save
+  // revalida e o pai remonta via `key`).
+  // Props são estáveis por montagem (o pai remonta via `key` ao revalidar).
+  const initialState: State = {
     enabled: !!recurrence,
     freq: recurrence || 'monthly',
     noLimit: recurrence ? remaining == null : false,
     count: remaining ?? 12,
     resetStatus: resetStatus || 'briefing',
-  })
+  }
+  const [state, setState] = useState<State>(initialState)
+  const stateRef = useRef(state)
+  function update(next: State) { stateRef.current = next; setState(next) }
 
-  // Fecha ao clicar fora
-  useEffect(() => {
-    if (!open) return
-    function onOut(e: MouseEvent) {
-      if (popupRef.current && !popupRef.current.contains(e.target as Node)) { setOpen(false); setStatusOpen(false) }
-    }
-    document.addEventListener('mousedown', onOut)
-    return () => document.removeEventListener('mousedown', onOut)
-  }, [open])
-
-  function save(next: State) {
-    setState(next)
+  function persist(s: State) {
     startTransition(async () => {
       const result = await setActivityRecurrence(
         path,
         activityId,
-        next.enabled ? next.freq : null,
-        next.enabled ? (next.noLimit ? null : Math.max(1, next.count)) : null,
-        next.enabled ? next.resetStatus : null,
+        s.enabled ? s.freq : null,
+        s.enabled ? (s.noLimit ? null : Math.max(1, s.count)) : null,
+        s.enabled ? s.resetStatus : null,
       )
       if (result?.error) toast.error(result.error)
     })
   }
+  function changed(a: State, b: State) {
+    return a.enabled !== b.enabled || a.freq !== b.freq || a.noLimit !== b.noLimit
+      || a.count !== b.count || a.resetStatus !== b.resetStatus
+  }
+  function closeAndSave() {
+    setOpen(false); setStatusOpen(false)
+    const s = stateRef.current
+    if (changed(s, initialState)) persist(s)
+  }
+
+  // Fecha (e salva) ao clicar fora
+  useEffect(() => {
+    if (!open) return
+    function onOut(e: MouseEvent) {
+      if (popupRef.current && !popupRef.current.contains(e.target as Node)) closeAndSave()
+    }
+    document.addEventListener('mousedown', onOut)
+    return () => document.removeEventListener('mousedown', onOut)
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const resetCfg = statusConfig.find(s => s.value === state.resetStatus)
 
@@ -91,7 +104,7 @@ export function RecurrenceEditor({ activityId, path, recurrence, remaining, rese
     <div className="relative">
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => (open ? closeAndSave() : setOpen(true))}
         title="Recorrência do prazo"
         className={cn(
           'flex items-center gap-1.5 text-xs rounded-lg px-3 py-1.5 transition',
@@ -117,7 +130,7 @@ export function RecurrenceEditor({ activityId, path, recurrence, remaining, rese
           {/* Toggle "é recorrente" */}
           <button
             type="button"
-            onClick={() => save({ ...state, enabled: !state.enabled })}
+            onClick={() => update({ ...state, enabled: !state.enabled })}
             className="flex items-center gap-2.5 w-full text-left"
           >
             <span className={cn(
@@ -136,7 +149,7 @@ export function RecurrenceEditor({ activityId, path, recurrence, remaining, rese
                 <label className="block text-xs text-gray-500 mb-1">Frequência</label>
                 <Select
                   value={state.freq}
-                  onChange={v => save({ ...state, freq: v })}
+                  onChange={v => update({ ...state, freq: v })}
                   options={FREQ_OPTIONS}
                   size="sm"
                 />
@@ -161,7 +174,7 @@ export function RecurrenceEditor({ activityId, path, recurrence, remaining, rese
                       <button
                         key={s.value}
                         type="button"
-                        onClick={() => { setStatusOpen(false); save({ ...state, resetStatus: s.value }) }}
+                        onClick={() => { setStatusOpen(false); update({ ...state, resetStatus: s.value }) }}
                         className="w-full text-left px-2.5 py-1.5 flex items-center gap-2 hover:bg-gray-50 transition-colors"
                       >
                         <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ backgroundColor: s.bg, color: s.text }}>{s.label}</span>
@@ -181,15 +194,14 @@ export function RecurrenceEditor({ activityId, path, recurrence, remaining, rese
                     min={1}
                     value={state.noLimit ? '' : state.count}
                     disabled={state.noLimit}
-                    onChange={e => setState(s => ({ ...s, count: Math.max(1, Number(e.target.value) || 1) }))}
-                    onBlur={() => !state.noLimit && save(state)}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); save(state); setOpen(false) } }}
+                    onChange={e => update({ ...state, count: Math.max(1, Number(e.target.value) || 1) })}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); closeAndSave() } }}
                     className="w-16 text-sm border border-gray-200 rounded-lg px-2 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:bg-gray-50 disabled:text-gray-300"
                   />
                   <span className="text-sm text-gray-500">vezes</span>
                   <button
                     type="button"
-                    onClick={() => save({ ...state, noLimit: !state.noLimit })}
+                    onClick={() => update({ ...state, noLimit: !state.noLimit })}
                     className={cn(
                       'ml-auto flex items-center gap-1 text-xs rounded-lg px-2 py-1.5 transition border',
                       state.noLimit
