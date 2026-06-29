@@ -60,6 +60,14 @@ export function CommentBox({ activityId, path, members = [], assignedIds = [] }:
     return () => window.removeEventListener('flow:reply', onReply)
   }, [])
 
+  // Auto-expandir a caixa conforme digita (até um máximo; depois rola).
+  useEffect(() => {
+    const ta = taRef.current
+    if (!ta) return
+    ta.style.height = 'auto'
+    ta.style.height = `${Math.min(ta.scrollHeight, 260)}px`
+  }, [content])
+
   const q = norm(query)
   const memberOpts = members.filter(m => norm(m.name).includes(q)).slice(0, 6)
   const showAll = q === '' || 'todos'.startsWith(q) || 'all'.startsWith(q)
@@ -175,7 +183,7 @@ export function CommentBox({ activityId, path, members = [], assignedIds = [] }:
           rows={2}
           aria-label="Comentário"
           placeholder="Adicione um comentário…  (@ menciona alguém · ⌘/Ctrl+Enter envia)"
-          className="flex-1 px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-y min-h-[44px]"
+          className="flex-1 px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none overflow-y-auto min-h-[44px] max-h-[260px]"
         />
         <button
           type="submit"
