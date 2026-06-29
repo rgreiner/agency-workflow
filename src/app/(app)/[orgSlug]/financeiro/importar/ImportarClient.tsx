@@ -1,0 +1,216 @@
+'use client'
+
+import { useState, useRef, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import { Upload, FileSpreadsheet, Loader2, Check, AlertCircle, Trash2, X } from 'lucide-react'
+import { formatBRL } from '@/lib/midia'
+import { mapSheetToRows, summarize, type ExtratoRow } from '@/lib/extrato'
+import { importarExtrato, limparExtrato } from '@/app/actions/financeiro'
+
+const CHUNK = 500
+
+type Preview = ReturnType<typeof summarize>
+
+function fmtDate(iso: string | null) {
+  if (!iso) return '—'
+  const [y, m, d] = iso.split('-')
+  return `${d}/${m}/${y}`
+}
+function fmtDateTime(iso: string | null) {
+  if (!iso) return null
+  const dt = new Date(iso)
+  return dt.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
+  orgSlug: string; totalAtual: number; ultimoImport: string | null
+}) {
+  const router = useRouter()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [fileName, setFileName] = useState<string | null>(null)
+  const [rows, setRows] = useState<ExtratoRow[] | null>(null)
+  const [preview, setPreview] = useState<Preview | null>(null)
+  const [error, setError] = useState('')
+  const [parsing, setParsing] = useState(false)
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
+  const [done, setDone] = useState<{ inserted: number; updated: number } | null>(null)
+  const [clearing, startClear] = useTransition()
+  const [confirmClear, setConfirmClear] = useState(false)
+
+  async function onFile(file: File) {
+    setError(''); setDone(null); setRows(null); setPreview(null); setFileName(file.name)
+    setParsing(true)
+    try {
+      const XLSX = await import('xlsx')
+      const buf = await file.arrayBuffer()
+      const wb = XLSX.read(buf, { cellDates: true })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const matrix = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, blankrows: false })
+      const res = mapSheetToRows(matrix)
+      if (res.error) { setError(res.error); setParsing(false); return }
+      if (res.rows.length === 0) { setError('Nenhuma linha encontrada no arquivo.'); setParsing(false); return }
+      setRows(res.rows)
+      setPreview(summarize(res.rows))
+    } catch (e) {
+      setError('Falha ao ler o arquivo: ' + (e instanceof Error ? e.message : String(e)))
+    }
+    setParsing(false)
+  }
+
+  async function doImport() {
+    if (!rows) return
+    setError(''); setDone(null)
+    setProgress({ done: 0, total: rows.length })
+    let inserted = 0, updated = 0
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const chunk = rows.slice(i, i + CHUNK)
+      const res = await importarExtrato(orgSlug, chunk)
+      if (res?.error) { setError(res.error); setProgress(null); return }
+      if (res?.result) { inserted += res.result.inserted; updated += res.result.updated }
+      setProgress({ done: Math.min(i + CHUNK, rows.length), total: rows.length })
+    }
+    setProgress(null)
+    setDone({ inserted, updated })
+    setRows(null); setPreview(null); setFileName(null)
+    if (inputRef.current) inputRef.current.value = ''
+    router.refresh()
+  }
+
+  function doClear() {
+    startClear(async () => {
+      const res = await limparExtrato(orgSlug)
+      if (res?.error) { setError(res.error); return }
+      setConfirmClear(false)
+      router.refresh()
+    })
+  }
+
+  const ultimo = fmtDateTime(ultimoImport)
+
+  return (
+    <div className="p-6 max-w-3xl">
+      <div className="mb-5">
+        <h1 className="text-lg font-semibold text-gray-900">Importar extrato</h1>
+        <p className="text-gray-500 text-sm mt-0.5">
+          Suba o export <strong>&ldquo;Extrato Financeiro&rdquo;</strong> da Conta Azul (.xls, .xlsx ou .csv).
+          Reimportar não duplica — atualiza os lançamentos existentes.
+        </p>
+      </div>
+
+      {/* status atual */}
+      <div className="flex items-center gap-4 mb-5 text-sm">
+        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+          <p className="text-[11px] text-gray-400">Lançamentos importados</p>
+          <p className="text-lg font-semibold text-gray-900">{totalAtual.toLocaleString('pt-BR')}</p>
+        </div>
+        {ultimo && (
+          <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+            <p className="text-[11px] text-gray-400">Último import</p>
+            <p className="text-sm font-medium text-gray-700">{ultimo}</p>
+          </div>
+        )}
+        {totalAtual > 0 && (
+          <button onClick={() => setConfirmClear(true)}
+            className="ml-auto inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-600 transition">
+            <Trash2 className="w-3.5 h-3.5" /> Limpar tudo
+          </button>
+        )}
+      </div>
+
+      {/* dropzone / file picker */}
+      <label
+        className="block border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center cursor-pointer hover:border-orange-300 hover:bg-orange-50/30 transition-colors"
+        onDragOver={e => e.preventDefault()}
+        onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) onFile(f) }}
+      >
+        <input ref={inputRef} type="file" accept=".xls,.xlsx,.csv" className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f) }} />
+        {parsing ? (
+          <span className="inline-flex items-center gap-2 text-sm text-gray-500"><Loader2 className="w-4 h-4 animate-spin" /> Lendo arquivo…</span>
+        ) : fileName ? (
+          <span className="inline-flex items-center gap-2 text-sm text-gray-700"><FileSpreadsheet className="w-5 h-5 text-emerald-600" /> {fileName}</span>
+        ) : (
+          <span className="inline-flex flex-col items-center gap-2 text-sm text-gray-500">
+            <Upload className="w-7 h-7 text-gray-300" />
+            Arraste o arquivo aqui ou <span className="text-orange-600 font-medium">clique para selecionar</span>
+          </span>
+        )}
+      </label>
+
+      {error && (
+        <p className="mt-4 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 inline-flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" /> {error}
+        </p>
+      )}
+
+      {done && (
+        <p className="mt-4 text-sm text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 inline-flex items-center gap-2">
+          <Check className="w-4 h-4 shrink-0" /> Import concluído — {done.inserted.toLocaleString('pt-BR')} novos, {done.updated.toLocaleString('pt-BR')} atualizados.
+        </p>
+      )}
+
+      {/* preview + confirmar */}
+      {preview && rows && !progress && (
+        <div className="mt-5 bg-white border border-gray-200 rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-gray-900 mb-3">Prévia — {preview.total.toLocaleString('pt-BR')} lançamentos</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+            <PreviewStat label="Recebido" value={preview.recebido} tone="emerald" />
+            <PreviewStat label="Pago" value={preview.pago} tone="red" />
+            <PreviewStat label="A receber" value={preview.aReceber} tone="emerald" muted />
+            <PreviewStat label="A pagar" value={preview.aPagar} tone="red" muted />
+          </div>
+          <p className="text-xs text-gray-400 mb-4">Período: {fmtDate(preview.periodo.de)} a {fmtDate(preview.periodo.ate)}</p>
+          <button onClick={doImport}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition">
+            <Check className="w-4 h-4" /> Confirmar import
+          </button>
+        </div>
+      )}
+
+      {/* progresso */}
+      {progress && (
+        <div className="mt-5 bg-white border border-gray-200 rounded-xl p-5">
+          <p className="text-sm text-gray-700 mb-2 inline-flex items-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin text-orange-600" />
+            Importando… {progress.done.toLocaleString('pt-BR')} / {progress.total.toLocaleString('pt-BR')}
+          </p>
+          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-full bg-orange-500 transition-all" style={{ width: `${(progress.done / progress.total) * 100}%` }} />
+          </div>
+        </div>
+      )}
+
+      {/* confirmar limpar */}
+      {confirmClear && (
+        <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="modal-card w-full max-w-sm bg-white rounded-2xl shadow-xl border border-gray-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="text-base font-semibold text-gray-900">Limpar extrato importado</h2>
+              <button aria-label="Fechar" onClick={() => setConfirmClear(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="px-6 py-5">
+              <p className="text-sm text-gray-600">Apaga os {totalAtual.toLocaleString('pt-BR')} lançamentos importados. As views de fluxo de caixa ficam vazias até reimportar. Isso não afeta os lançamentos do sistema (mídia/fee/manual).</p>
+              <div className="flex justify-end gap-2 pt-4">
+                <button onClick={() => setConfirmClear(false)} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">Cancelar</button>
+                <button onClick={doClear} disabled={clearing}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-red-700 disabled:opacity-50 transition">
+                  {clearing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} Apagar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PreviewStat({ label, value, tone, muted }: { label: string; value: number; tone: 'emerald' | 'red'; muted?: boolean }) {
+  const color = tone === 'emerald' ? 'text-emerald-600' : 'text-red-600'
+  return (
+    <div>
+      <p className="text-[11px] text-gray-400 mb-0.5">{label}</p>
+      <p className={`text-base font-semibold ${muted ? 'opacity-60' : ''} ${color}`}>{formatBRL(value)}</p>
+    </div>
+  )
+}

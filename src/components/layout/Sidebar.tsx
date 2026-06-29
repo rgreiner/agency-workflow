@@ -86,11 +86,13 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Proposta',           href: 'producao/proposta' },
   ] },
   { id: 'financeiro', label: 'Financeiro', icon: Wallet, finance: true, items: [
-    { label: 'Painel',      href: 'financeiro/painel' },
-    { label: 'Lançamentos', href: 'financeiro/lancamentos' },
-    { label: 'Faturamento', href: 'financeiro/faturamento' },
-    { label: 'Contas',      href: 'financeiro/contas' },
-    { label: 'Categorias',  href: 'financeiro/categorias' },
+    { label: 'Painel',         href: 'financeiro/painel' },
+    { label: 'Fluxo de caixa', href: 'financeiro/fluxo-caixa' },
+    { label: 'Lançamentos',    href: 'financeiro/lancamentos' },
+    { label: 'Faturamento',    href: 'financeiro/faturamento' },
+    { label: 'Contas',         href: 'financeiro/contas' },
+    { label: 'Categorias',     href: 'financeiro/categorias' },
+    { label: 'Importar extrato', href: 'financeiro/importar' },
   ] },
   { id: 'cadastros', label: 'Cadastros', icon: Users, items: [
     { label: 'Clientes',     href: 'workspaces' },

@@ -263,6 +263,45 @@ export async function updateConta(orgSlug: string, contaId: string, data: Partia
   revalidatePath(`/${orgSlug}/financeiro/contas`)
 }
 
+// ── Import do extrato (Conta Azul) ───────────────────────────
+import type { ExtratoRow } from '@/lib/extrato'
+
+/** Importa um lote de linhas do extrato (chamado em chunks pelo client). */
+export async function importarExtrato(orgSlug: string, rows: ExtratoRow[]) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { data: org } = await supabase
+    .from('organizations').select('id').eq('slug', orgSlug).single()
+  if (!org) return { error: 'Organização não encontrada' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('import_extrato', {
+    p_user_id: user.id, p_org_id: org.id, p_rows: rows,
+  })
+  if (error) return { error: error.message }
+  return { result: data as { inserted: number; updated: number; total: number } }
+}
+
+/** Apaga todo o extrato importado da org. */
+export async function limparExtrato(orgSlug: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { data: org } = await supabase
+    .from('organizations').select('id').eq('slug', orgSlug).single()
+  if (!org) return { error: 'Organização não encontrada' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('clear_extrato', {
+    p_user_id: user.id, p_org_id: org.id,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/importar`)
+}
+
 // ── Config: categorias / centros de custo ────────────────────
 // Categorias em árvore de 2 níveis (grupo → filhos), separadas por tipo
 // (entrada = receita | saida = despesa). Um grupo sem filhos é uma categoria
