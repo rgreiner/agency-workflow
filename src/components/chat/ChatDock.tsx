@@ -10,7 +10,6 @@
  * Emite 'flow:chat-unread' (total) p/ o badge da sidebar.
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Search, X, Minus, Send, MessagesSquare } from 'lucide-react'
@@ -174,17 +173,9 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
     })
   const totalUnread = Object.values(unread).reduce((a, b) => a + b, 0)
 
-  // No detalhe da tarefa há um composer de comentário fixo no canto inferior do
-  // painel direito (360px); desloca o dock p/ a esquerda dele e evita sobrepor o
-  // botão de enviar. Nas demais telas, o messenger fica no canto.
-  const pathname = usePathname()
-  const onActivityDetail = /\/activities\/[^/]+$/.test(pathname ?? '')
-
+  // Messenger sempre no canto inferior direito (acima da modal de tarefa, z-60 > z-50).
   return (
-    <div className={cn(
-      'fixed bottom-0 right-0 z-[60] flex items-end gap-3 p-3 pointer-events-none',
-      onActivityDetail && 'lg:right-[360px]',
-    )}>
+    <div className="fixed bottom-0 right-0 z-[60] flex items-end gap-3 p-3 pointer-events-none">
       {/* Janelas de conversa */}
       {windows.map(peer => {
         const m = memberById[peer]
