@@ -25,12 +25,18 @@ import { MoveTaskProject } from './MoveTaskProject'
 
 export default async function ActivityPage({
   params,
+  searchParams,
 }: {
   params: Promise<{
     orgSlug: string; workspaceId: string; campaignId: string; activityId: string
   }>
+  searchParams: Promise<{ from?: string }>
 }) {
   const { orgSlug, workspaceId, campaignId, activityId } = await params
+  const { from } = await searchParams
+  // Volta para a tela de origem (?from=) se for um caminho interno seguro; senão, a campanha.
+  const safeFrom = from && from.startsWith('/') && !from.startsWith('//') ? from : null
+  const closeHref = safeFrom ?? `/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}`
   const supabase = await createClient()
 
   const user = await getUsuario()
@@ -245,7 +251,7 @@ export default async function ActivityPage({
           <ShareJobButton orgSlug={orgSlug} activityId={activityId} title={activity.title} />
           <span className="hidden md:inline">Criada {formatDate(activity.created_at)}</span>
           <Link
-            href={`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}`}
+            href={closeHref}
             title="Fechar"
             className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
           >

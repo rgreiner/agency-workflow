@@ -245,7 +245,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
     // Click (no significant movement) → open activity page
     if (Math.abs(d.deltaX) < 5) {
       const camp = campMap[a.campaign_id]
-      router.push(`/${orgSlug}/workspaces/${camp.workspaceId}/campaigns/${a.campaign_id}/activities/${a.id}`)
+      router.push(`/${orgSlug}/workspaces/${camp.workspaceId}/campaigns/${a.campaign_id}/activities/${a.id}?from=${encodeURIComponent(`/${orgSlug}/views/gantt`)}`)
       return
     }
 

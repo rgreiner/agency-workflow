@@ -208,7 +208,7 @@ export default async function DashboardPage({
                     return (
                       <Link
                         key={task.id}
-                        href={`/${orgSlug}/workspaces/${wsId}/campaigns/${task.campaign_id}/activities/${task.id}`}
+                        href={`/${orgSlug}/workspaces/${wsId}/campaigns/${task.campaign_id}/activities/${task.id}?from=${encodeURIComponent(`/${orgSlug}/dashboard`)}`}
                         className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-50 transition group"
                       >
                         <div className="flex-1 min-w-0">
@@ -311,7 +311,7 @@ export default async function DashboardPage({
                     </div>
                     {activity && camp && (
                       <Link
-                        href={`/${orgSlug}/workspaces/${camp.workspaceId}/campaigns/${activity.campaign_id}/activities/${activity.id}`}
+                        href={`/${orgSlug}/workspaces/${camp.workspaceId}/campaigns/${activity.campaign_id}/activities/${activity.id}?from=${encodeURIComponent(`/${orgSlug}/dashboard`)}`}
                         className="text-xs text-gray-500 hover:text-orange-600 transition truncate block mt-0.5"
                       >
                         {activity.title}

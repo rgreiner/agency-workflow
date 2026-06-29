@@ -687,7 +687,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                       const cxKey = activity.complexity as keyof typeof COMPLEXITY_ICON | undefined
                       const ComplexityIcon = cxKey ? COMPLEXITY_ICON[cxKey] : null
                       const complexity = cxKey ? COMPLEXITY_CONFIG[cxKey] : null
-                      const href = `/${orgSlug}/workspaces/${camp?.workspaceId}/campaigns/${activity.campaign_id}/activities/${activity.id}`
+                      const href = `/${orgSlug}/workspaces/${camp?.workspaceId}/campaigns/${activity.campaign_id}/activities/${activity.id}?from=${encodeURIComponent(`/${orgSlug}/${routeBase}`)}`
 
                       const dueBadge = activity.due_date ? (
                         <span className={cn(
