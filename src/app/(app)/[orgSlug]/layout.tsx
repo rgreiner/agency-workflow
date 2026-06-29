@@ -9,9 +9,11 @@ import { TabUnreadBadge } from '@/components/layout/TabUnreadBadge'
 
 export default async function OrgLayout({
   children,
+  modal,
   params,
 }: {
   children: React.ReactNode
+  modal: React.ReactNode
   params: Promise<{ orgSlug: string }>
 }) {
   const { orgSlug } = await params
@@ -122,6 +124,9 @@ export default async function OrgLayout({
       >
         {children}
       </AppShell>
+
+      {/* Slot da modal (intercepting route do detalhe da tarefa) */}
+      {modal}
 
       {/* Messenger interno — dock global no canto inferior direito */}
       <ChatDock orgId={org.id} meId={user.id} members={chatMembers} />
