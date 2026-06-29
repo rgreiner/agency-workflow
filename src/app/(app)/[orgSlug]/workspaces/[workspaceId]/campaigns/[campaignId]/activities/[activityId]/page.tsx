@@ -23,6 +23,10 @@ import { Avatar } from '@/components/ui/Avatar'
 import { MachinePath } from '@/components/ui/MachinePath'
 import { MoveTaskProject } from './MoveTaskProject'
 
+// Comentários podem ser HTML (editor rico) ou texto puro (antigos).
+const isHtml = (s: string) => /^\s*</.test(s)
+const stripHtml = (s: string) => s.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
+
 export default async function ActivityPage({
   params,
   searchParams,
@@ -86,7 +90,8 @@ export default async function ActivityPage({
   const commentsById = new Map<string, { author: string; content: string }>()
   ;(comments ?? []).forEach(c => {
     const p = c.profiles as unknown as { full_name: string | null } | null
-    commentsById.set(c.id, { author: p?.full_name ?? 'Usuário', content: c.content })
+    const preview = isHtml(c.content) ? stripHtml(c.content) : c.content
+    commentsById.set(c.id, { author: p?.full_name ?? 'Usuário', content: preview })
   })
 
   const { data: campaign } = await supabase
@@ -511,10 +516,12 @@ export default async function ActivityPage({
                             <span className="block line-clamp-2">{commentsById.get(item.replyTo)!.content}</span>
                           </div>
                         )}
-                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{item.content}</p>
+                        {isHtml(item.content)
+                          ? <div className="rich-text text-sm text-gray-700 leading-relaxed" dangerouslySetInnerHTML={{ __html: item.content }} />
+                          : <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{item.content}</p>}
                         <div className="flex items-center justify-between gap-3">
                           <ReactionBar path={path} commentId={item.id} currentUserId={user?.id ?? ''} reactions={reactionsByComment.get(item.id) ?? []} />
-                          <div className="mt-2 shrink-0"><ReplyButton id={item.id} author={item.profile?.full_name ?? 'Usuário'} preview={item.content.slice(0, 80)} /></div>
+                          <div className="mt-2 shrink-0"><ReplyButton id={item.id} author={item.profile?.full_name ?? 'Usuário'} preview={(isHtml(item.content) ? stripHtml(item.content) : item.content).slice(0, 80)} /></div>
                         </div>
                       </div>
                     </div>
