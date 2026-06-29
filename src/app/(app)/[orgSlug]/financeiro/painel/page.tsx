@@ -62,16 +62,26 @@ export default async function PainelPage({ params }: { params: Promise<{ orgSlug
   const receber = grp('entrada')
   const pagar = grp('saida')
 
-  // Posição das contas: saldo_inicial + realizados (recebido − pago) por conta.
-  const saldoConta = (id: string) => {
-    const real = lanc.filter(l => isPago(l.situacao) && l.conta_id === id)
-    const ent = real.filter(l => l.tipo === 'entrada').reduce((s, l) => s + realVal(l), 0)
-    const sai = real.filter(l => l.tipo === 'saida').reduce((s, l) => s + realVal(l), 0)
-    return ent - sai
+  // Uma passada só pelos lançamentos: saldo realizado por conta + faturamento
+  // (entrada realizada) por mês de liquidação. Evita varrer o array por conta/mês.
+  const realPorConta = new Map<string, number>()
+  const fatPorMes = new Map<string, number>()
+  for (const l of lanc) {
+    if (!isPago(l.situacao)) continue
+    if (l.conta_id) {
+      const delta = l.tipo === 'saida' ? -realVal(l) : realVal(l)
+      realPorConta.set(l.conta_id, (realPorConta.get(l.conta_id) ?? 0) + delta)
+    }
+    if (l.tipo === 'entrada') {
+      const ym = monthOf(l.data_liquidacao ?? l.vencimento)
+      if (ym) fatPorMes.set(ym, (fatPorMes.get(ym) ?? 0) + realVal(l))
+    }
   }
+
+  // Posição das contas: saldo_inicial + realizados (recebido − pago) por conta.
   const contasComSaldo = contas.map(c => ({
     ...c,
-    saldo: Number(c.saldo_inicial ?? 0) + saldoConta(c.id),
+    saldo: Number(c.saldo_inicial ?? 0) + (realPorConta.get(c.id) ?? 0),
   }))
   const saldoTotal = contasComSaldo.reduce((s, c) => s + c.saldo, 0)
 
@@ -80,9 +90,7 @@ export default async function PainelPage({ params }: { params: Promise<{ orgSlug
   const faturamento = meses.map(ym => ({
     ym,
     label: MESES_ABREV[Number(ym.split('-')[1]) - 1],
-    valor: lanc
-      .filter(l => l.tipo === 'entrada' && isPago(l.situacao) && monthOf(l.data_liquidacao ?? l.vencimento) === ym)
-      .reduce((s, l) => s + realVal(l), 0),
+    valor: fatPorMes.get(ym) ?? 0,
   }))
   const fatMax = Math.max(1, ...faturamento.map(f => f.valor))
 
