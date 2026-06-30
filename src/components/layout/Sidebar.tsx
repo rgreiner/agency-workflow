@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import {
   ChevronRight,
-  ChevronDown,
   ChevronsDown,
   ChevronsUp,
   Settings,
@@ -27,6 +26,8 @@ import {
   ClipboardList,
   Wallet,
   Users,
+  SquareKanban,
+  Building2,
   type LucideIcon,
 } from 'lucide-react'
 import { logout } from '@/app/actions/auth'
@@ -159,6 +160,11 @@ function modeForPath(path: string, base: string): SidebarMode | null {
   if (['dashboard', 'views', 'docs', 'boards', 'workspaces'].some(p => path.startsWith(`${base}/${p}`))) return 'trabalho'
   return null
 }
+// Abas de modo (ícones no header). Tarefas/trabalho × comercial/operacional.
+const MODE_TABS: { m: SidebarMode; Icon: LucideIcon; label: string }[] = [
+  { m: 'trabalho', Icon: SquareKanban, label: 'Trabalho' },
+  { m: 'operacional', Icon: Building2, label: 'Operacional' },
+]
 
 export function Sidebar({
   orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#f97316',
@@ -274,27 +280,52 @@ export function Sidebar({
   const sidebarContent = (
     <aside className="sidebar-shell w-60 bg-gray-900 flex flex-col h-full select-none">
 
-      {/* ── Org header ───────────────────────────────── */}
-      <div className="px-3 pt-4 pb-3 border-b border-gray-800 flex items-center gap-1">
+      {/* ── Org header: logo + switcher de modo (Trabalho × Operacional) ── */}
+      <div className="px-3 pt-4 pb-3 border-b border-gray-800 flex items-center gap-2">
         <Link
           href={`${base}/dashboard`}
-          className="flex items-center gap-2 flex-1 min-w-0 px-2 py-1.5 rounded-lg hover:bg-gray-800 transition group"
+          title={orgName}
+          aria-label={orgName}
+          className="shrink-0 rounded-lg p-1 hover:bg-gray-800 transition"
         >
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt={orgName} className="w-6 h-6 rounded-md object-contain shrink-0 bg-white" />
+            <img src={logoUrl} alt={orgName} className="w-7 h-7 rounded-md object-contain bg-white" />
           ) : (
-            <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: accentColor }}>
-              <span className="text-white text-[10px] font-bold">{orgName.charAt(0).toUpperCase()}</span>
+            <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ backgroundColor: accentColor }}>
+              <span className="text-white text-[11px] font-bold">{orgName.charAt(0).toUpperCase()}</span>
             </div>
           )}
-          <span className="text-gray-100 font-semibold text-sm truncate flex-1 text-left">{orgName}</span>
-          <ChevronDown className="w-3.5 h-3.5 text-gray-600 shrink-0" />
         </Link>
+
+        {/* Modo: Trabalho × Operacional (ícones) — só com permissão ao Operacional */}
+        {canOperacional && (
+          <div className="flex items-center gap-0.5 bg-gray-800/60 rounded-lg p-0.5">
+            {MODE_TABS.map(({ m, Icon, label }) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                aria-pressed={mode === m}
+                aria-label={label}
+                title={label}
+                className={cn(
+                  'p-1.5 rounded-md transition-colors',
+                  mode === m ? 'bg-gray-700 text-orange-400' : 'text-gray-500 hover:text-gray-200'
+                )}
+              >
+                <Icon className="w-4 h-4" />
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="flex-1" />
+
         {/* Ocultar — desktop only */}
         <button
           onClick={onCollapse}
-          className="hidden md:block p-1.5 text-gray-600 hover:text-gray-300 transition"
+          className="hidden md:block p-1.5 text-gray-600 hover:text-gray-300 transition shrink-0"
           title="Ocultar menu"
         >
           <PanelLeftClose className="w-4 h-4" />
@@ -303,7 +334,7 @@ export function Sidebar({
         <button
           onClick={() => setMobileOpen(false)}
           aria-label="Fechar menu"
-          className="md:hidden p-1.5 text-gray-600 hover:text-gray-300 transition"
+          className="md:hidden p-1.5 text-gray-600 hover:text-gray-300 transition shrink-0"
         >
           <X className="w-4 h-4" />
         </button>
@@ -330,26 +361,6 @@ export function Sidebar({
 
         {/* Mensagens — abre o chat (dock no canto inferior direito) */}
         <MessagesNavItem />
-
-        {/* Switcher de modo — Trabalho × Operacional (só com permissão ao Operacional) */}
-        {canOperacional && (
-          <div className="mx-2 my-1.5 flex bg-gray-800/70 rounded-lg p-0.5">
-            {(['trabalho', 'operacional'] as const).map(m => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMode(m)}
-                aria-pressed={mode === m}
-                className={cn(
-                  'flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-colors',
-                  mode === m ? 'bg-gray-700 text-gray-100 shadow-sm' : 'text-gray-400 hover:text-gray-200'
-                )}
-              >
-                {m === 'trabalho' ? 'Trabalho' : 'Operacional'}
-              </button>
-            ))}
-          </div>
-        )}
 
         {/* ── Modo Trabalho: Trabalhar + Visões ── */}
         {mode === 'trabalho' && (
