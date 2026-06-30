@@ -94,7 +94,7 @@ export function FluxoCaixaClient({ orgSlug, rows }: { orgSlug: string; rows: Flu
         {/* toggle Diário / Mensal */}
         <div className="inline-flex bg-gray-100 rounded-xl p-0.5">
           {(['diario', 'mensal'] as const).map(m => (
-            <button key={m} onClick={() => setModo(m)}
+            <button key={m} onClick={() => setModo(m)} aria-pressed={modo === m}
               className={`px-4 py-1.5 text-sm font-medium rounded-[10px] transition-colors ${modo === m ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
               {m === 'diario' ? 'Diário' : 'Mensal'}
             </button>
@@ -116,9 +116,6 @@ export function FluxoCaixaClient({ orgSlug, rows }: { orgSlug: string; rows: Flu
         <div className="w-64">
           <MultiSelect values={contasModo} onChange={setContasDoModo} options={contaOpts} allLabel="Todas as contas" />
         </div>
-        {contasModo.length > 0 && (
-          <button onClick={() => setContasDoModo([])} className="text-xs text-gray-400 hover:text-gray-600 transition">Limpar</button>
-        )}
       </div>
 
       {/* gráfico */}
@@ -128,19 +125,23 @@ export function FluxoCaixaClient({ orgSlug, rows }: { orgSlug: string; rows: Flu
             {modo === 'diario' ? (
               <ComposedChart data={dadosDia} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis dataKey="dia" tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={{ stroke: '#e2e8f0' }} />
+                <XAxis dataKey="dia" tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={{ stroke: '#e2e8f0' }} interval="preserveStartEnd" minTickGap={14} />
                 <YAxis tickFormatter={compactBRL} tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} width={44} />
                 <Tooltip content={<FluxoTooltip modo="diario" />} />
                 <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
                 <ReferenceLine y={0} stroke="#cbd5e1" />
-                <Bar dataKey="recebimentos" name="Recebimentos" fill={C.receb} radius={[3, 3, 0, 0]} maxBarSize={22} />
-                <Bar dataKey="pagamentos" name="Pagamentos" fill={C.pag} radius={[0, 0, 3, 3]} maxBarSize={22} />
+                {/* realizado (sólido) na base, previsto (claro) empilhado por cima */}
+                <Bar dataKey="recebimentos" name="Recebimentos" stackId="rec" fill={C.receb} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                <Bar dataKey="recebPrevisto" name="A receber" stackId="rec" fill={C.recebL} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                <Bar dataKey="pagamentos" name="Pagamentos" stackId="pag" fill={C.pag} radius={[0, 0, 3, 3]} maxBarSize={20} />
+                <Bar dataKey="pagPrevisto" name="A pagar" stackId="pag" fill={C.pagL} radius={[0, 0, 3, 3]} maxBarSize={20} />
+                <Line dataKey="saldoProjetado" name="Saldo projetado" type="monotone" stroke={C.saldoP} strokeWidth={2} strokeDasharray="4 3" dot={false} />
                 <Line dataKey="saldo" name="Saldo" type="monotone" stroke={C.saldoR} strokeWidth={2} dot={{ r: 2 }} />
               </ComposedChart>
             ) : (
               <ComposedChart data={dadosMes} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={{ stroke: '#e2e8f0' }} />
+                <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={{ stroke: '#e2e8f0' }} interval="preserveStartEnd" minTickGap={8} />
                 <YAxis tickFormatter={compactBRL} tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} width={44} />
                 <Tooltip content={<FluxoTooltip modo="mensal" />} />
                 <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
@@ -170,7 +171,7 @@ function FluxoTooltip({ active, payload, label, modo }: any) {
     <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
       <p className="font-semibold text-gray-900 mb-1">{modo === 'diario' ? `Dia ${label}` : label}</p>
       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-      {payload.map((p: any) => (
+      {payload.filter((p: any) => p.value !== 0 && p.value != null).map((p: any) => (
         <p key={p.dataKey} className="flex items-center justify-between gap-4">
           <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />{p.name}</span>
           <span className="font-medium text-gray-700">{formatBRL(Math.abs(p.value))}</span>
@@ -181,8 +182,9 @@ function FluxoTooltip({ active, payload, label, modo }: any) {
 }
 
 function TabelaDiaria({ dados }: { dados: ReturnType<typeof fluxoDiario> }) {
-  const linhas = dados.filter(d => d.recebimentos !== 0 || d.pagamentos !== 0)
-  if (linhas.length === 0) return <p className="text-sm text-gray-400">Sem movimento realizado neste mês.</p>
+  const linhas = dados.filter(d => d.recebimentos !== 0 || d.pagamentos !== 0 || d.recebPrevisto !== 0 || d.pagPrevisto !== 0)
+  if (linhas.length === 0) return <p className="text-sm text-gray-400">Sem movimento neste mês.</p>
+  const temPrevisto = dados.some(d => d.recebPrevisto !== 0 || d.pagPrevisto !== 0)
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden overflow-x-auto">
       <table className="w-full min-w-[480px] text-sm">
@@ -191,7 +193,9 @@ function TabelaDiaria({ dados }: { dados: ReturnType<typeof fluxoDiario> }) {
             <th className="text-left px-4 py-2.5 font-medium">Dia</th>
             <th className="text-right px-4 py-2.5 font-medium">Recebimentos</th>
             <th className="text-right px-4 py-2.5 font-medium">Pagamentos</th>
-            <th className="text-right px-4 py-2.5 font-medium">Saldo</th>
+            {temPrevisto && <th className="text-right px-4 py-2.5 font-medium">A receber</th>}
+            {temPrevisto && <th className="text-right px-4 py-2.5 font-medium">A pagar</th>}
+            <th className="text-right px-4 py-2.5 font-medium">{temPrevisto ? 'Saldo projetado' : 'Saldo'}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
@@ -200,7 +204,9 @@ function TabelaDiaria({ dados }: { dados: ReturnType<typeof fluxoDiario> }) {
               <td className="px-4 py-2 text-gray-600">{d.dia}</td>
               <td className="px-4 py-2 text-right text-emerald-600">{d.recebimentos ? formatBRL(d.recebimentos) : '—'}</td>
               <td className="px-4 py-2 text-right text-red-600">{d.pagamentos ? formatBRL(Math.abs(d.pagamentos)) : '—'}</td>
-              <td className={`px-4 py-2 text-right font-medium ${d.saldo >= 0 ? 'text-gray-900' : 'text-red-600'}`}>{formatBRL(d.saldo)}</td>
+              {temPrevisto && <td className="px-4 py-2 text-right text-emerald-500/70">{d.recebPrevisto ? formatBRL(d.recebPrevisto) : '—'}</td>}
+              {temPrevisto && <td className="px-4 py-2 text-right text-red-500/70">{d.pagPrevisto ? formatBRL(Math.abs(d.pagPrevisto)) : '—'}</td>}
+              <td className={`px-4 py-2 text-right font-medium ${d.saldoProjetado >= 0 ? 'text-gray-900' : 'text-red-600'}`}>{formatBRL(d.saldoProjetado)}</td>
             </tr>
           ))}
         </tbody>

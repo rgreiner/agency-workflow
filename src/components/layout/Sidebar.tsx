@@ -339,6 +339,7 @@ export function Sidebar({
                 key={m}
                 type="button"
                 onClick={() => setMode(m)}
+                aria-pressed={mode === m}
                 className={cn(
                   'flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-colors',
                   mode === m ? 'bg-gray-700 text-gray-100 shadow-sm' : 'text-gray-400 hover:text-gray-200'

@@ -42,9 +42,12 @@ export function anosDisponiveis(rows: FluxoRow[]): number[] {
 
 export interface DiaPonto {
   dia: string            // 'DD'
-  recebimentos: number   // + (verde, acima do eixo)
-  pagamentos: number     // − (vermelho, abaixo do eixo)
-  saldo: number          // linha (saldo acumulado real)
+  recebimentos: number   // realizado, acima do eixo (verde)
+  pagamentos: number     // realizado, abaixo do eixo (vermelho)
+  recebPrevisto: number  // a receber em aberto (verde claro)
+  pagPrevisto: number    // a pagar em aberto (vermelho claro)
+  saldo: number          // linha sólida (saldo realizado acumulado)
+  saldoProjetado: number // linha tracejada (realizado + previsto acumulado)
 }
 
 // Filtra por um conjunto de contas; null ou lista vazia = todas.
@@ -69,22 +72,42 @@ export function fluxoDiario(rows: FluxoRow[], ym: string, contas: string[] | nul
 
   const receb = new Array(diasNoMes + 1).fill(0)
   const pag = new Array(diasNoMes + 1).fill(0)
-  const mov = new Array(diasNoMes + 1).fill(0) // movimento de saldo do dia (com transferências)
+  const recebP = new Array(diasNoMes + 1).fill(0)
+  const pagP = new Array(diasNoMes + 1).fill(0)
+  const mov = new Array(diasNoMes + 1).fill(0)  // movimento realizado do dia (com transferências)
+  const movP = new Array(diasNoMes + 1).fill(0) // movimento previsto do dia
   for (const r of sel) {
-    if (!isRealizado(r.situacao) || !r.data_mov || r.data_mov.slice(0, 7) !== ym) continue
-    const d = Number(r.data_mov.slice(8, 10))
-    if (d < 1 || d > diasNoMes) continue
-    mov[d] += signed(r)
-    if (isTransferencia(r.origem, r.categoria)) continue
-    if (r.tipo === 'receita') receb[d] += abs(r.valor)
-    else if (r.tipo === 'despesa') pag[d] += abs(r.valor)
+    if (isRealizado(r.situacao) && r.data_mov && r.data_mov.slice(0, 7) === ym) {
+      const d = Number(r.data_mov.slice(8, 10))
+      if (d < 1 || d > diasNoMes) continue
+      mov[d] += signed(r)
+      if (isTransferencia(r.origem, r.categoria)) continue
+      if (r.tipo === 'receita') receb[d] += abs(r.valor)
+      else if (r.tipo === 'despesa') pag[d] += abs(r.valor)
+    } else if (isPrevisto(r.situacao)) {
+      const dp = dataPrev(r)
+      if (!dp || dp.slice(0, 7) !== ym) continue
+      const d = Number(dp.slice(8, 10))
+      if (d < 1 || d > diasNoMes) continue
+      movP[d] += signed(r)
+      if (isTransferencia(r.origem, r.categoria)) continue
+      if (r.tipo === 'receita') recebP[d] += abs(r.valor)
+      else if (r.tipo === 'despesa') pagP[d] += abs(r.valor)
+    }
   }
 
   const out: DiaPonto[] = []
   let saldo = saldoStart
+  let saldoProj = saldoStart
   for (let d = 1; d <= diasNoMes; d++) {
     saldo += mov[d]
-    out.push({ dia: String(d).padStart(2, '0'), recebimentos: receb[d], pagamentos: -pag[d], saldo })
+    saldoProj += mov[d] + movP[d]
+    out.push({
+      dia: String(d).padStart(2, '0'),
+      recebimentos: receb[d], pagamentos: -pag[d],
+      recebPrevisto: recebP[d], pagPrevisto: -pagP[d],
+      saldo, saldoProjetado: saldoProj,
+    })
   }
   return out
 }
