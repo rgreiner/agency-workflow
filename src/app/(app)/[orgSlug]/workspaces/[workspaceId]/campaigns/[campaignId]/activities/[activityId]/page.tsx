@@ -10,6 +10,7 @@ import { StatusChanger } from './StatusChanger'
 import { ReviewBanner } from './ReviewBanner'
 import { AutoRefresh } from '@/components/ui/AutoRefresh'
 import { CommentBox } from './CommentBox'
+import { CommentContent } from './CommentContent'
 import { AssigneeSelector } from './AssigneeSelector'
 import { FieldEditor } from './FieldEditor'
 import { ActivityHeader } from './ActivityHeader'
@@ -127,6 +128,7 @@ export default async function ActivityPage({
     .single() : { data: null }
 
   const isOrgMember = !!membership
+  const isOwner = membership?.role === 'owner'
 
   const { data: membersRaw } = orgId ? await supabase
     .from('organization_members')
@@ -147,7 +149,7 @@ export default async function ActivityPage({
 
   // Merge comments + history into one feed, sorted ascending
   type FeedItem =
-    | { kind: 'comment'; id: string; at: string; profile: { full_name: string | null; avatar_url: string | null } | null; content: string; replyTo: string | null }
+    | { kind: 'comment'; id: string; at: string; profile: { full_name: string | null; avatar_url: string | null } | null; content: string; replyTo: string | null; authorId: string; edited: boolean }
     | { kind: 'status';  id: string; at: string; profile: { full_name: string | null; avatar_url: string | null } | null; from: string | null; to: string; comment: string | null }
     | { kind: 'field';   id: string; at: string; profile: { full_name: string | null; avatar_url: string | null } | null; field: string; oldVal: string | null; newVal: string | null }
 
@@ -166,6 +168,8 @@ export default async function ActivityPage({
       profile: c.profiles as { full_name: string | null; avatar_url: string | null } | null,
       content: c.content,
       replyTo: (c as { reply_to?: string | null }).reply_to ?? null,
+      authorId: c.user_id as string,
+      edited: !!c.updated_at && c.updated_at !== c.created_at,
     })),
     ...(history ?? []).map(h => ({
       kind: 'status' as const,
@@ -516,9 +520,14 @@ export default async function ActivityPage({
                             <span className="block line-clamp-2">{commentsById.get(item.replyTo)!.content}</span>
                           </div>
                         )}
-                        {isHtml(item.content)
-                          ? <div className="rich-text text-sm text-gray-700 leading-relaxed" dangerouslySetInnerHTML={{ __html: item.content }} />
-                          : <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{item.content}</p>}
+                        <CommentContent
+                          path={path}
+                          commentId={item.id}
+                          content={item.content}
+                          edited={item.edited}
+                          canEdit={!!user && item.authorId === user.id}
+                          canDelete={!!user && (item.authorId === user.id || isOwner)}
+                        />
                         <div className="flex items-center justify-between gap-3">
                           <ReactionBar path={path} commentId={item.id} currentUserId={user?.id ?? ''} reactions={reactionsByComment.get(item.id) ?? []} />
                           <div className="mt-2 shrink-0"><ReplyButton id={item.id} author={item.profile?.full_name ?? 'Usuário'} preview={(isHtml(item.content) ? stripHtml(item.content) : item.content).slice(0, 80)} /></div>

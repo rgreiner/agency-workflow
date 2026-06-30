@@ -407,6 +407,34 @@ export async function addComment(
   revalidatePath(path)
 }
 
+/** Edita um comentário (só o autor). */
+export async function editComment(path: string, commentId: string, content: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('update_comment', {
+    p_user_id: user.id, p_comment_id: commentId, p_content: content,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(path)
+}
+
+/** Apaga um comentário (autor ou owner da empresa). */
+export async function deleteComment(path: string, commentId: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('delete_comment', {
+    p_user_id: user.id, p_comment_id: commentId,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(path)
+}
+
 /** Salva os links livres ("Mídia") do job — array [{label, url}]. */
 export async function setActivityExtraLinks(
   path: string,
