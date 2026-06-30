@@ -205,10 +205,12 @@ function makeMentionPopup() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onKeyDown: (props: any) => {
       const k = props.event.key
-      if (k === 'ArrowDown') { active = (active + 1) % Math.max(items.length, 1); paint(); return true }
-      if (k === 'ArrowUp') { active = (active - 1 + items.length) % Math.max(items.length, 1); paint(); return true }
-      if (k === 'Enter' || k === 'Tab') { if (items[active]) command(items[active]); return true }
-      if (k === 'Escape') { return true }
+      // Enquanto o popup está aberto, segura as teclas aqui — senão Escape/Enter
+      // sobem pro modal da tarefa (que fecharia no Escape).
+      if (k === 'ArrowDown') { props.event.stopPropagation(); active = (active + 1) % Math.max(items.length, 1); paint(); return true }
+      if (k === 'ArrowUp') { props.event.stopPropagation(); active = (active - 1 + items.length) % Math.max(items.length, 1); paint(); return true }
+      if (k === 'Enter' || k === 'Tab') { props.event.stopPropagation(); if (items[active]) command(items[active]); return true }
+      if (k === 'Escape') { props.event.stopPropagation(); return true }
       return false
     },
     onExit: () => { el?.remove(); el = null },

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { X } from 'lucide-react'
 
@@ -8,9 +8,15 @@ import { X } from 'lucide-react'
  * Casco da modal do detalhe da tarefa (intercepting route). Overlay com a tela
  * de detalhe dentro; fecha com Esc, clique no fundo ou no X — sempre via
  * router.back(), pra voltar exatamente pra onde a pessoa estava.
+ *
+ * Fechar só quando o clique COMEÇA e TERMINA no próprio backdrop. Isso evita
+ * fechar quando um popup ancorado no <body> (ex.: o @menção do comentário) é
+ * removido no mousedown e o clique "atravessa" pro fundo — e também quando se
+ * arrasta uma seleção de texto e solta fora do card.
  */
 export function TaskModal({ children }: { children: React.ReactNode }) {
   const router = useRouter()
+  const downOnBackdrop = useRef(false)
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') router.back() }
@@ -24,11 +30,12 @@ export function TaskModal({ children }: { children: React.ReactNode }) {
   return (
     <div
       className="modal-backdrop fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center sm:p-4"
-      onClick={() => router.back()}
+      onMouseDown={e => { downOnBackdrop.current = e.target === e.currentTarget }}
+      onClick={e => { if (downOnBackdrop.current && e.target === e.currentTarget) router.back() }}
     >
       <div
         className="modal-card relative w-full bg-white shadow-xl flex flex-col overflow-hidden sm:max-w-5xl sm:max-h-[92vh] sm:rounded-2xl"
-        onClick={e => e.stopPropagation()}
+        onMouseDown={e => e.stopPropagation()}
       >
         <button
           type="button"
