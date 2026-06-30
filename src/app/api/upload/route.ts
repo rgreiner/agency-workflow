@@ -10,7 +10,7 @@ import { getUsuario } from '@/lib/auth/server'
 
 export const runtime = 'nodejs'
 
-const ALLOWED_BUCKETS = new Set(['avatars', 'org-logos', 'orcamentos', 'boards', 'midia-kits'])
+const ALLOWED_BUCKETS = new Set(['avatars', 'org-logos', 'orcamentos', 'boards', 'midia-kits', 'comments', 'briefings', 'lancamentos'])
 const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml', 'application/pdf'])
 const MAX_BYTES_IMAGE = 2 * 1024 * 1024   // 2 MB (imagens já vêm reduzidas do client)
 const MAX_BYTES_PDF = 20 * 1024 * 1024    // 20 MB (mídia kit)
