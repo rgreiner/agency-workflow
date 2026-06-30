@@ -49,39 +49,62 @@ export default async function ActivityPage({
 
   const user = await getUsuario()
 
-  const { data: activity } = await supabase
-    .from('activities')
-    .select('*')
-    .eq('id', activityId)
-    .single()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any
+
+  // ── Lote 1: tudo que depende só dos params, em paralelo (1 round-trip) ──
+  const [
+    { data: activity },
+    { data: history },
+    { data: fieldHistory },
+    { data: comments },
+    { data: campaign },
+    { data: assigneesRaw },
+    { data: orgRow },
+  ] = await Promise.all([
+    supabase.from('activities').select('*').eq('id', activityId).single(),
+    supabase.from('activity_history').select('*, profiles(full_name, avatar_url)').eq('activity_id', activityId).order('changed_at', { ascending: true }),
+    supabase.from('activity_field_history').select('*, profiles!changed_by(full_name, avatar_url)').eq('activity_id', activityId).order('changed_at', { ascending: true }),
+    supabase.from('activity_comments').select('*, profiles(full_name, avatar_url)').eq('activity_id', activityId).order('created_at', { ascending: true }),
+    supabase.from('campaigns').select('name, drive_folder_id, workspaces(org_id, name)').eq('id', campaignId).single(),
+    supabase.from('activity_assignees').select('user_id').eq('activity_id', activityId),
+    supabase.from('organizations').select('id').eq('slug', orgSlug).single(),
+  ])
 
   if (!activity) notFound()
 
-  const { data: history } = await supabase
-    .from('activity_history')
-    .select('*, profiles(full_name, avatar_url)')
-    .eq('activity_id', activityId)
-    .order('changed_at', { ascending: true })
-
-  const { data: fieldHistory } = await supabase
-    .from('activity_field_history')
-    .select('*, profiles!changed_by(full_name, avatar_url)')
-    .eq('activity_id', activityId)
-    .order('changed_at', { ascending: true })
-
-  const { data: comments } = await supabase
-    .from('activity_comments')
-    .select('*, profiles(full_name, avatar_url)')
-    .eq('activity_id', activityId)
-    .order('created_at', { ascending: true })
-
-  // Reações por comentário + mapa p/ resolver o comentário citado (responder).
+  const drivePending = !!campaign?.drive_folder_id && !activity.drive_folder_id
+  const ws = campaign?.workspaces as unknown as { org_id: string; name: string } | null
+  const orgId = ws?.org_id
+  const assignedIds = (assigneesRaw ?? []).map(a => a.user_id)
   const commentIds = (comments ?? []).map(c => c.id)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb = supabase as any
-  const { data: reactionsRaw } = commentIds.length
-    ? await sb.from('activity_comment_reactions').select('comment_id, user_id, emoji').in('comment_id', commentIds)
-    : { data: [] }
+
+  // ── Lote 2: depende de orgId / commentIds / orgRow, em paralelo (1 round-trip) ──
+  const [
+    { data: projWs },
+    { data: membership },
+    { data: membersRaw },
+    { data: reactionsRaw },
+    { data: rawSettings },
+  ] = await Promise.all([
+    orgId ? supabase.from('workspaces').select('id, name, campaigns(id, name)').eq('org_id', orgId).eq('archived', false).eq('campaigns.archived', false).order('name') : Promise.resolve({ data: [] }),
+    (user && orgId) ? supabase.from('organization_members').select('role').eq('org_id', orgId).eq('user_id', user.id).single() : Promise.resolve({ data: null }),
+    orgId ? supabase.from('organization_members').select('user_id, profiles!user_id(id, full_name, email, avatar_url)').eq('org_id', orgId) : Promise.resolve({ data: [] }),
+    commentIds.length ? sb.from('activity_comment_reactions').select('comment_id, user_id, emoji').in('comment_id', commentIds) : Promise.resolve({ data: [] }),
+    orgRow?.id ? sb.from('org_settings').select('status_overrides').eq('org_id', orgRow.id).single() : Promise.resolve({ data: null }),
+  ])
+
+  const moveProjects = (projWs ?? []).flatMap((w: { id: string; name: string; campaigns?: { id: string; name: string }[] }) =>
+    ((w.campaigns as unknown as { id: string; name: string }[]) ?? []).map(c => ({
+      workspaceId: w.id, workspaceName: w.name, campaignId: c.id, campaignName: c.name,
+    })))
+  const isOrgMember = !!membership
+  const isOwner = (membership as { role?: string } | null)?.role === 'owner'
+  const members = (membersRaw ?? []).map((m: { user_id: string; profiles: unknown }) => {
+    const p = m.profiles as unknown as { id: string; full_name: string | null; email: string; avatar_url: string | null } | null
+    return { userId: m.user_id, fullName: p?.full_name ?? null, email: p?.email ?? '', avatarUrl: p?.avatar_url ?? null }
+  })
+
   const reactionsByComment = new Map<string, { emoji: string; userId: string }[]>()
   for (const r of (reactionsRaw ?? []) as { comment_id: string; user_id: string; emoji: string }[]) {
     const arr = reactionsByComment.get(r.comment_id) ?? []
@@ -94,58 +117,6 @@ export default async function ActivityPage({
     const preview = isHtml(c.content) ? stripHtml(c.content) : c.content
     commentsById.set(c.id, { author: p?.full_name ?? 'Usuário', content: preview })
   })
-
-  const { data: campaign } = await supabase
-    .from('campaigns')
-    .select('name, drive_folder_id, workspaces(org_id, name)')
-    .eq('id', campaignId)
-    .single()
-
-  // Pastas do Drive ainda sendo criadas em 2º plano (campanha vinculada, tarefa sem pasta)
-  const drivePending = !!campaign?.drive_folder_id && !activity.drive_folder_id
-
-  const ws = campaign?.workspaces as unknown as { org_id: string; name: string } | null
-  const orgId = ws?.org_id
-
-  // Projetos (cliente → campanha) p/ o seletor de "mover tarefa" no breadcrumb.
-  const { data: projWs } = orgId ? await supabase
-    .from('workspaces')
-    .select('id, name, campaigns(id, name)')
-    .eq('org_id', orgId)
-    .eq('archived', false)
-    .eq('campaigns.archived', false)
-    .order('name') : { data: [] }
-  const moveProjects = (projWs ?? []).flatMap(w =>
-    ((w.campaigns as unknown as { id: string; name: string }[]) ?? []).map(c => ({
-      workspaceId: w.id, workspaceName: w.name, campaignId: c.id, campaignName: c.name,
-    })))
-
-  const { data: membership } = (user && orgId) ? await supabase
-    .from('organization_members')
-    .select('role')
-    .eq('org_id', orgId)
-    .eq('user_id', user.id)
-    .single() : { data: null }
-
-  const isOrgMember = !!membership
-  const isOwner = membership?.role === 'owner'
-
-  const { data: membersRaw } = orgId ? await supabase
-    .from('organization_members')
-    .select('user_id, profiles!user_id(id, full_name, email, avatar_url)')
-    .eq('org_id', orgId) : { data: [] }
-
-  const members = (membersRaw ?? []).map(m => {
-    const p = m.profiles as unknown as { id: string; full_name: string | null; email: string; avatar_url: string | null } | null
-    return { userId: m.user_id, fullName: p?.full_name ?? null, email: p?.email ?? '', avatarUrl: p?.avatar_url ?? null }
-  })
-
-  const { data: assigneesRaw } = await supabase
-    .from('activity_assignees')
-    .select('user_id')
-    .eq('activity_id', activityId)
-
-  const assignedIds = (assigneesRaw ?? []).map(a => a.user_id)
 
   // Merge comments + history into one feed, sorted ascending
   type FeedItem =
@@ -191,12 +162,7 @@ export default async function ActivityPage({
     })),
   ].sort((a, b) => a.at.localeCompare(b.at))
 
-  // Cores de status seguem Configurações → Aparência (mescladas)
-  const { data: orgRow } = await supabase
-    .from('organizations').select('id').eq('slug', orgSlug).single()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: rawSettings } = await (supabase as any)
-    .from('org_settings').select('status_overrides').eq('org_id', orgRow?.id).single()
+  // Cores de status seguem Configurações → Aparência (mescladas) — rawSettings vem do Lote 2
   const statusConfig = getMergedStatusConfig((rawSettings?.status_overrides ?? []) as StatusOverride[])
 
   const priorityCfg  = PRIORITY_CONFIG[activity.priority as ActivityPriority]

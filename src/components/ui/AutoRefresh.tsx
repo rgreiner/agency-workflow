@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation'
  * Redação) sem precisar de F5. Pausa quando a aba está em background; `fast`
  * acelera o intervalo (usado enquanto a revisão está rodando).
  */
-export function AutoRefresh({ intervalMs = 10000, fastMs = 4000, fast = false }: {
+export function AutoRefresh({ intervalMs = 20000, fastMs = 4000, fast = false }: {
   intervalMs?: number
   fastMs?: number
   fast?: boolean
