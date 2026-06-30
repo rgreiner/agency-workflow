@@ -5,6 +5,7 @@ import type { Database, Json } from '@/types/database'
 import { STATUS_CONFIG } from '@/types'
 import { driveConfigured, readRedacaoText, readReviewAssets } from '@/lib/google-drive'
 import { reviewConfigured, reviewText, reviewArtwork, crossCheckRedacao, type ReviewError } from '@/lib/ai/review'
+import { logSystemError } from '@/lib/system-error'
 
 export type ReviewKind = 'redacao' | 'design' | 'finalizacao'
 
@@ -87,13 +88,14 @@ export function scheduleReview(params: {
       })
       await comment(formatErrorComment(label, out.errors, out.provider))
     } catch (e) {
-      // Nunca deixa preso em "revisando…": finaliza como 'failed' e leva o erro
-      // pro comentário (diagnóstico). A tarefa já avançou — segue manual.
-      const msg = e instanceof Error ? e.message : String(e)
+      // Nunca deixa preso em "revisando…": finaliza como 'failed'. O erro técnico
+      // (ex.: quota do provider) vai pro log de sistema (Configurações → Erros), NÃO
+      // pro comentário — o usuário vê só um aviso limpo. A tarefa já avançou.
       console.error(`[review:${kind}] falha no gate`, e)
       try {
         await setReview('failed', null, null)
-        await comment(`⚠️ A revisão de ${label} não pôde ser concluída automaticamente: ${msg}. A tarefa seguiu — confira manualmente.`)
+        await logSystemError(supabase, { userId, context: `review:${kind}`, error: e, activityId })
+        await comment(`⚠️ A revisão de ${label} não pôde ser concluída automaticamente. A tarefa seguiu — confira manualmente.`)
       } catch (e2) {
         console.error(`[review:${kind}] falha ao registrar o erro da revisão`, e2)
       }

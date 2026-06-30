@@ -40,6 +40,7 @@ export default async function SettingsLayout({
           ...(isAdmin ? [
             { href: `/${orgSlug}/settings/cargos`,    label: 'Cargos' },
             { href: `/${orgSlug}/settings/aparencia`, label: 'Aparência' },
+            { href: `/${orgSlug}/settings/erros`,     label: 'Erros do sistema' },
           ] : []),
         ].map(({ href, label }) => (
           <Link
