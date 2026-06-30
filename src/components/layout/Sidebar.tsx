@@ -131,7 +131,7 @@ function NavGroup({ base, pathname, group, open, onToggle }: {
                 key={it.href}
                 href={href}
                 className={cn(
-                  'flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors',
+                  'flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm transition-colors',
                   active ? 'bg-orange-600/20 text-orange-300' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/60'
                 )}
               >
@@ -459,7 +459,7 @@ export function Sidebar({
                       href={`${base}/workspaces/${ws.id}`}
                       onClick={() => !isOpen && toggle(ws.id)}
                       className={cn(
-                        'flex items-center gap-1.5 flex-1 min-w-0 px-1.5 py-1.5 rounded-lg text-xs font-medium transition-colors',
+                        'flex items-center gap-1.5 flex-1 min-w-0 px-1.5 py-1.5 rounded-lg text-sm font-medium transition-colors',
                         isWsActive && !pathname.includes('/campaigns/')
                           ? 'bg-gray-800/60 text-gray-100'
                           : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
@@ -487,7 +487,7 @@ export function Sidebar({
                             key={camp.id}
                             href={href}
                             className={cn(
-                              'flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors',
+                              'flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm transition-colors',
                               isActive
                                 ? 'bg-orange-600/20 text-orange-300'
                                 : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/60'
@@ -501,7 +501,7 @@ export function Sidebar({
                       {ws.campaigns.length === 0 && (
                         <Link
                           href={`${base}/workspaces/${ws.id}/campaigns/new`}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-gray-600 hover:text-gray-400 transition rounded-lg"
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-gray-600 hover:text-gray-400 transition rounded-lg"
                         >
                           <Plus className="w-3 h-3" />
                           Nova campanha
@@ -516,7 +516,7 @@ export function Sidebar({
             {workspaces.length === 0 && (
               <Link
                 href={`${base}/workspaces/new`}
-                className="flex items-center gap-1.5 mx-4 px-2 py-1.5 text-xs text-gray-600 hover:text-gray-400 transition rounded-lg"
+                className="flex items-center gap-1.5 mx-4 px-2 py-1.5 text-sm text-gray-600 hover:text-gray-400 transition rounded-lg"
               >
                 <Plus className="w-3 h-3" />
                 Novo cliente
@@ -554,7 +554,7 @@ export function Sidebar({
                 <span className="text-gray-300 text-[10px]">{displayName.charAt(0).toUpperCase()}</span>
               </div>
             )}
-            <span className="text-gray-400 text-xs truncate group-hover:text-gray-200 transition-colors">{displayName}</span>
+            <span className="text-gray-400 text-sm truncate group-hover:text-gray-200 transition-colors">{displayName}</span>
           </Link>
           <ThemeToggle />
           <button onClick={signOut} className="text-gray-600 hover:text-gray-300 transition-colors shrink-0" title="Sair">
