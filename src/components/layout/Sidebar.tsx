@@ -152,6 +152,14 @@ const VIEWS = [
   { id: 'boards',label: 'Quadros',    icon: PenTool,    href: 'boards' },
 ]
 
+type SidebarMode = 'trabalho' | 'operacional'
+// Em que modo cada rota se encaixa (null = neutra, não troca o modo).
+function modeForPath(path: string, base: string): SidebarMode | null {
+  if (['financeiro', 'midias', 'producao', 'cadastros'].some(p => path.startsWith(`${base}/${p}`))) return 'operacional'
+  if (['dashboard', 'views', 'docs', 'boards', 'workspaces'].some(p => path.startsWith(`${base}/${p}`))) return 'trabalho'
+  return null
+}
+
 export function Sidebar({
   orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#f97316',
   positionName, canFinance = false, canVendas = false, collapsed, onCollapse, onExpand,
@@ -169,9 +177,14 @@ export function Sidebar({
   useEffect(() => {
     try {
       const raw = localStorage.getItem('sidebar-comercial-groups')
+      const set = raw ? new Set(JSON.parse(raw) as string[]) : new Set<string>()
+      // garante que o grupo da página atual já abre expandido
+      const active = COMERCIAL_GROUPS.find(g => g.items.some(it => pathname.startsWith(`${base}/${it.href}`)))
+      if (active) set.add(active.id)
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (raw) setOpenGroups(new Set(JSON.parse(raw) as string[]))
+      setOpenGroups(set)
     } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   function toggleGroup(id: string) {
     setOpenGroups(prev => {
@@ -182,22 +195,20 @@ export function Sidebar({
     })
   }
 
-  // Seção "Operacional" recolhível como um todo (foco nos espaços × nas liberações).
-  const [operacionalOpen, setOperacionalOpen] = useState(true)
+  // Modo da sidebar: "Trabalho" (visões + espaços) × "Operacional" (mídia/produção/
+  // financeiro/cadastros) — um contexto por vez p/ reduzir a poluição. O switcher só
+  // aparece com permissão; ao navegar, o modo acompanha a página atual.
+  const canOperacional = canFinance || canVendas
+  const [mode, setMode] = useState<SidebarMode>(
+    () => (canOperacional ? modeForPath(pathname, base) : null) ?? 'trabalho'
+  )
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('sidebar-operacional-open')
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (raw != null) setOperacionalOpen(raw === '1')
-    } catch {}
-  }, [])
-  function toggleOperacional() {
-    setOperacionalOpen(prev => {
-      const next = !prev
-      try { localStorage.setItem('sidebar-operacional-open', next ? '1' : '0') } catch {}
-      return next
-    })
-  }
+    if (!canOperacional) return
+    const m = modeForPath(pathname, base)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (m && m !== mode) setMode(m)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname])
 
   // SSR sempre renderiza 'Ctrl K'; suppressHydrationWarning no <kbd> cobre o Mac.
   const shortcutLabel =
@@ -320,52 +331,67 @@ export function Sidebar({
         {/* Mensagens — abre o chat (dock no canto inferior direito) */}
         <MessagesNavItem />
 
-        {/* Trabalhar — tela de trabalho do cargo da pessoa (mostra o cargo, se houver) */}
-        <Link
-          href={`${base}/views/atendimento`}
-          className={cn(
-            'flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition',
-            pathname.startsWith(`${base}/views/atendimento`)
-              ? 'bg-gray-800 text-gray-100'
-              : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
-          )}
-        >
-          <Briefcase className="w-4 h-4 shrink-0" />
-          <span className="flex-1 truncate">{positionName ?? 'Trabalhar'}</span>
-        </Link>
+        {/* Switcher de modo — Trabalho × Operacional (só com permissão ao Operacional) */}
+        {canOperacional && (
+          <div className="mx-2 my-1.5 flex bg-gray-800/70 rounded-lg p-0.5">
+            {(['trabalho', 'operacional'] as const).map(m => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                className={cn(
+                  'flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-colors',
+                  mode === m ? 'bg-gray-700 text-gray-100 shadow-sm' : 'text-gray-400 hover:text-gray-200'
+                )}
+              >
+                {m === 'trabalho' ? 'Trabalho' : 'Operacional'}
+              </button>
+            ))}
+          </div>
+        )}
 
-        {/* Visões da org — Lista (todos os clientes/status), Gantt, Documentos, Quadros */}
-        {VIEWS.map(({ id, label, icon: Icon, href }) => (
-          <Link
-            key={id}
-            href={`${base}/${href}`}
-            className={cn(
-              'flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition',
-              pathname.startsWith(`${base}/${href}`)
-                ? 'bg-gray-800 text-gray-100'
-                : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
-            )}
-          >
-            <Icon className="w-4 h-4 shrink-0" />
-            <span className="flex-1">{label}</span>
-          </Link>
-        ))}
-
-        {/* ── Operacional (Mídia / Produção / Financeiro / Cadastros) — só com permissão ── */}
-        {(canFinance || canVendas) && (
+        {/* ── Modo Trabalho: Trabalhar + Visões ── */}
+        {mode === 'trabalho' && (
           <>
-            <div className="mx-3 my-2 border-t border-gray-800" />
-            <button
-              onClick={toggleOperacional}
-              className="w-full flex items-center gap-1 px-4 mb-1.5 group/op"
-              title={operacionalOpen ? 'Recolher Operacional' : 'Expandir Operacional'}
+            {/* Trabalhar — tela de trabalho do cargo da pessoa (mostra o cargo, se houver) */}
+            <Link
+              href={`${base}/views/atendimento`}
+              className={cn(
+                'flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition',
+                pathname.startsWith(`${base}/views/atendimento`)
+                  ? 'bg-gray-800 text-gray-100'
+                  : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
+              )}
             >
-              {operacionalOpen
-                ? <ChevronDown className="w-3 h-3 text-gray-600 group-hover/op:text-gray-400 transition-colors shrink-0" />
-                : <ChevronRight className="w-3 h-3 text-gray-600 group-hover/op:text-gray-400 transition-colors shrink-0" />}
-              <span className="text-[11px] font-semibold text-gray-500 group-hover/op:text-gray-400 uppercase tracking-[0.08em] transition-colors">Operacional</span>
-            </button>
-            {operacionalOpen && comercialGroups.map(g => (
+              <Briefcase className="w-4 h-4 shrink-0" />
+              <span className="flex-1 truncate">{positionName ?? 'Trabalhar'}</span>
+            </Link>
+
+            {/* Visões da org — Lista (todos os clientes/status), Gantt, Documentos, Quadros */}
+            {VIEWS.map(({ id, label, icon: Icon, href }) => (
+              <Link
+                key={id}
+                href={`${base}/${href}`}
+                className={cn(
+                  'flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition',
+                  pathname.startsWith(`${base}/${href}`)
+                    ? 'bg-gray-800 text-gray-100'
+                    : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
+                )}
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                <span className="flex-1">{label}</span>
+              </Link>
+            ))}
+
+            <div className="mx-3 my-2 border-t border-gray-800" />
+          </>
+        )}
+
+        {/* ── Modo Operacional: Mídia / Produção / Financeiro / Cadastros ── */}
+        {mode === 'operacional' && canOperacional && (
+          <div className="mt-1">
+            {comercialGroups.map(g => (
               <NavGroup
                 key={g.id}
                 base={base}
@@ -375,12 +401,11 @@ export function Sidebar({
                 onToggle={() => toggleGroup(g.id)}
               />
             ))}
-          </>
+          </div>
         )}
 
-        <div className="mx-3 my-2 border-t border-gray-800" />
-
-        {/* Espaços */}
+        {/* ── Modo Trabalho: Espaços (clientes + campanhas) ── */}
+        {mode === 'trabalho' && (
         <div>
           <div className="flex items-center justify-between px-4 mb-1.5">
             <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-[0.08em]">
@@ -487,6 +512,7 @@ export function Sidebar({
             )}
           </div>
         </div>
+        )}
 
       </div>
 
