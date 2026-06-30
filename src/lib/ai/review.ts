@@ -240,7 +240,8 @@ const GEMINI_RESPONSE_SCHEMA = {
 }
 
 async function runGemini(system: string, parts: ReviewPart[]): Promise<{ model: string; list: ReviewError[] }> {
-  const model = process.env.REVIEW_MODEL_GEMINI || process.env.REDACAO_REVIEW_MODEL_GEMINI || 'gemini-2.5-pro'
+  // 2.5-flash tem free tier; o 2.5-pro foi zerado (limit 0) no plano grátis.
+  const model = process.env.REVIEW_MODEL_GEMINI || process.env.REDACAO_REVIEW_MODEL_GEMINI || 'gemini-2.5-flash'
   const { url, headers } = await geminiEndpoint(model)
 
   const gParts = parts.map(p => p.kind === 'text'
