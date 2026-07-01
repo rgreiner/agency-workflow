@@ -685,7 +685,10 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                 onDragLeave={() => setDragOverStatus(prev => prev === statusCfg.value ? null : prev)}
                 onDrop={e => { e.preventDefault(); handleDrop(statusCfg.value) }}
                 className={cn(
-                  'bg-white rounded-xl border border-gray-200 shadow-sm transition-colors',
+                  // focus-within eleva o card do grupo (relative+z) enquanto um dropdown
+                  // de linha está aberto — senão o card do grupo de baixo (stacking context
+                  // do stagger-in) pinta por cima do dropdown.
+                  'bg-white rounded-xl border border-gray-200 shadow-sm transition-colors focus-within:relative focus-within:z-30',
                   draggingId && dragOverStatus === statusCfg.value && 'ring-2 ring-inset ring-orange-300'
                 )}
               >

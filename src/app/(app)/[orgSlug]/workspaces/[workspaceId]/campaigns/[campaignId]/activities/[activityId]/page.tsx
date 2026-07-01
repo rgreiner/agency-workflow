@@ -11,6 +11,7 @@ import { ReviewBanner } from './ReviewBanner'
 import { AutoRefresh } from '@/components/ui/AutoRefresh'
 import { CommentBox } from './CommentBox'
 import { CommentContent } from './CommentContent'
+import { ScrollFeedBottom } from './ScrollFeedBottom'
 import { AssigneeSelector } from './AssigneeSelector'
 import { FieldEditor } from './FieldEditor'
 import { ActivityHeader } from './ActivityHeader'
@@ -241,10 +242,10 @@ export default async function ActivityPage({
       </div>
 
       {/* ── Body — stacks on mobile, side-by-side on lg+ ────────── */}
-      <div className="flex flex-1 flex-col lg:flex-row lg:overflow-hidden">
+      <div className="flex flex-1 flex-col lg:flex-row lg:overflow-hidden min-h-0">
 
         {/* ── Main content ─────────────────────────────────────── */}
-        <div className="flex-1 lg:overflow-y-auto">
+        <div className="flex-1 min-h-0 lg:overflow-y-auto">
           <div className="px-4 md:px-8 py-6 max-w-3xl">
 
             {/* Título + meta (status/datas/prioridade/responsáveis) + briefing */}
@@ -455,7 +456,7 @@ export default async function ActivityPage({
         </div>
 
         {/* ── Activity feed — full-width below content on mobile ── */}
-        <div className="w-full lg:w-[360px] border-t lg:border-t-0 lg:border-l border-gray-200 flex flex-col shrink-0 bg-gray-50/40">
+        <div className="w-full lg:w-[360px] border-t lg:border-t-0 lg:border-l border-gray-200 flex flex-col shrink-0 min-h-0 bg-gray-50/40">
 
           {/* Header */}
           <div className="px-5 py-3.5 border-b border-gray-200 bg-white shrink-0 flex items-center justify-between">
@@ -464,7 +465,7 @@ export default async function ActivityPage({
           </div>
 
           {/* Feed */}
-          <div className="flex-1 lg:overflow-y-auto scrollbar-thin p-4 space-y-3">
+          <div id="activity-feed" className="flex-1 min-h-0 overflow-y-auto scrollbar-thin p-4 space-y-3">
             {feed.length === 0 && (
               <p className="text-xs text-gray-500 text-center py-8">Nenhuma atividade ainda.</p>
             )}
@@ -548,9 +549,10 @@ export default async function ActivityPage({
                 </div>
               )
             })}
+            <ScrollFeedBottom feedId="activity-feed" count={feed.length} />
           </div>
 
-          {/* Comment box */}
+          {/* Comment box — ancorada na base da coluna */}
           <div className="border-t border-gray-200 p-4 bg-white shrink-0">
             <CommentBox
               activityId={activityId}
