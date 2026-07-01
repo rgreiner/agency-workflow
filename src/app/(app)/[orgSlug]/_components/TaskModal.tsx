@@ -46,7 +46,7 @@ export function TaskModal({ children }: { children: React.ReactNode }) {
         >
           <X className="w-4 h-4" />
         </button>
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
           {children}
         </div>
       </div>
