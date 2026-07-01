@@ -1,21 +1,26 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Inbox } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getUnreadCount } from '@/app/actions/notifications'
+import { playNotifSound } from '@/lib/notif-sound'
 
 export function InboxNavItem({ orgSlug }: { orgSlug: string }) {
   const pathname = usePathname()
   const base = `/${orgSlug}`
   const active = pathname === `${base}/inbox`
   const [unread, setUnread] = useState(0)
+  const prevUnread = useRef<number | null>(null)
 
   const load = useCallback(async () => {
     try {
       const n = await getUnreadCount(orgSlug)
+      // Toca o som só quando o contador AUMENTA (chegou nova) — não no 1º load.
+      if (prevUnread.current !== null && n > prevUnread.current) playNotifSound()
+      prevUnread.current = n
       setUnread(n)
       // Espelha p/ o título da aba (TabUnreadBadge), que soma inbox + chat.
       window.dispatchEvent(new CustomEvent('flow:inbox-unread', { detail: n }))

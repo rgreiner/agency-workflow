@@ -12,6 +12,7 @@ import {
   type NotificationItem,
 } from '@/app/actions/notifications'
 import { messageOf, timeLabel, groupByDay, NotifIcon } from '@/lib/notifications'
+import { NotifSoundToggle } from './NotifSoundToggle'
 
 /** Entrada da lista: uma notificação ou um grupo de notificações da mesma tarefa. */
 interface Entry { key: string; items: NotificationItem[] }
@@ -135,6 +136,7 @@ export function InboxClient({ orgSlug, initial }: { orgSlug: string; initial: No
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <NotifSoundToggle />
           <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 text-sm">
             <button onClick={() => setFilter('todas')}
               className={cn('px-2.5 py-1 rounded-md transition', filter === 'todas' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-700')}>
