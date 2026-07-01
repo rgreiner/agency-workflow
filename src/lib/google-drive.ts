@@ -57,9 +57,7 @@ async function findFolder(parentId: string, name: string): Promise<string | null
 }
 
 /** Cria a pasta (ou reusa se já existir uma com o mesmo nome no pai). */
-async function ensureFolder(parentId: string, name: string): Promise<{ id: string; link: string }> {
-  const existing = await findFolder(parentId, name)
-  if (existing) return { id: existing, link: folderLink(existing) }
+async function createFolder(parentId: string, name: string): Promise<{ id: string; link: string }> {
   const drive = getDrive()
   const res = await drive.files.create({
     requestBody: { name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] },
@@ -68,6 +66,12 @@ async function ensureFolder(parentId: string, name: string): Promise<{ id: strin
   })
   const id = res.data.id!
   return { id, link: res.data.webViewLink ?? folderLink(id) }
+}
+
+async function ensureFolder(parentId: string, name: string): Promise<{ id: string; link: string }> {
+  const existing = await findFolder(parentId, name)
+  if (existing) return { id: existing, link: folderLink(existing) }
+  return createFolder(parentId, name)
 }
 
 /** Reconstrói o caminho da pasta no Drive (ex.: "Clientes\One a One\2026\Institucional\<tarefa>"). */
@@ -102,12 +106,23 @@ export interface TaskFoldersResult {
   drivePath: string   // caminho relativo no Drive (sem o prefixo local)
 }
 
-/** Cria a pasta da tarefa + subpastas dentro da pasta da campanha. Idempotente. */
-export async function createTaskFolders(campaignFolderId: string, taskName: string): Promise<TaskFoldersResult> {
+/**
+ * Cria a pasta da tarefa + subpastas dentro da pasta da campanha.
+ * `forceNew` cria uma pasta NOVA em vez de reaproveitar uma homônima já existente
+ * no projeto — evita linkar a tarefa na pasta de outro trabalho de mesmo nome/outra
+ * data. As subpastas seguem idempotentes (dentro da pasta nova, criam do zero).
+ */
+export async function createTaskFolders(
+  campaignFolderId: string,
+  taskName: string,
+  opts?: { forceNew?: boolean },
+): Promise<TaskFoldersResult> {
   // O Drive aceita acentos e a maioria dos símbolos no nome — manter igual ao título.
   // Só troco barras (\ /) por "-", que quebrariam o caminho (buildDrivePath usa "\").
   const safeName = taskName.trim().replace(/[\\/]/g, '-') || 'Tarefa'
-  const task = await ensureFolder(campaignFolderId, safeName)
+  const task = opts?.forceNew
+    ? await createFolder(campaignFolderId, safeName)
+    : await ensureFolder(campaignFolderId, safeName)
   const sub: Record<string, { id: string; link: string }> = {}
   for (const name of SUBFOLDERS) {
     sub[name] = await ensureFolder(task.id, name)

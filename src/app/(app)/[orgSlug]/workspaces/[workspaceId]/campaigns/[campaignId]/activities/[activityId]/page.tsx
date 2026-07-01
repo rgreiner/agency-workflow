@@ -12,6 +12,7 @@ import { AutoRefresh } from '@/components/ui/AutoRefresh'
 import { CommentBox } from './CommentBox'
 import { CommentContent } from './CommentContent'
 import { ScrollFeedBottom } from './ScrollFeedBottom'
+import { RegenerateDriveButton } from './RegenerateDriveButton'
 import { AssigneeSelector } from './AssigneeSelector'
 import { FieldEditor } from './FieldEditor'
 import { ActivityHeader } from './ActivityHeader'
@@ -391,6 +392,9 @@ export default async function ActivityPage({
                         <ExternalLink className="w-3 h-3 shrink-0" />
                         Abrir no Drive
                       </a>
+                    )}
+                    {isOrgMember && (
+                      <RegenerateDriveButton orgSlug={orgSlug} path={path} activityId={activityId} hasFolder={!!driveWebUrl} />
                     )}
                   </div>
                 </div>

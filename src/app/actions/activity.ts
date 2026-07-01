@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { provisionActivitiesDrive, moveActivityDrive } from '@/lib/drive-provision'
+import { provisionActivitiesDrive, moveActivityDrive, regenerateActivityDrive } from '@/lib/drive-provision'
 import { scheduleReview, reviewKindForAdvance } from '@/lib/review-gate'
 import { scheduleRecurrence, isConclusion } from '@/lib/recurrence-gate'
 
@@ -97,10 +97,14 @@ export async function createActivity(
     if (linksError) return { error: linksError.message }
   }
 
-  // Cria as pastas no Drive em 2º plano (se a campanha tiver pasta vinculada)
-  await provisionActivitiesDrive(supabase, {
-    campaignId, userId: user.id, items: [{ activityId: activityId as string, title }],
-  })
+  // Cria as pastas no Drive em 2º plano (se a campanha tiver pasta vinculada).
+  // Só provisiona se NÃO veio um link manual (senão respeita o que a pessoa colou).
+  if (!drive_folder_url) {
+    await provisionActivitiesDrive(supabase, {
+      campaignId, userId: user.id,
+      items: [{ activityId: activityId as string, title, date: start_date || due_date || null }],
+    })
+  }
 
   redirect(`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}/activities/${activityId}`)
 }
@@ -405,6 +409,30 @@ export async function addComment(
 
   if (error) return { error: error.message }
   revalidatePath(path)
+}
+
+/**
+ * Gera/re-vincula a pasta do Drive da tarefa: cria uma pasta NOVA (nome = título
+ * com a data) e regrava os links. Corrige o caso de ter sido linkada na pasta de
+ * um trabalho homônimo de outra data.
+ */
+export async function regenerarPastaDrive(orgSlug: string, path: string, activityId: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: act } = await (supabase as any)
+    .from('activities').select('campaign_id, title, start_date, due_date').eq('id', activityId).single()
+  if (!act) return { error: 'Tarefa não encontrada' }
+
+  const res = await regenerateActivityDrive(supabase, {
+    campaignId: act.campaign_id, userId: user.id, activityId,
+    title: act.title, date: act.start_date || act.due_date || null,
+  })
+  if (!res.ok) return { error: res.error }
+  revalidatePath(path)
+  return { url: res.url }
 }
 
 /** Edita um comentário (só o autor). */
