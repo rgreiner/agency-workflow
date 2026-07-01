@@ -300,6 +300,8 @@ button:focus-visible,
 .rich-text ul[data-type="taskList"] li[data-checked="true"] > div { text-decoration: line-through; color: var(--color-gray-400); }
 /* Imagens coladas/inseridas */
 .rich-text img { max-width: 100%; height: auto; border-radius: 0.5rem; margin: 0.4rem 0; }
+/* Imagens de comentário: clicar amplia (lightbox no CommentContent). */
+.comment-body img { cursor: zoom-in; }
 .rich-text .ProseMirror img.ProseMirror-selectednode { outline: 2px solid #fb923c; }
 /* @menção */
 .rich-text .mention { background: #fff7ed; color: #c2410c; border-radius: 4px; padding: 0 3px; font-weight: 500; }

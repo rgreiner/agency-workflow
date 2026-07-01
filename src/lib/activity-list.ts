@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import type { ActivityStatus } from '@/types'
+import { commentPreview } from '@/lib/html'
 
 export interface LastComment {
   content: string
@@ -130,7 +131,7 @@ export async function loadActivityList(
     if (lastCommentMap[cid]) continue
     const p = (c as { profiles: unknown }).profiles as { full_name: string | null } | null
     lastCommentMap[cid] = {
-      content: (c as { content: string }).content,
+      content: commentPreview((c as { content: string }).content),
       at: (c as { created_at: string }).created_at,
       author: p?.full_name ?? null,
     }

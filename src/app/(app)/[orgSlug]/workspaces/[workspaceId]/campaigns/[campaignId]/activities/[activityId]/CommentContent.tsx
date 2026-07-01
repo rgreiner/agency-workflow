@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -25,7 +25,20 @@ export function CommentContent({ path, commentId, content, edited, canEdit, canD
   const router = useRouter()
   const [editing, setEditing] = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
+  const [lightbox, setLightbox] = useState<string | null>(null)
   const [pending, start] = useTransition()
+
+  // Clicar numa imagem do comentário → amplia (lightbox).
+  function onBodyClick(e: React.MouseEvent) {
+    const el = e.target as HTMLElement
+    if (el.tagName === 'IMG') { e.preventDefault(); setLightbox((el as HTMLImageElement).src) }
+  }
+  useEffect(() => {
+    if (!lightbox) return
+    function onKey(ev: KeyboardEvent) { if (ev.key === 'Escape') setLightbox(null) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [lightbox])
 
   function onDelete() {
     start(async () => {
@@ -55,9 +68,19 @@ export function CommentContent({ path, commentId, content, edited, canEdit, canD
   return (
     <div className="group/comment relative">
       {isHtml(content)
-        ? <div className="rich-text text-sm text-gray-700 leading-relaxed" dangerouslySetInnerHTML={{ __html: content }} />
+        ? <div className="rich-text comment-body text-sm text-gray-700 leading-relaxed" onClick={onBodyClick} dangerouslySetInnerHTML={{ __html: content }} />
         : <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{content}</p>}
       {edited && <span className="text-[10px] text-gray-400 italic">(editado)</span>}
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-6 cursor-zoom-out"
+          onClick={() => setLightbox(null)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightbox} alt="" className="max-h-full max-w-full rounded-lg shadow-2xl object-contain" />
+        </div>
+      )}
 
       {(canEdit || canDelete) && !confirmDel && (
         <div className="absolute -top-1 right-0 hidden group-hover/comment:flex items-center gap-0.5 bg-white/90 backdrop-blur rounded-lg border border-gray-100 shadow-sm">
