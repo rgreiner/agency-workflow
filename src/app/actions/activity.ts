@@ -411,6 +411,20 @@ export async function addComment(
   revalidatePath(path)
 }
 
+/** Silencia/reativa as notificações de MUDANÇA DE STATUS desta tarefa (só pra mim). */
+export async function setActivityMute(orgSlug: string, path: string, activityId: string, muted: boolean) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('set_activity_mute', {
+    p_user_id: user.id, p_activity_id: activityId, p_muted: muted,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(path)
+}
+
 /**
  * Gera/re-vincula a pasta do Drive da tarefa: cria uma pasta NOVA (nome = título
  * com a data) e regrava os links. Corrige o caso de ter sido linkada na pasta de

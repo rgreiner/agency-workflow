@@ -13,6 +13,7 @@ import { CommentBox } from './CommentBox'
 import { CommentContent } from './CommentContent'
 import { ScrollFeedBottom } from './ScrollFeedBottom'
 import { RegenerateDriveButton } from './RegenerateDriveButton'
+import { MuteButton } from './MuteButton'
 import { AssigneeSelector } from './AssigneeSelector'
 import { FieldEditor } from './FieldEditor'
 import { ActivityHeader } from './ActivityHeader'
@@ -88,13 +89,16 @@ export default async function ActivityPage({
     { data: membersRaw },
     { data: reactionsRaw },
     { data: rawSettings },
+    { data: muteRow },
   ] = await Promise.all([
     orgId ? supabase.from('workspaces').select('id, name, campaigns(id, name)').eq('org_id', orgId).eq('archived', false).eq('campaigns.archived', false).order('name') : Promise.resolve({ data: [] }),
     (user && orgId) ? supabase.from('organization_members').select('role').eq('org_id', orgId).eq('user_id', user.id).single() : Promise.resolve({ data: null }),
     orgId ? supabase.from('organization_members').select('user_id, profiles!user_id(id, full_name, email, avatar_url)').eq('org_id', orgId) : Promise.resolve({ data: [] }),
     commentIds.length ? sb.from('activity_comment_reactions').select('comment_id, user_id, emoji').in('comment_id', commentIds) : Promise.resolve({ data: [] }),
     orgRow?.id ? sb.from('org_settings').select('status_overrides').eq('org_id', orgRow.id).single() : Promise.resolve({ data: null }),
+    user ? sb.from('activity_mutes').select('activity_id').eq('activity_id', activityId).eq('user_id', user.id).maybeSingle() : Promise.resolve({ data: null }),
   ])
+  const muted = !!muteRow
 
   const moveProjects = (projWs ?? []).flatMap((w: { id: string; name: string; campaigns?: { id: string; name: string }[] }) =>
     ((w.campaigns as unknown as { id: string; name: string }[]) ?? []).map(c => ({
@@ -228,6 +232,7 @@ export default async function ActivityPage({
               <AlertTriangle className="w-3.5 h-3.5" /> Atrasada
             </span>
           )}
+          {isOrgMember && <MuteButton orgSlug={orgSlug} path={path} activityId={activityId} muted={muted} />}
           <ShareJobButton orgSlug={orgSlug} activityId={activityId} title={activity.title} />
           <span className="hidden md:inline">Criada {formatDate(activity.created_at)}</span>
           {!modal && (
