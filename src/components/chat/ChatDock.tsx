@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Search, X, Minus, Send, MessagesSquare } from 'lucide-react'
 import { sendChatMessage, getConversation, getChatOverview, markChatRead, touchPresence, type ChatMsg } from '@/app/actions/chat'
+import { playNotifSound } from '@/lib/notif-sound'
 
 interface Member { id: string; name: string; avatarUrl: string | null }
 type Msg = ChatMsg & { pending?: boolean }
@@ -92,9 +93,12 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
     return () => clearInterval(t)
   }, [loadOverview])
 
-  // Total de não-lidas → badge da sidebar
+  // Total de não-lidas → badge da sidebar (+ som quando aumenta = mensagem nova)
+  const prevTotal = useRef<number | null>(null)
   useEffect(() => {
     const total = Object.values(unread).reduce((a, b) => a + b, 0)
+    if (prevTotal.current !== null && total > prevTotal.current) playNotifSound()
+    prevTotal.current = total
     window.dispatchEvent(new CustomEvent('flow:chat-unread', { detail: total }))
   }, [unread])
 
