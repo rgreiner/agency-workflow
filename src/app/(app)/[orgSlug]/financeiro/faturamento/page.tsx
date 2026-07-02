@@ -2,6 +2,7 @@ import { assertFinanceAccess } from '@/lib/finance'
 import { formatBRL, FATURAMENTO_PAGADOR } from '@/lib/midia'
 import { GerarLancamentosButton } from './GerarLancamentosButton'
 import { LancarButton } from './LancarButton'
+import { GerarFeeButton } from './GerarFeeButton'
 import { Receipt } from 'lucide-react'
 
 export default async function FaturamentoPage({
@@ -39,6 +40,27 @@ export default async function FaturamentoPage({
   const totalComissao = pendentes.reduce((s, d) => s + comissaoDe(d), 0)
   const totalDocs = pendentes.reduce((s, d) => s + Number(d.valor ?? 0), 0)
 
+  // Fees/Produção que o Atendimento marcou como "Faturar" — prontos pro Financeiro
+  // conferir e gerar as parcelas (1 lançamento por parcela via gerar_lancamentos_producao).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: feesRaw } = await (supabase as any)
+    .from('producao')
+    .select('id, numero, titulo, tipo, valor, detalhe, workspaces(name)')
+    .eq('org_id', orgId).eq('situacao', 'faturar').eq('archived', false)
+    .in('tipo', ['fee', 'pedido'])
+    .order('numero', { ascending: false })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fees = ((feesRaw ?? []) as any[]).map(f => ({
+    id: f.id as string,
+    numero: f.numero as number | null,
+    titulo: (f.titulo as string) || 'Fee',
+    tipo: f.tipo as string,
+    cliente: f.workspaces?.name ?? '—',
+    total: Number(f.valor ?? 0),
+    parcelas: Array.isArray(f.detalhe?.parcelas) ? f.detalhe.parcelas.length : 0,
+  }))
+  const totalFees = fees.reduce((s, f) => s + f.total, 0)
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between gap-3 mb-2">
@@ -49,7 +71,46 @@ export default async function FaturamentoPage({
         {pendentes.length > 0 && <GerarLancamentosButton orgSlug={orgSlug} />}
       </div>
 
-      <div className="grid grid-cols-3 gap-3 my-5">
+      {/* Fees / Produção a faturar (Atendimento marcou "Faturar") */}
+      {fees.length > 0 && (
+        <section className="mt-5">
+          <div className="flex items-baseline justify-between gap-3 mb-2">
+            <h2 className="text-sm font-semibold text-gray-800">Fees a faturar <span className="text-gray-400 font-normal">({fees.length})</span></h2>
+            <span className="text-sm text-gray-500">Total: <strong className="text-gray-900">{formatBRL(totalFees)}</strong></span>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
+            <table className="w-full min-w-[720px]">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-medium text-gray-400">
+                  <th className="text-left px-4 py-3 w-16">Nº</th>
+                  <th className="text-left px-4 py-3">Fee</th>
+                  <th className="text-left px-4 py-3">Cliente</th>
+                  <th className="text-center px-4 py-3">Parcelas</th>
+                  <th className="text-right px-4 py-3">Total</th>
+                  <th className="w-36" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {fees.map(f => (
+                  <tr key={f.id} className="hover:bg-gray-50/50 transition">
+                    <td className="px-4 py-3 text-sm text-gray-400">{f.numero ?? '—'}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{f.titulo}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{f.cliente}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 text-center">{f.parcelas > 0 ? `${f.parcelas}x` : '—'}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-emerald-600 text-right">{formatBRL(f.total)}</td>
+                    <td className="px-3 py-3 text-right"><GerarFeeButton orgSlug={orgSlug} feeId={f.id} parcelas={f.parcelas} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {pendentes.length > 0 && (
+      <>
+      <h2 className="text-sm font-semibold text-gray-800 mt-6 mb-2">Mídia a lançar <span className="text-gray-400 font-normal">({pendentes.length})</span></h2>
+      <div className="grid grid-cols-3 gap-3 mb-3">
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-400">A conferir (documentos)</p>
           <p className="text-lg font-semibold text-gray-900 mt-1">{pendentes.length}</p>
@@ -64,7 +125,6 @@ export default async function FaturamentoPage({
         </div>
       </div>
 
-      {pendentes.length > 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
           <table className="w-full min-w-[820px]">
             <thead>
@@ -95,11 +155,14 @@ export default async function FaturamentoPage({
             </tbody>
           </table>
         </div>
-      ) : (
+      </>
+      )}
+
+      {fees.length === 0 && pendentes.length === 0 && (
         <div className="text-center py-24 bg-white rounded-xl border border-gray-200">
           <Receipt className="w-10 h-10 text-gray-300 mx-auto mb-3" />
           <h3 className="text-gray-900 font-medium">Nada a conferir</h3>
-          <p className="text-gray-500 text-sm mt-1">Quando uma liberação de mídia for marcada como <strong>Faturado</strong>, ela aparece aqui pra você conferir e lançar.</p>
+          <p className="text-gray-500 text-sm mt-1">Quando o Atendimento marcar um Fee como <strong>Faturar</strong> (ou uma mídia como <strong>Faturado</strong>), aparece aqui pra conferir e lançar.</p>
         </div>
       )}
     </div>
