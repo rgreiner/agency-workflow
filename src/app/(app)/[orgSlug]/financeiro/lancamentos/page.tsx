@@ -14,7 +14,7 @@ export default async function LancamentosPage({
   const sb = supabase as any
   const [{ data: raw }, { data: contasRaw }, { data: settings }] = await Promise.all([
     sb.from('lancamentos')
-      .select('id, tipo, origem_tipo, contato_nome, descricao, valor, valor_realizado, vencimento, competencia, situacao, nf_emitida, boleto_gerado, revisar, conta_id, categoria, centro_custo, data_liquidacao, forma_pagamento, observacao, juros, multa, desconto, tarifa, anexos')
+      .select('id, tipo, origem_tipo, parcela_num, parcela_total, contato_nome, descricao, valor, valor_realizado, vencimento, competencia, situacao, nf_emitida, boleto_gerado, revisar, conta_id, categoria, centro_custo, data_liquidacao, forma_pagamento, observacao, juros, multa, desconto, tarifa, anexos')
       .eq('org_id', orgId)
       .order('vencimento', { ascending: true, nullsFirst: false }),
     sb.from('contas_financeiras')

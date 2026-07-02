@@ -19,6 +19,8 @@ export interface Lancamento {
   id: string
   tipo: string                      // entrada | saida
   origem_tipo: string | null        // midia | producao | fee | manual
+  parcela_num: number | null
+  parcela_total: number | null
   contato_nome: string | null
   descricao: string | null
   valor: number | string
@@ -71,6 +73,7 @@ export function LancamentosClient({ orgSlug, lancamentos, contas, categorias, ce
 }) {
   const [mes, setMes] = useState(today.slice(0, 7))
   const [contaFilter, setContaFilter] = useState('')
+  const [tipoFilter, setTipoFilter] = useState<'todos' | 'entrada' | 'saida'>('todos')
   const [query, setQuery] = useState('')
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Lancamento | null>(null)
@@ -79,11 +82,12 @@ export function LancamentosClient({ orgSlug, lancamentos, contas, categorias, ce
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     return lancamentos.filter(l => {
+      if (tipoFilter !== 'todos' && l.tipo !== tipoFilter) return false
       if (contaFilter && l.conta_id !== contaFilter) return false
       if (q && !`${l.contato_nome ?? ''} ${l.descricao ?? ''} ${l.categoria ?? ''}`.toLowerCase().includes(q)) return false
       return true
     })
-  }, [lancamentos, contaFilter, query])
+  }, [lancamentos, tipoFilter, contaFilter, query])
 
   const liqMonth = (l: Lancamento) => monthOf(l.data_liquidacao ?? l.vencimento)
 
@@ -136,6 +140,15 @@ export function LancamentosClient({ orgSlug, lancamentos, contas, categorias, ce
 
       {/* Filtros */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <div className="inline-flex bg-gray-100 rounded-xl p-0.5">
+          {([['todos', 'Tudo'], ['entrada', 'A receber'], ['saida', 'A pagar']] as const).map(([v, label]) => (
+            <button key={v} onClick={() => setTipoFilter(v)} aria-pressed={tipoFilter === v}
+              className={cn('px-3 py-1.5 text-sm font-medium rounded-[10px] transition-colors',
+                tipoFilter === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="w-52"><Select value={contaFilter} onChange={setContaFilter} options={contaFilterOptions} /></div>
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -255,6 +268,9 @@ function Row({ l, orgSlug, today, paid, conta, onEdit, onBaixa }: {
       </td>
       <td className="px-4 py-2.5 text-sm text-gray-600">
         <span>{l.descricao ?? '—'}</span>
+        {l.parcela_num && l.parcela_total && (
+          <span className="ml-2 align-middle text-[10px] font-medium text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">{l.parcela_num}/{l.parcela_total}</span>
+        )}
         {(l.categoria || conta) && (
           <span className="ml-2 inline-flex items-center gap-1.5 align-middle">
             {l.categoria && <span className="text-[10px] text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">{l.categoria}</span>}
