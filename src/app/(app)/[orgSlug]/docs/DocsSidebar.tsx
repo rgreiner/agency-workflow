@@ -6,11 +6,12 @@ import { useRouter } from 'next/navigation'
 import {
   FileText, Plus, Building2, PanelLeftClose, PanelLeft, Loader2,
   Folder, FolderOpen, ChevronRight, MoreHorizontal, Pencil, Trash2,
-  FolderPlus, FilePlus,
+  FolderPlus, FilePlus, Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import { createDocument, createFolder, renameDocument, moveDocument, removeDocument } from '@/app/actions/docs'
+import { createDocument, createFolder, renameDocument, moveDocument, removeDocument, getDocShareInfo, updateDocumentVisibility } from '@/app/actions/docs'
+import { ShareModal } from '@/components/docs/ShareModal'
 
 interface Doc {
   id: string
@@ -25,14 +26,31 @@ interface Doc {
 const COLLAPSE_KEY = 'docs-sidebar-collapsed'
 const CLOSED_KEY = 'docs-folders-closed'
 
-export function DocsSidebar({ orgSlug, orgId, currentDocId, docs }: {
+interface ShareState {
+  docId: string
+  visibility: 'org' | 'custom'
+  memberIds: string[]
+  members: { userId: string; fullName: string | null; email: string }[]
+  currentUserId: string
+}
+
+export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, currentUserId }: {
   orgSlug: string
   orgId: string
   currentDocId: string
   docs: Doc[]
+  currentUserId: string
 }) {
   const router = useRouter()
   const [, start] = useTransition()
+  const [share, setShare] = useState<ShareState | null>(null)
+
+  async function openShare(docId: string) {
+    setMenu(null)
+    const info = await getDocShareInfo(orgId, docId)
+    if ('error' in info) { toast.error(info.error); return }
+    setShare({ docId, visibility: info.visibility, memberIds: info.memberIds, members: info.members, currentUserId: info.currentUserId })
+  }
   const [collapsed, setCollapsed] = useState(false)
   const [closed, setClosed] = useState<Set<string>>(new Set())
   const [menu, setMenu] = useState<string | null>(null)
@@ -141,6 +159,7 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs }: {
               <ChevronRight className={cn('w-3.5 h-3.5 transition-transform', open && 'rotate-90')} />
             </button>
             {open ? <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" /> : <Folder className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+            {!d.parent_id && d.visibility === 'custom' && <Lock className="w-3 h-3 text-gray-400 shrink-0" />}
             {renamingId === d.id ? (
               <input autoFocus value={renameValue} onChange={e => setRenameValue(e.target.value)}
                 onBlur={() => commitRename(d.id)}
@@ -158,7 +177,9 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs }: {
                 <Popover>
                   <PItem icon={<FolderPlus className="w-3.5 h-3.5" />} onClick={() => newFolder(d.workspace_id, d.id)}>Nova subpasta</PItem>
                   <PItem icon={<Pencil className="w-3.5 h-3.5" />} onClick={() => { setMenu(null); setRenamingId(d.id); setRenameValue(d.title) }}>Renomear</PItem>
-                  {d.parent_id && <PItem icon={<FolderOpen className="w-3.5 h-3.5" />} onClick={() => move(d, null)}>Mover pra raiz</PItem>}
+                  {!d.parent_id
+                    ? <PItem icon={<Lock className="w-3.5 h-3.5" />} onClick={() => openShare(d.id)}>Compartilhar / acesso</PItem>
+                    : <PItem icon={<FolderOpen className="w-3.5 h-3.5" />} onClick={() => move(d, null)}>Mover pra raiz</PItem>}
                   <PItem icon={<Trash2 className="w-3.5 h-3.5" />} danger
                     onClick={() => { if (kids.length) { toast.error('Esvazie a pasta antes de excluir'); setMenu(null) } else del(d) }}>Excluir</PItem>
                 </Popover>
@@ -177,6 +198,7 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs }: {
   }
 
   return (
+    <>
     <aside ref={ref} className="hidden md:flex w-64 shrink-0 border-r border-gray-100 bg-gray-50/40 flex-col h-full">
       <div className="flex items-center justify-between px-3 py-3 border-b border-gray-100 shrink-0">
         <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Documentos</span>
@@ -214,6 +236,22 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs }: {
         ))}
       </div>
     </aside>
+
+    {share && (
+      <ShareModal
+        visibility={share.visibility}
+        sharedMemberIds={share.memberIds}
+        members={share.members}
+        currentUserId={share.currentUserId}
+        onSave={async (visibility, memberIds) => {
+          const r = await updateDocumentVisibility(share.docId, orgSlug, visibility, memberIds)
+          if (r?.error) { toast.error(r.error); return }
+          setShare(null); router.refresh()
+        }}
+        onClose={() => setShare(null)}
+      />
+    )}
+    </>
   )
 }
 

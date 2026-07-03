@@ -75,6 +75,7 @@ export default async function DocPage({
         orgSlug={orgSlug}
         orgId={org.id}
         currentDocId={doc.id}
+        currentUserId={user.id}
         docs={(allDocs ?? []) as unknown as Parameters<typeof DocsSidebar>[0]['docs']}
       />
       <div className="flex-1 min-w-0">

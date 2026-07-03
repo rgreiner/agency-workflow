@@ -79,6 +79,34 @@ export async function removeDocument(docId: string, orgSlug: string) {
   return {}
 }
 
+/** Info de compartilhamento de um documento/pasta (p/ abrir o ShareModal fora da tela do doc). */
+export async function getDocShareInfo(orgId: string, docId: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' as const }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any
+  const [{ data: doc }, { data: dm }, { data: mem }] = await Promise.all([
+    sb.from('documents').select('visibility').eq('id', docId).single(),
+    sb.from('document_members').select('user_id').eq('document_id', docId),
+    sb.from('organization_members').select('user_id, profiles!user_id(full_name, email)').eq('org_id', orgId),
+  ])
+  if (!doc) return { error: 'Documento não encontrado' as const }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const members = (mem ?? []).map((m: any) => ({
+    userId: m.user_id as string,
+    fullName: (m.profiles?.full_name ?? null) as string | null,
+    email: (m.profiles?.email ?? '') as string,
+  }))
+  return {
+    visibility: (doc.visibility as 'org' | 'custom'),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    memberIds: ((dm ?? []) as any[]).map(x => x.user_id as string),
+    members,
+    currentUserId: user.id as string,
+  }
+}
+
 export async function updateDocumentVisibility(
   docId: string,
   orgSlug: string,

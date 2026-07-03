@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getUsuario } from '@/lib/auth/server'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createDocument } from '@/app/actions/docs'
@@ -13,6 +14,7 @@ export default async function DocsPage({
 }) {
   const { orgSlug } = await params
   const supabase = await createClient()
+  const user = await getUsuario()
 
   const { data: org } = await supabase
     .from('organizations')
@@ -61,6 +63,7 @@ export default async function DocsPage({
         orgSlug={orgSlug}
         orgId={org.id}
         currentDocId=""
+        currentUserId={user?.id ?? ''}
         docs={(allDocs ?? []) as unknown as Parameters<typeof DocsSidebar>[0]['docs']}
       />
       <div className="flex-1 min-w-0 overflow-y-auto">
