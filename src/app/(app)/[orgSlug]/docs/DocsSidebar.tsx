@@ -22,15 +22,6 @@ interface Doc {
   workspaces?: { name: string } | null
 }
 
-interface Group {
-  key: string
-  name: string
-  workspaceId: string | null
-  folders: Doc[]
-  looseDocs: Doc[]
-  docsByFolder: Record<string, Doc[]>
-}
-
 const COLLAPSE_KEY = 'docs-sidebar-collapsed'
 const CLOSED_KEY = 'docs-folders-closed'
 
@@ -80,9 +71,10 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs }: {
     setMenu(null)
     start(async () => { const r = await createDocument(orgId, orgSlug, workspaceId, parentId); if (r?.error) toast.error(r.error) })
   }
-  async function newFolder(workspaceId: string | null) {
+  async function newFolder(workspaceId: string | null, parentId: string | null = null) {
     setMenu(null)
-    const r = await createFolder(orgId, orgSlug, workspaceId, 'Nova pasta')
+    if (parentId) setClosed(prev => { const n = new Set(prev); n.delete(parentId); return n }) // abre a pasta-mãe
+    const r = await createFolder(orgId, orgSlug, workspaceId, 'Nova pasta', parentId)
     if (r?.error) { toast.error(r.error); return }
     router.refresh()
     if (r.id) { setRenamingId(r.id); setRenameValue('Nova pasta') }
@@ -116,30 +108,73 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs }: {
     )
   }
 
-  // ── Monta os grupos (Organização + clientes), igual à estrutura da listagem ──
-  const map = new Map<string, Group>()
-  function group(d: Doc): Group {
-    const key = d.workspace_id ?? '__org__'
-    if (!map.has(key)) {
-      map.set(key, {
-        key,
-        name: d.workspace_id ? (d.workspaces?.name ?? 'Cliente') : 'Organização',
-        workspaceId: d.workspace_id,
-        folders: [], looseDocs: [], docsByFolder: {},
-      })
-    }
-    return map.get(key)!
+  // ── Monta a árvore: filhos por pasta (parent_id) + roots por grupo (workspace) ──
+  const childrenByParent = new Map<string, Doc[]>()
+  for (const d of docs) if (d.parent_id) {
+    const arr = childrenByParent.get(d.parent_id) ?? []
+    arr.push(d); childrenByParent.set(d.parent_id, arr)
   }
-  // Garante o grupo "Organização" sempre presente
-  if (!map.has('__org__')) map.set('__org__', { key: '__org__', name: 'Organização', workspaceId: null, folders: [], looseDocs: [], docsByFolder: {} })
+  const groupsMap = new Map<string, { key: string; name: string; workspaceId: string | null; roots: Doc[]; folders: Doc[] }>()
+  const ensure = (workspaceId: string | null, wsName?: string | null) => {
+    const key = workspaceId ?? '__org__'
+    if (!groupsMap.has(key)) groupsMap.set(key, { key, name: workspaceId ? (wsName ?? 'Cliente') : 'Organização', workspaceId, roots: [], folders: [] })
+    return groupsMap.get(key)!
+  }
+  ensure(null)
   for (const d of docs) {
-    const g = group(d)
+    const g = ensure(d.workspace_id, d.workspaces?.name)
     if (d.is_folder) g.folders.push(d)
-    else if (d.parent_id) (g.docsByFolder[d.parent_id] ??= []).push(d)
-    else g.looseDocs.push(d)
+    if (!d.parent_id) g.roots.push(d)
   }
-  const groups = [...map.values()].sort((a, b) =>
+  const groups = [...groupsMap.values()].sort((a, b) =>
     a.key === '__org__' ? -1 : b.key === '__org__' ? 1 : a.name.localeCompare(b.name))
+
+  // Renderiza um nó (pasta recursiva ou documento). depth = nível de indentação.
+  function renderNode(d: Doc, depth: number, groupFolders: Doc[]): ReactNode {
+    if (d.is_folder) {
+      const kids = childrenByParent.get(d.id) ?? []
+      const open = !closed.has(d.id)
+      return (
+        <div key={d.id}>
+          <div className="group/f flex items-center gap-1 pr-2 py-1 mx-1 rounded-lg hover:bg-gray-100/70" style={{ paddingLeft: 8 + depth * 14 }}>
+            <button onClick={() => toggleFolder(d.id)} className="p-0.5 text-gray-400 hover:text-gray-700 shrink-0">
+              <ChevronRight className={cn('w-3.5 h-3.5 transition-transform', open && 'rotate-90')} />
+            </button>
+            {open ? <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" /> : <Folder className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+            {renamingId === d.id ? (
+              <input autoFocus value={renameValue} onChange={e => setRenameValue(e.target.value)}
+                onBlur={() => commitRename(d.id)}
+                onKeyDown={e => { if (e.key === 'Enter') commitRename(d.id); if (e.key === 'Escape') setRenamingId(null) }}
+                className="flex-1 min-w-0 text-sm bg-white border border-orange-300 rounded px-1 py-0.5 focus:outline-none" />
+            ) : (
+              <button onClick={() => toggleFolder(d.id)} className="flex-1 min-w-0 text-left text-sm font-medium text-gray-700 truncate">{d.title}</button>
+            )}
+            <button onClick={() => newDoc(d.workspace_id, d.id)} title="Novo documento na pasta"
+              className="p-0.5 rounded text-gray-400 hover:text-orange-600 opacity-0 group-hover/f:opacity-100 transition shrink-0"><Plus className="w-3.5 h-3.5" /></button>
+            <div className="relative shrink-0">
+              <button aria-label="Mais opções" onClick={() => setMenu(menu === `fld:${d.id}` ? null : `fld:${d.id}`)}
+                className="p-0.5 rounded text-gray-400 hover:text-gray-700 opacity-0 group-hover/f:opacity-100 transition"><MoreHorizontal className="w-3.5 h-3.5" /></button>
+              {menu === `fld:${d.id}` && (
+                <Popover>
+                  <PItem icon={<FolderPlus className="w-3.5 h-3.5" />} onClick={() => newFolder(d.workspace_id, d.id)}>Nova subpasta</PItem>
+                  <PItem icon={<Pencil className="w-3.5 h-3.5" />} onClick={() => { setMenu(null); setRenamingId(d.id); setRenameValue(d.title) }}>Renomear</PItem>
+                  {d.parent_id && <PItem icon={<FolderOpen className="w-3.5 h-3.5" />} onClick={() => move(d, null)}>Mover pra raiz</PItem>}
+                  <PItem icon={<Trash2 className="w-3.5 h-3.5" />} danger
+                    onClick={() => { if (kids.length) { toast.error('Esvazie a pasta antes de excluir'); setMenu(null) } else del(d) }}>Excluir</PItem>
+                </Popover>
+              )}
+            </div>
+          </div>
+          {open && kids.map(k => renderNode(k, depth + 1, groupFolders))}
+        </div>
+      )
+    }
+    return (
+      <DocRow key={d.id} doc={d} orgSlug={orgSlug} active={d.id === currentDocId} depth={depth}
+        menuOpen={menu === `doc:${d.id}`} onMenu={() => setMenu(menu === `doc:${d.id}` ? null : `doc:${d.id}`)}
+        folders={groupFolders} onMove={move} />
+    )
+  }
 
   return (
     <aside ref={ref} className="hidden md:flex w-64 shrink-0 border-r border-gray-100 bg-gray-50/40 flex-col h-full">
@@ -152,111 +187,51 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs }: {
       </div>
 
       <div className="flex-1 overflow-y-auto py-2">
-        {groups.map(g => {
-          const empty = g.folders.length === 0 && g.looseDocs.length === 0
-          return (
-            <div key={g.key} className="mb-3">
-              {/* Cabeçalho do grupo + criar */}
-              <div className="group/h flex items-center gap-1.5 px-3 mb-1">
-                {g.workspaceId
-                  ? <span className="w-2 h-2 rounded-sm bg-orange-400 shrink-0" />
-                  : <Building2 className="w-3 h-3 text-gray-400 shrink-0" />}
-                <span className="flex-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 truncate">{g.name}</span>
-                <div className="relative">
-                  <button onClick={() => setMenu(menu === `grp:${g.key}` ? null : `grp:${g.key}`)}
-                    title="Adicionar" className="p-0.5 rounded text-gray-400 hover:text-orange-600 hover:bg-gray-200/60 opacity-0 group-hover/h:opacity-100 transition">
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                  {menu === `grp:${g.key}` && (
-                    <Popover>
-                      <PItem icon={<FilePlus className="w-3.5 h-3.5" />} onClick={() => newDoc(g.workspaceId, null)}>Novo documento</PItem>
-                      <PItem icon={<FolderPlus className="w-3.5 h-3.5" />} onClick={() => newFolder(g.workspaceId)}>Nova pasta</PItem>
-                    </Popover>
-                  )}
-                </div>
+        {groups.map(g => (
+          <div key={g.key} className="mb-3">
+            <div className="group/h flex items-center gap-1.5 px-3 mb-1">
+              {g.workspaceId
+                ? <span className="w-2 h-2 rounded-sm bg-orange-400 shrink-0" />
+                : <Building2 className="w-3 h-3 text-gray-400 shrink-0" />}
+              <span className="flex-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 truncate">{g.name}</span>
+              <div className="relative">
+                <button onClick={() => setMenu(menu === `grp:${g.key}` ? null : `grp:${g.key}`)}
+                  title="Adicionar" className="p-0.5 rounded text-gray-400 hover:text-orange-600 hover:bg-gray-200/60 opacity-0 group-hover/h:opacity-100 transition">
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+                {menu === `grp:${g.key}` && (
+                  <Popover>
+                    <PItem icon={<FilePlus className="w-3.5 h-3.5" />} onClick={() => newDoc(g.workspaceId, null)}>Novo documento</PItem>
+                    <PItem icon={<FolderPlus className="w-3.5 h-3.5" />} onClick={() => newFolder(g.workspaceId)}>Nova pasta</PItem>
+                  </Popover>
+                )}
               </div>
-
-              {empty && <p className="px-3 py-1 text-xs text-gray-300">Vazio</p>}
-
-              {/* Pastas */}
-              {g.folders.map(f => {
-                const inside = g.docsByFolder[f.id] ?? []
-                const open = !closed.has(f.id)
-                return (
-                  <div key={f.id}>
-                    <div className="group/f flex items-center gap-1 pl-2 pr-2 py-1 mx-1 rounded-lg hover:bg-gray-100/70">
-                      <button onClick={() => toggleFolder(f.id)} className="p-0.5 text-gray-400 hover:text-gray-700 shrink-0">
-                        <ChevronRight className={cn('w-3.5 h-3.5 transition-transform', open && 'rotate-90')} />
-                      </button>
-                      {open ? <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" /> : <Folder className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
-                      {renamingId === f.id ? (
-                        <input autoFocus value={renameValue}
-                          onChange={e => setRenameValue(e.target.value)}
-                          onBlur={() => commitRename(f.id)}
-                          onKeyDown={e => { if (e.key === 'Enter') commitRename(f.id); if (e.key === 'Escape') setRenamingId(null) }}
-                          className="flex-1 min-w-0 text-sm bg-white border border-orange-300 rounded px-1 py-0.5 focus:outline-none" />
-                      ) : (
-                        <button onClick={() => toggleFolder(f.id)} className="flex-1 min-w-0 text-left text-sm font-medium text-gray-700 truncate">{f.title}</button>
-                      )}
-                      <button onClick={() => newDoc(g.workspaceId, f.id)} title="Novo documento na pasta"
-                        className="p-0.5 rounded text-gray-400 hover:text-orange-600 opacity-0 group-hover/f:opacity-100 transition shrink-0">
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                      <div className="relative shrink-0">
-                        <button aria-label="Mais opções" onClick={() => setMenu(menu === `fld:${f.id}` ? null : `fld:${f.id}`)}
-                          className="p-0.5 rounded text-gray-400 hover:text-gray-700 opacity-0 group-hover/f:opacity-100 transition">
-                          <MoreHorizontal className="w-3.5 h-3.5" />
-                        </button>
-                        {menu === `fld:${f.id}` && (
-                          <Popover>
-                            <PItem icon={<Pencil className="w-3.5 h-3.5" />} onClick={() => { setMenu(null); setRenamingId(f.id); setRenameValue(f.title) }}>Renomear</PItem>
-                            <PItem icon={<Trash2 className="w-3.5 h-3.5" />} danger
-                              onClick={() => { if (inside.length) { toast.error('Esvazie a pasta antes de excluir'); setMenu(null) } else del(f) }}>
-                              Excluir
-                            </PItem>
-                          </Popover>
-                        )}
-                      </div>
-                    </div>
-
-                    {open && inside.map(d => (
-                      <DocRow key={d.id} doc={d} orgSlug={orgSlug} active={d.id === currentDocId} nested
-                        menuOpen={menu === `doc:${d.id}`} onMenu={() => setMenu(menu === `doc:${d.id}` ? null : `doc:${d.id}`)}
-                        folders={g.folders} inFolder onMove={move} />
-                    ))}
-                  </div>
-                )
-              })}
-
-              {/* Documentos soltos */}
-              {g.looseDocs.map(d => (
-                <DocRow key={d.id} doc={d} orgSlug={orgSlug} active={d.id === currentDocId}
-                  menuOpen={menu === `doc:${d.id}`} onMenu={() => setMenu(menu === `doc:${d.id}` ? null : `doc:${d.id}`)}
-                  folders={g.folders} onMove={move} />
-              ))}
             </div>
-          )
-        })}
+
+            {g.roots.length === 0 && <p className="px-3 py-1 text-xs text-gray-300">Vazio</p>}
+            {g.roots.map(d => renderNode(d, 0, g.folders))}
+          </div>
+        ))}
       </div>
     </aside>
   )
 }
 
-function DocRow({ doc, orgSlug, active, nested, inFolder, menuOpen, onMenu, folders, onMove }: {
+function DocRow({ doc, orgSlug, active, depth, menuOpen, onMenu, folders, onMove }: {
   doc: Doc
   orgSlug: string
   active: boolean
-  nested?: boolean
-  inFolder?: boolean
+  depth: number
   menuOpen: boolean
   onMenu: () => void
   folders: Doc[]
   onMove: (doc: Doc, folder: Doc | null) => void
 }) {
+  const inFolder = !!doc.parent_id
   return (
-    <div className={cn('group/d flex items-center gap-1 mx-1 rounded-lg', active ? 'bg-orange-100' : 'hover:bg-gray-100')}>
+    <div className={cn('group/d flex items-center gap-1 mx-1 rounded-lg', active ? 'bg-orange-100' : 'hover:bg-gray-100')} style={{ paddingLeft: depth * 14 }}>
       <Link href={`/${orgSlug}/docs/${doc.id}`}
-        className={cn('flex items-center gap-2 flex-1 min-w-0 px-2 py-1.5 text-sm', nested && 'pl-7', active ? 'text-orange-800 font-medium' : 'text-gray-600')}>
+        className={cn('flex items-center gap-2 flex-1 min-w-0 px-2 py-1.5 text-sm', active ? 'text-orange-800 font-medium' : 'text-gray-600')}>
         <FileText className={cn('w-3.5 h-3.5 shrink-0', active ? 'text-orange-500' : 'text-gray-400')} />
         <span className="truncate">{doc.title || 'Sem título'}</span>
       </Link>

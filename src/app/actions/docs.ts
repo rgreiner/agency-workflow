@@ -26,7 +26,7 @@ export async function createDocument(
   redirect(`/${orgSlug}/docs/${newId}`)
 }
 
-export async function createFolder(orgId: string, orgSlug: string, workspaceId: string | null, name: string) {
+export async function createFolder(orgId: string, orgSlug: string, workspaceId: string | null, name: string, parentId: string | null = null) {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
@@ -36,6 +36,7 @@ export async function createFolder(orgId: string, orgSlug: string, workspaceId: 
     p_org_id: orgId,
     p_workspace_id: workspaceId,
     p_name: name,
+    p_parent_id: parentId,
   })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/docs`)
