@@ -12,6 +12,7 @@ import { criarTokenReset, consumirTokenReset, redefinirSenhaUsuario } from '@/li
 import { sendPasswordResetEmail } from '@/app/actions/email'
 import { iniciarSessao, encerrarSessao, getUsuario } from '@/lib/auth/server'
 import { createClient } from '@/lib/supabase/server'
+import { logSystemError } from '@/lib/system-error'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
 
@@ -47,9 +48,15 @@ export async function solicitarReset(formData: FormData): Promise<void> {
     try {
       const token = await criarTokenReset(usuario.id)
       const r = await sendPasswordResetEmail(usuario.email, `${SITE_URL}/redefinir-senha/${token}`, usuario.nome)
-      if (r.error) console.error('[reset] falha ao enviar e-mail:', r.error)
+      if (r.error) {
+        console.error('[reset] falha ao enviar e-mail:', r.error)
+        const supabase = await createClient()
+        await logSystemError(supabase, { userId: usuario.id, context: 'email:reset', error: new Error(r.error) })
+      }
     } catch (e) {
       console.error('[reset] erro ao solicitar reset:', e)
+      const supabase = await createClient()
+      await logSystemError(supabase, { userId: usuario.id, context: 'email:reset', error: e })
     }
   }
   redirect('/recuperar-senha?enviado=1')

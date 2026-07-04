@@ -69,7 +69,7 @@ export function scheduleReview(params: {
 
     try {
       await setReview('reviewing', null, null)
-      const out = await withTimeout(runKind(kind, supabase, activityId), REVIEW_TIMEOUT_MS, `revisão de ${label}`)
+      const out = await withTimeout(runKind(kind, supabase, activityId, userId), REVIEW_TIMEOUT_MS, `revisão de ${label}`)
 
       if (!out || out.note) {
         await setReview('clean', null, null)
@@ -109,6 +109,7 @@ async function runKind(
   kind: ReviewKind,
   supabase: SupabaseClient<Database>,
   activityId: string,
+  userId: string,
 ): Promise<KindOutcome | null> {
   const { data: act } = await supabase
     .from('activities').select('redacao_url, preview_url, finalizacao_url').eq('id', activityId).single()
@@ -118,7 +119,10 @@ async function runKind(
     const link = act?.redacao_url ?? ''
     if (!link || !driveConfigured()) return { clean: true, errors: [], provider: '—', note: 'sem link de Redação' }
     let text = ''
-    try { text = (await readRedacaoText(link)).text } catch (e) { console.error('[review:redacao] leitura falhou', e) }
+    try { text = (await readRedacaoText(link)).text } catch (e) {
+      console.error('[review:redacao] leitura falhou', e)
+      await logSystemError(supabase, { userId, context: 'review:redacao:leitura', error: e, activityId })
+    }
     if (!text.trim()) return { clean: true, errors: [], provider: '—', note: 'sem texto na Redação' }
     const r = await reviewText(text)
     if (!r) return null
@@ -149,7 +153,10 @@ async function runKind(
   const redLink = act?.redacao_url ?? ''
   if (redLink) {
     let text = ''
-    try { text = (await readRedacaoText(redLink)).text } catch (e) { console.error('[review:design] leitura da Redação falhou', e) }
+    try { text = (await readRedacaoText(redLink)).text } catch (e) {
+      console.error('[review:design] leitura da Redação falhou', e)
+      await logSystemError(supabase, { userId, context: 'review:design:leitura', error: e, activityId })
+    }
     if (text.trim()) {
       const cc = await crossCheckRedacao(text, assets)
       if (cc) crossErrors = cc.errors

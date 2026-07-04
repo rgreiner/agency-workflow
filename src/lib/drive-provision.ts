@@ -3,6 +3,7 @@ import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
 import { createTaskFolders, moveTaskFolder, driveConfigured } from '@/lib/google-drive'
+import { logSystemError } from '@/lib/system-error'
 
 const DEFAULT_PREFIX = 'G:\\Drives compartilhados\\'
 
@@ -76,6 +77,7 @@ export async function provisionActivitiesDrive(
         })
       } catch (e) {
         console.error('[drive] provision falhou para', it.activityId, e)
+        await logSystemError(supabase, { userId: params.userId, context: 'drive:provision', error: e, activityId: it.activityId })
       }
     }
   })
@@ -155,6 +157,7 @@ export async function moveActivityDrive(
       }
     } catch (e) {
       console.error('[drive] move falhou para', params.activityId, e)
+      await logSystemError(supabase, { userId: params.userId, context: 'drive:move', error: e, activityId: params.activityId })
     }
   })
 }

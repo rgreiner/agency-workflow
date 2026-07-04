@@ -3,6 +3,7 @@
 import { Resend } from 'resend'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
+import { logSystemError } from '@/lib/system-error'
 
 const FROM = process.env.RESEND_FROM ?? 'Flow <onboarding@resend.dev>'
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
@@ -97,7 +98,10 @@ export async function sendInviteEmail(
 </html>`,
   })
 
-  if (error) return { error: error.message }
+  if (error) {
+    await logSystemError(supabase, { userId: user.id, context: 'email:convite', error })
+    return { error: error.message }
+  }
   return {}
 }
 

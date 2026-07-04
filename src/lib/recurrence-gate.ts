@@ -2,6 +2,7 @@ import 'server-only'
 import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
+import { logSystemError } from '@/lib/system-error'
 
 const CONCLUIDO = 'concluido'
 
@@ -27,6 +28,7 @@ export function scheduleRecurrence(params: {
       await (supabase as any).rpc('recur_activity', { p_user_id: userId, p_activity_id: activityId })
     } catch (e) {
       console.error('[recurrence] falha ao reabrir tarefa recorrente', e)
+      await logSystemError(supabase, { userId, context: 'recurrence', error: e, activityId })
     }
   })
 }

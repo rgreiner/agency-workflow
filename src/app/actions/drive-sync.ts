@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { driveConfigured, listSubfolders, inspectTaskFolder, createTaskFolders, type TaskFoldersResult } from '@/lib/google-drive'
+import { logSystemError } from '@/lib/system-error'
 
 const DEFAULT_PREFIX = 'G:\\Drives compartilhados\\'
 
@@ -120,13 +121,19 @@ export async function applyCampaignDriveReconcile(
   // 1. Vincular jobs a pastas já existentes.
   for (const l of decisions.link ?? []) {
     try { await persist(l.activityId, await inspectTaskFolder(l.folderId)); linked++ }
-    catch (e) { console.error('[drive-sync] link falhou', l.activityId, e) }
+    catch (e) {
+      console.error('[drive-sync] link falhou', l.activityId, e)
+      await logSystemError(supabase, { userId: user.id, context: 'drive:reconcile:link', error: e, activityId: l.activityId })
+    }
   }
 
   // 2. Criar pastas faltantes para jobs sem pasta (cria a pasta da tarefa + subpastas).
   for (const c of decisions.createFolders ?? []) {
     try { await persist(c.activityId, await createTaskFolders(folderId, c.title)); created++ }
-    catch (e) { console.error('[drive-sync] criar pasta falhou', c.activityId, e) }
+    catch (e) {
+      console.error('[drive-sync] criar pasta falhou', c.activityId, e)
+      await logSystemError(supabase, { userId: user.id, context: 'drive:reconcile:criar-pasta', error: e, activityId: c.activityId })
+    }
   }
 
   // 3. Criar novos jobs a partir de pastas órfãs (activity + vínculo).
@@ -137,10 +144,17 @@ export async function applyCampaignDriveReconcile(
       const { data: actId, error } = await (supabase as any).rpc('create_activity', {
         p_user_id: user.id, p_campaign_id: campaignId, p_title: n.name,
       })
-      if (error || !actId) { console.error('[drive-sync] criar job falhou', n.name, error); continue }
+      if (error || !actId) {
+        console.error('[drive-sync] criar job falhou', n.name, error)
+        await logSystemError(supabase, { userId: user.id, context: 'drive:reconcile:criar-job', error: error ?? new Error(`Sem id ao criar job a partir da pasta "${n.name}"`) })
+        continue
+      }
       await persist(actId as string, await inspectTaskFolder(n.folderId))
       jobs++
-    } catch (e) { console.error('[drive-sync] criar job falhou', n.name, e) }
+    } catch (e) {
+      console.error('[drive-sync] criar job falhou', n.name, e)
+      await logSystemError(supabase, { userId: user.id, context: 'drive:reconcile:criar-job', error: e })
+    }
   }
 
   return { linked, created, jobs }

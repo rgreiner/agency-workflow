@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { revalidatePath } from 'next/cache'
 import { provisionActivitiesDrive } from '@/lib/drive-provision'
+import { logSystemError } from '@/lib/system-error'
 
 export interface SpecRow {
   title: string
@@ -115,7 +116,9 @@ export async function parseSpecsSheet(sheetUrl: string): Promise<{ rows: SpecRow
     if (!res.ok || ct.includes('text/html') || text.startsWith('<!DOCTYPE')) {
       return { error: 'Não consegui acessar a planilha. Deixe-a como "qualquer pessoa com o link: Leitor" e tente de novo.' }
     }
-  } catch {
+  } catch (e) {
+    const supabase = await createClient()
+    await logSystemError(supabase, { userId: user.id, context: 'import:specs', error: e })
     return { error: 'Falha ao buscar a planilha. Verifique o link e o compartilhamento.' }
   }
 
