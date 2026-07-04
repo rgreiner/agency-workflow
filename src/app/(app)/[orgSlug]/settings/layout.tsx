@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
+import { runHealthChecks } from '@/lib/health/checks'
 
 export default async function SettingsLayout({
   children,
@@ -27,8 +28,9 @@ export default async function SettingsLayout({
   const isAdmin = ['owner', 'admin'].includes(membership.role)
   const orgName = (membership.organizations as { name: string } | null)?.name
 
-  // Contagem de erros em aberto p/ o badge na aba (só admin vê a aba).
+  // Contagens p/ os badges das abas (só admin as vê): erros em aberto + divergências.
   let errosPendentes = 0
+  let verificacoesPendentes = 0
   if (isAdmin) {
     const { data: org } = await supabase.from('organizations').select('id').eq('slug', orgSlug).single()
     if (org) {
@@ -39,6 +41,9 @@ export default async function SettingsLayout({
         .eq('org_id', org.id)
         .eq('resolved', false)
       errosPendentes = count ?? 0
+
+      const checks = await runHealthChecks(supabase, org.id)
+      verificacoesPendentes = checks.reduce((n, c) => n + c.items.length, 0)
     }
   }
 
@@ -55,6 +60,7 @@ export default async function SettingsLayout({
           ...(isAdmin ? [
             { href: `/${orgSlug}/settings/cargos`,    label: 'Cargos',           badge: 0 },
             { href: `/${orgSlug}/settings/aparencia`, label: 'Aparência',        badge: 0 },
+            { href: `/${orgSlug}/settings/saude`,     label: 'Verificações',     badge: verificacoesPendentes },
             { href: `/${orgSlug}/settings/erros`,     label: 'Erros do sistema', badge: errosPendentes },
           ] : []),
         ].map(({ href, label, badge }) => (
