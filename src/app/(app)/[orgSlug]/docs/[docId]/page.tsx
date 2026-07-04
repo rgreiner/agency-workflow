@@ -24,7 +24,7 @@ export default async function DocPage({
 
   const { data: doc } = await supabase
     .from('documents')
-    .select('id, title, content, visibility, created_by, workspace_id, workspaces(name)')
+    .select('id, title, content, visibility, created_by, workspace_id, parent_id, workspaces(name)')
     .eq('id', docId)
     .single()
   if (!doc) notFound()
@@ -69,6 +69,16 @@ export default async function DocPage({
   const { data: workspaces } = await supabase
     .from('workspaces').select('id, name').eq('org_id', org.id).neq('archived', true).order('name')
 
+  // Se o doc está dentro de uma pasta, o acesso herda da pasta-RAIZ (mostra o nome).
+  const docParentId = (doc as { parent_id: string | null }).parent_id
+  let parentFolderName: string | null = null
+  if (docParentId) {
+    const byId = new Map(((allDocs ?? []) as { id: string; title: string; parent_id: string | null }[]).map(d => [d.id, d]))
+    let node = byId.get(docParentId)
+    while (node?.parent_id) node = byId.get(node.parent_id)
+    parentFolderName = node?.title ?? null
+  }
+
   return (
     <div className="flex h-full">
       <DocsSidebar
@@ -93,6 +103,7 @@ export default async function DocPage({
           workspaceName={workspaceName}
           workspaces={workspaces ?? []}
           initialWorkspaceId={doc.workspace_id ?? null}
+          parentFolderName={parentFolderName}
         />
       </div>
     </div>

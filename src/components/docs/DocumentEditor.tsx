@@ -47,13 +47,15 @@ interface Props {
   workspaceName: string | null
   workspaces: { id: string; name: string }[]
   initialWorkspaceId: string | null
+  /** Se o doc está dentro de uma pasta, o acesso herda dela (nome aqui). */
+  parentFolderName?: string | null
 }
 
 export function DocumentEditor({
   docId, orgSlug, currentUserId, canManage,
   initialTitle, initialContent,
   initialVisibility, initialMemberIds, members,
-  workspaceName, workspaces, initialWorkspaceId,
+  workspaceName, workspaces, initialWorkspaceId, parentFolderName,
 }: Props) {
   const router = useRouter()
   const [title, setTitle] = useState(initialTitle)
@@ -188,16 +190,26 @@ export function DocumentEditor({
             />
           )}
 
-          <button
-            onClick={() => setShowShare(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 hover:bg-gray-50 transition text-gray-600"
-          >
-            {visibility === 'org'
-              ? <Globe className="w-3.5 h-3.5 text-green-500" />
-              : <Lock className="w-3.5 h-3.5 text-amber-500" />
-            }
-            {visibility === 'org' ? 'Todo o time' : `${sharedMemberIds.length} pessoas`}
-          </button>
+          {parentFolderName ? (
+            <span
+              title={`O acesso deste documento vem da pasta "${parentFolderName}". Ajuste o acesso na pasta.`}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-gray-50 text-gray-500"
+            >
+              <Lock className="w-3.5 h-3.5 text-gray-400" />
+              Herda da pasta {parentFolderName}
+            </span>
+          ) : (
+            <button
+              onClick={() => setShowShare(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 hover:bg-gray-50 transition text-gray-600"
+            >
+              {visibility === 'org'
+                ? <Globe className="w-3.5 h-3.5 text-green-500" />
+                : <Lock className="w-3.5 h-3.5 text-amber-500" />
+              }
+              {visibility === 'org' ? 'Todo o time' : `${sharedMemberIds.length} pessoas`}
+            </button>
+          )}
 
           {canManage && !confirmDelete && (
             <button
