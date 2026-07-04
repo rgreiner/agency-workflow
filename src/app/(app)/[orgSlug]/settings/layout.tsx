@@ -27,6 +27,21 @@ export default async function SettingsLayout({
   const isAdmin = ['owner', 'admin'].includes(membership.role)
   const orgName = (membership.organizations as { name: string } | null)?.name
 
+  // Contagem de erros em aberto p/ o badge na aba (só admin vê a aba).
+  let errosPendentes = 0
+  if (isAdmin) {
+    const { data: org } = await supabase.from('organizations').select('id').eq('slug', orgSlug).single()
+    if (org) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { count } = await (supabase as any)
+        .from('system_errors')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', org.id)
+        .eq('resolved', false)
+      errosPendentes = count ?? 0
+    }
+  }
+
   return (
     <div className="p-6 max-w-4xl">
       <div className="mb-5">
@@ -36,19 +51,24 @@ export default async function SettingsLayout({
 
       <div className="flex gap-1 mb-5 border-b border-gray-200">
         {[
-          { href: `/${orgSlug}/settings/membros`,   label: 'Membros' },
+          { href: `/${orgSlug}/settings/membros`,   label: 'Membros',          badge: 0 },
           ...(isAdmin ? [
-            { href: `/${orgSlug}/settings/cargos`,    label: 'Cargos' },
-            { href: `/${orgSlug}/settings/aparencia`, label: 'Aparência' },
-            { href: `/${orgSlug}/settings/erros`,     label: 'Erros do sistema' },
+            { href: `/${orgSlug}/settings/cargos`,    label: 'Cargos',           badge: 0 },
+            { href: `/${orgSlug}/settings/aparencia`, label: 'Aparência',        badge: 0 },
+            { href: `/${orgSlug}/settings/erros`,     label: 'Erros do sistema', badge: errosPendentes },
           ] : []),
-        ].map(({ href, label }) => (
+        ].map(({ href, label, badge }) => (
           <Link
             key={href}
             href={href}
-            className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-900 border-b-2 border-transparent hover:border-gray-300 transition -mb-px"
+            className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-900 border-b-2 border-transparent hover:border-gray-300 transition -mb-px inline-flex items-center gap-2"
           >
             {label}
+            {badge > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-amber-100 text-amber-700 text-[11px] font-semibold leading-none">
+                {badge > 99 ? '99+' : badge}
+              </span>
+            )}
           </Link>
         ))}
       </div>
