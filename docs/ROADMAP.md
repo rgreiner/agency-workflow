@@ -19,8 +19,11 @@
 - **Admin**: membros/papéis/cargos (status permitidos por cargo), aparência (logo, accent,
   cores de status), **Erros do sistema** (log de falhas de 2º plano) e **Verificações**
   (checks de consistência com correção in-loco).
+- **Pauta ágil (já feito, não repropor)**: busca global **Ctrl+K** (`CommandPalette`, com
+  toggle de arquivadas), **mudanças em lote** na Lista (checkbox + barra flutuante: status,
+  responsável, prazo, arquivar), edição inline, colunas configuráveis por usuário.
 - **Dados que já existem mas não têm UI**: `activity_history` + `activity_field_history`
-  (auditoria completa de status e campos) e a RPC `search_activities` (busca com unaccent).
+  (auditoria completa de status e campos).
 
 ## 1. As cinco cegueiras (o que a análise revelou)
 
@@ -77,15 +80,13 @@ de um template base e de um remetente organizado.
 
 ## ONDA 1 — Vitórias rápidas na pauta (1 semana no total)
 
-### 1.1 Busca global ⌘K — esforço P
+### 1.1 Estender o Ctrl+K existente — esforço P
 
-A RPC `search_activities` já existe; falta só a interface.
+O `CommandPalette` já busca tarefas; falta ampliá-lo pra ser O ponto de partida do app.
 
-1. Componente `src/components/CommandPalette.tsx`: modal global (padrão de clique-fora com
-   `mousedown`), atalho ⌘K/Ctrl+K registrado no layout do `(app)`.
-2. Conteúdo: input → debounce 250ms → `searchActivities` (título+briefing) + atalhos fixos
-   de navegação (Inbox, Lista, Gantt, clientes recentes). Enter abre a tarefa via `/j/[id]`.
-3. Fase 2 (depois): incluir docs e mídias na busca (nova RPC `search_all`, 1 assinatura).
+1. Incluir **docs, mídias e produção** na busca (nova RPC `search_all`, **1 assinatura**,
+   devolvendo tipo+título+rota de cada hit).
+2. Atalhos fixos de navegação no palette vazio (Inbox, Lista, Gantt, clientes recentes).
 
 ### 1.2 Filtros salvos nas views — esforço P
 
@@ -97,16 +98,18 @@ Padrão já definido nas preferências do projeto: um multi-select por dimensão
    aplicar/limpar/excluir + botão "salvar filtro atual".
 3. Reusar o mesmo componente nas três views (um `FilterBar` só).
 
-### 1.3 Operações em lote na Lista — esforço M
+### 1.3 Dois débitos do backlog antigo que esta análise reforça — esforço P+M
 
-1. Checkbox por linha + "selecionar todos os filtrados"; barra flutuante com ações:
-   **mudar status, definir responsável, arquivar, mover de campanha**.
-2. Migration 083: RPC `bulk_update_activities(p_user_id, p_activity_ids uuid[], p_set jsonb)`
-   — **uma assinatura só** (PostgREST estrito); valida permissão por item; grava
-   `activity_history`/`field_history` por item (auditoria continua íntegra).
-3. Aplicar migration em produção ANTES do push (one-liner ssh; achar o container pelo schema).
-4. Notificações: em lote, notificar de forma agregada (1 notificação "N tarefas mudaram para X"),
-   não N avisos — senão vira spam de sino.
+1. **"Saiba sobre o cliente / sobre a campanha" na tarefa** (backlog de 17/06, aberto):
+   link no modal da tarefa levando ao briefing/contexto geral do cliente e da campanha.
+   Com os docs colaborativos já existentes, a forma natural é um campo "doc de contexto"
+   em `workspaces` e `campaigns` (migration: 2 colunas `context_doc_id`) apontando pra um
+   doc — e o link na tarefa abre esse doc. Barato e resolve o "quem chega numa tarefa fria".
+2. **Preferências por CONTA em vez de por dispositivo** (backlog aberto): colunas da Lista
+   e filtros salvos hoje ficam no localStorage. Migration: tabela `user_view_prefs
+   (user_id, org_id, view, prefs jsonb)` + RPC `set_user_view_prefs`; carregar no
+   `UserPrefsProvider` existente com fallback pro localStorage (migração transparente).
+   Fazer JUNTO com o 1.2 pra já nascer sincronizado.
 
 ### 1.4 Checklist dentro da tarefa — esforço M
 
@@ -307,7 +310,7 @@ se o cliente não abre e-mail, o WhatsApp vira a entrega; se abre, não vale a m
 | Onda | Entregas | Esforço somado | Depende de |
 |---|---|---|---|
 | **0 — Fundação** | Cron executor · infra de e-mail · user_prefs | ~2 dias | — |
-| **1 — Pauta ágil** | ⌘K · filtros salvos · lote · checklist | ~1 semana | — |
+| **1 — Pauta ágil** | Ctrl+K ampliado · filtros salvos · prefs por conta · contexto cliente/campanha · checklist | ~1 semana | — |
 | **2 — Cliente ⭐** | Aprovação por link público · digest+lembretes | ~2 semanas | Onda 0 |
 | **3 — Gestão** | Dashboard gerencial · templates · auditoria UI | ~2 semanas | — |
 | **4 — Tempo e dinheiro** | Horas · contratos · cobrança · DRE | ~2–3 semanas | Onda 0 |
