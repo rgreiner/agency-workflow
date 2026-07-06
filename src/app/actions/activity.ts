@@ -386,8 +386,13 @@ export async function bulkSetArchived(path: string, ids: string[], archived: boo
   revalidatePath(path)
 }
 
+/**
+ * Sem revalidatePath de propósito: re-renderizar a página inteira da tarefa na
+ * resposta da action segurava o botão de enviar por segundos. O CommentBox limpa
+ * otimista e chama router.refresh() em 2º plano (funciona também no modal sobre
+ * a Lista, onde o path canônico nem é a rota em exibição).
+ */
 export async function addComment(
-  path: string,
   activityId: string,
   content: string,
   mentionIds: string[] = [],
@@ -408,7 +413,6 @@ export async function addComment(
   })
 
   if (error) return { error: error.message }
-  revalidatePath(path)
 }
 
 /** Silencia/reativa as notificações de MUDANÇA DE STATUS desta tarefa (só pra mim). */

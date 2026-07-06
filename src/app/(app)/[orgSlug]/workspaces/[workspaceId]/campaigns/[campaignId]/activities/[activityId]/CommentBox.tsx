@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -18,7 +19,6 @@ import { toast } from 'sonner'
 interface Mentionable { id: string; name: string }
 interface Props {
   activityId: string
-  path: string
   members?: Mentionable[]
   /** Ids dos responsáveis da tarefa — alvo do @atribuidos. */
   assignedIds?: string[]
@@ -27,8 +27,9 @@ interface Props {
 const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
 type Opt = { id: string; label: string }
 
-export function CommentBox({ activityId, path, members = [], assignedIds = [] }: Props) {
-  const [isPending, startTransition] = useTransition()
+export function CommentBox({ activityId, members = [], assignedIds = [] }: Props) {
+  const router = useRouter()
+  const [isPending, setIsPending] = useState(false)
   const [error, setError] = useState('')
   const [replyTo, setReplyTo] = useState<{ id: string; author: string; preview: string } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -100,7 +101,7 @@ export function CommentBox({ activityId, path, members = [], assignedIds = [] }:
   }
 
   function submit() {
-    if (!editor || editor.isEmpty) return
+    if (!editor || editor.isEmpty || isPending) return
     const html = editor.getHTML()
     const ids: string[] = []
     let mentionAll = false
@@ -113,11 +114,26 @@ export function CommentBox({ activityId, path, members = [], assignedIds = [] }:
       }
     })
     const uniqueIds = Array.from(new Set(ids))
-    startTransition(async () => {
-      const result = await addComment(path, activityId, html, uniqueIds, mentionAll, replyTo?.id ?? null)
-      if (result?.error) { setError(result.error); toast.error(result.error) }
-      else { editor.commands.clearContent(); setError(''); setReplyTo(null) }
-    })
+    const reply = replyTo
+
+    // Otimista: limpa já e libera a digitação; o feed atualiza com o refresh em
+    // 2º plano. Se falhar, devolve o texto pro editor.
+    editor.commands.clearContent()
+    setReplyTo(null)
+    setError('')
+    setIsPending(true)
+    void (async () => {
+      const result = await addComment(activityId, html, uniqueIds, mentionAll, reply?.id ?? null)
+      setIsPending(false)
+      if (result?.error) {
+        editor.commands.setContent(html)
+        setReplyTo(reply)
+        setError(result.error)
+        toast.error(result.error)
+      } else {
+        router.refresh()
+      }
+    })()
   }
 
   return (
@@ -188,8 +204,13 @@ function makeMentionPopup() {
   }
   function position(rect: DOMRect | null) {
     if (!el || !rect) return
-    el.style.left = `${rect.left}px`
-    el.style.top = `${rect.bottom + 6}px`
+    // Medir DEPOIS de pintar. A caixa de comentário fica na base da tela, então
+    // sem espaço embaixo o popup abre PARA CIMA — senão renderiza fora da viewport.
+    const h = el.offsetHeight
+    const w = el.offsetWidth
+    const flip = rect.bottom + 6 + h > window.innerHeight && rect.top - 6 - h >= 0
+    el.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - w - 8))}px`
+    el.style.top = flip ? `${rect.top - 6 - h}px` : `${rect.bottom + 6}px`
   }
   return {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -198,10 +219,10 @@ function makeMentionPopup() {
       el = document.createElement('div')
       el.style.cssText = 'position:fixed;z-index:80;min-width:180px;max-height:240px;overflow:auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:4px'
       document.body.appendChild(el)
-      position(props.clientRect?.()); paint()
+      paint(); position(props.clientRect?.())
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onUpdate: (props: any) => { items = props.items; command = props.command; active = 0; position(props.clientRect?.()); paint() },
+    onUpdate: (props: any) => { items = props.items; command = props.command; active = 0; paint(); position(props.clientRect?.()) },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onKeyDown: (props: any) => {
       const k = props.event.key
