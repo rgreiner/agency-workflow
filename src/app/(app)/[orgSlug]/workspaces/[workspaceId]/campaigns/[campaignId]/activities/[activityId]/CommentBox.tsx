@@ -45,6 +45,10 @@ export function CommentBox({ activityId, members = [], assignedIds = [] }: Props
 
   const editor = useEditor({
     immediatelyRender: false,
+    // TipTap v3 NÃO re-renderiza mais o componente a cada transação por padrão —
+    // sem isto, o disabled do botão de enviar e os estados ativos da toolbar
+    // congelam no valor do mount (botão ficava "preso" até algo re-renderizar).
+    shouldRerenderOnTransaction: true,
     extensions: [
       StarterKit,
       Placeholder.configure({ placeholder: 'Adicione um comentário…  (@ menciona · checklist e imagens · ⌘/Ctrl+Enter envia)' }),
@@ -197,7 +201,20 @@ function makeMentionPopup() {
       b.type = 'button'
       b.textContent = it.id === '__all__' ? '@todos' : it.id === '__assigned__' ? '@atribuidos' : it.label
       b.style.cssText = `display:block;width:100%;text-align:left;padding:6px 10px;font-size:13px;border:0;background:${i === active ? '#fff7ed' : 'transparent'};color:${i === active ? '#9a3412' : '#374151'};cursor:pointer;border-radius:6px`
-      b.onmousedown = (e) => { e.preventDefault(); command(it) }
+      // Seleciona no POINTERDOWN (dispara antes do mousedown e sobrevive se outro
+      // handler da página cancelar os eventos de mouse), com mousedown/click como
+      // fallback. preventDefault mantém o foco no editor. Guarda de execução única
+      // por gesto; se o command lançar, loga e libera pra tentar de novo.
+      let done = false
+      const select = (e: Event) => {
+        if (done) return
+        done = true
+        e.preventDefault()
+        try { command(it) } catch (err) { console.error('[mention] falha ao inserir', err); done = false }
+      }
+      b.onpointerdown = select
+      b.onmousedown = select
+      b.onclick = select
       b.onmouseenter = () => { active = i; paint() }
       el!.appendChild(b)
     })
