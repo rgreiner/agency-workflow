@@ -1,12 +1,57 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export interface SelectOption {
   value: string
   label: string
+}
+
+/**
+ * Posiciona um painel flutuante (position:fixed) ancorado no gatilho, com flip
+ * vertical quando falta espaço embaixo. Usado pelo Select/MultiSelect p/ o menu
+ * escapar de containers com overflow (ex.: tabelas com overflow-x-auto, que
+ * cortavam o dropdown). Fecha no scroll/resize p/ não descolar do gatilho.
+ */
+function useAnchoredPanel(
+  open: boolean,
+  triggerRef: React.RefObject<HTMLElement | null>,
+  panelRef: React.RefObject<HTMLElement | null>,
+  align: 'left' | 'right',
+  onClose: () => void,
+) {
+  const [pos, setPos] = useState<{ top: number; left: number; minWidth: number } | null>(null)
+  // onClose é recriado a cada render; guardar em ref p/ não re-disparar o efeito
+  // de posição (senão setPos com objeto novo + dep instável = loop de render).
+  const closeRef = useRef(onClose)
+  useEffect(() => { closeRef.current = onClose })
+
+  useEffect(() => {
+    if (!open) return
+    const t = triggerRef.current, p = panelRef.current
+    if (t && p) {
+      const r = t.getBoundingClientRect()
+      const ph = p.offsetHeight, pw = p.offsetWidth, gap = 6
+      const openUp = r.bottom + gap + ph > window.innerHeight && r.top - gap - ph >= 0
+      let left = align === 'right' ? r.right - pw : r.left
+      left = Math.max(8, Math.min(left, window.innerWidth - pw - 8))
+      setPos({ top: openUp ? r.top - gap - ph : r.bottom + gap, left, minWidth: r.width })
+    }
+    const close = () => closeRef.current()
+    window.addEventListener('scroll', close, true)  // capture: pega scroll de qualquer container
+    window.addEventListener('resize', close)
+    return () => {
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+      setPos(null)  // limpa ao fechar (no cleanup, sem cascata de render)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, align])
+
+  return pos
 }
 
 interface Props {
@@ -30,15 +75,19 @@ export function Select({
   const [open, setOpen] = useState(false)
   const [activeIdx, setActiveIdx] = useState(0)
   const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
   const selected = options.find(o => o.value === value)
+  const pos = useAnchoredPanel(open, triggerRef, listRef, align, () => setOpen(false))
 
-  // Fecha ao clicar fora
+  // Fecha ao clicar fora (checa gatilho E painel — o painel vive num portal)
   useEffect(() => {
     if (!open) return
     function onOut(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (ref.current?.contains(t) || listRef.current?.contains(t)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', onOut)
     return () => document.removeEventListener('mousedown', onOut)
@@ -73,6 +122,7 @@ export function Select({
   return (
     <div className={cn('relative', className)} ref={ref}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen(o => !o)}
         onKeyDown={onKeyDown}
@@ -88,14 +138,12 @@ export function Select({
         <ChevronDown className={cn('w-4 h-4 text-gray-400 transition-transform duration-200 shrink-0', open && 'rotate-180')} />
       </button>
 
-      {open && (
+      {open && typeof document !== 'undefined' && createPortal(
         <div
           ref={listRef}
           role="listbox"
-          className={cn(
-            'pop-in absolute z-50 mt-1.5 min-w-full max-h-72 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-xl py-1.5',
-            align === 'right' ? 'right-0' : 'left-0'
-          )}
+          style={{ position: 'fixed', top: pos?.top ?? -9999, left: pos?.left ?? -9999, minWidth: pos?.minWidth, visibility: pos ? 'visible' : 'hidden' }}
+          className="pop-in z-[100] max-h-72 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-xl py-1.5"
         >
           {options.map((o, i) => {
             const isSel = o.value === value
@@ -119,7 +167,8 @@ export function Select({
               </button>
             )
           })}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
@@ -145,11 +194,16 @@ export function MultiSelect({
 }: MultiProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const pos = useAnchoredPanel(open, triggerRef, panelRef, align, () => setOpen(false))
 
   useEffect(() => {
     if (!open) return
     function onOut(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (ref.current?.contains(t) || panelRef.current?.contains(t)) return
+      setOpen(false)
     }
     function onEsc(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false) }
     document.addEventListener('mousedown', onOut)
@@ -169,6 +223,7 @@ export function MultiSelect({
   return (
     <div className={cn('relative', className)} ref={ref}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen(o => !o)}
         aria-haspopup="listbox"
@@ -184,13 +239,12 @@ export function MultiSelect({
         <ChevronDown className={cn('w-4 h-4 text-gray-400 transition-transform duration-200 shrink-0', open && 'rotate-180')} />
       </button>
 
-      {open && (
+      {open && typeof document !== 'undefined' && createPortal(
         <div
+          ref={panelRef}
           role="listbox"
-          className={cn(
-            'pop-in absolute z-50 mt-1.5 min-w-full max-h-72 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-xl py-1.5',
-            align === 'right' ? 'right-0' : 'left-0'
-          )}
+          style={{ position: 'fixed', top: pos?.top ?? -9999, left: pos?.left ?? -9999, minWidth: pos?.minWidth, visibility: pos ? 'visible' : 'hidden' }}
+          className="pop-in z-[100] max-h-72 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-xl py-1.5"
         >
           {values.length > 0 && (
             <button
@@ -222,7 +276,8 @@ export function MultiSelect({
               </button>
             )
           })}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
