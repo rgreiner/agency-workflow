@@ -228,6 +228,42 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
     try { const s = localStorage.getItem(SAVED_KEY); if (s) setSaved(JSON.parse(s)) } catch {}
   }, [SAVED_KEY])
 
+  // ── Último filtro usado: restaura ao montar e lembra a cada mudança ──
+  // Chave por org E por rota (Lista ≠ Trabalhar — contexto de cargo não mistura).
+  // Um ?ws= explícito na URL vence o filtro lembrado.
+  const LAST_FILTER_KEY = `lista-ultimo-filtro-v1:${orgSlug}:${routeBase}`
+  const lastFilterReady = useRef(false)
+  /* eslint-disable react-hooks/set-state-in-effect -- restaurar do localStorage
+     exige setState pós-mount (initializer daria mismatch de hidratação SSR);
+     mesmo padrão dos efeitos de colunas/presets acima. */
+  useEffect(() => {
+    try {
+      if (!initialWorkspace) {
+        const s = localStorage.getItem(LAST_FILTER_KEY)
+        if (s) {
+          const f = JSON.parse(s)
+          if (Array.isArray(f.workspaces)) setFilterWorkspaces(f.workspaces)
+          if (Array.isArray(f.persons))    setFilterPersons(f.persons)
+          if (Array.isArray(f.statuses))   setFilterStatuses(f.statuses)
+          if (typeof f.date === 'string')  setFilterDate(f.date)
+          if (typeof f.onlyMine === 'boolean') setOnlyMine(f.onlyMine)
+        }
+      }
+    } catch {}
+    lastFilterReady.current = true
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  /* eslint-enable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!lastFilterReady.current) return
+    try {
+      localStorage.setItem(LAST_FILTER_KEY, JSON.stringify({
+        workspaces: filterWorkspaces, persons: filterPersons, statuses: filterStatuses, date: filterDate, onlyMine,
+      }))
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterWorkspaces, filterPersons, filterStatuses, filterDate, onlyMine])
+
   useEffect(() => {
     if (!saveOpen) return
     function onOut(e: MouseEvent) { if (saveRef.current && !saveRef.current.contains(e.target as Node)) setSaveOpen(false) }
