@@ -59,6 +59,22 @@ export function scheduleReview(params: {
   const label = KIND_LABEL[kind]
 
   after(async () => {
+    // Gate desligado na config da org (Configurações → Revisão IA)? Sai em
+    // silêncio, sem tocar na tarefa. Qualquer falha na leitura (linha/coluna
+    // ausente) = revisão segue LIGADA (default-on).
+    try {
+      const { data: act } = await supabase
+        .from('activities').select('campaigns(workspaces(org_id))').eq('id', activityId).single()
+      const orgId = (act as unknown as { campaigns: { workspaces: { org_id: string } | null } | null } | null)
+        ?.campaigns?.workspaces?.org_id
+      if (orgId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: s } = await (supabase as any)
+          .from('org_settings').select('review_gates').eq('org_id', orgId).single()
+        if (s?.review_gates?.[kind] === false) return
+      }
+    } catch { /* default-on */ }
+
     const setReview = (status: string, errors: Json | null, target: string | null) =>
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (supabase as any).rpc('set_review', {

@@ -60,6 +60,7 @@ export default async function SettingsLayout({
           ...(isAdmin ? [
             { href: `/${orgSlug}/settings/cargos`,    label: 'Cargos',           badge: 0 },
             { href: `/${orgSlug}/settings/aparencia`, label: 'Aparência',        badge: 0 },
+            { href: `/${orgSlug}/settings/revisao`,   label: 'Revisão IA',       badge: 0 },
             { href: `/${orgSlug}/settings/saude`,     label: 'Verificações',     badge: verificacoesPendentes },
             { href: `/${orgSlug}/settings/erros`,     label: 'Erros do sistema', badge: errosPendentes },
           ] : []),
