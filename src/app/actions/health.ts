@@ -1,6 +1,9 @@
 'use server'
 
+import { createClient } from '@/lib/supabase/server'
+import { getUsuario } from '@/lib/auth/server'
 import { regenerarPastaDrive } from '@/app/actions/activity'
+import { relinkActivityDrive } from '@/lib/drive-provision'
 import type { HealthFix } from '@/lib/health/checks'
 
 /**
@@ -14,6 +17,20 @@ export async function applyHealthFix(orgSlug: string, fix: HealthFix): Promise<{
     case 'provision-drive': {
       const res = await regenerarPastaDrive(orgSlug, path, fix.activityId)
       if (res?.error) return { error: res.error }
+      return { ok: true }
+    }
+    case 'relink-drive': {
+      const supabase = await createClient()
+      const user = await getUsuario()
+      if (!user) return { error: 'Não autenticado' }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: act } = await (supabase as any)
+        .from('activities').select('campaign_id, drive_folder_id').eq('id', fix.activityId).single()
+      if (!act?.drive_folder_id) return { error: 'Tarefa sem pasta de Drive vinculada.' }
+      const res = await relinkActivityDrive(supabase, {
+        campaignId: act.campaign_id, userId: user.id, activityId: fix.activityId, folderId: act.drive_folder_id,
+      })
+      if (!res.ok) return { error: res.error }
       return { ok: true }
     }
     default:

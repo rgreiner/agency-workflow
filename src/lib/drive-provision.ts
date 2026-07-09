@@ -2,7 +2,7 @@ import 'server-only'
 import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
-import { createTaskFolders, moveTaskFolder, driveConfigured } from '@/lib/google-drive'
+import { createTaskFolders, moveTaskFolder, inspectTaskFolder, driveConfigured } from '@/lib/google-drive'
 import { logSystemError } from '@/lib/system-error'
 
 const DEFAULT_PREFIX = 'G:\\Drives compartilhados\\'
@@ -109,6 +109,37 @@ export async function regenerateActivityDrive(
     return { ok: true, url: r.taskFolderLink }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Falha ao criar a pasta no Drive' }
+  }
+}
+
+/**
+ * Relê a pasta EXISTENTE da tarefa no Drive e regrava os links das subpastas
+ * (Redação/Final/Preview) e o caminho — corrige tarefa com pasta vinculada mas
+ * campos sem link (provisão parcial). NÃO cria pasta nova (isso é o
+ * regenerateActivityDrive). Síncrono, pro botão de correção dar feedback.
+ */
+export async function relinkActivityDrive(
+  supabase: SupabaseClient<Database>,
+  params: { campaignId: string; userId: string; activityId: string; folderId: string },
+): Promise<{ ok: boolean; error?: string }> {
+  if (!driveConfigured()) return { ok: false, error: 'Integração com o Drive não está configurada.' }
+  const cfg = await resolve(supabase, params.campaignId)
+  const prefix = cfg?.prefix ?? DEFAULT_PREFIX
+  try {
+    const r = await inspectTaskFolder(params.folderId)
+    await supabase.rpc('set_activity_drive', {
+      p_user_id: params.userId,
+      p_activity_id: params.activityId,
+      p_drive_folder_id: r.taskFolderId,
+      p_drive_path: joinLocalPath(prefix, r.drivePath),
+      p_drive_folder_url: r.taskFolderLink,
+      p_redacao_url: r.sub['Redação']?.link ?? null,
+      p_finalizacao_url: r.sub['Final']?.link ?? null,
+      p_preview_url: r.sub['Preview']?.link ?? null,
+    })
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Falha ao reler a pasta no Drive' }
   }
 }
 
