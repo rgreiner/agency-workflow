@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Check, Loader2, Plus, Trash2, CircleCheck, Circle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
+import { Combobox } from '@/components/ui/Combobox'
 import { MIDIA_SITUACAO_OPTIONS, formatBRL, parseMoney } from '@/lib/midia'
 import { ItemImageField } from '@/components/ui/ItemImageField'
 import type { ClienteOpt, MemberOpt } from '../../midias/simplificada/MidiaForm'
@@ -14,7 +15,7 @@ export interface Opcao { fornecedor_id: string; n_orc: string; pgto: string; qua
 export interface ItemOrc { nome: string; descricao: string; job: string; opcoes: Opcao[]; imagem?: string }
 export interface OrcamentoValues {
   workspace_id: string; campaign_id: string; faturar: string; emissao: string; validade_dias: string; bv_pct: string
-  codigo_identificador: string; nota_fiscal: string; titulo: string; honorarios_pct: string
+  titulo: string; honorarios_pct: string
   contato: string; responsavel_id: string; situacao: string; observacao: string; texto_legal: string
   itens: ItemOrc[]
 }
@@ -32,7 +33,7 @@ const opcaoTotal = (o: Opcao) => (parseInt(o.quant || '1', 10) || 0) * parseMone
 function emptyValues(today: string, responsavelId: string): OrcamentoValues {
   return {
     workspace_id: '', campaign_id: '', faturar: 'contra_cliente', emissao: today, validade_dias: '', bv_pct: '15',
-    codigo_identificador: '', nota_fiscal: '', titulo: '', honorarios_pct: '0',
+    titulo: '', honorarios_pct: '0',
     contato: '', responsavel_id: responsavelId, situacao: 'em_aberto', observacao: '', texto_legal: '',
     itens: [newItem()],
   }
@@ -60,13 +61,15 @@ export function OrcamentoForm({
   const delItem = (i: number) => setForm(f => ({ ...f, itens: f.itens.filter((_, idx) => idx !== i) }))
   const setOpcao = (ii: number, oi: number, k: keyof Opcao, v: string | boolean) =>
     setForm(f => ({ ...f, itens: f.itens.map((it, idx) => idx !== ii ? it : { ...it, opcoes: it.opcoes.map((o, jdx) => jdx === oi ? { ...o, [k]: v } : o) }) }))
-  const selectOpcao = (ii: number, oi: number) =>
-    setForm(f => ({ ...f, itens: f.itens.map((it, idx) => idx !== ii ? it : { ...it, opcoes: it.opcoes.map((o, jdx) => ({ ...o, selecionado: jdx === oi })) }) }))
+  // Clicar alterna: escolhe a opção (e desmarca as outras) ou, se já era a escolhida, desmarca.
+  const toggleOpcao = (ii: number, oi: number) =>
+    setForm(f => ({ ...f, itens: f.itens.map((it, idx) => idx !== ii ? it : { ...it, opcoes: it.opcoes.map((o, jdx) => jdx === oi ? { ...o, selecionado: !o.selecionado } : { ...o, selecionado: false }) }) }))
   const addOpcao = (ii: number) => setForm(f => ({ ...f, itens: f.itens.map((it, idx) => idx === ii ? { ...it, opcoes: [...it.opcoes, newOpcao()] } : it) }))
   const delOpcao = (ii: number, oi: number) => setForm(f => ({ ...f, itens: f.itens.map((it, idx) => idx === ii ? { ...it, opcoes: it.opcoes.filter((_, jdx) => jdx !== oi) } : it) }))
 
+  // Total = soma só das opções ESCOLHIDAS. Item sem escolha soma zero.
   const valorFaturar = useMemo(() => form.itens.reduce((s, it) => {
-    const sel = it.opcoes.find(o => o.selecionado) ?? it.opcoes[0]
+    const sel = it.opcoes.find(o => o.selecionado)
     return s + (sel ? opcaoTotal(sel) : 0)
   }, 0), [form.itens])
   const honorarios = valorFaturar * (parseMoney(form.honorarios_pct) / 100)
@@ -84,7 +87,7 @@ export function OrcamentoForm({
     if (!form.titulo.trim()) { setError('Informe o título'); return }
 
     const fd = new FormData()
-    const scalars: (keyof OrcamentoValues)[] = ['workspace_id', 'campaign_id', 'faturar', 'emissao', 'validade_dias', 'codigo_identificador', 'nota_fiscal', 'titulo', 'contato', 'responsavel_id', 'situacao', 'observacao', 'texto_legal']
+    const scalars: (keyof OrcamentoValues)[] = ['workspace_id', 'campaign_id', 'faturar', 'emissao', 'validade_dias', 'titulo', 'contato', 'responsavel_id', 'situacao', 'observacao', 'texto_legal']
     scalars.forEach(k => fd.set(k, String(form[k] ?? '')))
     fd.set('tipo', 'orcamento')
     fd.set('bv_pct', String(parseMoney(form.bv_pct)))
@@ -123,9 +126,7 @@ export function OrcamentoForm({
             <div><label className={labelCls}>Faturar</label><Select value={form.faturar} onChange={v => set('faturar', v)} options={FATURAR} /></div>
             <div><label className={labelCls}>Emissão</label><input type="date" value={form.emissao} onChange={e => set('emissao', e.target.value)} className={inputCls} /></div>
             <div><label className={labelCls}>Validade (dias)</label><input value={form.validade_dias} onChange={e => set('validade_dias', e.target.value)} className={inputCls} /></div>
-            <div><label className={labelCls}>BV (%)</label><input inputMode="decimal" value={form.bv_pct} onChange={e => set('bv_pct', e.target.value)} className={inputCls} /></div>
-            <div><label className={labelCls}>Código Identificador</label><input value={form.codigo_identificador} onChange={e => set('codigo_identificador', e.target.value)} className={inputCls} /></div>
-            <div><label className={labelCls}>Nota Fiscal</label><input value={form.nota_fiscal} onChange={e => set('nota_fiscal', e.target.value)} className={inputCls} /></div>
+            <div><label className={labelCls}>Comissão (%)</label><input inputMode="decimal" value={form.bv_pct} onChange={e => set('bv_pct', e.target.value)} className={inputCls} /></div>
           </div>
           <div className="mt-4"><label className={labelCls}>Título <span className="text-red-500">*</span></label>
             <input value={form.titulo} onChange={e => set('titulo', e.target.value)} className={inputCls} required /></div>
@@ -147,7 +148,7 @@ export function OrcamentoForm({
                     {form.itens.length > 1 && <button aria-label="Remover" type="button" onClick={() => delItem(ii)} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>}
                   </div>
                   <label className={cn(labelCls, 'mt-2')}>Descrição</label>
-                  <textarea rows={2} value={it.descricao} onChange={e => patchItem(ii, { descricao: e.target.value })} className={cn(inputCls, 'resize-none')} />
+                  <textarea rows={2} value={it.descricao} onChange={e => patchItem(ii, { descricao: e.target.value })} className={cn(inputCls, 'resize-y min-h-[42px]')} />
                 </div>
               </div>
 
@@ -165,11 +166,11 @@ export function OrcamentoForm({
                     {it.opcoes.map((o, oi) => (
                       <tr key={oi} className={o.selecionado ? 'bg-emerald-50/50' : undefined}>
                         <td className="px-1 py-1 text-center">
-                          <button type="button" onClick={() => selectOpcao(ii, oi)} title="Escolher esta opção" className={o.selecionado ? 'text-emerald-600' : 'text-gray-300 hover:text-gray-500'}>
+                          <button type="button" onClick={() => toggleOpcao(ii, oi)} title={o.selecionado ? 'Clique para desmarcar' : 'Escolher esta opção'} className={o.selecionado ? 'text-emerald-600' : 'text-gray-300 hover:text-gray-500'}>
                             {o.selecionado ? <CircleCheck className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
                           </button>
                         </td>
-                        <td className="px-1 py-1"><Select size="sm" value={o.fornecedor_id} onChange={v => setOpcao(ii, oi, 'fornecedor_id', v)} options={fornecedorOptions} placeholder="Fornecedor" /></td>
+                        <td className="px-1 py-1"><Combobox size="sm" value={o.fornecedor_id} onChange={v => setOpcao(ii, oi, 'fornecedor_id', v)} options={fornecedorOptions} placeholder="Fornecedor" /></td>
                         <td className="px-1 py-1"><input value={o.n_orc} onChange={e => setOpcao(ii, oi, 'n_orc', e.target.value)} className={cellCls} /></td>
                         <td className="px-1 py-1"><input value={o.pgto} onChange={e => setOpcao(ii, oi, 'pgto', e.target.value)} className={cellCls} /></td>
                         <td className="px-1 py-1"><input value={o.quant} onChange={e => setOpcao(ii, oi, 'quant', e.target.value)} className={cn(cellCls, 'text-right')} /></td>
@@ -197,9 +198,9 @@ export function OrcamentoForm({
         {/* Textos + status */}
         <div className={cardCls}>
           <label className={labelCls}>Observação</label>
-          <textarea rows={3} value={form.observacao} onChange={e => set('observacao', e.target.value)} className={cn(inputCls, 'resize-none')} />
+          <textarea rows={3} value={form.observacao} onChange={e => set('observacao', e.target.value)} className={cn(inputCls, 'resize-y min-h-[64px]')} />
           <label className={cn(labelCls, 'mt-4')}>Texto Legal</label>
-          <textarea rows={2} value={form.texto_legal} onChange={e => set('texto_legal', e.target.value)} className={cn(inputCls, 'resize-none')} />
+          <textarea rows={2} value={form.texto_legal} onChange={e => set('texto_legal', e.target.value)} className={cn(inputCls, 'resize-y min-h-[42px]')} />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
             <div><label className={labelCls}>Contato</label><input value={form.contato} onChange={e => set('contato', e.target.value)} className={inputCls} /></div>
             <div><label className={labelCls}>Responsável</label><Select value={form.responsavel_id} onChange={v => set('responsavel_id', v)} options={memberOptions} placeholder="Selecionar" /></div>

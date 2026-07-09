@@ -27,7 +27,7 @@ export default async function EditarOrcamentoPage({
   const initial: OrcamentoValues = {
     workspace_id: s(p.workspace_id), campaign_id: s(p.campaign_id), faturar: s(p.faturar) || 'contra_cliente',
     emissao: s(p.emissao), validade_dias: s(p.validade_dias), bv_pct: num2br(p.bv_pct),
-    codigo_identificador: s(p.codigo_identificador), nota_fiscal: s(p.nota_fiscal), titulo: s(p.titulo),
+    titulo: s(p.titulo),
     honorarios_pct: num2br(p.honorarios_pct), contato: s(p.contato), responsavel_id: s(p.responsavel_id),
     situacao: s(p.situacao) || 'em_aberto', observacao: s(p.observacao), texto_legal: s(p.texto_legal),
     itens: Array.isArray(det.itens) ? det.itens : [],

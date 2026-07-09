@@ -16,7 +16,7 @@ export interface SelectOption {
  * escapar de containers com overflow (ex.: tabelas com overflow-x-auto, que
  * cortavam o dropdown). Fecha no scroll/resize p/ não descolar do gatilho.
  */
-function useAnchoredPanel(
+export function useAnchoredPanel(
   open: boolean,
   triggerRef: React.RefObject<HTMLElement | null>,
   panelRef: React.RefObject<HTMLElement | null>,
