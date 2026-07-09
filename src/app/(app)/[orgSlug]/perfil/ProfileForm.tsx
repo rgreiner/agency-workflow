@@ -58,13 +58,19 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  // Resultado do cropper (WebP 512px já comprimido) → upload.
+  // Resultado do cropper (WebP 512px já comprimido) → upload + SALVA na hora.
+  // (Antes só trocava o estado local e dependia do "Salvar alterações" — quem
+  // não clicava perdia a foto no reload e parecia que "não funcionou".)
   async function handleCropped(result: File) {
     setCropFile(null)
     setUploading(true)
     try {
       const url = await uploadFile('avatars', `${user.id}/avatar.webp`, result)
-      setAvatarUrl(`${url}?t=${Date.now()}`)
+      const newUrl = `${url}?t=${Date.now()}`
+      const nome = fullName.trim() || user.fullName || user.email
+      const r = await updateProfile(nome, newUrl, driveMacUser, driveGoogleEmail)
+      if (r?.error) { toast.error(r.error); return }
+      setAvatarUrl(newUrl)
       toast.success('Foto atualizada!')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Falha no upload')
@@ -132,7 +138,7 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
                   Restaurar foto do Google
                 </button>
               )}
-              <p className="text-[11px] text-gray-400">PNG, JPG ou WebP · máximo 1 MB</p>
+              <p className="text-[11px] text-gray-400">PNG, JPG ou WebP · máximo 2 MB</p>
             </div>
           </div>
         </div>

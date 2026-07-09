@@ -152,3 +152,22 @@ export async function deactivateInviteLink(
   revalidatePath(`/${orgSlug}/settings/membros`)
   return {}
 }
+
+/** Admin/owner troca o avatar de um membro da org (tela Membros). */
+export async function setMemberAvatar(orgSlug: string, orgId: string, targetUserId: string, avatarUrl: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('set_member_avatar', {
+    p_user_id:    user.id,
+    p_org_id:     orgId,
+    p_target:     targetUserId,
+    p_avatar_url: avatarUrl,
+  })
+
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/settings/membros`)
+  return {}
+}

@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
-import { updateMember, removeMember } from '@/app/actions/settings'
+import { AvatarCropper } from '@/components/ui/AvatarCropper'
+import { uploadFile } from '@/lib/storage/upload-client'
+import { updateMember, removeMember, setMemberAvatar } from '@/app/actions/settings'
 import { ResetPasswordButton } from './ResetPasswordButton'
-import { Trash2, Check, Loader2, AlertTriangle } from 'lucide-react'
+import { Trash2, Check, Loader2, AlertTriangle, Camera } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -37,6 +39,27 @@ export function MemberRow({
   const [isDirty, setIsDirty] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [confirmRemove, setConfirmRemove] = useState(false)
+
+  // Troca de avatar pelo admin (upload + cropper, mesmo fluxo do Meu Perfil).
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+  const [avatarCropFile, setAvatarCropFile] = useState<File | null>(null)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+
+  async function handleAvatarCropped(result: File) {
+    if (!profile) return
+    setAvatarCropFile(null)
+    setAvatarUploading(true)
+    try {
+      const url = await uploadFile('avatars', `${profile.id}/avatar.webp`, result)
+      const r = await setMemberAvatar(orgSlug, orgId, profile.id, `${url}?t=${Date.now()}`)
+      if (r?.error) toast.error(r.error)
+      else toast.success('Avatar atualizado!')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha no upload')
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
 
   function recomputeDirty(pos: string, r: string, fin: boolean, ven: boolean) {
     setIsDirty(pos !== (position?.id ?? '') || r !== role || fin !== canFinance || ven !== canVendas)
@@ -95,7 +118,40 @@ export function MemberRow({
       {/* Pessoa */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
-          <Avatar name={profile?.full_name ?? profile?.email ?? '?'} avatarUrl={profile?.avatar_url} size="md" />
+          {isAdmin && profile ? (
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={avatarUploading}
+              title={`Trocar a foto de ${profile.full_name ?? profile.email}`}
+              className="relative group rounded-full shrink-0 disabled:opacity-60"
+            >
+              <Avatar name={profile.full_name ?? profile.email} avatarUrl={profile.avatar_url} size="md" />
+              <span className="absolute inset-0 rounded-full bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                {avatarUploading
+                  ? <Loader2 className="w-3.5 h-3.5 text-[#fff] animate-spin" />
+                  : <Camera className="w-3.5 h-3.5 text-[#fff]" />}
+              </span>
+            </button>
+          ) : (
+            <Avatar name={profile?.full_name ?? profile?.email ?? '?'} avatarUrl={profile?.avatar_url} size="md" />
+          )}
+          {isAdmin && profile && (
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) setAvatarCropFile(f); e.target.value = '' }}
+            />
+          )}
+          {avatarCropFile && (
+            <AvatarCropper
+              file={avatarCropFile}
+              onCancel={() => setAvatarCropFile(null)}
+              onConfirm={handleAvatarCropped}
+            />
+          )}
           <div>
             <p className="text-sm font-medium text-gray-900">
               {profile?.full_name ?? '—'}
