@@ -37,6 +37,17 @@ export function NotificationsBell({ orgSlug }: { orgSlug: string }) {
     return () => clearInterval(t)
   }, [load])
 
+  // A página /inbox avisa na hora ao marcar lidas — o contador cai sem esperar
+  // o poll; a lista de itens sincroniza no próximo ciclo.
+  useEffect(() => {
+    function onSet(e: Event) {
+      const n = (e as CustomEvent).detail
+      if (typeof n === 'number') setUnread(n)
+    }
+    window.addEventListener('flow:inbox-unread-set', onSet)
+    return () => window.removeEventListener('flow:inbox-unread-set', onSet)
+  }, [])
+
   // Fecha ao clicar fora
   useEffect(() => {
     if (!open) return

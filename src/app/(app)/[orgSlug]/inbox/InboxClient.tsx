@@ -94,6 +94,13 @@ export function InboxClient({ orgSlug, initial }: { orgSlug: string; initial: No
   }
 
   const unread = items.filter(n => !n.readAt).length
+
+  // Espelha a contagem local pro badge da sidebar/sino NA HORA — sem isto o
+  // badge só caía no próximo poll de 30s e parecia exigir F5. Cobre marcar
+  // lida, abrir, marcar todas e excluir (tudo passa pelo derivado `unread`).
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('flow:inbox-unread-set', { detail: unread }))
+  }, [unread])
   const shown = filter === 'nao_lidas' ? items.filter(n => !n.readAt) : items
   const groups = groupByDay(shown)
   const selCount = selected.size

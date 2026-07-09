@@ -35,6 +35,22 @@ export function InboxNavItem({ orgSlug }: { orgSlug: string }) {
   }, [load])
   useEffect(() => { load() }, [pathname, load])
 
+  // A página /inbox avisa na hora ao marcar lidas (senão o badge só caía no
+  // próximo poll de 30s — parecia que precisava de F5). Mesmo padrão do chat.
+  useEffect(() => {
+    function onSet(e: Event) {
+      const n = (e as CustomEvent).detail
+      if (typeof n === 'number') {
+        prevUnread.current = n
+        setUnread(n)
+        // repassa pro título da aba (TabUnreadBadge soma inbox + chat)
+        window.dispatchEvent(new CustomEvent('flow:inbox-unread', { detail: n }))
+      }
+    }
+    window.addEventListener('flow:inbox-unread-set', onSet)
+    return () => window.removeEventListener('flow:inbox-unread-set', onSet)
+  }, [])
+
   return (
     <Link
       href={`${base}/inbox`}
