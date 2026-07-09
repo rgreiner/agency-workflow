@@ -107,8 +107,11 @@ export function configuredProvider(): ReviewProvider | null {
   const forced = (process.env.REVIEW_PROVIDER || process.env.REDACAO_REVIEW_PROVIDER || 'auto').toLowerCase()
   if (forced === 'gemini') return geminiConfigured() ? 'gemini' : null
   if (forced === 'claude') return claudeConfigured() ? 'claude' : null
-  if (geminiConfigured()) return 'gemini'
+  // Auto: Claude primeiro — o free tier do gemini-2.5-pro foi zerado (429) e o
+  // serviço vem dando 503; a chave da Anthropic já roda em produção (briefing).
+  // Pra forçar Gemini de volta: REVIEW_PROVIDER=gemini no ambiente.
   if (claudeConfigured()) return 'claude'
+  if (geminiConfigured()) return 'gemini'
   return null
 }
 

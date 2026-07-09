@@ -72,8 +72,10 @@ export function RevisaoClient({ orgSlug, orgId, initial }: { orgSlug: string; or
               aria-label={`Revisão de ${label}`}
               onClick={() => toggle(key)}
               className={cn(
-                'relative shrink-0 w-10 h-6 rounded-full transition-colors active:scale-[0.97]',
-                gates[key] ? 'bg-orange-600' : 'bg-gray-200',
+                // Track desligado: gray-300 + ring — gray-200 no dark é a cor do
+                // card e o seletor "some" (fica só a bolinha branca solta).
+                'relative shrink-0 w-10 h-6 rounded-full transition-colors active:scale-[0.97] ring-1 ring-inset',
+                gates[key] ? 'bg-orange-600 ring-transparent' : 'bg-gray-300 ring-gray-400/30',
               )}
             >
               <span className={cn(
