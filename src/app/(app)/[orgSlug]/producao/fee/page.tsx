@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { ProducaoClient, type ProducaoRow } from '../ProducaoClient'
+import { FEE_SITUACAO_OPTIONS } from '@/lib/midia'
 
 export default async function FeePage({
   params,
@@ -34,6 +35,7 @@ export default async function FeePage({
       orgSlug={orgSlug} items={items} archivedView={archivedView}
       basePath="producao/fee" title="Liberação de Produção — FEE"
       subtitle="Contratos recorrentes (fee mensal)" addLabel="Adicionar Fee"
+      situacaoOptions={FEE_SITUACAO_OPTIONS}
     />
   )
 }

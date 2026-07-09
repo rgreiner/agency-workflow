@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Check, Loader2, Plus, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
-import { MIDIA_SITUACAO_OPTIONS, formatBRL, parseMoney } from '@/lib/midia'
+import { formatBRL, parseMoney } from '@/lib/midia'
 import type { ClienteOpt, MemberOpt } from '../../midias/simplificada/MidiaForm'
 
 export interface ParcelaFee { vencimento: string; valor: string; tipo: string }
@@ -45,6 +45,7 @@ export function FeeForm({
   const [form, setForm] = useState<FeeValues>({ ...emptyValues(today, defaultResponsavelId), ...initial, parcelas: initial?.parcelas ?? [] })
   const [primeira, setPrimeira] = useState(initial?.parcelas?.[0]?.vencimento || today)
   const [isPending, startTransition] = useTransition()
+  const [running, setRunning] = useState<'save' | 'approve' | null>(null)
   const [error, setError] = useState('')
 
   function set<K extends keyof FeeValues>(k: K, v: FeeValues[K]) { setForm(f => ({ ...f, [k]: v })) }
@@ -63,18 +64,23 @@ export function FeeForm({
   const cliNome = clientes.find(c => c.id === form.workspace_id)?.name
   const PARCELA_TIPOS = [{ value: 'receber_cliente', label: `Receber do Cliente${cliNome ? ` (${cliNome})` : ''}` }]
 
-  function handleSubmit(e: React.FormEvent) {
+  // situacaoAlvo: 'em_aberto' salva rascunho; 'aprovado' aprova e já fatura
+  // (a RPC gera os lançamentos das parcelas). Em edição, undefined mantém a atual.
+  function handleSubmit(e: React.FormEvent, situacaoAlvo?: string) {
     e.preventDefault()
     setError('')
     if (!form.workspace_id) { setError('Selecione o cliente'); return }
     if (!form.titulo.trim()) { setError('Informe o título'); return }
+    if (situacaoAlvo === 'aprovado' && form.parcelas.length === 0) {
+      setError('Gere as parcelas antes de aprovar (é o que vira o faturamento).'); return
+    }
 
     const fd = new FormData()
     fd.set('tipo', 'fee')
     fd.set('workspace_id', form.workspace_id)
     fd.set('titulo', form.titulo)
     fd.set('emissao', form.de || today)
-    fd.set('situacao', form.situacao)
+    fd.set('situacao', situacaoAlvo ?? form.situacao)
     fd.set('observacao', form.observacao)
     fd.set('texto_legal', form.texto_legal)
     fd.set('contato', form.contato)
@@ -84,9 +90,10 @@ export function FeeForm({
     const parcelas = form.parcelas.map(p => ({ vencimento: p.vencimento, valor: String(parseMoney(p.valor)), tipo: 'receber_cliente' }))
     fd.set('detalhe', JSON.stringify({ de: form.de, ate: form.ate, num_parcelas: form.num_parcelas, valor_mensal: form.valor_mensal, parcelas }))
 
+    setRunning(situacaoAlvo === 'aprovado' ? 'approve' : 'save')
     startTransition(async () => {
       const res = await onSubmit(fd)
-      if (res?.error) { setError(res.error); return }
+      if (res?.error) { setError(res.error); setRunning(null); return }
     })
   }
 
@@ -100,7 +107,7 @@ export function FeeForm({
       </button>
       <h1 className="text-xl font-semibold text-gray-900 mb-5">{submitLabel === 'Gravar' ? 'Adicionar' : 'Editar'} Fee</h1>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={e => handleSubmit(e)} className="space-y-5">
         {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
 
         <div className={cardCls}>
@@ -153,17 +160,22 @@ export function FeeForm({
           <textarea rows={3} value={form.observacao} onChange={e => set('observacao', e.target.value)} className={cn(inputCls, 'resize-none')} />
           <label className={cn(labelCls, 'mt-4')}>Texto Legal</label>
           <textarea rows={2} value={form.texto_legal} onChange={e => set('texto_legal', e.target.value)} className={cn(inputCls, 'resize-none')} />
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
             <div><label className={labelCls}>Contato</label><input value={form.contato} onChange={e => set('contato', e.target.value)} className={inputCls} /></div>
             <div><label className={labelCls}>Responsável</label><Select value={form.responsavel_id} onChange={v => set('responsavel_id', v)} options={memberOptions} placeholder="Selecionar" /></div>
-            <div><label className={labelCls}>Situação</label><Select value={form.situacao} onChange={v => set('situacao', v)} options={MIDIA_SITUACAO_OPTIONS} /></div>
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pb-10">
-          <button type="button" onClick={() => router.back()} className="px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
-          <button aria-label="Salvar" type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-5 py-2.5 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
-            {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{submitLabel}
+        <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pb-10">
+          <button type="button" onClick={() => router.back()} className="px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 transition order-last sm:order-first">Cancelar</button>
+          {/* Gravar = rascunho (Em Aberto). Aprovar e faturar = gera as parcelas em Lançamentos. */}
+          <button aria-label="Gravar rascunho" type="submit" disabled={isPending}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 disabled:opacity-50 transition">
+            {isPending && running === 'save' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}Gravar
+          </button>
+          <button aria-label="Aprovar e faturar" type="button" onClick={e => handleSubmit(e, 'aprovado')} disabled={isPending}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
+            {isPending && running === 'approve' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}Aprovar e faturar
           </button>
         </div>
       </form>

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, Archive, ArchiveRestore, Pencil, ClipboardList, Printer, Factory, Files } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Select } from '@/components/ui/Select'
+import { Select, type SelectOption } from '@/components/ui/Select'
 import { setProducaoSituacao, setProducaoArchived, gerarPedidosDoOrcamento, gerarDocsDaProposta } from '@/app/actions/producao'
 import { MIDIA_SITUACAO_OPTIONS, MIDIA_SITUACAO_COLORS, labelOf, formatBRL } from '@/lib/midia'
 
@@ -16,6 +16,7 @@ export interface ProducaoRow {
 
 export function ProducaoClient({
   orgSlug, items, archivedView, basePath, title, subtitle, addLabel, gerarPedidos = false, gerarDocs = false, showPrint = true,
+  situacaoOptions = MIDIA_SITUACAO_OPTIONS,
 }: {
   orgSlug: string; items: ProducaoRow[]; archivedView: boolean
   basePath: string; title: string; subtitle: string; addLabel: string
@@ -25,6 +26,8 @@ export function ProducaoClient({
   gerarDocs?: boolean
   /** Mostra o botão de imprimir/PDF (false enquanto o tipo não tiver impressão). */
   showPrint?: boolean
+  /** Estados disponíveis no seletor de situação (fee usa um conjunto reduzido). */
+  situacaoOptions?: SelectOption[]
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -86,7 +89,7 @@ export function ProducaoClient({
                       {archivedView ? (
                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: cor?.bg, color: cor?.text }}>{labelOf(MIDIA_SITUACAO_OPTIONS, r.situacao)}</span>
                       ) : (
-                        <Select size="sm" value={r.situacao} onChange={v => changeSituacao(r.id, v)} options={MIDIA_SITUACAO_OPTIONS} />
+                        <Select size="sm" value={r.situacao} onChange={v => changeSituacao(r.id, v)} options={situacaoOptions} />
                       )}
                     </td>
                     <td className="px-3 py-3">

@@ -57,6 +57,13 @@ export const MIDIA_SITUACAO_OPTIONS = [
   { value: 'faturado', label: 'Faturado' },
 ]
 
+// Fee: aprovar já fatura, então os estados intermediários não fazem sentido.
+export const FEE_SITUACAO_OPTIONS = [
+  { value: 'em_aberto', label: 'Em Aberto' },
+  { value: 'aprovado', label: 'Aprovado' },
+  { value: 'cancelado', label: 'Cancelado' },
+]
+
 // Cores das pílulas de situação (hex inline — segue o padrão do app).
 export const MIDIA_SITUACAO_COLORS: Record<string, { bg: string; text: string }> = {
   em_aberto: { bg: '#fef9c3', text: '#854d0e' },
