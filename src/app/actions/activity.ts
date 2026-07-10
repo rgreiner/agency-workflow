@@ -259,8 +259,8 @@ export async function updateActivityDates(
 }
 
 /**
- * Define a recorrência do prazo. `recurrence` = frequência ('weekly'|'monthly'|
- * 'bimonthly'|'quarterly'|'semiannual'|'annual') ou null p/ desligar; `remaining`
+ * Define a recorrência do prazo. `recurrence` = frequência ('weekly'|'biweekly'|
+ * 'monthly'|'bimonthly'|'quarterly'|'semiannual'|'annual') ou null p/ desligar; `remaining`
  * = quantas vezes ainda repete (null = sem limite); `resetStatus` = status p/ onde
  * a tarefa volta ao recorrer (null = padrão 'briefing').
  */

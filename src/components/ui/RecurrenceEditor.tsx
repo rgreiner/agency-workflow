@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 // Frequências disponíveis (value casa com a RPC recurrence_interval no banco).
 const FREQ_OPTIONS = [
   { value: 'weekly',     label: 'Semanal'   },
+  { value: 'biweekly',   label: 'Quinzenal' },
   { value: 'monthly',    label: 'Mensal'    },
   { value: 'bimonthly',  label: 'Bimestral' },
   { value: 'quarterly',  label: 'Trimestral'},
