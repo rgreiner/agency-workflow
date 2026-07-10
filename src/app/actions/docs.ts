@@ -145,6 +145,39 @@ export async function setDocumentWorkspace(docId: string, orgSlug: string, works
   return {}
 }
 
+/** Arquiva/reativa um documento ou pasta (pasta leva o conteúdo junto). */
+export async function setDocumentArchived(docId: string, orgSlug: string, archived: boolean) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('set_document_archived', {
+    p_user_id: user.id, p_doc_id: docId, p_archived: archived,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/docs`)
+  return {}
+}
+
+/** Marca/desmarca o doc como briefing de um cliente ou campanha (único; aberto a todos). */
+export async function setDocumentBriefing(
+  docId: string, orgSlug: string, kind: 'workspace' | 'campaign' | 'none', targetId: string | null,
+) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('set_document_briefing', {
+    p_user_id: user.id, p_doc_id: docId, p_kind: kind, p_target_id: targetId,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/docs/${docId}`)
+  revalidatePath(`/${orgSlug}/docs`)
+  return {}
+}
+
 export async function deleteDocument(docId: string, orgSlug: string) {
   const supabase = await createClient()
   const user = await getUsuario()

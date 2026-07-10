@@ -24,7 +24,7 @@ export default async function DocPage({
 
   const { data: doc } = await supabase
     .from('documents')
-    .select('id, title, content, visibility, created_by, workspace_id, parent_id, workspaces(name)')
+    .select('id, title, content, visibility, created_by, workspace_id, parent_id, briefing_workspace_id, briefing_campaign_id, workspaces(name)')
     .eq('id', docId)
     .single()
   if (!doc) notFound()
@@ -60,14 +60,26 @@ export default async function DocPage({
   // Documentos + pastas para a sidebar (navegar/organizar sem voltar à listagem)
   const { data: allDocs } = await supabase
     .from('documents')
-    .select('id, title, visibility, workspace_id, parent_id, is_folder, workspaces(name)')
+    .select('id, title, visibility, workspace_id, parent_id, is_folder, archived, briefing_workspace_id, briefing_campaign_id, workspaces(name)')
     .eq('org_id', org.id)
     .order('is_folder', { ascending: false })
     .order('title', { ascending: true })
 
-  // Clientes para associar o documento
+  // Clientes (+ campanhas) para associar o documento e para o seletor de briefing
   const { data: workspaces } = await supabase
-    .from('workspaces').select('id, name').eq('org_id', org.id).neq('archived', true).order('name')
+    .from('workspaces').select('id, name, campaigns(id, name)')
+    .eq('org_id', org.id).eq('archived', false).eq('campaigns.archived', false).order('name')
+
+  // Opções combinadas cliente+campanha p/ o seletor de briefing (com busca).
+  type WsRow = { id: string; name: string; campaigns?: { id: string; name: string }[] }
+  const wsRows = (workspaces ?? []) as WsRow[]
+  const briefingOptions = [
+    ...wsRows.map(w => ({ value: `ws:${w.id}`, label: `Cliente · ${w.name}` })),
+    ...wsRows.flatMap(w => (w.campaigns ?? []).map(c => ({ value: `camp:${c.id}`, label: `Campanha · ${c.name} — ${w.name}` }))),
+  ]
+  const d = doc as { briefing_workspace_id: string | null; briefing_campaign_id: string | null }
+  const initialBriefingValue = d.briefing_workspace_id ? `ws:${d.briefing_workspace_id}`
+    : d.briefing_campaign_id ? `camp:${d.briefing_campaign_id}` : ''
 
   // Se o doc está dentro de uma pasta, o acesso herda da pasta-RAIZ (mostra o nome).
   const docParentId = (doc as { parent_id: string | null }).parent_id
@@ -101,9 +113,11 @@ export default async function DocPage({
           initialMemberIds={(sharedMembers ?? []).map(m => m.user_id)}
           members={members}
           workspaceName={workspaceName}
-          workspaces={workspaces ?? []}
+          workspaces={(workspaces ?? []).map(w => ({ id: w.id, name: w.name }))}
           initialWorkspaceId={doc.workspace_id ?? null}
           parentFolderName={parentFolderName}
+          briefingOptions={briefingOptions}
+          initialBriefingValue={initialBriefingValue}
         />
       </div>
     </div>

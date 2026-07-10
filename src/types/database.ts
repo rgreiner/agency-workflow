@@ -643,6 +643,9 @@ export type Database = {
           visibility: string
           created_by: string
           is_folder: boolean
+          archived: boolean
+          briefing_workspace_id: string | null
+          briefing_campaign_id: string | null
           created_at: string
           updated_at: string
         }
@@ -656,6 +659,9 @@ export type Database = {
           visibility?: string
           created_by: string
           is_folder?: boolean
+          archived?: boolean
+          briefing_workspace_id?: string | null
+          briefing_campaign_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -669,6 +675,9 @@ export type Database = {
           visibility?: string
           created_by?: string
           is_folder?: boolean
+          archived?: boolean
+          briefing_workspace_id?: string | null
+          briefing_campaign_id?: string | null
           created_at?: string
           updated_at?: string
         }

@@ -13,13 +13,14 @@ import { TableCell } from '@tiptap/extension-table-cell'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { ShareModal } from './ShareModal'
-import { Select } from '@/components/ui/Select'
-import { updateDocumentVisibility, deleteDocument, setDocumentWorkspace } from '@/app/actions/docs'
+import { Select, type SelectOption } from '@/components/ui/Select'
+import { Combobox } from '@/components/ui/Combobox'
+import { updateDocumentVisibility, deleteDocument, setDocumentWorkspace, setDocumentBriefing } from '@/app/actions/docs'
 import {
   Bold, Italic, Strikethrough, Heading1, Heading2, Heading3,
   List, ListOrdered, CheckSquare, Code, Quote, Minus,
   ArrowLeft, Check, Loader2, Trash2, Globe, Lock, AlertTriangle, X,
-  Table as TableIcon,
+  Table as TableIcon, Target,
 } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
@@ -49,6 +50,10 @@ interface Props {
   initialWorkspaceId: string | null
   /** Se o doc está dentro de uma pasta, o acesso herda dela (nome aqui). */
   parentFolderName?: string | null
+  /** Opções cliente+campanha (value 'ws:<id>' | 'camp:<id>') p/ o seletor de briefing. */
+  briefingOptions: SelectOption[]
+  /** Briefing atual: 'ws:<id>' | 'camp:<id>' | ''. */
+  initialBriefingValue: string
 }
 
 export function DocumentEditor({
@@ -56,6 +61,7 @@ export function DocumentEditor({
   initialTitle, initialContent,
   initialVisibility, initialMemberIds, members,
   workspaceName, workspaces, initialWorkspaceId, parentFolderName,
+  briefingOptions, initialBriefingValue,
 }: Props) {
   const router = useRouter()
   const [title, setTitle] = useState(initialTitle)
@@ -66,6 +72,8 @@ export function DocumentEditor({
   const [visibility, setVisibility] = useState<'org' | 'custom'>(initialVisibility)
   const [sharedMemberIds, setSharedMemberIds] = useState<string[]>(initialMemberIds)
   const [workspaceId, setWorkspaceId] = useState<string>(initialWorkspaceId ?? '')
+  const [briefingOn, setBriefingOn] = useState(!!initialBriefingValue)
+  const [briefingValue, setBriefingValue] = useState(initialBriefingValue)
   const supabase = createClient()
 
   async function handleWorkspaceChange(value: string) {
@@ -74,6 +82,31 @@ export function DocumentEditor({
     const r = await setDocumentWorkspace(docId, orgSlug, value || null)
     if (r?.error) { setWorkspaceId(prev); toast.error(r.error) }
     else { toast.success('Cliente atualizado.'); router.refresh() }
+  }
+
+  // Aplica o alvo do briefing ('ws:<id>' | 'camp:<id>'). Trata o conflito de
+  // unicidade (cliente/campanha já têm briefing) devolvido pela RPC.
+  async function applyBriefing(value: string) {
+    const prev = briefingValue
+    setBriefingValue(value)
+    const [pfx, id] = value.split(':')
+    const kind = pfx === 'ws' ? 'workspace' : pfx === 'camp' ? 'campaign' : 'none'
+    const r = await setDocumentBriefing(docId, orgSlug, kind as 'workspace' | 'campaign', id ?? null)
+    if (r?.error) { setBriefingValue(prev); toast.error(r.error) }
+    else { toast.success('Briefing vinculado — visível a todo o time.'); router.refresh() }
+  }
+  async function toggleBriefing() {
+    if (briefingOn) {
+      // desligar limpa o vínculo
+      setBriefingOn(false)
+      const keep = briefingValue
+      setBriefingValue('')
+      const r = await setDocumentBriefing(docId, orgSlug, 'none', null)
+      if (r?.error) { setBriefingOn(true); setBriefingValue(keep); toast.error(r.error) }
+      else router.refresh()
+    } else {
+      setBriefingOn(true)  // abre o seletor; só persiste quando escolher o alvo
+    }
   }
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -179,6 +212,28 @@ export function DocumentEditor({
           )}
 
           {canManage && (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button" role="switch" aria-checked={briefingOn} onClick={toggleBriefing}
+                title="Marcar como briefing de um cliente ou campanha (único, visível a todo o time)"
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors',
+                  briefingOn ? 'border-orange-200 bg-orange-50 text-orange-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50',
+                )}
+              >
+                <Target className="w-3.5 h-3.5" /> Briefing
+              </button>
+              {briefingOn && (
+                <Combobox
+                  size="sm" className="w-52" minChars={1}
+                  value={briefingValue} onChange={applyBriefing}
+                  options={briefingOptions} placeholder="Cliente ou campanha"
+                />
+              )}
+            </div>
+          )}
+
+          {canManage && !briefingOn && (
             <Select
               value={workspaceId}
               onChange={handleWorkspaceChange}
