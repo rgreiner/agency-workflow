@@ -266,8 +266,10 @@ function DocRow({ doc, orgSlug, active, depth, menuOpen, onMenu, folders, onMove
   onMove: (doc: Doc, folder: Doc | null) => void
 }) {
   const inFolder = !!doc.parent_id
+  // +22 = largura do chevron (18) + gap (4) da pasta → alinha o ícone do doc sob o
+  // ícone da pasta do mesmo nível (itens dentro da pasta ficam visivelmente aninhados).
   return (
-    <div className={cn('group/d flex items-center gap-1 mx-1 rounded-lg', active ? 'bg-orange-100' : 'hover:bg-gray-100')} style={{ paddingLeft: depth * 14 }}>
+    <div className={cn('group/d flex items-center gap-1 mx-1 rounded-lg', active ? 'bg-orange-100' : 'hover:bg-gray-100')} style={{ paddingLeft: 22 + depth * 14 }}>
       <Link href={`/${orgSlug}/docs/${doc.id}`}
         className={cn('flex items-center gap-2 flex-1 min-w-0 px-2 py-1.5 text-sm', active ? 'text-orange-800 font-medium' : 'text-gray-600')}>
         <FileText className={cn('w-3.5 h-3.5 shrink-0', active ? 'text-orange-500' : 'text-gray-400')} />
