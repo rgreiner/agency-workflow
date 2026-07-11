@@ -2,7 +2,8 @@
 
 > Documento vivo. Gerado em 05/07/2026 a partir de uma varredura completa do código
 > (rotas, tabelas, actions, RPCs). Atualizar conforme as ondas forem sendo entregues.
-> Números de migration são ilustrativos — usar sempre o próximo livre (hoje: 081).
+> Números de migration são ilustrativos — usar sempre o próximo livre (hoje: **091**).
+> Última atualização: **11/07/2026** (livro-caixa unificado — ver 4.0).
 
 ## 0. A fotografia atual (o que JÁ existe — não reconstruir)
 
@@ -16,6 +17,9 @@
 - **Comercial/Financeiro**: mídias (5 tipos, com faturamento → lançamento de comissão),
   produção (orçamento/pedido/proposta/fee), lançamentos, contas, categorias, fluxo de caixa,
   import de extrato Conta Azul, cadastros de veículos/fornecedores, permissão `can_finance`.
+  **Lançamentos = livro-caixa unificado** (jul/2026): tabela única por data estilo extrato
+  (Situação + saldo corrido projetado, cards clicáveis), import "substitui tudo" (não duplica)
+  e unificação Flow + extrato importado com **promover ao editar** (ver 4.0).
 - **Admin**: membros/papéis/cargos (status permitidos por cargo), aparência (logo, accent,
   cores de status), **Erros do sistema** (log de falhas de 2º plano) e **Verificações**
   (checks de consistência com correção in-loco).
@@ -214,6 +218,41 @@ Rota `/views/gestao` (owner/admin/manager). Tudo com dados que já existem.
 
 ## ONDA 4 — Tempo e dinheiro (rentabilidade)
 
+### 4.0 Lançamentos = livro-caixa unificado (fluxo de caixa oficial) — EM ANDAMENTO
+
+**Visão (Rafael):** a tela `/financeiro/lancamentos` é O fluxo de caixa. **A pagar** vem do
+cadastro manual de custos; **a receber** vem do faturamento (Fee/Pedido/Mídia). O
+`extrato_importado` (import Conta Azul) é **histórico transitório** — hoje ele importa o que
+ainda não foi migrado pra não perder histórico. Quando a tela estiver 100% + acesso do
+contador, ele **desliga o Conta Azul** e tudo passa a ser gerado no Flow.
+
+**Feito (jul/2026):**
+- **Redesenho estilo extrato**: tabela única por data com **Situação** (badge) e **Saldo
+  corrido projetado** (substituiu os 3 grupos por status). **Cards de resumo clicáveis** viram
+  filtro (Receitas/Despesas × aberto/realizado; "Resultado" = tudo).
+- **Import "substitui tudo"** (snapshot): cada import apaga e recarrega o extrato completo →
+  não duplica mesmo quando situação/saldo mudam entre exports; reflete baixas e exclusões.
+  `import_ref` = chave **estável** (campos imutáveis + contador de ocorrência), pré-requisito
+  da promoção. Sem migration (reusa `clear_extrato`).
+- **Unificação + promover ao editar** (migration 090): a tela mostra Flow + extrato importado
+  (selo "Conta Azul", em leitura). Ao **editar** uma linha importada ela vira lançamento do
+  Flow (`origem_tipo='conta_azul'`, `origem_ref=import_ref`) e **some do espelho** — não volta
+  ao reimportar. RPC `promover_extrato` + coluna `lancamentos.origem_ref`.
+- **Fee**: propõe data final (+1 ano) ao escolher o início; Observação pré-carrega o texto
+  padrão de Config→Documentos (editável). **Select/MultiSelect**: busca por digitação em
+  listas grandes; scroll no dropdown não fecha mais o campo.
+
+**Falta (pra desligar o Conta Azul):**
+- **Acesso do contador**: papel/permissão **read-only** no financeiro + **export** (CSV/planilha).
+- **Migração final com data de corte**: trazer o histórico do `extrato_importado` pra
+  `lancamentos` de uma vez (ou seguir promovendo incremental) e **parar de depender do import**.
+  Resolve a limitação da chave estável (2 transações idênticas em
+  venc_orig+valor_orig+competência+contato+descrição colidem — raro; o corte elimina).
+- **Saldo inicial do mês** (hoje o saldo corrido começa em 0 dentro do mês) e **ordenação por
+  coluna** — melhorias de UX pendentes.
+- Encaixa direto com **4.2** (contratos/fee recorrente), **4.4** (DRE previsto×realizado) e
+  **5.1** (conciliação BTG — mesma tabela `extrato_importado`).
+
 ### 4.1 Apontamento de horas leve — esforço G
 
 **Cuidado deliberado:** timesheet burocrático mata a adesão. Versão leve: timer opcional +
@@ -313,7 +352,7 @@ se o cliente não abre e-mail, o WhatsApp vira a entrega; se abre, não vale a m
 | **1 — Pauta ágil** | Ctrl+K ampliado · filtros salvos · prefs por conta · contexto cliente/campanha · checklist | ~1 semana | — |
 | **2 — Cliente ⭐** | Aprovação por link público · digest+lembretes | ~2 semanas | Onda 0 |
 | **3 — Gestão** | Dashboard gerencial · templates · auditoria UI | ~2 semanas | — |
-| **4 — Tempo e dinheiro** | Horas · contratos · cobrança · DRE | ~2–3 semanas | Onda 0 |
+| **4 — Tempo e dinheiro** | ✅ livro-caixa unificado (4.0, em andamento) · Horas · contratos · cobrança · DRE | ~2–3 semanas | Onda 0 |
 | **5 — Integrações** | BTG · relatório do cliente · (WhatsApp?) | ~2–3 semanas | Ondas 0 e 4 |
 
 Ordem recomendada: **0 → 1 → 2 → 3 → 4 → 5**. As ondas 1 e 3 não dependem de nada e podem
