@@ -121,7 +121,7 @@ export default async function OrgLayout({
         positionName={positionName}
         canFinance={canFinance}
         canVendas={canVendas}
-        canManage={['owner', 'admin', 'manager'].includes(membership.role)}
+        canManage={membership.role === 'owner'}
       >
         {children}
       </AppShell>

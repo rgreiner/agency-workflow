@@ -30,8 +30,8 @@ export async function assertFinanceAccess(orgSlug: string) {
 }
 
 /**
- * Garante acesso de gestão (owner/admin/manager) — usado pelo Dashboard gerencial.
- * Redireciona se não tiver. Retorna client + ids.
+ * Garante acesso de gestão — SÓ o proprietário (owner) do ambiente. Usado pelo
+ * Dashboard gerencial. Redireciona se não for. Retorna client + ids.
  */
 export async function assertManageAccess(orgSlug: string) {
   const supabase = await createClient()
@@ -50,7 +50,7 @@ export async function assertManageAccess(orgSlug: string) {
     .eq('user_id', user.id)
     .single() as { data: { role: string } | null }
 
-  const allowed = !!m && ['owner', 'admin', 'manager'].includes(m.role)
+  const allowed = !!m && m.role === 'owner'
   if (!allowed) redirect(`/${orgSlug}/dashboard`)
 
   return { supabase, orgId: org.id as string, userId: user.id as string }
