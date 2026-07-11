@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Check, Loader2, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Check, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { formatBRL, parseMoney } from '@/lib/midia'
@@ -25,6 +25,15 @@ function addMonths(iso: string, k: number): string {
   const dt = new Date(Date.UTC(y, m - 1 + k, d))
   return dt.toISOString().slice(0, 10)
 }
+function addDays(iso: string, k: number): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d + k))
+  return dt.toISOString().slice(0, 10)
+}
+// Fim proposto do contrato: 1 ano após o início, menos 1 dia (ex.: 06/07/26 → 05/07/27).
+function oneYearEnd(de: string): string {
+  return de ? addDays(addMonths(de, 12), -1) : ''
+}
 function emptyValues(today: string, responsavelId: string): FeeValues {
   return {
     workspace_id: '', titulo: '', de: today, ate: '', num_parcelas: '12', valor_mensal: '',
@@ -34,15 +43,22 @@ function emptyValues(today: string, responsavelId: string): FeeValues {
 }
 
 export function FeeForm({
-  clientes, members, defaultResponsavelId, today, redirectTo, initial, submitLabel = 'Gravar', onSubmit,
+  clientes, members, defaultResponsavelId, today, redirectTo, initial, submitLabel = 'Gravar', defaultObservacao = '', onSubmit,
 }: {
   clientes: ClienteOpt[]; members: MemberOpt[]
   defaultResponsavelId: string; today: string; redirectTo: string
   initial?: Partial<FeeValues>; submitLabel?: string
+  /** Observação padrão da org (Configurações → Documentos) — pré-carregada como "conhecimento". */
+  defaultObservacao?: string
   onSubmit: (fd: FormData) => Promise<{ error?: string } | void>
 }) {
   const router = useRouter()
-  const [form, setForm] = useState<FeeValues>({ ...emptyValues(today, defaultResponsavelId), ...initial, parcelas: initial?.parcelas ?? [] })
+  // Fee novo herda a observação padrão da config; edição mantém a salva.
+  const initialObs = initial?.observacao ?? defaultObservacao
+  const [form, setForm] = useState<FeeValues>({ ...emptyValues(today, defaultResponsavelId), ...initial, observacao: initialObs, parcelas: initial?.parcelas ?? [] })
+  // Modo "conhecimento" (só leitura) quando a observação é exatamente o texto padrão;
+  // some quando não há padrão configurado ou o usuário já customizou.
+  const [editObs, setEditObs] = useState(() => !defaultObservacao || initialObs !== defaultObservacao)
   const [primeira, setPrimeira] = useState(initial?.parcelas?.[0]?.vencimento || today)
   const [isPending, startTransition] = useTransition()
   const [running, setRunning] = useState<'save' | 'approve' | null>(null)
@@ -121,7 +137,7 @@ export function FeeForm({
 
         <div className={cardCls}>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div><label className={labelCls}>De</label><input type="date" value={form.de} onChange={e => set('de', e.target.value)} className={inputCls} /></div>
+            <div><label className={labelCls}>De</label><input type="date" value={form.de} onChange={e => setForm(f => ({ ...f, de: e.target.value, ate: oneYearEnd(e.target.value) }))} className={inputCls} /></div>
             <div><label className={labelCls}>Até</label><input type="date" value={form.ate} onChange={e => set('ate', e.target.value)} className={inputCls} /></div>
             <div><label className={labelCls}>Parcelas</label><input value={form.num_parcelas} onChange={e => set('num_parcelas', e.target.value)} className={inputCls} /></div>
             <div><label className={labelCls}>Valor mensal (R$)</label><input inputMode="decimal" value={form.valor_mensal} onChange={e => set('valor_mensal', e.target.value)} placeholder="0,00" className={inputCls} /></div>
@@ -156,8 +172,22 @@ export function FeeForm({
         </div>
 
         <div className={cardCls}>
-          <label className={labelCls}>Observação</label>
-          <textarea rows={3} value={form.observacao} onChange={e => set('observacao', e.target.value)} className={cn(inputCls, 'resize-none')} />
+          <div className="flex items-center justify-between mb-1">
+            <label className={cn(labelCls, 'mb-0')}>Observação</label>
+            {!editObs && (
+              <button type="button" onClick={() => setEditObs(true)} className="inline-flex items-center gap-1 text-xs font-medium text-orange-600 hover:text-orange-700 transition-colors">
+                <Pencil className="w-3 h-3" /> Editar
+              </button>
+            )}
+          </div>
+          {editObs ? (
+            <textarea rows={3} value={form.observacao} onChange={e => set('observacao', e.target.value)} className={cn(inputCls, 'resize-none')} />
+          ) : (
+            <div className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5 text-sm text-gray-500 whitespace-pre-line">
+              {form.observacao}
+              <p className="mt-1.5 text-[11px] text-gray-400">Texto padrão de Configurações → Documentos. Clique em “Editar” para personalizar só deste Fee.</p>
+            </div>
+          )}
           <label className={cn(labelCls, 'mt-4')}>Texto Legal</label>
           <textarea rows={2} value={form.texto_legal} onChange={e => set('texto_legal', e.target.value)} className={cn(inputCls, 'resize-none')} />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">

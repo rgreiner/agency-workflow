@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { updateProducao } from '@/app/actions/producao'
 import { loadProducaoSelectors } from '@/lib/midia-selectors'
+import { loadOrgDocs } from '@/lib/agency'
 import { FeeForm, type FeeValues, type ParcelaFee } from '../FeeForm'
 
 function s(v: unknown): string { return v == null ? '' : String(v) }
@@ -16,7 +17,9 @@ export default async function EditarFeePage({
   params: Promise<{ orgSlug: string; producaoId: string }>
 }) {
   const { orgSlug, producaoId } = await params
-  const { supabase, clientes, members, userId, today } = await loadProducaoSelectors(orgSlug)
+  const { supabase, orgId, clientes, members, userId, today } = await loadProducaoSelectors(orgSlug)
+  const { nfNotes } = await loadOrgDocs(supabase, orgId)
+  const defaultObservacao = nfNotes.map(n => n.text).join('\n')
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: p } = await (supabase as any).from('producao').select('*').eq('id', producaoId).single()
@@ -43,6 +46,7 @@ export default async function EditarFeePage({
       redirectTo={`/${orgSlug}/producao/fee`}
       initial={initial}
       submitLabel="Salvar"
+      defaultObservacao={defaultObservacao}
       onSubmit={updateProducao.bind(null, orgSlug, producaoId)}
     />
   )
