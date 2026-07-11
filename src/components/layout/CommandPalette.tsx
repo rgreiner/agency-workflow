@@ -7,8 +7,9 @@ import {
   Search, List, GanttChart, Users, BookOpen, PenTool,
   Folder, AlignLeft, Plus, Settings, User, Palette,
   CornerDownLeft, CheckSquare, Loader2, Archive,
+  Inbox, Wallet, Megaphone, ClipboardList,
 } from 'lucide-react'
-import { searchActivities } from '@/app/actions/search'
+import { searchActivities, searchExtras, type ExtraSearchResult } from '@/app/actions/search'
 
 interface Workspace {
   id: string
@@ -38,6 +39,12 @@ function norm(s: string) {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 }
 
+const EXTRA_META: Record<ExtraSearchResult['type'], { group: string; icon: Item['icon'] }> = {
+  doc:      { group: 'Documentos', icon: BookOpen },
+  midia:    { group: 'Mídias',     icon: Megaphone },
+  producao: { group: 'Produção',   icon: ClipboardList },
+}
+
 export function CommandPalette({ open, ...rest }: Props) {
   // Monta/desmonta o painel: o estado interno (query, seleção) zera a cada abertura
   if (!open) return null
@@ -50,45 +57,61 @@ function PalettePanel({ orgSlug, workspaces, onClose }: Omit<Props, 'open'>) {
   const [activeIdx, setActiveIdx] = useState(0)
   const [includeArchived, setIncludeArchived] = useState(false)
   // Resultados carregam a query que os gerou: itens obsoletos são descartados por derivação
-  const [activityResults, setActivityResults] = useState<{ q: string; items: Item[] }>({ q: '', items: [] })
+  const [results, setResults] = useState<{ q: string; items: Item[] }>({ q: '', items: [] })
   const listRef = useRef<HTMLDivElement>(null)
   const base = `/${orgSlug}`
   const q = query.trim()
 
-  // Busca server-side de atividades, debounced — resultados entram no grupo "Atividades"
+  // Busca server-side, debounced — atividades + docs/mídias/produção em paralelo.
   useEffect(() => {
     if (q.length < 2) return
     let cancelled = false
     const timer = setTimeout(async () => {
       let items: Item[] = []
       try {
-        const results = await searchActivities(orgSlug, q, includeArchived)
-        items = results.map(a => ({
-          id: `act-${a.id}`,
-          label: a.title,
-          hint: `${a.workspaceName} / ${a.campaignName}`,
-          group: 'Atividades',
-          href: `${base}/workspaces/${a.workspaceId}/campaigns/${a.campaignId}/activities/${a.id}`,
-          icon: CheckSquare,
-          archived: a.archived,
-        }))
+        const [acts, extras] = await Promise.all([
+          searchActivities(orgSlug, q, includeArchived),
+          searchExtras(orgSlug, q, includeArchived),
+        ])
+        items = [
+          ...acts.map(a => ({
+            id: `act-${a.id}`,
+            label: a.title,
+            hint: `${a.workspaceName} / ${a.campaignName}`,
+            group: 'Atividades',
+            href: `${base}/workspaces/${a.workspaceId}/campaigns/${a.campaignId}/activities/${a.id}`,
+            icon: CheckSquare,
+            archived: a.archived,
+          })),
+          ...extras.map(e => ({
+            id: `${e.type}-${e.id}`,
+            label: e.title,
+            hint: e.hint,
+            group: EXTRA_META[e.type].group,
+            href: e.href,
+            icon: EXTRA_META[e.type].icon,
+            archived: e.archived,
+          })),
+        ]
       } catch { /* falha de rede → trata como sem resultados */ }
-      if (!cancelled) setActivityResults({ q, items })
+      if (!cancelled) setResults({ q, items })
     }, 250)
     return () => { cancelled = true; clearTimeout(timer) }
   }, [q, orgSlug, base, includeArchived])
 
-  const activityItems = q.length >= 2 && activityResults.q === q ? activityResults.items : []
-  const searching     = q.length >= 2 && activityResults.q !== q
+  const dynamicItems = q.length >= 2 && results.q === q ? results.items : []
+  const searching     = q.length >= 2 && results.q !== q
 
   const allItems = useMemo<Item[]>(() => {
     const items: Item[] = [
       // Views
+      { id: 'v-inbox',  label: 'Caixa de entrada',       group: 'Ir para', href: `${base}/inbox`,             icon: Inbox },
       { id: 'v-lista',  label: 'Lista de atividades',    group: 'Ir para', href: `${base}/views/lista`,       icon: List },
       { id: 'v-gantt',  label: 'Gantt',                  group: 'Ir para', href: `${base}/views/gantt`,       icon: GanttChart },
       { id: 'v-atend',  label: 'Painel de atendimento',  group: 'Ir para', href: `${base}/views/atendimento`, icon: Users },
       { id: 'v-docs',   label: 'Documentos',             group: 'Ir para', href: `${base}/docs`,              icon: BookOpen },
       { id: 'v-boards', label: 'Quadros visuais',        group: 'Ir para', href: `${base}/boards`,            icon: PenTool },
+      { id: 'v-fin',    label: 'Financeiro',             group: 'Ir para', href: `${base}/financeiro/painel`, icon: Wallet },
       { id: 'v-dash',   label: 'Dashboard',              group: 'Ir para', href: `${base}/dashboard`,         icon: List },
       // Clientes
       ...workspaces.map(ws => ({
@@ -127,8 +150,8 @@ function PalettePanel({ orgSlug, workspaces, onClose }: Omit<Props, 'open'>) {
     const statics = allItems.filter(item =>
       norm(item.label).includes(q) || (item.hint && norm(item.hint).includes(q))
     )
-    return [...statics, ...activityItems]
-  }, [query, allItems, activityItems])
+    return [...statics, ...dynamicItems]
+  }, [query, allItems, dynamicItems])
 
   // Agrupa mantendo ordem
   const groups = useMemo(() => {
@@ -197,7 +220,7 @@ function PalettePanel({ orgSlug, workspaces, onClose }: Omit<Props, 'open'>) {
             autoFocus
             value={query}
             onChange={e => { setQuery(e.target.value); setActiveIdx(0) }}
-            placeholder="Buscar cliente, campanha, view…"
+            placeholder="Buscar atividade, cliente, doc, mídia, produção…"
             className="flex-1 py-3.5 text-sm text-gray-900 placeholder-gray-400 bg-transparent focus:outline-none"
           />
           {searching && <Loader2 className="w-3.5 h-3.5 text-gray-300 animate-spin shrink-0" />}
@@ -210,7 +233,7 @@ function PalettePanel({ orgSlug, workspaces, onClose }: Omit<Props, 'open'>) {
         <div ref={listRef} className="max-h-[50vh] overflow-y-auto overscroll-contain py-2">
           {filtered.length === 0 ? (
             <p className="px-4 py-8 text-sm text-gray-400 text-center">
-              {searching ? 'Buscando atividades…' : `Nada encontrado para “${query}”`}
+              {searching ? 'Buscando…' : `Nada encontrado para “${query}”`}
             </p>
           ) : (
             groups.map(group => (
