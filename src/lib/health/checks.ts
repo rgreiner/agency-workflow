@@ -145,11 +145,40 @@ async function checkCamposSemLink(supabase: SupabaseClient<Database>, orgId: str
   }
 }
 
+/**
+ * Executor de agendados (crontab do VPS) parado. O job 'heartbeat' roda a cada
+ * 30min; se a última execução tem +70min (ou nunca rodou), o cron não está batendo
+ * na rota — e digest/lembretes/cobrança dependem dele.
+ */
+async function checkCronParado(supabase: SupabaseClient<Database>): Promise<HealthCheck> {
+  const items: HealthItem[] = []
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase as any).from('cron_runs').select('last_run_at').eq('job', 'heartbeat').maybeSingle()
+    const last = data?.last_run_at ? new Date(data.last_run_at).getTime() : 0
+    if (!last || Date.now() - last > 70 * 60 * 1000) {
+      items.push({
+        id: 'cron',
+        label: last ? `Última execução há mais de 1h (${new Date(last).toLocaleString('pt-BR')})` : 'Nunca executou',
+        sublabel: 'Confira o crontab do VPS batendo em /api/cron e a env CRON_SECRET.',
+      })
+    }
+  } catch { /* tabela ainda não existe → não alarma */ }
+
+  return {
+    id: 'cron-parado',
+    label: 'Executor de agendados',
+    description: 'O cron do VPS que dispara digest, lembretes de prazo e cobrança. Deve rodar a cada poucos minutos.',
+    items,
+  }
+}
+
 /** Roda todas as verificações e devolve os checks (mesmo os zerados, p/ dar o “tudo certo”). */
 export async function runHealthChecks(supabase: SupabaseClient<Database>, orgId: string): Promise<HealthCheck[]> {
   return Promise.all([
     checkAtividadesSemDrive(supabase, orgId),
     checkCamposSemLink(supabase, orgId),
+    checkCronParado(supabase),
     // Fase futura (quando o Financeiro/BTG existir): extrato sem conciliar, fee sem lançamento…
   ])
 }
