@@ -78,6 +78,8 @@ export function LancamentosClient({ orgSlug, lancamentos, contas, categorias, ce
   const [contaFilter, setContaFilter] = useState('')
   const [tipoFilter, setTipoFilter] = useState<'todos' | 'entrada' | 'saida'>('todos')
   const [query, setQuery] = useState('')
+  // Recorte pelos cards de resumo (tipo + situação). null = tudo (card "Resultado").
+  const [cardFilter, setCardFilter] = useState<null | 'rec_aberto' | 'rec_real' | 'desp_aberto' | 'desp_real'>(null)
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Lancamento | null>(null)
   const [baixa, setBaixa] = useState<Lancamento | null>(null)
@@ -101,6 +103,13 @@ export function LancamentosClient({ orgSlug, lancamentos, contas, categorias, ce
   // No mês atual, também carrega os em aberto atrasados de meses anteriores e os sem vencimento.
   const rows = useMemo(() => {
     const inView = filtered.filter(l => {
+      if (cardFilter) {
+        const p = isPago(l.situacao)
+        if (cardFilter === 'rec_aberto'  && !(l.tipo === 'entrada' && !p)) return false
+        if (cardFilter === 'rec_real'    && !(l.tipo === 'entrada' &&  p)) return false
+        if (cardFilter === 'desp_aberto' && !(l.tipo === 'saida'   && !p)) return false
+        if (cardFilter === 'desp_real'   && !(l.tipo === 'saida'   &&  p)) return false
+      }
       const em = monthOf(effDate(l))
       if (em === mes) return true
       if (isCurrentMonth && !isPago(l.situacao)) {
@@ -117,7 +126,7 @@ export function LancamentosClient({ orgSlug, lancamentos, contas, categorias, ce
     let acc = 0
     for (const l of inView) { acc += signedEff(l); out.push({ l, saldo: acc }) }
     return out
-  }, [filtered, mes, today, isCurrentMonth])
+  }, [filtered, mes, today, isCurrentMonth, cardFilter])
 
   // Resumo do mês (estilo Conta Azul): receita/despesa × em aberto/realizada.
   const resumo = useMemo(() => {
@@ -138,8 +147,13 @@ export function LancamentosClient({ orgSlug, lancamentos, contas, categorias, ce
   const revisarCount = lancamentos.filter(l => l.revisar).length
   const contaMap = useMemo(() => Object.fromEntries(contas.map(c => [c.id, c])), [contas])
   const contaFilterOptions = useMemo(() => [{ value: '', label: 'Todas as contas' }, ...contas.map(c => ({ value: c.id, label: c.nome }))], [contas])
-  const hasFilters = tipoFilter !== 'todos' || !!contaFilter || !!query.trim()
-  function limparFiltros() { setTipoFilter('todos'); setContaFilter(''); setQuery('') }
+  const hasFilters = tipoFilter !== 'todos' || !!contaFilter || !!query.trim() || !!cardFilter
+  function limparFiltros() { setTipoFilter('todos'); setContaFilter(''); setQuery(''); setCardFilter(null) }
+  // Card clicado vira o recorte; zera o segmento tipo p/ não conflitar (toggle no mesmo card = tudo).
+  function toggleCard(key: 'rec_aberto' | 'rec_real' | 'desp_aberto' | 'desp_real') {
+    setTipoFilter('todos')
+    setCardFilter(c => (c === key ? null : key))
+  }
 
   return (
     <div className="p-6">
@@ -165,7 +179,7 @@ export function LancamentosClient({ orgSlug, lancamentos, contas, categorias, ce
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <div className="inline-flex bg-gray-100 rounded-xl p-0.5">
           {([['todos', 'Tudo'], ['entrada', 'A receber'], ['saida', 'A pagar']] as const).map(([v, label]) => (
-            <button key={v} onClick={() => setTipoFilter(v)} aria-pressed={tipoFilter === v}
+            <button key={v} onClick={() => { setTipoFilter(v); setCardFilter(null) }} aria-pressed={tipoFilter === v}
               className={cn('px-3 py-1.5 text-sm font-medium rounded-[10px] transition-colors',
                 tipoFilter === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
               {label}
@@ -187,11 +201,11 @@ export function LancamentosClient({ orgSlug, lancamentos, contas, categorias, ce
 
       {/* Resumo do mês */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
-        <Card label="Receitas em aberto" value={resumo.receitaAberto} tone="emerald-soft" />
-        <Card label="Receitas realizadas" value={resumo.receitaReal} tone="emerald" />
-        <Card label="Despesas em aberto" value={resumo.despesaAberto} tone="red-soft" />
-        <Card label="Despesas realizadas" value={resumo.despesaReal} tone="red" />
-        <Card label={`Resultado de ${monthLabel(mes)}`} value={resumo.total} tone="total" highlight />
+        <Card label="Receitas em aberto" value={resumo.receitaAberto} tone="emerald-soft" active={cardFilter === 'rec_aberto'} onClick={() => toggleCard('rec_aberto')} />
+        <Card label="Receitas realizadas" value={resumo.receitaReal} tone="emerald" active={cardFilter === 'rec_real'} onClick={() => toggleCard('rec_real')} />
+        <Card label="Despesas em aberto" value={resumo.despesaAberto} tone="red-soft" active={cardFilter === 'desp_aberto'} onClick={() => toggleCard('desp_aberto')} />
+        <Card label="Despesas realizadas" value={resumo.despesaReal} tone="red" active={cardFilter === 'desp_real'} onClick={() => toggleCard('desp_real')} />
+        <Card label={`Resultado de ${monthLabel(mes)}`} value={resumo.total} tone="total" highlight active={!cardFilter} onClick={() => setCardFilter(null)} />
       </div>
 
       {revisarCount > 0 && (
@@ -339,17 +353,21 @@ function Row({ l, saldo, orgSlug, today, conta, onEdit, onBaixa }: {
   )
 }
 
-function Card({ label, value, tone, highlight }: { label: string; value: number; tone: string; highlight?: boolean }) {
+function Card({ label, value, tone, highlight, active, onClick }: {
+  label: string; value: number; tone: string; highlight?: boolean; active?: boolean; onClick?: () => void
+}) {
   const color = tone === 'emerald' ? 'text-emerald-600'
     : tone === 'emerald-soft' ? 'text-emerald-500'
     : tone === 'red' ? 'text-red-600'
     : tone === 'red-soft' ? 'text-red-500'
     : value >= 0 ? 'text-gray-900' : 'text-red-600'
   return (
-    <div className={cn('rounded-xl border bg-white px-4 py-3', highlight ? 'border-gray-300 shadow-sm' : 'border-gray-200')}>
+    <button type="button" onClick={onClick}
+      className={cn('w-full text-left rounded-xl border bg-white px-4 py-3 transition-colors active:scale-[0.99]',
+        active ? 'border-orange-300 ring-2 ring-orange-200' : highlight ? 'border-gray-300 shadow-sm hover:border-gray-400' : 'border-gray-200 hover:border-gray-300')}>
       <p className="text-[11px] font-medium text-gray-400 mb-1">{label}</p>
       <p className={cn('text-base font-semibold', color)}>{formatBRL(value)}</p>
-    </div>
+    </button>
   )
 }
 
