@@ -24,7 +24,7 @@ export default async function DocPage({
 
   const { data: doc } = await supabase
     .from('documents')
-    .select('id, title, content, visibility, created_by, workspace_id, parent_id, briefing_workspace_id, briefing_campaign_id, workspaces(name)')
+    .select('id, title, content, visibility, created_by, workspace_id, parent_id, briefing_workspace_id, briefing_campaign_id, workspaces!workspace_id(name)')
     .eq('id', docId)
     .single()
   if (!doc) notFound()
@@ -60,7 +60,7 @@ export default async function DocPage({
   // Documentos + pastas para a sidebar (navegar/organizar sem voltar à listagem)
   const { data: allDocs } = await supabase
     .from('documents')
-    .select('id, title, visibility, workspace_id, parent_id, is_folder, archived, briefing_workspace_id, briefing_campaign_id, workspaces(name)')
+    .select('id, title, visibility, workspace_id, parent_id, is_folder, archived, briefing_workspace_id, briefing_campaign_id, workspaces!workspace_id(name)')
     .eq('org_id', org.id)
     .order('is_folder', { ascending: false })
     .order('title', { ascending: true })

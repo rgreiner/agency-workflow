@@ -25,7 +25,7 @@ export default async function DocsPage({
 
   const { data: rawDocs } = await supabase
     .from('documents')
-    .select('id, title, visibility, created_at, updated_at, workspace_id, is_folder, workspaces(name), profiles!created_by(full_name)')
+    .select('id, title, visibility, created_at, updated_at, workspace_id, is_folder, workspaces!workspace_id(name), profiles!created_by(full_name)')
     .eq('org_id', org.id)
     .eq('archived', false)
     .order('updated_at', { ascending: false })
@@ -34,7 +34,7 @@ export default async function DocsPage({
   // ficar consistente (as pastas aparecem já na tela inicial).
   const { data: allDocs } = await supabase
     .from('documents')
-    .select('id, title, visibility, workspace_id, parent_id, is_folder, archived, briefing_workspace_id, briefing_campaign_id, workspaces(name)')
+    .select('id, title, visibility, workspace_id, parent_id, is_folder, archived, briefing_workspace_id, briefing_campaign_id, workspaces!workspace_id(name)')
     .eq('org_id', org.id)
     .order('is_folder', { ascending: false })
     .order('title', { ascending: true })
