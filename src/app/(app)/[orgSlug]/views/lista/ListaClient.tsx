@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useTransition, type ReactNode, type ComponentType } from 'react'
 import Link from 'next/link'
-import { cn, isOverdue, daysUntil } from '@/lib/utils'
+import { cn, isOverdue, daysUntil, dueLabel } from '@/lib/utils'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority } from '@/types'
 import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search, Flag, SignalLow, SignalMedium, SignalHigh, Copy, Archive, ArchiveRestore, X, Calendar, UserPlus, Minus, Circle, User, Bookmark, Loader2 } from 'lucide-react'
 
@@ -765,6 +765,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                       const isSel    = selected.has(activity.id)
                       const overdue  = isOverdue(activity.due_date)
                       const days     = daysUntil(activity.due_date)
+                      const dueTxt   = dueLabel(activity.due_date)
                       const cxKey = activity.complexity as keyof typeof COMPLEXITY_ICON | undefined
                       const ComplexityIcon = cxKey ? COMPLEXITY_ICON[cxKey] : null
                       const complexity = cxKey ? COMPLEXITY_CONFIG[cxKey] : null
@@ -776,7 +777,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                           overdue ? 'text-red-600' : days !== null && days <= 3 ? 'text-orange-500' : 'text-gray-500'
                         )}>
                           {overdue && <AlertCircle className="w-3 h-3 shrink-0" />}
-                          {overdue ? `${Math.abs(days!)}d atraso` : days === 0 ? 'Hoje' : days === 1 ? 'Amanhã' : `${days}d`}
+                          {dueTxt}
                         </span>
                       ) : null
 

@@ -5,7 +5,7 @@ import {
   AlertCircle, CheckCircle2, Clock, CalendarClock,
   CalendarDays, AlertTriangle, ChevronRight,
 } from 'lucide-react'
-import { cn, formatDate } from '@/lib/utils'
+import { cn, formatDate, isOverdue, parseDateLocal } from '@/lib/utils'
 import Link from 'next/link'
 import { Avatar } from '@/components/ui/Avatar'
 import { WeeklyProgress } from '@/components/dashboard/WeeklyProgress'
@@ -80,30 +80,29 @@ export default async function DashboardPage({
 
   const doneThisWeek = new Set((doneHistory ?? []).map(h => h.activity_id)).size
 
-  // ── Date buckets ──────────────────────────────────────────────────────────
-  const now = new Date(); now.setHours(0, 0, 0, 0)
-  const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999)
-  const weekEnd = new Date(now); weekEnd.setDate(now.getDate() + 7)
+  // ── Date buckets (parse LOCAL + prazo = 19h; ver lib/utils) ─────────────────
+  const now0 = new Date(); now0.setHours(0, 0, 0, 0)                       // hoje 00:00 local
+  const weekEnd = new Date(now0); weekEnd.setDate(now0.getDate() + 7)      // +7 dias
+  const dueLocal = (dd: string | null) => parseDateLocal(dd)              // meia-noite local do due
 
-  const overdueTasks = myActive.filter(a => a.due_date && new Date(a.due_date) < now)
+  // Atrasado = passou das 19h do dia (não "meia-noite UTC" = véspera em BRT).
+  const overdueTasks = myActive.filter(a => isOverdue(a.due_date))
   const todayTasks = myActive.filter(a => {
-    if (!a.due_date) return false
-    const d = new Date(a.due_date)
-    return d >= now && d <= todayEnd
+    const d = dueLocal(a.due_date)
+    return !!d && !isOverdue(a.due_date) && d.getTime() === now0.getTime()
   })
   const weekTasks = myActive.filter(a => {
-    if (!a.due_date) return false
-    const d = new Date(a.due_date)
-    return d > todayEnd && d <= weekEnd
+    const d = dueLocal(a.due_date)
+    return !!d && d.getTime() > now0.getTime() && d < weekEnd
   })
   const laterTasks = myActive.filter(a => {
-    if (!a.due_date) return true
-    return new Date(a.due_date) > weekEnd
+    const d = dueLocal(a.due_date)
+    return !d || d >= weekEnd
   })
 
   const totalWeek = doneThisWeek + myActive.filter(a => {
-    if (!a.due_date) return false
-    return new Date(a.due_date) <= weekEnd
+    const d = dueLocal(a.due_date)
+    return !!d && d < weekEnd
   }).length
 
   // ── Org-level stats (team view) ────────────────────────────────────────────
@@ -125,13 +124,13 @@ export default async function DashboardPage({
   const active = total - done
 
   const orgOverdue = allActivities?.filter(a =>
-    a.due_date && a.status !== 'concluido' && new Date(a.due_date) < now
+    a.status !== 'concluido' && isOverdue(a.due_date)
   ).length ?? 0
 
   const orgDueWeek = allActivities?.filter(a => {
-    if (!a.due_date || a.status === 'concluido') return false
-    const d = new Date(a.due_date)
-    return d >= now && d <= weekEnd
+    if (a.status === 'concluido') return false
+    const d = dueLocal(a.due_date)
+    return !!d && d.getTime() >= now0.getTime() && d < weekEnd
   }).length ?? 0
 
   const statusCounts = statusConfig.map(s => ({

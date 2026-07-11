@@ -8,7 +8,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { ChevronDown, ChevronRight, ListChecks } from 'lucide-react'
-import { cn, formatDate } from '@/lib/utils'
+import { cn, formatDate, parseDateLocal } from '@/lib/utils'
 
 export interface MyTask {
   id: string
@@ -67,7 +67,8 @@ export function MyTasksPanel({ tasks }: { tasks: MyTask[] }) {
     for (const t of tasks) {
       if (t.status === 'concluido') { b.concluidas.push(t); continue }
       if (!t.dueDate) { b.semprazo.push(t); continue }
-      const due = startOfDay(new Date(t.dueDate))
+      // parse LOCAL (senão 'YYYY-MM-DD' vira véspera em BRT e cai em atraso)
+      const due = parseDateLocal(t.dueDate) ?? today0
       if (due < today0) b.atraso.push(t)
       else if (due < tomorrow0) b.hoje.push(t)
       else b.proximas.push(t)
@@ -128,7 +129,7 @@ function TaskRow({ task, group }: { task: MyTask; group: GroupKey }) {
   if (task.dueDate && group !== 'hoje') {
     dateLabel = formatDate(task.dueDate)
     if (overdue) {
-      const days = Math.max(1, Math.round((startOfDay(new Date()).getTime() - startOfDay(new Date(task.dueDate)).getTime()) / 86400000))
+      const days = Math.max(1, Math.round((startOfDay(new Date()).getTime() - (parseDateLocal(task.dueDate)?.getTime() ?? 0)) / 86400000))
       dateLabel = `${dateLabel} · ${days}d`
     }
   }

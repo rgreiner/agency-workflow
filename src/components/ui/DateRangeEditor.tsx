@@ -3,7 +3,7 @@
 import { useState, useTransition, useRef, useEffect, useCallback } from 'react'
 import { Calendar, ArrowRight, Loader2, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react'
 import { updateActivityDates, updateActivityField } from '@/app/actions/activity'
-import { formatDate, isOverdue, daysUntil, cn } from '@/lib/utils'
+import { formatDate, isOverdue, daysUntil, dueLabel, cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
 // ── Calendar helpers ──────────────────────────────────────────────────────
@@ -205,7 +205,7 @@ export function DateRangeEditor({ activityId, path, startDate, dueDate, canEdit,
           overdue ? 'text-red-600' : days !== null && days <= 3 ? 'text-orange-500' : 'text-gray-600')}>
           {localEnd
             ? <>{overdue && <AlertCircle className="w-3 h-3 shrink-0" />}
-                {overdue ? `${Math.abs(days!)}d atraso` : days === 0 ? 'Hoje' : days === 1 ? 'Amanhã' : `${days}d`}</>
+                {dueLabel(localEnd || null)}</>
             : <span className="text-gray-300">—</span>}
         </span>
       )
@@ -235,7 +235,7 @@ export function DateRangeEditor({ activityId, path, startDate, dueDate, canEdit,
         <span className={cn('text-xs font-medium flex items-center gap-1',
           overdue ? 'text-red-600' : compactDays !== null && compactDays <= 3 ? 'text-orange-500' : 'text-gray-600')}>
           {overdue && <AlertCircle className="w-3 h-3 shrink-0" />}
-          {overdue ? `${Math.abs(compactDays!)}d atraso` : compactDays === 0 ? 'Hoje' : compactDays === 1 ? 'Amanhã' : `${compactDays}d`}
+          {dueLabel(localEnd || null)}
         </span>
       ) : <span className="text-xs text-gray-300 hover:text-orange-500 transition">+ prazo</span>}
       {isPending && <Loader2 className="w-3 h-3 text-orange-500 animate-spin shrink-0" />}
