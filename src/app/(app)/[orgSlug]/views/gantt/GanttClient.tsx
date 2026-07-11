@@ -7,6 +7,7 @@ import { Avatar, AvatarGroup } from '@/components/ui/Avatar'
 import { MultiSelect } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { ChevronLeft, ChevronRight, Bookmark, X } from 'lucide-react'
+import { PRIORITY_CONFIG } from '@/types'
 import { updateActivityDates } from '@/app/actions/activity'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -58,8 +59,9 @@ type DragState = {
 
 type CalState = { startX: number; origViewStart: Date }
 
-type SavedFilter = { id: string; name: string; workspaces: string[]; persons: string[]; statuses: string[] }
+type SavedFilter = { id: string; name: string; workspaces: string[]; persons: string[]; statuses: string[]; priorities?: string[] }
 const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every(x => b.includes(x))
+const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }))
 
 // ── Component ──────────────────────────────────────────────────────────────
 
@@ -84,6 +86,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
   const [filterWorkspaces, setFilterWorkspaces] = useState<string[]>(initialWorkspace ? [initialWorkspace] : [])
   const [filterPersons,    setFilterPersons]    = useState<string[]>([])
   const [filterStatuses,   setFilterStatuses]   = useState<string[]>([])
+  const [filterPriorities, setFilterPriorities] = useState<string[]>([])
 
   // ── Filtros salvos (favoritos, por org no localStorage) ────────────────
   const SAVED_KEY = `gantt-filtros:${orgSlug}`
@@ -112,19 +115,19 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
     if (!name) return
     persistSaved([...saved, {
       id: `${Date.now()}`, name,
-      workspaces: filterWorkspaces, persons: filterPersons, statuses: filterStatuses,
+      workspaces: filterWorkspaces, persons: filterPersons, statuses: filterStatuses, priorities: filterPriorities,
     }])
     setSaveName(''); setSaveOpen(false)
   }
   function applySavedFilter(f: SavedFilter) {
-    setFilterWorkspaces(f.workspaces); setFilterPersons(f.persons); setFilterStatuses(f.statuses)
+    setFilterWorkspaces(f.workspaces); setFilterPersons(f.persons); setFilterStatuses(f.statuses); setFilterPriorities(f.priorities ?? [])
   }
   function deleteSavedFilter(id: string) { persistSaved(saved.filter(f => f.id !== id)) }
   function isSavedActive(f: SavedFilter) {
-    return sameSet(f.workspaces, filterWorkspaces) && sameSet(f.persons, filterPersons) && sameSet(f.statuses, filterStatuses)
+    return sameSet(f.workspaces, filterWorkspaces) && sameSet(f.persons, filterPersons) && sameSet(f.statuses, filterStatuses) && sameSet(f.priorities ?? [], filterPriorities)
   }
 
-  const hasFilter = filterWorkspaces.length + filterPersons.length + filterStatuses.length > 0
+  const hasFilter = filterWorkspaces.length + filterPersons.length + filterStatuses.length + filterPriorities.length > 0
 
   // ── Drag state: BOTH a ref (for event handlers) and state (for render) ─
   // The ref is read immediately in event handlers (no stale closure).
@@ -312,6 +315,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
       const ps = (a.activity_assignees as { profiles: Profile }[])?.map(x => x.profiles) ?? []
       if (!ps.some(p => p && filterPersons.includes(p.id))) return false
     }
+    if (filterPriorities.length && !filterPriorities.includes(a.priority)) return false
     return true
   })
 
@@ -489,8 +493,15 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
           allLabel="Todos os status"
           options={statusConfig.map(s => ({ value: s.value, label: s.label }))}
         />
+        <MultiSelect
+          values={filterPriorities}
+          onChange={setFilterPriorities}
+          className="w-40"
+          allLabel="Toda prioridade"
+          options={PRIORITY_OPTIONS}
+        />
         {hasFilter && (
-          <button onClick={() => { setFilterWorkspaces([]); setFilterPersons([]); setFilterStatuses([]) }}
+          <button onClick={() => { setFilterWorkspaces([]); setFilterPersons([]); setFilterStatuses([]); setFilterPriorities([]) }}
             className="text-xs text-gray-400 hover:text-gray-600 transition px-2 py-1.5">
             Limpar filtros
           </button>

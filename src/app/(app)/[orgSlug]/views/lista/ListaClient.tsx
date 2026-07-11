@@ -42,7 +42,8 @@ function defaultCols(): Record<ColKey, boolean> {
 const defaultOrder = (): ColKey[] => COL_DEFS.map(c => c.key)
 
 // ── Filtros salvos (presets, por org no localStorage) ───────────────────────
-type SavedFilter = { id: string; name: string; workspaces: string[]; persons: string[]; statuses: string[]; date?: string }
+type SavedFilter = { id: string; name: string; workspaces: string[]; persons: string[]; statuses: string[]; priorities?: string[]; date?: string; onlyMine?: boolean }
+const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }))
 const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every(x => b.includes(x))
 
 // ── Filtro de prazo (presets) ───────────────────────────────────────────────
@@ -144,6 +145,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
   const [filterWorkspaces, setFilterWorkspaces] = useState<string[]>(initialWorkspace ? [initialWorkspace] : [])
   const [filterPersons,  setFilterPersons]  = useState<string[]>([])
   const [filterStatuses, setFilterStatuses] = useState<string[]>([])
+  const [filterPriorities, setFilterPriorities] = useState<string[]>([])
   const [filterDate, setFilterDate] = useState('')
   const [onlyMine, setOnlyMine] = useState(false)
   const me = getUsuarioClient()?.id ?? null
@@ -245,6 +247,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
           if (Array.isArray(f.workspaces)) setFilterWorkspaces(f.workspaces)
           if (Array.isArray(f.persons))    setFilterPersons(f.persons)
           if (Array.isArray(f.statuses))   setFilterStatuses(f.statuses)
+          if (Array.isArray(f.priorities)) setFilterPriorities(f.priorities)
           if (typeof f.date === 'string')  setFilterDate(f.date)
           if (typeof f.onlyMine === 'boolean') setOnlyMine(f.onlyMine)
         }
@@ -258,11 +261,11 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
     if (!lastFilterReady.current) return
     try {
       localStorage.setItem(LAST_FILTER_KEY, JSON.stringify({
-        workspaces: filterWorkspaces, persons: filterPersons, statuses: filterStatuses, date: filterDate, onlyMine,
+        workspaces: filterWorkspaces, persons: filterPersons, statuses: filterStatuses, priorities: filterPriorities, date: filterDate, onlyMine,
       }))
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterWorkspaces, filterPersons, filterStatuses, filterDate, onlyMine])
+  }, [filterWorkspaces, filterPersons, filterStatuses, filterPriorities, filterDate, onlyMine])
 
   useEffect(() => {
     if (!saveOpen) return
@@ -278,15 +281,17 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
   function saveCurrentFilter() {
     const name = saveName.trim()
     if (!name) return
-    persistSaved([...saved, { id: `${Date.now()}`, name, workspaces: filterWorkspaces, persons: filterPersons, statuses: filterStatuses, date: filterDate }])
+    persistSaved([...saved, { id: `${Date.now()}`, name, workspaces: filterWorkspaces, persons: filterPersons, statuses: filterStatuses, priorities: filterPriorities, date: filterDate, onlyMine }])
     setSaveName(''); setSaveOpen(false)
   }
   function applySavedFilter(f: SavedFilter) {
-    setFilterWorkspaces(f.workspaces); setFilterPersons(f.persons); setFilterStatuses(f.statuses); setFilterDate(f.date ?? '')
+    setFilterWorkspaces(f.workspaces); setFilterPersons(f.persons); setFilterStatuses(f.statuses)
+    setFilterPriorities(f.priorities ?? []); setFilterDate(f.date ?? ''); setOnlyMine(f.onlyMine ?? false)
   }
   function deleteSavedFilter(id: string) { persistSaved(saved.filter(f => f.id !== id)) }
   function isSavedActive(f: SavedFilter) {
-    return sameSet(f.workspaces, filterWorkspaces) && sameSet(f.persons, filterPersons) && sameSet(f.statuses, filterStatuses) && (f.date ?? '') === filterDate
+    return sameSet(f.workspaces, filterWorkspaces) && sameSet(f.persons, filterPersons) && sameSet(f.statuses, filterStatuses)
+      && sameSet(f.priorities ?? [], filterPriorities) && (f.date ?? '') === filterDate && (f.onlyMine ?? false) === onlyMine
   }
 
   function toggleCol(key: ColKey) {
@@ -337,8 +342,9 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
     .filter(a => filterWorkspaces.length === 0 || filterWorkspaces.includes(campMap[a.campaign_id]?.workspaceId ?? ''))
     .filter(a => filterPersons.length === 0 || a.assignedIds.some(id => filterPersons.includes(id)))
     .filter(a => filterStatuses.length === 0 || filterStatuses.includes(a.status))
+    .filter(a => filterPriorities.length === 0 || filterPriorities.includes(a.priority))
     .filter(a => matchesDateFilter(a.due_date, filterDate, todayYMD))
-  const hasFilter = filterWorkspaces.length + filterPersons.length + filterStatuses.length > 0 || !!filterDate
+  const hasFilter = filterWorkspaces.length + filterPersons.length + filterStatuses.length + filterPriorities.length > 0 || !!filterDate
 
   // Colunas na ordem escolhida pelo usuário (com fallback p/ defs novas)
   const orderedCols = [...order, ...COL_DEFS.map(c => c.key).filter(k => !order.includes(k))]
@@ -520,6 +526,13 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
           allLabel="Todos os status"
           options={statusConfig.map(s => ({ value: s.value, label: s.label }))}
         />
+        <MultiSelect
+          values={filterPriorities}
+          onChange={setFilterPriorities}
+          className="w-40"
+          allLabel="Toda prioridade"
+          options={PRIORITY_OPTIONS}
+        />
         <Select
           value={filterDate}
           onChange={setFilterDate}
@@ -528,7 +541,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
         />
         {hasFilter && (
           <button
-            onClick={() => { setFilterWorkspaces([]); setFilterPersons([]); setFilterStatuses([]); setFilterDate('') }}
+            onClick={() => { setFilterWorkspaces([]); setFilterPersons([]); setFilterStatuses([]); setFilterPriorities([]); setFilterDate('') }}
             className="text-xs text-gray-400 hover:text-gray-600 transition px-2 py-1.5"
           >
             Limpar filtros
