@@ -20,6 +20,12 @@ export default async function PerfilPage({
     .eq('id', authUser.id)
     .single()
 
+  // Preferência do resumo diário (default ligado se não houver linha).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: prefs } = await (supabase as any)
+    .from('user_prefs').select('digest_enabled').eq('user_id', authUser.id).maybeSingle()
+  const digestEnabled = prefs?.digest_enabled ?? true
+
   return (
     <ProfileForm
       user={{
@@ -32,6 +38,7 @@ export default async function PerfilPage({
         driveMacUser:     (profile as { drive_mac_user?: string | null } | null)?.drive_mac_user ?? null,
         driveGoogleEmail: (profile as { drive_google_email?: string | null } | null)?.drive_google_email ?? null,
       }}
+      digestEnabled={digestEnabled}
     />
   )
 }

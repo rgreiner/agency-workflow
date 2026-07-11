@@ -1,6 +1,7 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
+import { digestJob } from './digest'
 
 /**
  * Executor de tarefas agendadas. A rota /api/cron (batida pelo crontab do VPS)
@@ -13,11 +14,14 @@ import type { Database } from '@/types/database'
  */
 export interface CronCtx {
   supabase: SupabaseClient<Database>
+  /** Dry-run: jobs que enviam algo (e-mail) só simulam e reportam o que fariam. */
+  dry?: boolean
 }
 export interface CronJob {
   name: string
   everyMinutes?: number
-  dailyAfterHour?: number   // 0–23, horário de Brasília
+  dailyAfterHour?: number    // 0–23, horário de Brasília
+  dailyAfterMinute?: number  // 0–59 (default 0) — junto do dailyAfterHour
   run: (ctx: CronCtx) => Promise<string>
 }
 
@@ -29,33 +33,34 @@ export const JOBS: CronJob[] = [
     everyMinutes: 30,
     run: async () => 'ok',
   },
-  // Futuros (ondas 2/4/5): 'lembrete-prazo', 'digest', 'cobranca', 'contratos', 'btg-sync'.
+  digestJob,   // resumo diário 8h30 (BRT)
+  // Futuros (ondas 4/5): 'lembrete-prazo', 'cobranca', 'contratos', 'btg-sync'.
 ]
 
 // ── Runner ───────────────────────────────────────────────────────────────────
 /** Partes da data em horário de Brasília (p/ janelas diárias). */
-function brtParts(d: Date): { date: string; hour: number } {
+function brtParts(d: Date): { date: string; minutes: number } {
   const fmt = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false,
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
   }).formatToParts(d)
   const get = (t: string) => fmt.find(p => p.type === t)?.value ?? ''
-  return { date: `${get('year')}-${get('month')}-${get('day')}`, hour: Number(get('hour')) }
+  return { date: `${get('year')}-${get('month')}-${get('day')}`, minutes: Number(get('hour')) * 60 + Number(get('minute')) }
 }
 
 function isDue(job: CronJob, lastIso: string | null, nowMs: number, nowD: Date): boolean {
-  if (!lastIso) return true
-  const lastMs = new Date(lastIso).getTime()
-  if (job.everyMinutes != null) return nowMs - lastMs >= job.everyMinutes * 60_000
+  if (job.everyMinutes != null) return !lastIso || nowMs - new Date(lastIso).getTime() >= job.everyMinutes * 60_000
   if (job.dailyAfterHour != null) {
-    const now = brtParts(nowD), last = brtParts(new Date(lastIso))
-    return now.hour >= job.dailyAfterHour && last.date < now.date
+    const now = brtParts(nowD)
+    const threshold = job.dailyAfterHour * 60 + (job.dailyAfterMinute ?? 0)
+    const lastDate = lastIso ? brtParts(new Date(lastIso)).date : ''
+    return now.minutes >= threshold && lastDate < now.date  // ainda não rodou HOJE e já passou da hora
   }
   return false
 }
 
 /** Roda os jobs devidos (ou só `onlyJob`, forçado). Devolve o status de cada um. */
 export async function runCron(
-  supabase: SupabaseClient<Database>, onlyJob?: string,
+  supabase: SupabaseClient<Database>, onlyJob?: string, dry = false,
 ): Promise<Record<string, string>> {
   const results: Record<string, string> = {}
   // list_cron_runs é security-definer (a rota roda anon e não leria a tabela via RLS)
@@ -69,10 +74,11 @@ export async function runCron(
     const last = lastByJob.get(job.name) ?? null
     if (!onlyJob && !isDue(job, last, nowMs, nowD)) { results[job.name] = 'skip'; continue }
     try {
-      const summary = await job.run({ supabase })
+      const summary = await job.run({ supabase, dry })
+      // dry-run não marca execução (senão "pularia" o disparo real do dia)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).rpc('mark_cron_run', { p_job: job.name, p_status: 'ok', p_detail: summary })
-      results[job.name] = `ok: ${summary}`
+      if (!dry) await (supabase as any).rpc('mark_cron_run', { p_job: job.name, p_status: 'ok', p_detail: summary })
+      results[job.name] = `${dry ? 'dry ' : ''}ok: ${summary}`
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

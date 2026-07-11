@@ -2,8 +2,9 @@
 
 import { useState, useRef, useTransition } from 'react'
 import { uploadFile } from '@/lib/storage/upload-client'
-import { updateProfile } from '@/app/actions/profile'
+import { updateProfile, setDigestEnabled } from '@/app/actions/profile'
 import { alterarMinhaSenha } from '@/app/actions/auth'
+import { cn } from '@/lib/utils'
 import { useOrgSettings } from '@/components/providers/OrgSettingsProvider'
 import { AvatarCropper } from '@/components/ui/AvatarCropper'
 import { toast } from 'sonner'
@@ -20,9 +21,20 @@ export interface ProfileUser {
   driveGoogleEmail: string | null
 }
 
-export function ProfileForm({ user }: { user: ProfileUser }) {
+export function ProfileForm({ user, digestEnabled = true }: { user: ProfileUser; digestEnabled?: boolean }) {
   const settings     = useOrgSettings()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [digest, setDigest] = useState(digestEnabled)
+
+  function toggleDigest() {
+    const next = !digest
+    setDigest(next)  // otimista
+    startTransition(async () => {
+      const r = await setDigestEnabled(next)
+      if (r?.error) { setDigest(!next); toast.error(r.error) }
+      else toast.success(next ? 'Resumo diário ligado.' : 'Resumo diário desligado.')
+    })
+  }
 
   const [fullName,  setFullName]  = useState(user.fullName ?? '')
   const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl ?? '')
@@ -226,6 +238,23 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
                 Alterar senha
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Resumo diário por e-mail */}
+        <div className="px-6 py-5">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Notificações</p>
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-700">Resumo diário por e-mail</p>
+              <p className="text-[12px] text-gray-400 mt-0.5">Todo dia às 8h30: o que ficou atrasado, o que fazer hoje e as próximas datas. Só chega se você tiver algo pendente.</p>
+            </div>
+            <button
+              type="button" role="switch" aria-checked={digest} onClick={toggleDigest} aria-label="Resumo diário por e-mail"
+              className={cn('relative shrink-0 w-11 h-6 rounded-full transition-colors ring-1 ring-inset', digest ? 'bg-orange-600 ring-transparent' : 'bg-gray-300 ring-gray-400/30')}
+            >
+              <span className={cn('absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-[#fff] shadow transition-transform', digest ? 'translate-x-5' : 'translate-x-0')} />
+            </button>
           </div>
         </div>
 

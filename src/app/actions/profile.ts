@@ -25,3 +25,15 @@ export async function updateProfile(
   if (error) return { error: error.message }
   revalidatePath('/', 'layout')
 }
+
+/** Liga/desliga o resumo diário por e-mail (8h30) do próprio usuário. */
+export async function setDigestEnabled(enabled: boolean) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('set_digest_enabled', { p_user_id: user.id, p_enabled: enabled })
+  if (error) return { error: error.message }
+  return {}
+}
