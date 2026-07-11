@@ -12,7 +12,10 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname
   const isAuthPage = path.startsWith('/login')
   const isConvite = path.startsWith('/convite/')
-  const isPublic = isAuthPage || isConvite
+  // /api/cron tem auth própria (header x-cron-secret) e é chamada sem cookie pelo
+  // crontab — não pode ser redirecionada pro /login (viraria HTML no lugar do JSON).
+  const isCron = path.startsWith('/api/cron')
+  const isPublic = isAuthPage || isConvite || isCron
 
   if (!claims && !isPublic) {
     const url = request.nextUrl.clone()
