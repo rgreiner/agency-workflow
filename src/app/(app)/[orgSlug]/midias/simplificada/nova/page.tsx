@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { createMidia } from '@/app/actions/midia'
+import { midiaTextoLegalPadrao } from '@/lib/agency'
 import { MidiaForm, type ClienteOpt, type VeiculoOpt, type MemberOpt } from '../MidiaForm'
 
 export default async function NovaMidiaPage({
@@ -50,6 +51,7 @@ export default async function NovaMidiaPage({
   })).filter((m: MemberOpt) => m.id)
 
   const today = new Date().toISOString().slice(0, 10)
+  const defaultTextoLegal = await midiaTextoLegalPadrao(supabase, org.id)
 
   return (
     <MidiaForm
@@ -59,6 +61,7 @@ export default async function NovaMidiaPage({
       defaultResponsavelId={user.id}
       today={today}
       submitLabel="Gravar"
+      defaultTextoLegal={defaultTextoLegal}
       onSubmit={createMidia.bind(null, orgSlug)}
     />
   )

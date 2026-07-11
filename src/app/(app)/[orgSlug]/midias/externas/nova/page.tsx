@@ -1,5 +1,6 @@
 import { createMidia } from '@/app/actions/midia'
 import { loadMidiaSelectors } from '@/lib/midia-selectors'
+import { midiaTextoLegalPadrao } from '@/lib/agency'
 import { ExternaForm } from '../ExternaForm'
 
 export default async function NovaExternaPage({
@@ -8,7 +9,8 @@ export default async function NovaExternaPage({
   params: Promise<{ orgSlug: string }>
 }) {
   const { orgSlug } = await params
-  const { clientes, veiculos, members, userId, today } = await loadMidiaSelectors(orgSlug)
+  const { supabase, orgId, clientes, veiculos, members, userId, today } = await loadMidiaSelectors(orgSlug)
+  const defaultTextoLegal = await midiaTextoLegalPadrao(supabase, orgId)
 
   return (
     <ExternaForm
@@ -19,6 +21,7 @@ export default async function NovaExternaPage({
       today={today}
       redirectTo={`/${orgSlug}/midias/externas`}
       submitLabel="Gravar"
+      defaultTextoLegal={defaultTextoLegal}
       onSubmit={createMidia.bind(null, orgSlug)}
     />
   )

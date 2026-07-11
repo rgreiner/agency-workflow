@@ -142,14 +142,23 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
             </>
           )}
 
-          {/* Texto legal / observações de faturamento */}
+          {/* Texto legal / observações de faturamento.
+              Documento não editado (texto_legal vazio ou = padrão) → imprime as notas
+              da config com o destaque amarelo. Editado → imprime o texto do documento. */}
           <div className="border-l-2 border-gray-400 pl-2 mb-2"><span className="font-semibold text-gray-700">Observações sobre faturamento</span></div>
-          <ul className="list-disc pl-5 space-y-1 mb-2 text-gray-700">
-            {DOC_MIDIA_NOTES.map((n, i) => (
-              <li key={i}><span className={n.highlight ? 'bg-yellow-200 px-0.5 font-medium' : ''}>{n.text}</span></li>
-            ))}
-          </ul>
-          {m.texto_legal && <p className="text-gray-600 whitespace-pre-line mb-2">{m.texto_legal}</p>}
+          {(() => {
+            const padrao = DOC_MIDIA_NOTES.map(n => n.text).join('\n').trim()
+            const tl = (m.texto_legal ?? '').trim()
+            return !tl || tl === padrao ? (
+              <ul className="list-disc pl-5 space-y-1 mb-2 text-gray-700">
+                {DOC_MIDIA_NOTES.map((n, i) => (
+                  <li key={i}><span className={n.highlight ? 'bg-yellow-200 px-0.5 font-medium' : ''}>{n.text}</span></li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-600 whitespace-pre-line mb-2">{m.texto_legal}</p>
+            )
+          })()}
 
           {/* Datas */}
           <div className="grid grid-cols-2 gap-6 mt-6">

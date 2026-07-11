@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Check, Loader2, Plus, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
+import { TextoPadraoField } from '@/components/ui/TextoPadraoField'
 import {
   MIDIA_FATURAMENTO_OPTIONS, MIDIA_PRAZO_OPTIONS, MIDIA_ABRANGENCIA_OPTIONS,
   MIDIA_SITUACAO_OPTIONS, FATURAMENTO_PAGADOR, formatBRL, parseMoney,
@@ -60,16 +61,16 @@ const totalItem = (it: PeriodoItem) => exibOf(it) * parseMoney(it.valor_unitario
 const totalPeriodo = (p: Periodo) => p.itens.reduce((s, it) => s + totalItem(it), 0)
 
 export function EletronicaForm({
-  clientes, veiculos, members, defaultResponsavelId, today, redirectTo, initial, submitLabel = 'Gravar', onSubmit,
+  clientes, veiculos, members, defaultResponsavelId, today, redirectTo, initial, submitLabel = 'Gravar', defaultTextoLegal = '', onSubmit,
 }: {
   clientes: ClienteOpt[]; veiculos: VeiculoOpt[]; members: MemberOpt[]
   defaultResponsavelId: string; today: string; redirectTo: string
-  initial?: Partial<EletronicaValues>; submitLabel?: string
+  initial?: Partial<EletronicaValues>; submitLabel?: string; defaultTextoLegal?: string
   onSubmit: (fd: FormData) => Promise<{ error?: string } | void>
 }) {
   const router = useRouter()
   const [form, setForm] = useState<EletronicaValues>({
-    ...emptyValues(today, defaultResponsavelId), ...initial,
+    ...emptyValues(today, defaultResponsavelId), ...initial, texto_legal: initial?.texto_legal || defaultTextoLegal,
     pecas: initial?.pecas?.length ? initial.pecas : [newPeca()],
     periodos: initial?.periodos?.length ? initial.periodos : [newPeriodo(today)],
   })
@@ -290,10 +291,10 @@ export function EletronicaForm({
 
         {/* Textos */}
         <div className={cardCls}>
-          <label className={labelCls}>Observação</label>
-          <textarea rows={3} value={form.observacao} onChange={e => set('observacao', e.target.value)} className={cn(inputCls, 'resize-none')} />
-          <label className={cn(labelCls, 'mt-4')}>Texto Legal</label>
-          <textarea rows={3} value={form.texto_legal} onChange={e => set('texto_legal', e.target.value)} className={cn(inputCls, 'resize-none')} />
+          <TextoPadraoField label="Observação" value={form.observacao} onChange={v => set('observacao', v)} />
+          <div className="mt-4">
+            <TextoPadraoField label="Texto Legal" value={form.texto_legal} onChange={v => set('texto_legal', v)} defaultText={defaultTextoLegal} />
+          </div>
         </div>
 
         <div className="flex justify-end gap-2 pb-10">

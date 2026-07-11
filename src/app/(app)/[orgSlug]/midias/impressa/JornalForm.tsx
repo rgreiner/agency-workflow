@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Check, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
+import { TextoPadraoField } from '@/components/ui/TextoPadraoField'
 import {
   MIDIA_FATURAMENTO_OPTIONS, MIDIA_PRAZO_OPTIONS, MIDIA_ABRANGENCIA_OPTIONS,
   MIDIA_SITUACAO_OPTIONS, FATURAMENTO_PAGADOR, formatBRL, parseMoney,
@@ -54,15 +55,15 @@ function emptyValues(today: string, responsavelId: string): JornalValues {
 }
 
 export function JornalForm({
-  clientes, veiculos, members, defaultResponsavelId, today, redirectTo, initial, submitLabel = 'Gravar', onSubmit,
+  clientes, veiculos, members, defaultResponsavelId, today, redirectTo, initial, submitLabel = 'Gravar', defaultTextoLegal = '', onSubmit,
 }: {
   clientes: ClienteOpt[]; veiculos: VeiculoOpt[]; members: MemberOpt[]
   defaultResponsavelId: string; today: string; redirectTo: string
-  initial?: Partial<JornalValues>; submitLabel?: string
+  initial?: Partial<JornalValues>; submitLabel?: string; defaultTextoLegal?: string
   onSubmit: (fd: FormData) => Promise<{ error?: string } | void>
 }) {
   const router = useRouter()
-  const [form, setForm] = useState<JornalValues>({ ...emptyValues(today, defaultResponsavelId), ...initial, dias: initial?.dias ?? {} })
+  const [form, setForm] = useState<JornalValues>({ ...emptyValues(today, defaultResponsavelId), ...initial, texto_legal: initial?.texto_legal || defaultTextoLegal, dias: initial?.dias ?? {} })
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
 
@@ -229,8 +230,7 @@ export function JornalForm({
 
         {/* Texto legal */}
         <div className={cardCls}>
-          <label className={labelCls}>Texto Legal</label>
-          <textarea rows={3} value={form.texto_legal} onChange={e => set('texto_legal', e.target.value)} className={cn(inputCls, 'resize-none')} />
+          <TextoPadraoField label="Texto Legal" value={form.texto_legal} onChange={v => set('texto_legal', v)} defaultText={defaultTextoLegal} />
         </div>
 
         <div className="flex justify-end gap-2 pb-10">

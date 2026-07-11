@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { updateMidia } from '@/app/actions/midia'
 import { loadMidiaSelectors } from '@/lib/midia-selectors'
+import { midiaTextoLegalPadrao } from '@/lib/agency'
 import { ImpressaForm, type ImpressaValues, type Insercao } from '../ImpressaForm'
 import { JornalForm, type JornalValues } from '../JornalForm'
 
@@ -17,7 +18,8 @@ export default async function EditarImpressaPage({
   params: Promise<{ orgSlug: string; midiaId: string }>
 }) {
   const { orgSlug, midiaId } = await params
-  const { supabase, clientes, veiculos, members, userId, today } = await loadMidiaSelectors(orgSlug)
+  const { supabase, orgId, clientes, veiculos, members, userId, today } = await loadMidiaSelectors(orgSlug)
+  const defaultTextoLegal = await midiaTextoLegalPadrao(supabase, orgId)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: m } = await (supabase as any).from('midias').select('*').eq('id', midiaId).single()
@@ -29,6 +31,7 @@ export default async function EditarImpressaPage({
     defaultResponsavelId: userId, today,
     redirectTo: `/${orgSlug}/midias/impressa`,
     submitLabel: 'Salvar',
+    defaultTextoLegal,
     onSubmit: updateMidia.bind(null, orgSlug, midiaId),
   }
 

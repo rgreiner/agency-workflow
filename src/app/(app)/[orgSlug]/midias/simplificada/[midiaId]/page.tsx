@@ -2,6 +2,7 @@ import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { updateMidia } from '@/app/actions/midia'
+import { midiaTextoLegalPadrao } from '@/lib/agency'
 import { MidiaForm, type ClienteOpt, type VeiculoOpt, type MemberOpt, type MidiaValues } from '../MidiaForm'
 
 function s(v: unknown): string {
@@ -92,6 +93,7 @@ export default async function EditarMidiaPage({
   }
 
   const today = new Date().toISOString().slice(0, 10)
+  const defaultTextoLegal = await midiaTextoLegalPadrao(supabase, org.id)
 
   return (
     <MidiaForm
@@ -102,6 +104,7 @@ export default async function EditarMidiaPage({
       today={today}
       initial={initial}
       submitLabel="Salvar"
+      defaultTextoLegal={defaultTextoLegal}
       onSubmit={updateMidia.bind(null, orgSlug, midiaId)}
     />
   )

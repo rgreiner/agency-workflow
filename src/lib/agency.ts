@@ -43,3 +43,10 @@ export async function loadOrgDocs(supabase: any, orgId: string): Promise<OrgDocs
     midiaNotes: Array.isArray(midia) && midia.length ? midia : DOC_MIDIA_NOTES,
   }
 }
+
+/** Texto legal padrão das autorizações de mídia (notas de faturamento), como texto. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function midiaTextoLegalPadrao(supabase: any, orgId: string): Promise<string> {
+  const { midiaNotes } = await loadOrgDocs(supabase, orgId)
+  return midiaNotes.map(n => n.text).join('\n')
+}

@@ -1,5 +1,6 @@
 import { createMidia } from '@/app/actions/midia'
 import { loadMidiaSelectors } from '@/lib/midia-selectors'
+import { midiaTextoLegalPadrao } from '@/lib/agency'
 import { DigitalForm } from '../DigitalForm'
 
 export default async function NovaDigitalPage({
@@ -8,7 +9,8 @@ export default async function NovaDigitalPage({
   params: Promise<{ orgSlug: string }>
 }) {
   const { orgSlug } = await params
-  const { clientes, veiculos, members, userId, today } = await loadMidiaSelectors(orgSlug)
+  const { supabase, orgId, clientes, veiculos, members, userId, today } = await loadMidiaSelectors(orgSlug)
+  const defaultTextoLegal = await midiaTextoLegalPadrao(supabase, orgId)
 
   return (
     <DigitalForm
@@ -19,6 +21,7 @@ export default async function NovaDigitalPage({
       today={today}
       redirectTo={`/${orgSlug}/midias/digitais`}
       submitLabel="Gravar"
+      defaultTextoLegal={defaultTextoLegal}
       onSubmit={createMidia.bind(null, orgSlug)}
     />
   )

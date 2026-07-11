@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { updateMidia } from '@/app/actions/midia'
 import { loadMidiaSelectors } from '@/lib/midia-selectors'
+import { midiaTextoLegalPadrao } from '@/lib/agency'
 import { DigitalForm, type DigitalValues, type PecaDig, type InsercaoDig } from '../DigitalForm'
 
 function s(v: unknown): string { return v == null ? '' : String(v) }
@@ -16,7 +17,8 @@ export default async function EditarDigitalPage({
   params: Promise<{ orgSlug: string; midiaId: string }>
 }) {
   const { orgSlug, midiaId } = await params
-  const { supabase, clientes, veiculos, members, userId, today } = await loadMidiaSelectors(orgSlug)
+  const { supabase, orgId, clientes, veiculos, members, userId, today } = await loadMidiaSelectors(orgSlug)
+  const defaultTextoLegal = await midiaTextoLegalPadrao(supabase, orgId)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: m } = await (supabase as any).from('midias').select('*').eq('id', midiaId).single()
@@ -48,6 +50,7 @@ export default async function EditarDigitalPage({
       redirectTo={`/${orgSlug}/midias/digitais`}
       initial={initial}
       submitLabel="Salvar"
+      defaultTextoLegal={defaultTextoLegal}
       onSubmit={updateMidia.bind(null, orgSlug, midiaId)}
     />
   )
