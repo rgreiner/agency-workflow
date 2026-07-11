@@ -3,7 +3,7 @@ import { getUsuario } from '@/lib/auth/server'
 import { notFound } from 'next/navigation'
 import { getMergedStatusConfig, PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity, type StatusOverride } from '@/types'
 import { cn, formatDate, isOverdue } from '@/lib/utils'
-import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink, X } from 'lucide-react'
+import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink, X, Target } from 'lucide-react'
 import Link from 'next/link'
 import { DriveProvisioningNotice } from './DriveProvisioningNotice'
 import { StatusChanger } from './StatusChanger'
@@ -30,6 +30,21 @@ import { MoveTaskProject } from './MoveTaskProject'
 // Comentários podem ser HTML (editor rico) ou texto puro (antigos).
 const isHtml = (s: string) => /^\s*</.test(s)
 const stripHtml = (s: string) => s.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
+
+/** Atalho pro briefing (doc) do cliente/campanha, acima do feed de atividade. */
+function BriefingLink({ href, label, title }: { href: string; label: string; title?: string | null }) {
+  return (
+    <Link href={href}
+      className="group flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-orange-100 bg-orange-50/60 hover:bg-orange-50 transition-colors">
+      <Target className="w-4 h-4 text-orange-500 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold text-orange-800">{label}</p>
+        {title && <p className="text-[11px] text-orange-600/70 truncate">{title}</p>}
+      </div>
+      <ArrowRight className="w-3.5 h-3.5 text-orange-400 shrink-0 transition-transform group-hover:translate-x-0.5" />
+    </Link>
+  )
+}
 
 export default async function ActivityPage({
   params,
@@ -90,6 +105,8 @@ export default async function ActivityPage({
     { data: reactionsRaw },
     { data: rawSettings },
     { data: muteRow },
+    { data: briefingCliente },
+    { data: briefingCampanha },
   ] = await Promise.all([
     orgId ? supabase.from('workspaces').select('id, name, campaigns(id, name)').eq('org_id', orgId).eq('archived', false).eq('campaigns.archived', false).order('name') : Promise.resolve({ data: [] }),
     (user && orgId) ? supabase.from('organization_members').select('role').eq('org_id', orgId).eq('user_id', user.id).single() : Promise.resolve({ data: null }),
@@ -97,6 +114,9 @@ export default async function ActivityPage({
     commentIds.length ? sb.from('activity_comment_reactions').select('comment_id, user_id, emoji').in('comment_id', commentIds) : Promise.resolve({ data: [] }),
     orgRow?.id ? sb.from('org_settings').select('status_overrides').eq('org_id', orgRow.id).single() : Promise.resolve({ data: null }),
     user ? sb.from('activity_mutes').select('activity_id').eq('activity_id', activityId).eq('user_id', user.id).maybeSingle() : Promise.resolve({ data: null }),
+    // Briefings (docs) vinculados ao cliente e à campanha desta tarefa (visibility='org').
+    sb.from('documents').select('id, title').eq('briefing_workspace_id', workspaceId).eq('archived', false).maybeSingle(),
+    sb.from('documents').select('id, title').eq('briefing_campaign_id', campaignId).eq('archived', false).maybeSingle(),
   ])
   const muted = !!muteRow
 
@@ -466,6 +486,18 @@ export default async function ActivityPage({
 
         {/* ── Activity feed — full-width below content on mobile ── */}
         <div className="w-full lg:w-[360px] border-t lg:border-t-0 lg:border-l border-gray-200 flex flex-col shrink-0 min-h-0 bg-gray-50/40">
+
+          {/* Briefings vinculados — atalho pro contexto do cliente/campanha */}
+          {(briefingCliente || briefingCampanha) && (
+            <div className="shrink-0 border-b border-gray-200 bg-white p-2 space-y-1.5">
+              {briefingCliente && (
+                <BriefingLink href={`/${orgSlug}/docs/${briefingCliente.id}`} label="Ver documento do cliente" title={briefingCliente.title} />
+              )}
+              {briefingCampanha && (
+                <BriefingLink href={`/${orgSlug}/docs/${briefingCampanha.id}`} label="Ver documento da campanha" title={briefingCampanha.title} />
+              )}
+            </div>
+          )}
 
           {/* Header */}
           <div className="px-5 py-3.5 border-b border-gray-200 bg-white shrink-0 flex items-center justify-between">
