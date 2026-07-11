@@ -1,6 +1,6 @@
 'use client'
 
-import { useTransition } from 'react'
+import { Fragment, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, Archive, ArchiveRestore, Pencil, ClipboardList, Printer, Factory, Files } from 'lucide-react'
@@ -31,6 +31,7 @@ export function ProducaoClient({
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const [situacao, setSituacaoFiltro] = useState<string | null>(null)
   const base = `/${orgSlug}/${basePath}`
 
   const changeSituacao = (id: string, s: string) => startTransition(async () => { await setProducaoSituacao(orgSlug, id, s, basePath); router.refresh() })
@@ -43,9 +44,26 @@ export function ProducaoClient({
     router.refresh()
   })
 
+  // Situações presentes (p/ os chips de filtro), com contagem.
+  const situacoes = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const r of items) m.set(r.situacao, (m.get(r.situacao) ?? 0) + 1)
+    return [...m.entries()].sort((a, b) => (situacaoOptions.findIndex(o => o.value === a[0])) - (situacaoOptions.findIndex(o => o.value === b[0])))
+  }, [items, situacaoOptions])
+
+  // Filtra + agrupa por cliente (com total por cliente).
+  const grupos = useMemo(() => {
+    const filtered = situacao ? items.filter(r => r.situacao === situacao) : items
+    const m = new Map<string, ProducaoRow[]>()
+    for (const r of filtered) { const arr = m.get(r.cliente) ?? []; arr.push(r); m.set(r.cliente, arr) }
+    return [...m.entries()]
+      .map(([cliente, rows]) => ({ cliente, rows, total: rows.reduce((s, r) => s + r.valor, 0) }))
+      .sort((a, b) => a.cliente.localeCompare(b.cliente))
+  }, [items, situacao])
+
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between gap-3 mb-5">
+      <div className="flex items-center justify-between gap-3 mb-4">
         <div>
           <h1 className="text-lg font-semibold text-gray-900">{title}</h1>
           <p className="text-gray-500 text-sm mt-0.5">{subtitle}</p>
@@ -63,69 +81,103 @@ export function ProducaoClient({
         </div>
       </div>
 
-      {items.length > 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
+      {/* Filtro por situação */}
+      {situacoes.length > 1 && (
+        <div className="flex items-center gap-1.5 flex-wrap mb-3">
+          <Chip label="Todas" active={situacao === null} onClick={() => setSituacaoFiltro(null)} count={items.length} />
+          {situacoes.map(([s, n]) => {
+            const cor = MIDIA_SITUACAO_COLORS[s]
+            return <Chip key={s} label={labelOf(situacaoOptions, s)} count={n} active={situacao === s} onClick={() => setSituacaoFiltro(situacao === s ? null : s)} dot={cor?.text} />
+          })}
+        </div>
+      )}
+
+      {grupos.length > 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <table className="w-full min-w-[720px]">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-medium text-gray-400">
-                <th className="text-left px-4 py-3 w-14">Nº</th>
-                <th className="text-left px-4 py-3">Título</th>
-                <th className="text-left px-4 py-3">Cliente</th>
-                <th className="text-right px-4 py-3">Valor</th>
-                <th className="text-left px-4 py-3 w-44">Situação</th>
-                <th className="w-20" />
+              <tr className="border-b border-gray-100 bg-gray-50/50 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                <th className="text-left px-4 py-2 w-12">Nº</th>
+                <th className="text-left px-4 py-2">Título</th>
+                <th className="text-right px-4 py-2 w-32">Valor</th>
+                <th className="text-left px-4 py-2 w-40">Situação</th>
+                <th className="w-24" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
-              {items.map(r => {
-                const cor = MIDIA_SITUACAO_COLORS[r.situacao]
-                return (
-                  <tr key={r.id} className="hover:bg-gray-50/50 transition">
-                    <td className="px-4 py-3 text-sm text-gray-400">{r.numero ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm font-medium"><Link href={`${base}/${r.id}`} className="text-gray-900 hover:text-orange-600 transition">{r.titulo}</Link></td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{r.cliente}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">{formatBRL(r.valor)}</td>
-                    <td className="px-4 py-3">
-                      {archivedView ? (
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: cor?.bg, color: cor?.text }}>{labelOf(MIDIA_SITUACAO_OPTIONS, r.situacao)}</span>
-                      ) : (
-                        <Select size="sm" value={r.situacao} onChange={v => changeSituacao(r.id, v)} options={situacaoOptions} />
-                      )}
+            <tbody>
+              {grupos.map(g => (
+                <Fragment key={g.cliente}>
+                  <tr className="bg-gray-50/70 border-y border-gray-100">
+                    <td colSpan={3} className="px-4 py-1.5">
+                      <span className="text-xs font-semibold text-gray-700">{g.cliente}</span>
+                      <span className="text-[11px] text-gray-400 ml-2">{g.rows.length} {g.rows.length === 1 ? 'item' : 'itens'}</span>
                     </td>
-                    <td className="px-3 py-3">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {gerarPedidos && r.situacao === 'aprovado' && (
-                          <button onClick={() => gerarPPs(r)} disabled={isPending} title="Gerar Pedidos de Produção das opções escolhidas"
-                            className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-orange-200 text-orange-700 hover:bg-orange-50 transition disabled:opacity-50">
-                            <Factory className="w-3.5 h-3.5" /> Gerar PPs
-                          </button>
-                        )}
-                        {gerarDocs && r.situacao === 'aprovado' && (
-                          <button onClick={() => gerarDocsFn(r)} disabled={isPending} title="Gerar mídias/produções/fees em rascunho"
-                            className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-orange-200 text-orange-700 hover:bg-orange-50 transition disabled:opacity-50">
-                            <Files className="w-3.5 h-3.5" /> Gerar docs
-                          </button>
-                        )}
-                        {showPrint && <Link href={`${base}/${r.id}/print`} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Imprimir / PDF"><Printer className="w-3.5 h-3.5" /></Link>}
-                        <Link href={`${base}/${r.id}`} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar"><Pencil className="w-3.5 h-3.5" /></Link>
-                        <button onClick={() => archive(r)} disabled={isPending} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition disabled:opacity-50" title={r.archived ? 'Desarquivar' : 'Arquivar'}>
-                          {r.archived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
-                    </td>
+                    <td colSpan={2} className="px-4 py-1.5 text-right text-xs font-medium text-gray-500">{formatBRL(g.total)}</td>
                   </tr>
-                )
-              })}
+                  {g.rows.map(r => {
+                    const cor = MIDIA_SITUACAO_COLORS[r.situacao]
+                    return (
+                      <tr key={r.id} className="border-b border-gray-50 hover:bg-orange-50/30 transition-colors">
+                        <td className="px-4 py-1.5 text-sm text-gray-400 tabular-nums">{r.numero ?? '—'}</td>
+                        <td className="px-4 py-1.5 text-sm font-medium"><Link href={`${base}/${r.id}`} className="text-gray-900 hover:text-orange-600 transition-colors">{r.titulo}</Link></td>
+                        <td className="px-4 py-1.5 text-sm text-gray-900 text-right font-medium tabular-nums">{formatBRL(r.valor)}</td>
+                        <td className="px-4 py-1.5">
+                          {archivedView ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: cor?.bg, color: cor?.text }}>{labelOf(MIDIA_SITUACAO_OPTIONS, r.situacao)}</span>
+                          ) : (
+                            <Select size="sm" value={r.situacao} onChange={v => changeSituacao(r.id, v)} options={situacaoOptions} />
+                          )}
+                        </td>
+                        <td className="px-3 py-1.5">
+                          <div className="flex items-center justify-end gap-1">
+                            {gerarPedidos && r.situacao === 'aprovado' && (
+                              <button onClick={() => gerarPPs(r)} disabled={isPending} title="Gerar Pedidos de Produção das opções escolhidas"
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg border border-orange-200 text-orange-700 hover:bg-orange-50 transition-colors disabled:opacity-50 whitespace-nowrap">
+                                <Factory className="w-3.5 h-3.5 shrink-0" /> Gerar PPs
+                              </button>
+                            )}
+                            {gerarDocs && r.situacao === 'aprovado' && (
+                              <button onClick={() => gerarDocsFn(r)} disabled={isPending} title="Gerar mídias/produções/fees em rascunho"
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg border border-orange-200 text-orange-700 hover:bg-orange-50 transition-colors disabled:opacity-50 whitespace-nowrap">
+                                <Files className="w-3.5 h-3.5 shrink-0" /> Gerar docs
+                              </button>
+                            )}
+                            {showPrint && <Link href={`${base}/${r.id}/print`} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title="Imprimir / PDF"><Printer className="w-3.5 h-3.5" /></Link>}
+                            <Link href={`${base}/${r.id}`} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title="Editar"><Pencil className="w-3.5 h-3.5" /></Link>
+                            <button onClick={() => archive(r)} disabled={isPending} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50" title={r.archived ? 'Desarquivar' : 'Arquivar'}>
+                              {r.archived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </Fragment>
+              ))}
             </tbody>
           </table>
         </div>
       ) : (
         <div className="text-center py-24 bg-white rounded-xl border border-gray-200">
           <ClipboardList className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-          <h3 className="text-gray-900 font-medium">{archivedView ? 'Nenhum registro arquivado' : 'Nenhum registro ainda'}</h3>
-          <p className="text-gray-500 text-sm mt-1">{archivedView ? 'Arquivados aparecem aqui.' : 'Adicione o primeiro.'}</p>
+          <h3 className="text-gray-900 font-medium">{situacao ? 'Nada nesta situação' : archivedView ? 'Nenhum registro arquivado' : 'Nenhum registro ainda'}</h3>
+          <p className="text-gray-500 text-sm mt-1">{situacao ? 'Ajuste o filtro acima.' : archivedView ? 'Arquivados aparecem aqui.' : 'Adicione o primeiro.'}</p>
         </div>
       )}
     </div>
+  )
+}
+
+function Chip({ label, count, active, onClick, dot }: { label: string; count?: number; active: boolean; onClick: () => void; dot?: string }) {
+  return (
+    <button onClick={onClick}
+      className={cn(
+        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors active:scale-[0.97]',
+        active ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300',
+      )}>
+      {dot && <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: dot }} />}
+      {label}
+      {count != null && <span className={cn('text-[10px] font-semibold', active ? 'text-white/70' : 'text-gray-400')}>{count}</span>}
+    </button>
   )
 }
