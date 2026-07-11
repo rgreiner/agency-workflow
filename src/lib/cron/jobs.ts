@@ -22,6 +22,7 @@ export interface CronJob {
   everyMinutes?: number
   dailyAfterHour?: number    // 0–23, horário de Brasília
   dailyAfterMinute?: number  // 0–59 (default 0) — junto do dailyAfterHour
+  weekdaysOnly?: boolean     // seg–sex apenas (não dispara sáb/dom)
   run: (ctx: CronCtx) => Promise<string>
 }
 
@@ -51,6 +52,11 @@ function isDue(job: CronJob, lastIso: string | null, nowMs: number, nowD: Date):
   if (job.everyMinutes != null) return !lastIso || nowMs - new Date(lastIso).getTime() >= job.everyMinutes * 60_000
   if (job.dailyAfterHour != null) {
     const now = brtParts(nowD)
+    // seg–sex: getUTCDay do dia de calendário (0=dom..6=sáb) é estável por fuso
+    if (job.weekdaysOnly) {
+      const dow = new Date(`${now.date}T00:00:00Z`).getUTCDay()
+      if (dow === 0 || dow === 6) return false
+    }
     const threshold = job.dailyAfterHour * 60 + (job.dailyAfterMinute ?? 0)
     const lastDate = lastIso ? brtParts(new Date(lastIso)).date : ''
     return now.minutes >= threshold && lastDate < now.date  // ainda não rodou HOJE e já passou da hora

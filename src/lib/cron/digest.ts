@@ -38,6 +38,7 @@ export const digestJob: CronJob = {
   name: 'digest',
   dailyAfterHour: 8,
   dailyAfterMinute: 30,
+  weekdaysOnly: true,   // não manda sábado/domingo
   run: async ({ supabase, dry }) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data } = await (supabase as any).rpc('digest_payload')
