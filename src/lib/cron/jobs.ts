@@ -36,8 +36,20 @@ export const JOBS: CronJob[] = [
     everyMinutes: 30,
     run: async () => 'ok',
   },
+  {
+    // Aviso no sino: tarefas que vencem AMANHÃ. Todo dia (inclui fim de semana,
+    // p/ não perder tarefas de segunda avisadas no domingo). É in-app, não e-mail.
+    name: 'lembrete-prazo',
+    dailyAfterHour: 8,
+    run: async ({ supabase }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc('notify_due_soon')
+      if (error) throw new Error(error.message)
+      return `${data ?? 0} lembrete(s) criado(s)`
+    },
+  },
   digestJob,   // resumo diário 8h30 (BRT)
-  // Futuros (ondas 4/5): 'lembrete-prazo', 'cobranca', 'contratos', 'btg-sync'.
+  // Futuros (ondas 4/5): 'cobranca', 'contratos', 'btg-sync'.
 ]
 
 // ── Runner ───────────────────────────────────────────────────────────────────
