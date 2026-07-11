@@ -41,10 +41,16 @@ export function useAnchoredPanel(
       setPos({ top: openUp ? r.top - gap - ph : r.bottom + gap, left, minWidth: r.width })
     }
     const close = () => closeRef.current()
-    window.addEventListener('scroll', close, true)  // capture: pega scroll de qualquer container
+    // scroll dentro do próprio painel (lista com overflow) NÃO fecha — só o scroll
+    // de um container de fundo, que descolaria o painel do gatilho.
+    const onScroll = (e: Event) => {
+      if (panelRef.current?.contains(e.target as Node)) return
+      closeRef.current()
+    }
+    window.addEventListener('scroll', onScroll, true)  // capture: pega scroll de qualquer container
     window.addEventListener('resize', close)
     return () => {
-      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('scroll', onScroll, true)
       window.removeEventListener('resize', close)
       setPos(null)  // limpa ao fechar (no cleanup, sem cascata de render)
     }
