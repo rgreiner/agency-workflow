@@ -63,7 +63,8 @@ const isPago = (s: string) => s === 'pago' || s === 'recebido'
 const monthOf = (d: string | null) => (d ? d.slice(0, 7) : null)
 const val = (l: Lancamento) => Number(l.valor ?? 0)
 const realVal = (l: Lancamento) => Number(l.valor_realizado ?? l.valor ?? 0)
-const signed = (l: Lancamento) => (l.tipo === 'saida' ? -val(l) : val(l))
+// Valor com sinal p/ saldo corrido: entrada soma, saída subtrai (usa o realizado quando liquidado).
+const signedEff = (l: Lancamento) => (l.tipo === 'saida' ? -1 : 1) * (isPago(l.situacao) ? realVal(l) : val(l))
 /** "1.234,56" → "1234.56" (string p/ a RPC). Vazio → '0'. */
 const parseBR = (s: string) => { const t = s.trim().replace(/\./g, '').replace(',', '.'); return t === '' ? '0' : t }
 const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
@@ -92,13 +93,31 @@ export function LancamentosClient({ orgSlug, lancamentos, contas, categorias, ce
   }, [lancamentos, tipoFilter, contaFilter, query])
 
   const liqMonth = (l: Lancamento) => monthOf(l.data_liquidacao ?? l.vencimento)
+  // Data efetiva: liquidação (se pago) ou vencimento (se em aberto).
+  const effDate = (l: Lancamento) => (isPago(l.situacao) ? (l.data_liquidacao ?? l.vencimento) : l.vencimento)
+  const isCurrentMonth = mes === today.slice(0, 7)
 
-  const { atrasado, aVencer, pagos } = useMemo(() => {
-    const atrasado = filtered.filter(l => !isPago(l.situacao) && l.vencimento && l.vencimento < today)
-    const aVencer = filtered.filter(l => !isPago(l.situacao) && (!l.vencimento || (monthOf(l.vencimento) === mes && l.vencimento >= today)))
-    const pagos = filtered.filter(l => isPago(l.situacao) && liqMonth(l) === mes)
-    return { atrasado, aVencer, pagos }
-  }, [filtered, mes, today])
+  // Tabela única (estilo extrato): itens do mês por data + saldo corrido projetado.
+  // No mês atual, também carrega os em aberto atrasados de meses anteriores e os sem vencimento.
+  const rows = useMemo(() => {
+    const inView = filtered.filter(l => {
+      const em = monthOf(effDate(l))
+      if (em === mes) return true
+      if (isCurrentMonth && !isPago(l.situacao)) {
+        if (!l.vencimento) return true
+        if (l.vencimento < today && (!em || em < mes)) return true
+      }
+      return false
+    })
+    inView.sort((a, b) => {
+      const da = effDate(a) ?? '9999-12-31', db = effDate(b) ?? '9999-12-31'
+      return da < db ? -1 : da > db ? 1 : 0
+    })
+    const out: { l: Lancamento; saldo: number }[] = []
+    let acc = 0
+    for (const l of inView) { acc += signedEff(l); out.push({ l, saldo: acc }) }
+    return out
+  }, [filtered, mes, today, isCurrentMonth])
 
   // Resumo do mês (estilo Conta Azul): receita/despesa × em aberto/realizada.
   const resumo = useMemo(() => {
@@ -116,9 +135,11 @@ export function LancamentosClient({ orgSlug, lancamentos, contas, categorias, ce
     }
   }, [filtered, mes])
 
-  const sum = (arr: Lancamento[]) => arr.reduce((s, l) => s + signed(l), 0)
   const revisarCount = lancamentos.filter(l => l.revisar).length
+  const contaMap = useMemo(() => Object.fromEntries(contas.map(c => [c.id, c])), [contas])
   const contaFilterOptions = useMemo(() => [{ value: '', label: 'Todas as contas' }, ...contas.map(c => ({ value: c.id, label: c.nome }))], [contas])
+  const hasFilters = tipoFilter !== 'todos' || !!contaFilter || !!query.trim()
+  function limparFiltros() { setTipoFilter('todos'); setContaFilter(''); setQuery('') }
 
   return (
     <div className="p-6">
@@ -157,6 +178,11 @@ export function LancamentosClient({ orgSlug, lancamentos, contas, categorias, ce
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar por contato, descrição ou categoria"
             className="w-full pl-9 pr-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent" />
         </div>
+        {hasFilters && (
+          <button onClick={limparFiltros} className="inline-flex items-center gap-1.5 px-2.5 py-2 text-sm text-gray-500 hover:text-gray-700 transition">
+            <X className="w-3.5 h-3.5" /> Limpar filtros
+          </button>
+        )}
       </div>
 
       {/* Resumo do mês */}
@@ -175,12 +201,33 @@ export function LancamentosClient({ orgSlug, lancamentos, contas, categorias, ce
         </div>
       )}
 
-      <Bucket title="Atrasado" tone="red" total={sum(atrasado)} items={atrasado} orgSlug={orgSlug} today={today}
-        emptyHint="Nada atrasado." contas={contas} onEdit={setEditing} onBaixa={setBaixa} />
-      <Bucket title={`A vencer em ${monthLabel(mes)}`} tone="amber" total={sum(aVencer)} items={aVencer} orgSlug={orgSlug} today={today}
-        emptyHint="Nada a vencer neste mês." contas={contas} onEdit={setEditing} onBaixa={setBaixa} />
-      <Bucket title={`Realizado em ${monthLabel(mes)}`} tone="emerald" total={sum(pagos)} items={pagos} orgSlug={orgSlug} today={today}
-        emptyHint="Nada realizado neste mês." contas={contas} onEdit={setEditing} onBaixa={setBaixa} paid />
+      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[920px]">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50/60 text-xs font-medium text-gray-400">
+                <th className="text-left px-4 py-2.5 font-medium">Data</th>
+                <th className="text-left px-4 py-2.5 font-medium">Resumo do lançamento</th>
+                <th className="text-left px-3 py-2.5 font-medium">Situação</th>
+                <th className="text-right px-4 py-2.5 font-medium">Valor</th>
+                <th className="text-right px-4 py-2.5 font-medium">Saldo</th>
+                <th className="text-center px-3 py-2.5 font-medium">NF</th>
+                <th className="text-center px-3 py-2.5 font-medium">Boleto</th>
+                <th className="w-44" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {rows.map(({ l, saldo }) => (
+                <Row key={l.id} l={l} saldo={saldo} orgSlug={orgSlug} today={today}
+                  conta={l.conta_id ? contaMap[l.conta_id] : undefined} onEdit={setEditing} onBaixa={setBaixa} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {rows.length === 0 && (
+          <p className="text-sm text-gray-400 px-4 py-10 text-center">Nenhum lançamento neste mês.</p>
+        )}
+      </div>
 
       {(creating || editing) && (
         <LancamentoModal orgSlug={orgSlug} lancamento={editing} contas={contas} categorias={categorias} centros={centros}
@@ -193,61 +240,23 @@ export function LancamentosClient({ orgSlug, lancamentos, contas, categorias, ce
   )
 }
 
-function Bucket({ title, tone, total, items, orgSlug, today, emptyHint, contas, onEdit, onBaixa, paid = false }: {
-  title: string; tone: 'red' | 'amber' | 'emerald'; total: number; items: Lancamento[]
-  orgSlug: string; today: string; emptyHint: string; contas: ContaRef[]
-  onEdit: (l: Lancamento) => void; onBaixa: (l: Lancamento) => void; paid?: boolean
-}) {
-  const toneCls = {
-    red: 'text-red-700 bg-red-50 border-red-100',
-    amber: 'text-amber-700 bg-amber-50 border-amber-100',
-    emerald: 'text-emerald-700 bg-emerald-50 border-emerald-100',
-  }[tone]
-  const contaMap = useMemo(() => Object.fromEntries(contas.map(c => [c.id, c])), [contas])
-
-  return (
-    <div className="mb-5">
-      <div className={cn('flex items-center justify-between px-4 py-2 rounded-t-xl border text-sm font-semibold', toneCls)}>
-        <span>{title} · {items.length}</span>
-        <span>{formatBRL(total)}</span>
-      </div>
-      <div className="bg-white rounded-b-xl border border-t-0 border-gray-200 overflow-hidden overflow-x-auto">
-        {items.length > 0 ? (
-          <table className="w-full min-w-[820px]">
-            <thead>
-              <tr className="border-b border-gray-100 text-xs font-medium text-gray-400">
-                <th className="text-left px-4 py-2">{paid ? 'Liquidação' : 'Vencimento'}</th>
-                <th className="text-left px-4 py-2">Contato</th>
-                <th className="text-left px-4 py-2">Descrição</th>
-                <th className="text-right px-4 py-2">Valor</th>
-                <th className="text-center px-3 py-2">NF</th>
-                <th className="text-center px-3 py-2">Boleto</th>
-                <th className="w-40" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {items.map(l => <Row key={l.id} l={l} orgSlug={orgSlug} today={today} paid={paid} conta={l.conta_id ? contaMap[l.conta_id] : undefined} onEdit={onEdit} onBaixa={onBaixa} />)}
-            </tbody>
-          </table>
-        ) : (
-          <p className="text-sm text-gray-400 px-4 py-5">{emptyHint}</p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function Row({ l, orgSlug, today, paid, conta, onEdit, onBaixa }: {
-  l: Lancamento; orgSlug: string; today: string; paid: boolean; conta?: ContaRef
+function Row({ l, saldo, orgSlug, today, conta, onEdit, onBaixa }: {
+  l: Lancamento; saldo: number; orgSlug: string; today: string; conta?: ContaRef
   onEdit: (l: Lancamento) => void; onBaixa: (l: Lancamento) => void
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [confirmDel, setConfirmDel] = useState(false)
+  const paid = isPago(l.situacao)
   const overdue = !paid && !!l.vencimento && l.vencimento < today
   const isSaida = l.tipo === 'saida'
   const isManual = l.origem_tipo === 'manual'
   const dateShown = paid ? (l.data_liquidacao ?? l.vencimento) : l.vencimento
+  const status = paid
+    ? { label: isSaida ? 'Pago' : 'Recebido', cls: 'bg-emerald-50 text-emerald-700' }
+    : overdue
+      ? { label: 'Atrasado', cls: 'bg-red-50 text-red-700' }
+      : { label: 'Em aberto', cls: 'bg-amber-50 text-amber-700' }
 
   function toggleNf() { startTransition(async () => { await setLancamentoFlags(orgSlug, l.id, !l.nf_emitida, l.boleto_gerado); router.refresh() }) }
   function toggleBoleto() { startTransition(async () => { await setLancamentoFlags(orgSlug, l.id, l.nf_emitida, !l.boleto_gerado); router.refresh() }) }
@@ -261,29 +270,35 @@ function Row({ l, orgSlug, today, paid, conta, onEdit, onBaixa }: {
 
   return (
     <tr className={cn('transition', isPending ? 'opacity-50' : 'hover:bg-gray-50/50', l.revisar && 'bg-amber-50/40')}>
-      <td className={cn('px-4 py-2.5 text-sm', overdue ? 'text-red-600 font-medium' : 'text-gray-600')}>{formatDateBR(dateShown)}</td>
-      <td className="px-4 py-2.5 text-sm text-gray-900">
-        <div className="flex items-center gap-1.5">
-          {isSaida ? <ArrowUpCircle className="w-3.5 h-3.5 text-red-400 shrink-0" /> : <ArrowDownCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
-          <span>{l.contato_nome ?? '—'}</span>
-          {l.revisar && <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 text-[10px] font-medium px-1.5 py-0.5"><AlertTriangle className="w-2.5 h-2.5" /> alterado</span>}
+      <td className={cn('px-4 py-2.5 text-sm whitespace-nowrap', overdue ? 'text-red-600 font-medium' : 'text-gray-600')}>{formatDateBR(dateShown)}</td>
+      <td className="px-4 py-2.5 text-sm">
+        <div className="flex items-start gap-2">
+          {isSaida ? <ArrowUpCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" /> : <ArrowDownCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />}
+          <div className="min-w-0">
+            <span className="text-gray-900">{l.contato_nome ?? l.descricao ?? '—'}</span>
+            <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+              {l.contato_nome && l.descricao && <span className="text-xs text-gray-500">{l.descricao}</span>}
+              {l.parcela_num && l.parcela_total && (
+                <span className="text-[10px] font-medium text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">{l.parcela_num}/{l.parcela_total}</span>
+              )}
+              {l.categoria && <span className="text-[10px] text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">{l.categoria}</span>}
+              {conta && <span className="inline-flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: conta.cor ?? '#cbd5e1' }} />{conta.nome}</span>}
+            </div>
+          </div>
         </div>
       </td>
-      <td className="px-4 py-2.5 text-sm text-gray-600">
-        <span>{l.descricao ?? '—'}</span>
-        {l.parcela_num && l.parcela_total && (
-          <span className="ml-2 align-middle text-[10px] font-medium text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">{l.parcela_num}/{l.parcela_total}</span>
-        )}
-        {(l.categoria || conta) && (
-          <span className="ml-2 inline-flex items-center gap-1.5 align-middle">
-            {l.categoria && <span className="text-[10px] text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">{l.categoria}</span>}
-            {conta && <span className="inline-flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: conta.cor ?? '#cbd5e1' }} />{conta.nome}</span>}
+      <td className="px-3 py-2.5">
+        <div className="flex items-center gap-1.5">
+          <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap', status.cls)}>
+            {paid && <Check className="w-3 h-3" />}{status.label}
           </span>
-        )}
+          {l.revisar && <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 text-[10px] font-medium px-1.5 py-0.5" title="Documento alterado depois de lançado"><AlertTriangle className="w-2.5 h-2.5" /> alterado</span>}
+        </div>
       </td>
-      <td className={cn('px-4 py-2.5 text-sm font-medium text-right', isSaida ? 'text-red-600' : 'text-gray-900')}>
+      <td className={cn('px-4 py-2.5 text-sm font-medium text-right whitespace-nowrap', isSaida ? 'text-red-600' : 'text-gray-900')}>
         {isSaida ? '− ' : ''}{formatBRL(val(l))}
       </td>
+      <td className={cn('px-4 py-2.5 text-sm text-right tabular-nums whitespace-nowrap', saldo < 0 ? 'text-red-600' : 'text-gray-500')}>{formatBRL(saldo)}</td>
       <td className="px-3 py-2.5 text-center"><Flag on={l.nf_emitida} onClick={toggleNf} label="NF" /></td>
       <td className="px-3 py-2.5 text-center"><Flag on={l.boleto_gerado} onClick={toggleBoleto} label="Boleto" /></td>
       <td className="px-3 py-2.5">
