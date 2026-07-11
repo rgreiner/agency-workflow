@@ -1,14 +1,19 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, Check } from 'lucide-react'
+import { ChevronDown, Check, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export interface SelectOption {
   value: string
   label: string
 }
+
+// Normaliza p/ busca: sem acento, minúsculo (ex.: "São" casa com "sao").
+const normalize = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+// Acima disso o painel ganha campo de busca por digitação.
+const SEARCH_THRESHOLD = 7
 
 /**
  * Posiciona um painel flutuante (position:fixed) ancorado no gatilho, com flip
@@ -80,11 +85,18 @@ export function Select({
 }: Props) {
   const [open, setOpen] = useState(false)
   const [activeIdx, setActiveIdx] = useState(0)
+  const [query, setQuery] = useState('')
   const ref = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
 
   const selected = options.find(o => o.value === value)
+  const searchable = options.length > SEARCH_THRESHOLD
+  const filtered = useMemo(() => {
+    const q = normalize(query.trim())
+    return q ? options.filter(o => normalize(o.label).includes(q)) : options
+  }, [options, query])
   const pos = useAnchoredPanel(open, triggerRef, listRef, align, () => setOpen(false))
 
   // Fecha ao clicar fora (checa gatilho E painel — o painel vive num portal)
@@ -99,9 +111,12 @@ export function Select({
     return () => document.removeEventListener('mousedown', onOut)
   }, [open])
 
-  // Ao abrir, posiciona o destaque no item selecionado
+  // Ao abrir: limpa a busca, destaca o selecionado e foca o campo de busca.
   useEffect(() => {
-    if (open) setActiveIdx(Math.max(0, options.findIndex(o => o.value === value)))
+    if (!open) return
+    setQuery('')
+    setActiveIdx(Math.max(0, options.findIndex(o => o.value === value)))
+    if (searchable) setTimeout(() => searchRef.current?.focus(), 0)
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Mantém o item ativo visível
@@ -114,15 +129,20 @@ export function Select({
     setOpen(false)
   }
 
+  // Navegação por teclado (compartilhada entre gatilho e campo de busca).
+  function navKeys(e: React.KeyboardEvent) {
+    if (e.key === 'ArrowDown')      { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, filtered.length - 1)) }
+    else if (e.key === 'ArrowUp')   { e.preventDefault(); setActiveIdx(i => Math.max(i - 1, 0)) }
+    else if (e.key === 'Enter')     { e.preventDefault(); const o = filtered[activeIdx]; if (o) choose(o.value) }
+    else if (e.key === 'Escape')    { e.preventDefault(); setOpen(false) }
+  }
+
   function onKeyDown(e: React.KeyboardEvent) {
     if (!open) {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') { e.preventDefault(); setOpen(true) }
       return
     }
-    if (e.key === 'ArrowDown')      { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, options.length - 1)) }
-    else if (e.key === 'ArrowUp')   { e.preventDefault(); setActiveIdx(i => Math.max(i - 1, 0)) }
-    else if (e.key === 'Enter')     { e.preventDefault(); const o = options[activeIdx]; if (o) choose(o.value) }
-    else if (e.key === 'Escape')    { e.preventDefault(); setOpen(false) }
+    navKeys(e)
   }
 
   return (
@@ -151,7 +171,24 @@ export function Select({
           style={{ position: 'fixed', top: pos?.top ?? -9999, left: pos?.left ?? -9999, minWidth: pos?.minWidth, visibility: pos ? 'visible' : 'hidden' }}
           className="pop-in z-[100] max-h-72 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-xl py-1.5"
         >
-          {options.map((o, i) => {
+          {searchable && (
+            <div className="sticky top-0 z-10 bg-white px-1.5 pt-0.5 pb-1.5 mb-1 border-b border-gray-100">
+              <div className="flex items-center gap-2 px-2.5 py-1.5 bg-gray-100 rounded-lg">
+                <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                <input
+                  ref={searchRef}
+                  value={query}
+                  onChange={e => { setQuery(e.target.value); setActiveIdx(0) }}
+                  onKeyDown={navKeys}
+                  placeholder="Buscar…"
+                  className="w-full bg-transparent text-sm text-gray-700 placeholder-gray-400 focus:outline-none"
+                />
+              </div>
+            </div>
+          )}
+          {filtered.length === 0 ? (
+            <p className="px-3 py-2 text-sm text-gray-400">Nenhum resultado</p>
+          ) : filtered.map((o, i) => {
             const isSel = o.value === value
             const active = i === activeIdx
             return (
@@ -199,10 +236,18 @@ export function MultiSelect({
   values, onChange, options, allLabel, className, align = 'left', size = 'md',
 }: MultiProps) {
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const ref = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
   const pos = useAnchoredPanel(open, triggerRef, panelRef, align, () => setOpen(false))
+
+  const searchable = options.length > SEARCH_THRESHOLD
+  const filtered = useMemo(() => {
+    const q = normalize(query.trim())
+    return q ? options.filter(o => normalize(o.label).includes(q)) : options
+  }, [options, query])
 
   useEffect(() => {
     if (!open) return
@@ -231,7 +276,7 @@ export function MultiSelect({
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => { setQuery(''); setOpen(o => !o) }}
         aria-haspopup="listbox"
         aria-expanded={open}
         className={cn(
@@ -252,6 +297,21 @@ export function MultiSelect({
           style={{ position: 'fixed', top: pos?.top ?? -9999, left: pos?.left ?? -9999, minWidth: pos?.minWidth, visibility: pos ? 'visible' : 'hidden' }}
           className="pop-in z-[100] max-h-72 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-xl py-1.5"
         >
+          {searchable && (
+            <div className="sticky top-0 z-10 bg-white px-1.5 pt-0.5 pb-1.5 mb-1 border-b border-gray-100">
+              <div className="flex items-center gap-2 px-2.5 py-1.5 bg-gray-100 rounded-lg">
+                <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                <input
+                  ref={searchRef}
+                  autoFocus
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="Buscar…"
+                  className="w-full bg-transparent text-sm text-gray-700 placeholder-gray-400 focus:outline-none"
+                />
+              </div>
+            </div>
+          )}
           {values.length > 0 && (
             <button
               type="button"
@@ -261,7 +321,9 @@ export function MultiSelect({
               Limpar seleção
             </button>
           )}
-          {options.map(o => {
+          {filtered.length === 0 ? (
+            <p className="px-3 py-2 text-sm text-gray-400">Nenhum resultado</p>
+          ) : filtered.map(o => {
             const isSel = values.includes(o.value)
             return (
               <button
