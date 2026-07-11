@@ -97,6 +97,10 @@ interface Props {
   campMap: Record<string, CampInfo>
   members: Member[]
   initialWorkspace?: string
+  /** Filtros vindos da URL (ex.: deep-link do Dashboard gerencial). Vencem o "último filtro". */
+  initialPersons?: string[]
+  initialStatuses?: string[]
+  initialDate?: string
   view: 'ativas' | 'arquivadas'
   /** Título do cabeçalho (default "Lista de atividades"; na tela de cargo = nome do cargo). */
   title?: string
@@ -114,7 +118,7 @@ interface Props {
 
 // ── Component ─────────────────────────────────────────────────────────────
 
-export function ListaClient({ orgSlug, activities, campMap, members, initialWorkspace, view, title = 'Lista de atividades', routeBase = 'views/lista', breadcrumb, titleActions, secondaryActions, newActivityCampaign }: Props) {
+export function ListaClient({ orgSlug, activities, campMap, members, initialWorkspace, initialPersons, initialStatuses, initialDate, view, title = 'Lista de atividades', routeBase = 'views/lista', breadcrumb, titleActions, secondaryActions, newActivityCampaign }: Props) {
   const listPath = `/${orgSlug}/${routeBase}`
   const statusConfig = useStatusConfig()
   const isArchivedView = view === 'arquivadas'
@@ -142,11 +146,13 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
   const [pickerOpen, setPickerOpen] = useState(false)
   // Concluído começa recolhido (fluxo: revisar → selecionar pelo checkbox do grupo → arquivar).
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(['concluido']))
+  // Deep-link da URL (ex.: Dashboard gerencial) vence o "último filtro" lembrado.
+  const urlFiltered = !!initialWorkspace || (initialPersons?.length ?? 0) > 0 || (initialStatuses?.length ?? 0) > 0 || !!initialDate
   const [filterWorkspaces, setFilterWorkspaces] = useState<string[]>(initialWorkspace ? [initialWorkspace] : [])
-  const [filterPersons,  setFilterPersons]  = useState<string[]>([])
-  const [filterStatuses, setFilterStatuses] = useState<string[]>([])
+  const [filterPersons,  setFilterPersons]  = useState<string[]>(initialPersons ?? [])
+  const [filterStatuses, setFilterStatuses] = useState<string[]>(initialStatuses ?? [])
   const [filterPriorities, setFilterPriorities] = useState<string[]>([])
-  const [filterDate, setFilterDate] = useState('')
+  const [filterDate, setFilterDate] = useState(initialDate ?? '')
   const [onlyMine, setOnlyMine] = useState(false)
   const me = getUsuarioClient()?.id ?? null
   const pickerRef = useRef<HTMLDivElement>(null)
@@ -240,7 +246,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
      mesmo padrão dos efeitos de colunas/presets acima. */
   useEffect(() => {
     try {
-      if (!initialWorkspace) {
+      if (!urlFiltered) {
         const s = localStorage.getItem(LAST_FILTER_KEY)
         if (s) {
           const f = JSON.parse(s)

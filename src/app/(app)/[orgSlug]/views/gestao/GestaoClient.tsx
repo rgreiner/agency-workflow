@@ -7,18 +7,15 @@ import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/Avatar'
 import { MultiSelect, Select } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
-import { AlertTriangle, UserX, CalendarOff, PauseCircle, ChevronRight, Loader2, Activity as ActivityIcon } from 'lucide-react'
+import { AlertTriangle, UserX, CalendarOff, PauseCircle, Loader2, Activity as ActivityIcon, X, ExternalLink } from 'lucide-react'
 
-export interface GestaoItem {
-  id: string; title: string; ws_id: string; campaign_id: string
-  ws_name: string; camp_name: string; due_date?: string; status?: string; dias?: number
-}
+export interface ProblemTask { status: string; ws_id: string; ws_name: string; assignees: string[]; dias: number }
 export interface CargaRow { user_id: string; full_name: string | null; avatar_url: string | null; ativas: number; horas: number }
 export interface FunilRow { status: string; n: number }
 export interface GestaoData {
   total_ativas: number
   n_atrasadas: number; n_sem_responsavel: number; n_sem_prazo: number; n_paradas: number
-  atrasadas: GestaoItem[]; sem_responsavel: GestaoItem[]; paradas: GestaoItem[]
+  atrasadas: ProblemTask[]; paradas: ProblemTask[]
   carga: CargaRow[]; funil: FunilRow[]
 }
 export interface EngUser { user_id: string; full_name: string | null; avatar_url: string | null; total: number; por_tipo: Record<string, number> }
@@ -86,30 +83,56 @@ export function GestaoClient({
   )
 }
 
-// ── Operação (3.1) ──────────────────────────────────────────────────────────
+// ── Operação (3.1) — analítico: onde e com quem a pauta trava ────────────────
 function Operacao({ orgSlug, workspaces, wsFilter, gestao, onWs }: {
   orgSlug: string; workspaces: { id: string; name: string }[]; wsFilter: string[]
   gestao: GestaoData | null; onWs: (ws: string[]) => void
 }) {
   const statusConfig = useStatusConfig()
-  const [open, setOpen] = useState<'atrasadas' | 'sem_responsavel' | 'paradas' | null>('atrasadas')
+  const [person, setPerson] = useState<string | null>(null)  // uid | 'none' (sem responsável) | null
   if (!gestao) return <p className="text-sm text-gray-400">Sem dados.</p>
 
-  const cards = [
-    { key: 'atrasadas' as const, label: 'Atrasadas', n: gestao.n_atrasadas, icon: AlertTriangle, tone: 'red', items: gestao.atrasadas },
-    { key: 'sem_responsavel' as const, label: 'Sem responsável', n: gestao.n_sem_responsavel, icon: UserX, tone: 'amber', items: gestao.sem_responsavel },
-    { key: 'paradas' as const, label: 'Paradas +7 dias', n: gestao.n_paradas, icon: PauseCircle, tone: 'orange', items: gestao.paradas },
-    { key: 'sem_prazo' as const, label: 'Sem prazo', n: gestao.n_sem_prazo, icon: CalendarOff, tone: 'gray', items: null },
-  ]
-  const toneCls: Record<string, string> = {
-    red: 'text-red-600', amber: 'text-amber-600', orange: 'text-orange-600', gray: 'text-gray-500',
+  const people = new Map(gestao.carga.map(c => [c.user_id, c]))
+
+  // Ranking por pessoa (sobre TODAS as atrasadas — é o seletor de avatar).
+  const pc = new Map<string, number>(); let semResp = 0
+  for (const t of gestao.atrasadas) {
+    if (t.assignees.length === 0) semResp++
+    else for (const u of t.assignees) pc.set(u, (pc.get(u) ?? 0) + 1)
   }
-  const openCard = cards.find(c => c.key === open && c.items)
-  const maxCarga = Math.max(1, ...gestao.carga.map(c => c.ativas))
+  const ranking = [...pc.entries()].map(([uid, n]) => ({ uid, n, p: people.get(uid) })).sort((a, b) => b.n - a.n)
+
+  // Recorte por pessoa aplicado aos demais painéis.
+  const match = (t: ProblemTask) => person == null || (person === 'none' ? t.assignees.length === 0 : t.assignees.includes(person))
+  const atr = gestao.atrasadas.filter(match)
+  const par = gestao.paradas.filter(match)
+
+  const etapaAtr = countBy(atr, t => t.status)
+  const etapaPar = countBy(par, t => t.status)
+  const cliente = new Map<string, { name: string; n: number }>()
+  for (const t of atr) { const e = cliente.get(t.ws_id) ?? { name: t.ws_name, n: 0 }; e.n++; cliente.set(t.ws_id, e) }
+  const sev = { s1: 0, s2: 0, s3: 0, s4: 0 }
+  for (const t of atr) { const d = t.dias; if (d <= 3) sev.s1++; else if (d <= 7) sev.s2++; else if (d <= 30) sev.s3++; else sev.s4++ }
+
+  const etapaRows = statusConfig.filter(s => etapaAtr.has(s.value)).map(s => ({ cfg: s, n: etapaAtr.get(s.value)! })).sort((a, b) => b.n - a.n)
+  const paradasRows = statusConfig.filter(s => etapaPar.has(s.value)).map(s => ({ cfg: s, n: etapaPar.get(s.value)! })).sort((a, b) => b.n - a.n)
+  const cliRows = [...cliente.entries()].map(([ws_id, e]) => ({ ws_id, ...e })).sort((a, b) => b.n - a.n)
+
   const funilOrdered = statusConfig
     .map(s => ({ cfg: s, row: gestao.funil.find(f => f.status === s.value) }))
     .filter(x => x.row) as { cfg: typeof statusConfig[number]; row: FunilRow }[]
-  const maxFunil = Math.max(1, ...funilOrdered.map(x => x.row.n))
+
+  function href(q: { status?: string; ws?: string; overdue?: boolean; noduedate?: boolean }) {
+    const p = new URLSearchParams()
+    if (person && person !== 'none') p.set('persons', person)
+    if (q.status) p.set('statuses', q.status)
+    if (q.ws) p.set('ws', q.ws)
+    if (q.overdue) p.set('date', 'overdue')
+    if (q.noduedate) p.set('date', 'noduedate')
+    return `/${orgSlug}/views/lista?${p.toString()}`
+  }
+
+  const selName = person === 'none' ? 'Sem responsável' : person ? (people.get(person)?.full_name ?? 'pessoa') : null
 
   return (
     <div className="space-y-6">
@@ -122,101 +145,148 @@ function Operacao({ orgSlug, workspaces, wsFilter, gestao, onWs }: {
         <span className="text-sm text-gray-400">{gestao.total_ativas} atividades ativas</span>
       </div>
 
-      {/* cards de alerta */}
+      {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {cards.map(c => {
-          const Icon = c.icon
-          const clickable = !!c.items
-          const active = open === c.key && clickable
-          return (
-            <button key={c.key} type="button" disabled={!clickable}
-              onClick={() => clickable && setOpen(active ? null : c.key)}
-              className={cn('text-left rounded-xl border bg-white px-4 py-3 transition-colors',
-                active ? 'border-orange-300 ring-2 ring-orange-200' : 'border-gray-200',
-                clickable ? 'hover:border-gray-300 active:scale-[0.99]' : 'cursor-default')}>
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-medium text-gray-400">{c.label}</span>
-                <Icon className={cn('w-4 h-4', toneCls[c.tone])} />
-              </div>
-              <p className={cn('text-2xl font-semibold mt-1', c.n > 0 ? toneCls[c.tone] : 'text-gray-300')}>{c.n}</p>
-            </button>
-          )
-        })}
+        <Kpi label="Atrasadas" n={gestao.n_atrasadas} icon={AlertTriangle} tone="red" href={href({ overdue: true })} />
+        <Kpi label="Sem responsável" n={gestao.n_sem_responsavel} icon={UserX} tone="amber" onClick={() => setPerson(person === 'none' ? null : 'none')} active={person === 'none'} />
+        <Kpi label="Paradas +7 dias" n={gestao.n_paradas} icon={PauseCircle} tone="orange" />
+        <Kpi label="Sem prazo" n={gestao.n_sem_prazo} icon={CalendarOff} tone="gray" href={href({ noduedate: true })} />
       </div>
 
-      {/* lista do card aberto */}
-      {openCard && (
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-gray-100 text-xs font-semibold uppercase tracking-wide text-gray-400">
-            {openCard.label} · {openCard.items!.length}{openCard.items!.length >= 60 ? '+' : ''}
+      {/* Quem: seletor de avatar (ranking de atraso por pessoa) */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Quem acumula atraso</h3>
+          {person && <button onClick={() => setPerson(null)} className="inline-flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700"><X className="w-3 h-3" /> limpar filtro</button>}
+        </div>
+        {ranking.length === 0 && semResp === 0 ? <p className="text-sm text-gray-400">Ninguém com atraso. 🎉</p> : (
+          <div className="flex items-center gap-2 flex-wrap">
+            {ranking.map(r => {
+              const sel = person === r.uid
+              return (
+                <button key={r.uid} onClick={() => setPerson(sel ? null : r.uid)}
+                  className={cn('inline-flex items-center gap-2 rounded-full border pl-1 pr-3 py-1 transition', sel ? 'border-orange-300 bg-orange-50' : 'border-gray-200 hover:bg-gray-50')}>
+                  <Avatar name={r.p?.full_name ?? null} avatarUrl={r.p?.avatar_url ?? null} />
+                  <span className="text-xs text-gray-700 max-w-[120px] truncate">{r.p?.full_name ?? '—'}</span>
+                  <span className="text-xs font-semibold text-red-600">{r.n}</span>
+                </button>
+              )
+            })}
+            {semResp > 0 && (
+              <button onClick={() => setPerson(person === 'none' ? null : 'none')}
+                className={cn('inline-flex items-center gap-2 rounded-full border px-3 py-1.5 transition', person === 'none' ? 'border-orange-300 bg-orange-50' : 'border-gray-200 hover:bg-gray-50')}>
+                <UserX className="w-3.5 h-3.5 text-amber-500" />
+                <span className="text-xs text-gray-700">Sem responsável</span>
+                <span className="text-xs font-semibold text-amber-600">{semResp}</span>
+              </button>
+            )}
           </div>
-          {openCard.items!.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-gray-400 text-center">Nada aqui. 🎉</p>
-          ) : (
-            <ul className="divide-y divide-gray-50">
-              {openCard.items!.map(it => (
-                <li key={it.id}>
-                  <Link href={`/${orgSlug}/workspaces/${it.ws_id}/campaigns/${it.campaign_id}/activities/${it.id}`}
-                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50/60 transition group">
-                    <span className="flex-1 min-w-0">
-                      <span className="text-sm text-gray-900 truncate block">{it.title}</span>
-                      <span className="text-xs text-gray-400">{it.ws_name} · {it.camp_name}</span>
-                    </span>
-                    {it.due_date && <span className="text-xs text-red-600 font-medium shrink-0">{formatBR(it.due_date)}</span>}
-                    {typeof it.dias === 'number' && <span className="text-xs text-orange-600 font-medium shrink-0">{it.dias}d parada</span>}
-                    <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 shrink-0" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+        )}
+      </div>
+
+      {person && (
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-orange-200 bg-orange-50 px-4 py-2.5">
+          <span className="text-sm text-orange-800">Recortando por <strong>{selName}</strong> — {atr.length} atrasada(s), {par.length} parada(s).</span>
+          <Link href={href({ overdue: true })} className="inline-flex items-center gap-1 text-xs font-medium text-orange-700 hover:text-orange-900 shrink-0">Abrir na Lista <ExternalLink className="w-3 h-3" /></Link>
         </div>
       )}
 
-      {/* carga por pessoa + funil */}
+      {/* Onde: etapa, cliente, severidade, paradas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <div className="bg-white rounded-2xl border border-gray-200 p-5">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-4">Carga por pessoa</h3>
-          {gestao.carga.length === 0 ? <p className="text-sm text-gray-400">Ninguém com atividade ativa.</p> : (
-            <div className="space-y-3">
-              {gestao.carga.map(c => (
-                <div key={c.user_id} className="flex items-center gap-3">
-                  <Avatar name={c.full_name} avatarUrl={c.avatar_url} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className="text-sm text-gray-800 truncate">{c.full_name ?? '—'}</span>
-                      <span className="text-xs text-gray-500 shrink-0">{c.ativas} {c.ativas === 1 ? 'tarefa' : 'tarefas'}{Number(c.horas) > 0 ? ` · ${fmtHoras(c.horas)}` : ''}</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                      <div className="h-full bg-orange-500 rounded-full" style={{ width: `${(c.ativas / maxCarga) * 100}%` }} />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <Panel title="Atrasadas por etapa" hint="onde a pauta perde prazo">
+          <Bars rows={etapaRows.map(r => ({ label: r.cfg.label, n: r.n, bg: r.cfg.bg, fg: r.cfg.text, href: href({ status: r.cfg.value, overdue: true }) }))} empty="Nada atrasado nesse recorte." />
+        </Panel>
+        <Panel title="Atrasadas por cliente" hint="qual conta escorrega">
+          <Bars rows={cliRows.map(r => ({ label: r.name, n: r.n, bg: '#f97316', fg: '#fff', href: href({ ws: r.ws_id, overdue: true }) }))} empty="Nada atrasado nesse recorte." />
+        </Panel>
+        <Panel title="Severidade do atraso" hint="o quão grave">
+          <div className="grid grid-cols-4 gap-2">
+            {([['1–3 dias', sev.s1, '#fca5a5'], ['4–7 dias', sev.s2, '#f87171'], ['8–30 dias', sev.s3, '#ef4444'], ['+30 dias', sev.s4, '#b91c1c']] as const).map(([lab, n, col]) => (
+              <div key={lab} className="rounded-xl border border-gray-100 px-2 py-3 text-center">
+                <p className="text-2xl font-semibold" style={{ color: n > 0 ? col : '#d1d5db' }}>{n}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">{lab}</p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+        <Panel title="Paradas por etapa" hint="onde emperra (sem movimento +7d)">
+          <Bars rows={paradasRows.map(r => ({ label: r.cfg.label, n: r.n, bg: r.cfg.bg, fg: r.cfg.text, href: href({ status: r.cfg.value }) }))} empty="Nada parado nesse recorte." />
+        </Panel>
+      </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200 p-5">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-4">Funil por status</h3>
-          {funilOrdered.length === 0 ? <p className="text-sm text-gray-400">Sem atividades.</p> : (
-            <div className="space-y-2">
-              {funilOrdered.map(({ cfg, row }) => (
-                <div key={cfg.value} className="flex items-center gap-3">
-                  <span className="text-xs text-gray-600 w-40 shrink-0 truncate">{cfg.label}</span>
-                  <div className="flex-1 h-5 rounded-md bg-gray-50 overflow-hidden">
-                    <div className="h-full rounded-md flex items-center justify-end px-2" style={{ width: `${Math.max((row.n / maxFunil) * 100, 8)}%`, backgroundColor: cfg.bg }}>
-                      <span className="text-[11px] font-semibold" style={{ color: cfg.text }}>{row.n}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+      {/* Carga total + funil (contexto) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Panel title="Carga por pessoa" hint="quem está sobrecarregado (tarefas ativas)">
+          <Bars rows={gestao.carga.map(c => ({ label: c.full_name ?? '—', n: c.ativas, bg: '#f97316', fg: '#fff', suffix: Number(c.horas) > 0 ? fmtHoras(c.horas) : undefined }))} empty="Ninguém com atividade ativa." />
+        </Panel>
+        <Panel title="Funil por status" hint="distribuição da pauta ativa">
+          <Bars rows={funilOrdered.map(({ cfg, row }) => ({ label: cfg.label, n: row.n, bg: cfg.bg, fg: cfg.text, href: href({ status: cfg.value }) }))} empty="Sem atividades." />
+        </Panel>
       </div>
     </div>
   )
+}
+
+function Kpi({ label, n, icon: Icon, tone, href, onClick, active }: {
+  label: string; n: number; icon: typeof AlertTriangle; tone: string; href?: string; onClick?: () => void; active?: boolean
+}) {
+  const toneCls: Record<string, string> = { red: 'text-red-600', amber: 'text-amber-600', orange: 'text-orange-600', gray: 'text-gray-500' }
+  const inner = (
+    <>
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-medium text-gray-400">{label}</span>
+        <Icon className={cn('w-4 h-4', toneCls[tone])} />
+      </div>
+      <p className={cn('text-2xl font-semibold mt-1', n > 0 ? toneCls[tone] : 'text-gray-300')}>{n}</p>
+    </>
+  )
+  const cls = cn('block text-left rounded-xl border bg-white px-4 py-3 transition-colors',
+    active ? 'border-orange-300 ring-2 ring-orange-200' : 'border-gray-200', (href || onClick) && 'hover:border-gray-300 active:scale-[0.99]')
+  if (href) return <Link href={href} className={cls}>{inner}</Link>
+  if (onClick) return <button type="button" onClick={onClick} className={cn(cls, 'w-full')}>{inner}</button>
+  return <div className={cn(cls, 'cursor-default')}>{inner}</div>
+}
+
+function Panel({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 p-5">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">{title}</h3>
+      {hint && <p className="text-[11px] text-gray-400 mb-4 mt-0.5">{hint}</p>}
+      <div className={hint ? '' : 'mt-4'}>{children}</div>
+    </div>
+  )
+}
+
+interface BarRowData { label: string; n: number; bg: string; fg: string; href?: string; suffix?: string }
+function Bars({ rows, empty }: { rows: BarRowData[]; empty: string }) {
+  if (rows.length === 0) return <p className="text-sm text-gray-400">{empty}</p>
+  const max = Math.max(1, ...rows.map(r => r.n))
+  return (
+    <div className="space-y-2">
+      {rows.map((r, i) => {
+        const bar = (
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-600 w-36 shrink-0 truncate" title={r.label}>{r.label}</span>
+            <div className="flex-1 h-5 rounded-md bg-gray-50 overflow-hidden">
+              <div className="h-full rounded-md flex items-center justify-end px-2 gap-1" style={{ width: `${Math.max((r.n / max) * 100, 8)}%`, backgroundColor: r.bg }}>
+                <span className="text-[11px] font-semibold" style={{ color: r.fg }}>{r.n}</span>
+              </div>
+            </div>
+            {r.suffix && <span className="text-[11px] text-gray-400 shrink-0 w-10 text-right">{r.suffix}</span>}
+          </div>
+        )
+        return r.href
+          ? <Link key={i} href={r.href} className="block hover:opacity-90 transition-opacity">{bar}</Link>
+          : <div key={i}>{bar}</div>
+      })}
+    </div>
+  )
+}
+
+function countBy(rows: ProblemTask[], key: (t: ProblemTask) => string) {
+  const m = new Map<string, number>()
+  for (const t of rows) m.set(key(t), (m.get(key(t)) ?? 0) + 1)
+  return m
 }
 
 // ── Engajamento (calendário estilo GitHub por pessoa) ────────────────────────
