@@ -118,12 +118,14 @@ export function mapSheetToRows(matrix: unknown[][]): MapResult {
     const contato = norm(get(row, 'Nome do fornecedor/cliente')) || null
     const conta = norm(get(row, 'Conta bancária')) || null
 
-    // chave de dedup estável (não depende da ordem das linhas, pra reimport não duplicar):
-    // data|competência|valor|saldo|situação|descrição|contato|conta
-    const import_ref = [
+    // O import SUBSTITUI tudo (apaga + recarrega o extrato completo), então a chave só
+    // precisa ser única DENTRO do arquivo. Prefixo de sequência garante isso e evita
+    // fundir duas linhas parecidas — o export da Conta Azul não traz ID de transação.
+    const fingerprint = [
       dataMov ?? '', competencia ?? '', valor ?? '', saldo ?? '', situacao ?? '',
       descricao ?? '', contato ?? '', conta ?? '',
     ].join('|')
+    const import_ref = `${rows.length}|${fingerprint}`
 
     rows.push({
       import_ref,

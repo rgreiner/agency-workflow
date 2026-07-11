@@ -75,6 +75,11 @@ export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
     if (!rows) return
     setError(''); setDone(null)
     setProgress({ done: 0, total: rows.length })
+    // Substitui tudo: apaga o extrato importado antes de recarregar o arquivo completo.
+    // É o que garante "não duplicar" mesmo quando situação/saldo mudam entre exports
+    // (e reflete baixas e exclusões feitas na Conta Azul).
+    const clr = await limparExtrato(orgSlug)
+    if (clr?.error) { setError('Falha ao limpar antes de importar: ' + clr.error); setProgress(null); return }
     let inserted = 0, updated = 0
     for (let i = 0; i < rows.length; i += CHUNK) {
       const chunk = rows.slice(i, i + CHUNK)
@@ -116,8 +121,8 @@ export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
       <div className="mb-5">
         <h1 className="text-lg font-semibold text-gray-900">Importar extrato</h1>
         <p className="text-gray-500 text-sm mt-0.5">
-          Suba o export <strong>&ldquo;Extrato Financeiro&rdquo;</strong> da Conta Azul (.xls, .xlsx ou .csv).
-          Reimportar não duplica — atualiza os lançamentos existentes.
+          Suba o export <strong>&ldquo;Extrato Financeiro&rdquo;</strong> <strong>completo</strong> da Conta Azul (.xls, .xlsx ou .csv).
+          Cada import <strong>substitui</strong> o extrato anterior — não duplica e reflete baixas e exclusões feitas na Conta Azul.
         </p>
       </div>
 
@@ -179,7 +184,7 @@ export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
           <Check className="w-4 h-4 shrink-0 mt-0.5" />
           <span>
             {(done.inserted > 0 || done.updated > 0) && (
-              <>Import concluído — {done.inserted.toLocaleString('pt-BR')} novos, {done.updated.toLocaleString('pt-BR')} atualizados.<br /></>
+              <>Import concluído — {(done.inserted + done.updated).toLocaleString('pt-BR')} lançamentos carregados (substituiu o extrato anterior).<br /></>
             )}
             {done.contas != null && (
               <>Config: {done.contas} conta(s) criada(s){done.contas_atualizadas ? ` + ${done.contas_atualizadas} com saldo preenchido` : ''}, {done.centros} centro(s) de custo, {done.categorias} categoria(s).</>
