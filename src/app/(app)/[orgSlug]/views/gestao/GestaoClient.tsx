@@ -283,7 +283,8 @@ function Engajamento({ dias, engajamento, onDias }: {
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-function formatBR(iso: string) { const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}` }
+// Aceita 'YYYY-MM-DD' ou timestamp ISO ('YYYY-MM-DDT…') — usa só a parte da data.
+function formatBR(iso: string) { const [y, m, d] = iso.slice(0, 10).split('-'); return `${d}/${m}/${y}` }
 function fmtHoras(h: number | string) { const n = Number(h); return `${Number.isInteger(n) ? n : n.toFixed(1)}h` }
 function level(n: number) { if (n <= 0) return 0; if (n <= 2) return 1; if (n <= 5) return 2; if (n <= 10) return 3; return 4 }
 const CELL = [
