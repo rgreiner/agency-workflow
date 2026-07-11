@@ -50,15 +50,18 @@ returns jsonb language sql security definer set search_path = public stable as $
     from tasks t
     group by t.user_id
   )
+  -- E-mail vem do LOGIN (auth.users) — fonte da verdade. Nome vem do profiles.
+  -- (função é security-definer, então pode ler o schema auth.)
   select coalesce(jsonb_agg(jsonb_build_object(
-           'email', p.email, 'name', p.full_name, 'org_slug', a.org_slug,
+           'email', u.email, 'name', p.full_name, 'org_slug', a.org_slug,
            'atrasadas', coalesce(a.atrasadas, '[]'::jsonb),
            'hoje',      coalesce(a.hoje,      '[]'::jsonb),
            'proximas',  coalesce(a.proximas,  '[]'::jsonb)
          )), '[]'::jsonb)
   from agg a
-  join profiles p on p.id = a.user_id
-  where p.email is not null
+  join auth.users u on u.id = a.user_id
+  left join profiles p on p.id = a.user_id
+  where u.email is not null
     and coalesce((select up.digest_enabled from user_prefs up where up.user_id = a.user_id), true)
     and (a.atrasadas is not null or a.hoje is not null or a.proximas is not null);
 $$;
