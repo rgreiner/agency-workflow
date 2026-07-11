@@ -17,6 +17,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   Briefcase,
+  Gauge,
   List,
   GanttChart,
   BookOpen,
@@ -63,6 +64,8 @@ interface SidebarProps {
   canFinance?: boolean
   /** Permissão para ver Mídias / Produção / Cadastros (Vendas). */
   canVendas?: boolean
+  /** Permissão de gestão (owner/admin/manager) — mostra o item "Gestão". */
+  canManage?: boolean
   collapsed: boolean
   onCollapse: () => void
   onExpand?: () => void
@@ -167,7 +170,7 @@ const MODE_TABS: { m: SidebarMode; Icon: LucideIcon; label: string }[] = [
 ]
 
 export function Sidebar({
-  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#f97316',
+  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#f97316', canManage,
   positionName, canFinance = false, canVendas = false, collapsed, onCollapse, onExpand,
 }: SidebarProps) {
   const pathname = usePathname()
@@ -380,7 +383,7 @@ export function Sidebar({
             </Link>
 
             {/* Visões da org — Lista (todos os clientes/status), Gantt, Documentos, Quadros */}
-            {VIEWS.map(({ id, label, icon: Icon, href }) => (
+            {(canManage ? [...VIEWS, { id: 'gestao', label: 'Gestão', icon: Gauge, href: 'views/gestao' }] : VIEWS).map(({ id, label, icon: Icon, href }) => (
               <Link
                 key={id}
                 href={`${base}/${href}`}
