@@ -25,13 +25,17 @@ export interface EngDaily { user_id: string; day: string; n: number }
 export interface EngajamentoData { since: string; until: string; days: number; users: EngUser[]; daily: EngDaily[] }
 export interface TipoTotal { tipo: string; n: number; total: number }
 export interface NTotal { n: number; total: number }
+export interface MesV { mes: string; v: number }
+export interface CatMesV { categoria: string; mes: string; v: number }
 export interface FinanceiroData {
   mes: string
   a_receber: number; a_pagar: number; recebido: number; pago: number
   a_receber_atrasado: number; a_pagar_atrasado: number
-  producao_pendente: NTotal; producao_faturar: NTotal; producao_por_tipo: TipoTotal[]
+  producao_pendente: NTotal; producao_faturar: NTotal
   midia_pendente: NTotal; midia_por_tipo: TipoTotal[]
-  despesas_categoria: { categoria: string; total: number }[]
+  dre_meses: string[]
+  dre_rec_real: MesV[]; dre_rec_prev: MesV[]
+  dre_desp_real: CatMesV[]; dre_desp_prev: CatMesV[]
 }
 
 const DIAS_OPTIONS = [
@@ -316,59 +320,112 @@ const TIPO_MIDIA: Record<string, string> = { impressa_jornal: 'Impressa (jornal)
 function Financeiro({ orgSlug, fin, categorias }: { orgSlug: string; fin: FinanceiroData | null; categorias: FinanceCategoriaGrupo[] }) {
   if (!fin) return <p className="text-sm text-gray-400">Sem dados.</p>
 
-  // categoria (folha) → grupo, p/ o % de despesas
+  const resultado = Number(fin.recebido) - Number(fin.pago)
+  const margem = Number(fin.recebido) > 0 ? (resultado / Number(fin.recebido)) * 100 : 0
+
+  // ── DRE mensal: receita + despesas por grupo, realizado × previsto ──
   const grupoDe = new Map<string, string>()
   for (const g of categorias) {
     if (g.filhos.length === 0) grupoDe.set(g.nome, g.nome)
     else for (const f of g.filhos) grupoDe.set(f.nome, g.nome)
   }
-  const despGrupo = new Map<string, number>()
-  let despTotal = 0
-  for (const d of fin.despesas_categoria) {
-    const g = grupoDe.get(d.categoria) ?? d.categoria
-    const t = Number(d.total)
-    despGrupo.set(g, (despGrupo.get(g) ?? 0) + t); despTotal += t
-  }
-  const despRows = [...despGrupo.entries()].map(([g, t]) => ({ g, t })).sort((a, b) => b.t - a.t)
-
-  const resultado = Number(fin.recebido) - Number(fin.pago)
-  const margem = Number(fin.recebido) > 0 ? (resultado / Number(fin.recebido)) * 100 : 0
+  const meses = fin.dre_meses
+  const recReal = mapMes(fin.dre_rec_real), recPrev = mapMes(fin.dre_rec_prev)
+  const despReal = mapCatMes(fin.dre_desp_real, grupoDe)
+  const despPrev = mapCatMes(fin.dre_desp_prev, grupoDe)
+  const grupos = [...new Set([...despReal.keys(), ...despPrev.keys()])]
+    .map(g => ({ g, tot: meses.reduce((s, m) => s + (despReal.get(g)?.get(m) ?? 0), 0) }))
+    .sort((a, b) => b.tot - a.tot).map(x => x.g)
+  const resReal = (m: string) => (recReal.get(m) ?? 0) - grupos.reduce((s, g) => s + (despReal.get(g)?.get(m) ?? 0), 0)
+  const resPrev = (m: string) => (recPrev.get(m) ?? 0) - grupos.reduce((s, g) => s + (despPrev.get(g)?.get(m) ?? 0), 0)
 
   return (
     <div className="space-y-6">
       {/* Fluxo do mês */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <FinKpi label="A receber (mês)" value={fin.a_receber} tone="emerald" href={`/${orgSlug}/financeiro/lancamentos`}
+        <FinKpi label="A receber (mês)" value={fin.a_receber} tone="emerald" href={`/${orgSlug}/financeiro/fluxo-caixa`}
           hint={Number(fin.a_receber_atrasado) > 0 ? `${formatBRL(fin.a_receber_atrasado)} atrasado` : undefined} />
-        <FinKpi label="A pagar (mês)" value={fin.a_pagar} tone="red" href={`/${orgSlug}/financeiro/lancamentos`}
+        <FinKpi label="A pagar (mês)" value={fin.a_pagar} tone="red" href={`/${orgSlug}/financeiro/fluxo-caixa`}
           hint={Number(fin.a_pagar_atrasado) > 0 ? `${formatBRL(fin.a_pagar_atrasado)} atrasado` : undefined} />
-        <FinKpi label="Recebido (mês)" value={fin.recebido} tone="emerald" />
+        <FinKpi label="Recebido (mês)" value={fin.recebido} tone="emerald" hint={`pago ${formatBRL(fin.pago)}`} />
         <FinKpi label="Resultado (mês)" value={resultado} tone={resultado >= 0 ? 'gray' : 'red'} hint={`margem ${margem.toFixed(0)}%`} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Acelerar receita */}
-        <Panel title="A faturar — acelerar receita" hint="aprovado esperando fatura + pendências de aprovação">
-          <div className="grid grid-cols-3 gap-2 mb-4">
-            <FinMini label="Produção a faturar" n={fin.producao_faturar.n} total={fin.producao_faturar.total} href={`/${orgSlug}/financeiro/faturamento`} strong />
-            <FinMini label="Produção p/ aprovar" n={fin.producao_pendente.n} total={fin.producao_pendente.total} href={`/${orgSlug}/producao/orcamento`} />
-            <FinMini label="Mídia a liberar" n={fin.midia_pendente.n} total={fin.midia_pendente.total} href={`/${orgSlug}/midias/simplificada`} />
-          </div>
+      {/* Acelerar receita */}
+      <Panel title="A faturar — acelerar receita" hint="aprovado esperando fatura + pendências de aprovação">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+          <FinMini label="Produção a faturar" n={fin.producao_faturar.n} total={fin.producao_faturar.total} href={`/${orgSlug}/financeiro/faturamento`} strong />
+          <FinMini label="Produção p/ aprovar" n={fin.producao_pendente.n} total={fin.producao_pendente.total} href={`/${orgSlug}/producao/orcamento`} />
+          <FinMini label="Mídia a liberar" n={fin.midia_pendente.n} total={fin.midia_pendente.total} href={`/${orgSlug}/midias/simplificada`} />
+        </div>
+        {fin.midia_por_tipo.length > 0 && <>
           <p className="text-[11px] text-gray-400 mb-1.5">Mídia pendente por tipo (valor bruto)</p>
-          <Bars empty="Nada de mídia pendente." rows={fin.midia_por_tipo.map(t => ({ label: TIPO_MIDIA[t.tipo] ?? t.tipo, n: Number(t.total), bg: '#f97316', fg: '#fff', text: formatBRL(t.total), suffix: `${t.n} un` }))} />
-        </Panel>
+          <Bars empty="—" rows={fin.midia_por_tipo.map(t => ({ label: TIPO_MIDIA[t.tipo] ?? t.tipo, n: Number(t.total), bg: '#f97316', fg: '#fff', text: formatBRL(t.total), suffix: `${t.n} un` }))} />
+        </>}
+      </Panel>
 
-        {/* Despesas por grupo (%) */}
-        <Panel title="Onde vai o dinheiro" hint="despesas realizadas do mês, por grupo de categoria">
-          <Bars empty="Sem despesas realizadas no mês." rows={despRows.map(r => ({
-            label: r.g, n: r.t, bg: '#ef4444', fg: '#fff', text: formatBRL(r.t),
-            suffix: despTotal > 0 ? `${Math.round((r.t / despTotal) * 100)}%` : undefined,
-          }))} />
-          {despTotal > 0 && <p className="text-[11px] text-gray-400 mt-3">Total de despesas realizadas: <strong className="text-gray-600">{formatBRL(despTotal)}</strong></p>}
-        </Panel>
-      </div>
+      {/* DRE mensal */}
+      <Panel title="DRE mensal" hint="receita e despesas por grupo — realizado (topo) × previsto (cinza), últimos 6 meses">
+        {meses.length === 0 ? <p className="text-sm text-gray-400">Sem dados no período.</p> : (
+          <div className="overflow-x-auto -mx-1">
+            <table className="w-full min-w-[640px] text-sm border-collapse">
+              <thead>
+                <tr className="text-[11px] text-gray-400">
+                  <th className="text-left font-medium py-1.5 px-2 sticky left-0 bg-white">Grupo</th>
+                  {meses.map(m => <th key={m} className="text-right font-medium py-1.5 px-2 whitespace-nowrap">{monthLabel(m)}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                <DreRow label="Receita" meses={meses} real={m => recReal.get(m) ?? 0} prev={m => recPrev.get(m) ?? 0} tone="emerald" strong />
+                {grupos.map(g => (
+                  <DreRow key={g} label={g} meses={meses} real={m => despReal.get(g)?.get(m) ?? 0} prev={m => despPrev.get(g)?.get(m) ?? 0} tone="red" negativo />
+                ))}
+                <DreRow label="Resultado" meses={meses} real={resReal} prev={resPrev} tone="result" strong topborder />
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
     </div>
   )
+}
+
+function DreRow({ label, meses, real, prev, tone, strong, negativo, topborder }: {
+  label: string; meses: string[]; real: (m: string) => number; prev: (m: string) => number
+  tone: 'emerald' | 'red' | 'result'; strong?: boolean; negativo?: boolean; topborder?: boolean
+}) {
+  return (
+    <tr className={cn('border-t', topborder ? 'border-gray-300' : 'border-gray-50')}>
+      <td className={cn('text-left py-1.5 px-2 sticky left-0 bg-white truncate max-w-[160px]', strong ? 'font-semibold text-gray-800' : 'text-gray-600')} title={label}>{label}</td>
+      {meses.map(m => {
+        const r = real(m), p = prev(m)
+        const rColor = tone === 'emerald' ? 'text-emerald-700' : tone === 'red' ? 'text-gray-700' : r >= 0 ? 'text-gray-900' : 'text-red-600'
+        return (
+          <td key={m} className="text-right py-1.5 px-2 tabular-nums whitespace-nowrap">
+            <span className={cn(strong ? 'font-semibold' : '', rColor)}>{r ? `${negativo ? '−' : ''}${fmtK(r)}` : '·'}</span>
+            {p > 0 && <span className="block text-[10px] text-gray-300 leading-tight">{fmtK(p)}</span>}
+          </td>
+        )
+      })}
+    </tr>
+  )
+}
+
+function mapMes(rows: MesV[]) { const m = new Map<string, number>(); for (const r of rows) m.set(r.mes, Number(r.v)); return m }
+function mapCatMes(rows: CatMesV[], grupoDe: Map<string, string>) {
+  const m = new Map<string, Map<string, number>>()
+  for (const r of rows) {
+    const g = grupoDe.get(r.categoria) ?? r.categoria
+    if (!m.has(g)) m.set(g, new Map())
+    const inner = m.get(g)!
+    inner.set(r.mes, (inner.get(r.mes) ?? 0) + Number(r.v))
+  }
+  return m
+}
+function fmtK(n: number) {
+  const a = Math.abs(n)
+  if (a >= 1000) return (n / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 'k'
+  return n.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 }
 
 function FinKpi({ label, value, tone, hint, href }: { label: string; value: number | string; tone: string; hint?: string; href?: string }) {
