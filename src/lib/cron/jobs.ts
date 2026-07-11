@@ -16,6 +16,8 @@ export interface CronCtx {
   supabase: SupabaseClient<Database>
   /** Dry-run: jobs que enviam algo (e-mail) só simulam e reportam o que fariam. */
   dry?: boolean
+  /** Restringe o envio a UM destinatário (teste de conteúdo sem atingir a equipe). */
+  only?: string
 }
 export interface CronJob {
   name: string
@@ -66,7 +68,7 @@ function isDue(job: CronJob, lastIso: string | null, nowMs: number, nowD: Date):
 
 /** Roda os jobs devidos (ou só `onlyJob`, forçado). Devolve o status de cada um. */
 export async function runCron(
-  supabase: SupabaseClient<Database>, onlyJob?: string, dry = false,
+  supabase: SupabaseClient<Database>, onlyJob?: string, dry = false, only?: string,
 ): Promise<Record<string, string>> {
   const results: Record<string, string> = {}
   // list_cron_runs é security-definer (a rota roda anon e não leria a tabela via RLS)
@@ -80,7 +82,7 @@ export async function runCron(
     const last = lastByJob.get(job.name) ?? null
     if (!onlyJob && !isDue(job, last, nowMs, nowD)) { results[job.name] = 'skip'; continue }
     try {
-      const summary = await job.run({ supabase, dry })
+      const summary = await job.run({ supabase, dry, only })
       // dry-run não marca execução (senão "pularia" o disparo real do dia)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if (!dry) await (supabase as any).rpc('mark_cron_run', { p_job: job.name, p_status: 'ok', p_detail: summary })

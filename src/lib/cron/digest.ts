@@ -39,10 +39,11 @@ export const digestJob: CronJob = {
   dailyAfterHour: 8,
   dailyAfterMinute: 30,
   weekdaysOnly: true,   // não manda sábado/domingo
-  run: async ({ supabase, dry }) => {
+  run: async ({ supabase, dry, only }) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data } = await (supabase as any).rpc('digest_payload')
-    const users = (data ?? []) as DigestUser[]
+    let users = (data ?? []) as DigestUser[]
+    if (only) users = users.filter(u => u.email?.toLowerCase() === only.toLowerCase())  // teste p/ 1 pessoa
     if (dry) return `${users.length} pessoa(s) receberiam: ${users.map(u => u.email).join(', ') || '—'}`
     let sent = 0, failed = 0
     for (const u of users) {

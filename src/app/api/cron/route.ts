@@ -15,9 +15,10 @@ export async function GET(request: NextRequest) {
 
   const onlyJob = request.nextUrl.searchParams.get('job') || undefined
   const dry = request.nextUrl.searchParams.get('dry') === '1'
+  const only = request.nextUrl.searchParams.get('only') || undefined
   try {
     const supabase = await createClient()
-    const results = await runCron(supabase, onlyJob, dry)
+    const results = await runCron(supabase, onlyJob, dry, only)
     return NextResponse.json({ ok: true, results })
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : 'erro' }, { status: 500 })
