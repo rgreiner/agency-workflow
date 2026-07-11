@@ -11,7 +11,7 @@ import { toast } from 'sonner'
 import {
   setLancamentoFlags, ressincronizarLancamento, marcarLancamentoRevisado,
   createLancamento, createLancamentosSerie, updateLancamento, deleteLancamento, liquidarLancamento, reabrirLancamento,
-  setLancamentoAnexos,
+  setLancamentoAnexos, promoverExtrato,
   type FinanceCategoriaGrupo, type FinanceCentro, type Anexo,
 } from '@/app/actions/financeiro'
 import { uploadFile } from '@/lib/storage/upload-client'
@@ -44,6 +44,9 @@ export interface Lancamento {
   desconto: number | string | null
   tarifa: number | string | null
   anexos: Anexo[] | null
+  origem_ref?: string | null        // (promovido do extrato) import_ref que este lançamento "assume"
+  source?: 'flow' | 'importado'     // 'importado' = linha do extrato Conta Azul (read-only até promover)
+  import_ref?: string | null        // (source=importado) chave estável no extrato
 }
 
 export interface ContaRef { id: string; nome: string; cor: string | null; ativo: boolean }
@@ -70,8 +73,8 @@ const parseBR = (s: string) => { const t = s.trim().replace(/\./g, '').replace('
 const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 
-export function LancamentosClient({ orgSlug, lancamentos, contas, categorias, centros, today }: {
-  orgSlug: string; lancamentos: Lancamento[]; contas: ContaRef[]
+export function LancamentosClient({ orgSlug, lancamentos, importadas = [], contas, categorias, centros, today }: {
+  orgSlug: string; lancamentos: Lancamento[]; importadas?: Lancamento[]; contas: ContaRef[]
   categorias: FinanceCategoriaGrupo[]; centros: FinanceCentro[]; today: string
 }) {
   const [mes, setMes] = useState(today.slice(0, 7))
@@ -84,15 +87,24 @@ export function LancamentosClient({ orgSlug, lancamentos, contas, categorias, ce
   const [editing, setEditing] = useState<Lancamento | null>(null)
   const [baixa, setBaixa] = useState<Lancamento | null>(null)
 
+  // Une lançamentos do Flow + linhas do extrato importado, escondendo as já promovidas
+  // (um lançamento origem_tipo='conta_azul' "assume" o import_ref → não duplica).
+  const merged = useMemo(() => {
+    const promoted = new Set(
+      lancamentos.filter(l => l.origem_tipo === 'conta_azul' && l.origem_ref).map(l => l.origem_ref as string)
+    )
+    return [...lancamentos, ...importadas.filter(e => !e.import_ref || !promoted.has(e.import_ref))]
+  }, [lancamentos, importadas])
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return lancamentos.filter(l => {
+    return merged.filter(l => {
       if (tipoFilter !== 'todos' && l.tipo !== tipoFilter) return false
       if (contaFilter && l.conta_id !== contaFilter) return false
       if (q && !`${l.contato_nome ?? ''} ${l.descricao ?? ''} ${l.categoria ?? ''}`.toLowerCase().includes(q)) return false
       return true
     })
-  }, [lancamentos, tipoFilter, contaFilter, query])
+  }, [merged, tipoFilter, contaFilter, query])
 
   const liqMonth = (l: Lancamento) => monthOf(l.data_liquidacao ?? l.vencimento)
   // Data efetiva: liquidação (se pago) ou vencimento (se em aberto).
@@ -265,6 +277,7 @@ function Row({ l, saldo, orgSlug, today, conta, onEdit, onBaixa }: {
   const overdue = !paid && !!l.vencimento && l.vencimento < today
   const isSaida = l.tipo === 'saida'
   const isManual = l.origem_tipo === 'manual'
+  const imported = l.source === 'importado'
   const dateShown = paid ? (l.data_liquidacao ?? l.vencimento) : l.vencimento
   const status = paid
     ? { label: isSaida ? 'Pago' : 'Recebido', cls: 'bg-emerald-50 text-emerald-700' }
@@ -297,6 +310,7 @@ function Row({ l, saldo, orgSlug, today, conta, onEdit, onBaixa }: {
               )}
               {l.categoria && <span className="text-[10px] text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">{l.categoria}</span>}
               {conta && <span className="inline-flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: conta.cor ?? '#cbd5e1' }} />{conta.nome}</span>}
+              {imported && <span className="text-[10px] font-medium text-sky-700 bg-sky-50 rounded px-1.5 py-0.5">Conta Azul</span>}
             </div>
           </div>
         </div>
@@ -313,39 +327,54 @@ function Row({ l, saldo, orgSlug, today, conta, onEdit, onBaixa }: {
         {isSaida ? '− ' : ''}{formatBRL(val(l))}
       </td>
       <td className={cn('px-4 py-2.5 text-sm text-right tabular-nums whitespace-nowrap', saldo < 0 ? 'text-red-600' : 'text-gray-500')}>{formatBRL(saldo)}</td>
-      <td className="px-3 py-2.5 text-center"><Flag on={l.nf_emitida} onClick={toggleNf} label="NF" /></td>
-      <td className="px-3 py-2.5 text-center"><Flag on={l.boleto_gerado} onClick={toggleBoleto} label="Boleto" /></td>
+      <td className="px-3 py-2.5 text-center">
+        {imported
+          ? (l.nf_emitida ? <FileText className="w-4 h-4 text-gray-300 inline" /> : <span className="text-gray-300">—</span>)
+          : <Flag on={l.nf_emitida} onClick={toggleNf} label="NF" />}
+      </td>
+      <td className="px-3 py-2.5 text-center">
+        {imported ? <span className="text-gray-300">—</span> : <Flag on={l.boleto_gerado} onClick={toggleBoleto} label="Boleto" />}
+      </td>
       <td className="px-3 py-2.5">
         <div className="flex items-center justify-end gap-1">
-          {l.revisar && (
-            <>
-              <button onClick={atualizarDoDoc} disabled={isPending} title="Atualizar do documento"
-                className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-50 transition disabled:opacity-50">
-                <RefreshCw className="w-3.5 h-3.5" />
-              </button>
-              <button onClick={marcarRevisado} disabled={isPending} title="Marcar como revisado"
-                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition disabled:opacity-50"><Check className="w-3.5 h-3.5" /></button>
-            </>
-          )}
-          <button onClick={() => onEdit(l)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar"><Pencil className="w-3.5 h-3.5" /></button>
-          {isManual && (
-            <button onClick={() => setConfirmDel(true)} disabled={isPending} className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-50" title="Excluir"><Trash2 className="w-3.5 h-3.5" /></button>
-          )}
-          <ConfirmDialog
-            open={confirmDel} loading={isPending}
-            title="Excluir lançamento"
-            description="Este lançamento manual será excluído. Não dá pra desfazer."
-            onConfirm={remover} onCancel={() => setConfirmDel(false)}
-          />
-          {paid ? (
-            <button onClick={reabrir} disabled={isPending} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-gray-500 hover:bg-gray-100 transition disabled:opacity-50">
-              <RotateCcw className="w-3.5 h-3.5" /> Reabrir
+          {imported ? (
+            <button onClick={() => onEdit(l)} title="Editar — vira lançamento do Flow"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
+              <Pencil className="w-3.5 h-3.5" /> Editar
             </button>
           ) : (
-            <button onClick={() => onBaixa(l)} disabled={isPending}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 text-[#fff] hover:bg-emerald-700 transition disabled:opacity-50">
-              <Check className="w-3.5 h-3.5" /> {isSaida ? 'Pagar' : 'Receber'}
-            </button>
+            <>
+              {l.revisar && (
+                <>
+                  <button onClick={atualizarDoDoc} disabled={isPending} title="Atualizar do documento"
+                    className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-50 transition disabled:opacity-50">
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={marcarRevisado} disabled={isPending} title="Marcar como revisado"
+                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition disabled:opacity-50"><Check className="w-3.5 h-3.5" /></button>
+                </>
+              )}
+              <button onClick={() => onEdit(l)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar"><Pencil className="w-3.5 h-3.5" /></button>
+              {isManual && (
+                <button onClick={() => setConfirmDel(true)} disabled={isPending} className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-50" title="Excluir"><Trash2 className="w-3.5 h-3.5" /></button>
+              )}
+              <ConfirmDialog
+                open={confirmDel} loading={isPending}
+                title="Excluir lançamento"
+                description="Este lançamento manual será excluído. Não dá pra desfazer."
+                onConfirm={remover} onCancel={() => setConfirmDel(false)}
+              />
+              {paid ? (
+                <button onClick={reabrir} disabled={isPending} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-gray-500 hover:bg-gray-100 transition disabled:opacity-50">
+                  <RotateCcw className="w-3.5 h-3.5" /> Reabrir
+                </button>
+              ) : (
+                <button onClick={() => onBaixa(l)} disabled={isPending}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 text-[#fff] hover:bg-emerald-700 transition disabled:opacity-50">
+                  <Check className="w-3.5 h-3.5" /> {isSaida ? 'Pagar' : 'Receber'}
+                </button>
+              )}
+            </>
           )}
         </div>
       </td>
@@ -408,7 +437,9 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
-  const readonly = !!lancamento && lancamento.origem_tipo !== 'manual'
+  // Importado (Conta Azul): editável — ao salvar, é PROMOVIDO a lançamento do Flow.
+  const imported = lancamento?.source === 'importado'
+  const readonly = !!lancamento && !imported && lancamento.origem_tipo !== 'manual'
   const [form, setForm] = useState({
     tipo: lancamento?.tipo ?? 'saida',
     descricao: lancamento?.descricao ?? '',
@@ -435,7 +466,7 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
   const contaOptions = useMemo(() => [{ value: '', label: '—' }, ...contas.map(c => ({ value: c.id, label: c.nome }))], [contas])
   const centroOptions = useMemo(() => [{ value: '', label: '—' }, ...centros.map(c => ({ value: c.nome, label: c.nome }))], [centros])
 
-  const liquidado = !!lancamento && (lancamento.situacao === 'pago' || lancamento.situacao === 'recebido')
+  const liquidado = !!lancamento && !imported && (lancamento.situacao === 'pago' || lancamento.situacao === 'recebido')
   const contaNome = lancamento?.conta_id ? contas.find(c => c.id === lancamento.conta_id)?.nome : null
   const [anexos, setAnexos] = useState<Anexo[]>(lancamento?.anexos ?? [])
   const [anexoTipo, setAnexoTipo] = useState('NF')
@@ -480,6 +511,24 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
       forma_pagamento: form.forma_pagamento || null,
       observacao: form.observacao.trim() || null,
     }
+    // Promoção: importado vira lançamento do Flow, carregando a liquidação do snapshot.
+    if (imported && lancamento) {
+      const numOrNull = (v: number | string | null) => (v == null ? null : String(v))
+      const payload = {
+        ...data,
+        situacao: lancamento.situacao,
+        data_liquidacao: lancamento.data_liquidacao ?? null,
+        valor_realizado: numOrNull(lancamento.valor_realizado),
+        juros: numOrNull(lancamento.juros), multa: numOrNull(lancamento.multa),
+        desconto: numOrNull(lancamento.desconto), tarifa: numOrNull(lancamento.tarifa),
+      }
+      startTransition(async () => {
+        const res = await promoverExtrato(orgSlug, lancamento.import_ref ?? '', payload)
+        if (res?.error) { setError(res.error); return }
+        onClose(); router.refresh()
+      })
+      return
+    }
     const n = Math.max(parseInt(parcelas || '1', 10) || 1, 1)
     const serie = !lancamento && modo !== 'unico'
     if (serie && !form.vencimento) { setError('Defina o vencimento da 1ª ocorrência'); return }
@@ -499,12 +548,13 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
     <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
       <div className="modal-card w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-xl border border-gray-200">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white">
-          <h2 className="text-base font-semibold text-gray-900">{lancamento ? 'Editar lançamento' : 'Novo lançamento'}</h2>
+          <h2 className="text-base font-semibold text-gray-900">{imported ? 'Editar (Conta Azul → Flow)' : lancamento ? 'Editar lançamento' : 'Novo lançamento'}</h2>
           <button aria-label="Fechar" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X className="w-5 h-5" /></button>
         </div>
 
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+          {imported && <p className="text-xs text-sky-800 bg-sky-50 rounded-lg px-3 py-2">Linha importada da <strong>Conta Azul</strong>. Ao salvar, ela vira um lançamento do Flow (editável) e passa a ser a versão oficial — a linha importada some, mesmo após reimportar o extrato.</p>}
           {readonly && <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">Lançamento gerado por documento ({lancamento?.origem_tipo}). Valor e contato vêm do documento; aqui você ajusta os campos do financeiro.</p>}
 
           {!readonly && (
@@ -620,7 +670,7 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
             </div>
           )}
 
-          {lancamento && (
+          {lancamento && !imported && (
             <div className="border-t border-gray-100 pt-4">
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs font-medium text-gray-600 inline-flex items-center gap-1.5"><Paperclip className="w-3.5 h-3.5" /> Anexos</label>

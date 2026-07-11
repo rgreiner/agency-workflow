@@ -109,6 +109,34 @@ export interface LancamentoInput {
   recorrente?: boolean
 }
 
+/**
+ * Promove uma linha do extrato importado (Conta Azul) para um lançamento editável do
+ * Flow. Guarda import_ref em origem_ref p/ a tela esconder a linha importada (não
+ * duplica após reimport). Recebe os campos editáveis + os de liquidação do snapshot.
+ */
+export interface PromoverInput extends LancamentoInput {
+  situacao?: string | null
+  data_liquidacao?: string | null
+  valor_realizado?: string | null
+  juros?: string | null; multa?: string | null; desconto?: string | null; tarifa?: string | null
+}
+export async function promoverExtrato(orgSlug: string, importRef: string, data: PromoverInput) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { data: org } = await supabase
+    .from('organizations').select('id').eq('slug', orgSlug).single()
+  if (!org) return { error: 'Organização não encontrada' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('promover_extrato', {
+    p_user_id: user.id, p_org_id: org.id, p_import_ref: importRef, p_dados: data,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+}
+
 export async function createLancamento(orgSlug: string, data: LancamentoInput) {
   const supabase = await createClient()
   const user = await getUsuario()

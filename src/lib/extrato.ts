@@ -103,6 +103,7 @@ export function mapSheetToRows(matrix: unknown[][]): MapResult {
 
   const rows: ExtratoRow[] = []
   let skipped = 0
+  const seen = new Map<string, number>()   // ocorrências por fingerprint (chave estável)
   for (let r = headerRow + 1; r < matrix.length; r++) {
     const row = matrix[r] ?? []
     const dataMov = parseDateBR(get(row, 'Data movimento'))
@@ -117,15 +118,20 @@ export function mapSheetToRows(matrix: unknown[][]): MapResult {
     const competencia = parseDateBR(get(row, 'Data de competência'))
     const contato = norm(get(row, 'Nome do fornecedor/cliente')) || null
     const conta = norm(get(row, 'Conta bancária')) || null
+    const origem = norm(get(row, 'Origem do lançamento')) || null
+    const vencOrig = parseDateBR(get(row, 'Data original de vencimento'))
+    const valorOrig = parseNum(get(row, 'Valor original (R$)'))
 
-    // O import SUBSTITUI tudo (apaga + recarrega o extrato completo), então a chave só
-    // precisa ser única DENTRO do arquivo. Prefixo de sequência garante isso e evita
-    // fundir duas linhas parecidas — o export da Conta Azul não traz ID de transação.
+    // Chave ESTÁVEL entre exports: só campos imutáveis do lançamento (nunca saldo,
+    // situação ou valor realizado, que mudam quando é baixado). Sem ID de transação no
+    // export, um contador de ocorrência separa linhas idênticas e garante unicidade no
+    // arquivo. Estável = a promoção (origem_ref) casa a mesma transação após reimport.
     const fingerprint = [
-      dataMov ?? '', competencia ?? '', valor ?? '', saldo ?? '', situacao ?? '',
-      descricao ?? '', contato ?? '', conta ?? '',
+      vencOrig ?? '', valorOrig ?? '', competencia ?? '', contato ?? '', descricao ?? '', origem ?? '',
     ].join('|')
-    const import_ref = `${rows.length}|${fingerprint}`
+    const occ = seen.get(fingerprint) ?? 0
+    seen.set(fingerprint, occ + 1)
+    const import_ref = `${fingerprint}#${occ}`
 
     rows.push({
       import_ref,
@@ -133,19 +139,19 @@ export function mapSheetToRows(matrix: unknown[][]): MapResult {
       contato,
       descricao,
       tipo,
-      origem: norm(get(row, 'Origem do lançamento')) || null,
+      origem,
       conta,
       forma_pgto: norm(get(row, 'Forma de pgto/recbto')) || null,
       valor,
       saldo_conta: saldo,
       situacao,
-      valor_original: parseNum(get(row, 'Valor original (R$)')),
+      valor_original: valorOrig,
       juros: parseNum(get(row, 'Juros (R$)')) ?? 0,
       multa: parseNum(get(row, 'Multa (R$)')) ?? 0,
       desconto: parseNum(get(row, 'Desconto (R$)')) ?? 0,
       taxas: parseNum(get(row, 'Taxas (R$)')) ?? 0,
       competencia,
-      venc_original: parseDateBR(get(row, 'Data original de vencimento')),
+      venc_original: vencOrig,
       data_prevista: parseDateBR(get(row, 'Data prevista')),
       observacao: norm(get(row, 'Observações')) || null,
       nota_fiscal: norm(get(row, 'Nota fiscal')) || null,
