@@ -304,15 +304,15 @@ function Engajamento({ engajamento }: { engajamento: EngajamentoData | null }) {
       {engajamento.users.length === 0 ? (
         <p className="text-sm text-gray-400 py-8 text-center">Nenhuma interação no período.</p>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {engajamento.users.map((u, i) => (
             <div key={u.user_id} className="bg-white rounded-2xl border border-gray-200 p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <span className="text-xs font-semibold text-gray-300 w-5 shrink-0 text-center">{i + 1}</span>
+              <div className="flex items-center gap-2.5 mb-3">
+                <span className="text-xs font-semibold text-gray-300 w-4 shrink-0 text-center">{i + 1}</span>
                 <Avatar name={u.full_name} avatarUrl={u.avatar_url} size="md" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{u.full_name ?? '—'}</p>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-[11px] text-gray-400 truncate">
                     {Object.entries(u.por_tipo).map(([k, n]) => `${n} ${KIND_LABEL[k] ?? k}`).join(' · ') || 'sem detalhe'}
                   </p>
                 </div>
@@ -322,7 +322,7 @@ function Engajamento({ engajamento }: { engajamento: EngajamentoData | null }) {
                 </div>
               </div>
               <div className="overflow-x-auto">
-                <div className="flex gap-1">
+                <div className="flex gap-1 w-max">
                   {weeks.map((col, ci) => (
                     <div key={ci} className="flex flex-col gap-1">
                       {col.map((day, ri) => {
