@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { FileText, Loader2, ExternalLink, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { uploadFile } from '@/lib/storage/upload-client'
 
 /**
@@ -18,13 +19,13 @@ export function PdfField({ value, name, bucket = 'midia-kits', onChange }: {
   const [uploading, setUploading] = useState(false)
 
   async function handleFile(file: File) {
-    if (file.type !== 'application/pdf') { alert('Envie um arquivo PDF.'); return }
+    if (file.type !== 'application/pdf') { toast.error('Envie um arquivo PDF.'); return }
     setUploading(true)
     try {
       const url = await uploadFile(bucket, `${crypto.randomUUID()}.pdf`, file)
       onChange(url, file.name)
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Falha no upload')
+      toast.error(e instanceof Error ? e.message : 'Falha no upload')
     } finally {
       setUploading(false)
     }

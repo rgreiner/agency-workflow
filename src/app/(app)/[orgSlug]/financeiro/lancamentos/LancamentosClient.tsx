@@ -6,6 +6,8 @@ import { ChevronLeft, ChevronRight, FileText, Receipt, Check, RotateCcw, AlertTr
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
 import { Select } from '@/components/ui/Select'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { toast } from 'sonner'
 import {
   setLancamentoFlags, ressincronizarLancamento, marcarLancamentoRevisado,
   createLancamento, createLancamentosSerie, updateLancamento, deleteLancamento, liquidarLancamento, reabrirLancamento,
@@ -241,6 +243,7 @@ function Row({ l, orgSlug, today, paid, conta, onEdit, onBaixa }: {
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const [confirmDel, setConfirmDel] = useState(false)
   const overdue = !paid && !!l.vencimento && l.vencimento < today
   const isSaida = l.tipo === 'saida'
   const isManual = l.origem_tipo === 'manual'
@@ -252,8 +255,8 @@ function Row({ l, orgSlug, today, paid, conta, onEdit, onBaixa }: {
   function atualizarDoDoc() { startTransition(async () => { await ressincronizarLancamento(orgSlug, l.id); router.refresh() }) }
   function marcarRevisado() { startTransition(async () => { await marcarLancamentoRevisado(orgSlug, l.id); router.refresh() }) }
   function remover() {
-    if (!confirm('Excluir este lançamento manual?')) return
-    startTransition(async () => { await deleteLancamento(orgSlug, l.id); router.refresh() })
+    setConfirmDel(false)
+    startTransition(async () => { const r = await deleteLancamento(orgSlug, l.id); if (r?.error) toast.error(r.error); else { toast.success('Lançamento excluído.'); router.refresh() } })
   }
 
   return (
@@ -297,8 +300,14 @@ function Row({ l, orgSlug, today, paid, conta, onEdit, onBaixa }: {
           )}
           <button onClick={() => onEdit(l)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar"><Pencil className="w-3.5 h-3.5" /></button>
           {isManual && (
-            <button onClick={remover} disabled={isPending} className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-50" title="Excluir"><Trash2 className="w-3.5 h-3.5" /></button>
+            <button onClick={() => setConfirmDel(true)} disabled={isPending} className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-50" title="Excluir"><Trash2 className="w-3.5 h-3.5" /></button>
           )}
+          <ConfirmDialog
+            open={confirmDel} loading={isPending}
+            title="Excluir lançamento"
+            description="Este lançamento manual será excluído. Não dá pra desfazer."
+            onConfirm={remover} onCancel={() => setConfirmDel(false)}
+          />
           {paid ? (
             <button onClick={reabrir} disabled={isPending} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-gray-500 hover:bg-gray-100 transition disabled:opacity-50">
               <RotateCcw className="w-3.5 h-3.5" /> Reabrir

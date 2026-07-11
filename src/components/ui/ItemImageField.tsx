@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { ImagePlus, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { ImageCropper } from './ImageCropper'
 import { uploadFile } from '@/lib/storage/upload-client'
 
@@ -18,7 +19,7 @@ export function ItemImageField({ value, onChange }: { value?: string; onChange: 
       const url = await uploadFile('orcamentos', `${crypto.randomUUID()}.webp`, file)
       onChange(url)
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Falha no upload')
+      toast.error(e instanceof Error ? e.message : 'Falha no upload')
     } finally {
       setUploading(false)
     }

@@ -4,6 +4,7 @@ import { Fragment, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, Archive, ArchiveRestore, Pencil, ClipboardList, Printer, Factory, Files } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Select, type SelectOption } from '@/components/ui/Select'
 import { setProducaoSituacao, setProducaoArchived, gerarPedidosDoOrcamento, gerarDocsDaProposta } from '@/app/actions/producao'
@@ -36,11 +37,15 @@ export function ProducaoClient({
 
   const changeSituacao = (id: string, s: string) => startTransition(async () => { await setProducaoSituacao(orgSlug, id, s, basePath); router.refresh() })
   const archive = (r: ProducaoRow) => startTransition(async () => { await setProducaoArchived(orgSlug, r.id, !r.archived, basePath); router.refresh() })
-  const gerarPPs = (r: ProducaoRow) => startTransition(async () => { const res = await gerarPedidosDoOrcamento(orgSlug, r.id); if (res?.error) alert(res.error) })
+  const gerarPPs = (r: ProducaoRow) => startTransition(async () => {
+    const res = await gerarPedidosDoOrcamento(orgSlug, r.id)
+    if (res?.error) toast.error(res.error)
+    else { toast.success('Pedidos de Produção gerados.'); router.refresh() }
+  })
   const gerarDocsFn = (r: ProducaoRow) => startTransition(async () => {
     const res = await gerarDocsDaProposta(orgSlug, r.id)
-    if (res?.error) { alert(res.error); return }
-    alert(`${res.count} documento(s) gerado(s) em rascunho${res.skipped ? ` (${res.skipped} serviço interno ignorado)` : ''}. Complete-os nas respectivas telas.`)
+    if (res?.error) { toast.error(res.error); return }
+    toast.success(`${res.count} documento(s) gerado(s) em rascunho${res.skipped ? ` (${res.skipped} serviço interno ignorado)` : ''}.`)
     router.refresh()
   })
 
