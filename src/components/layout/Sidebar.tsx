@@ -323,6 +323,23 @@ export function Sidebar({
           </div>
         )}
 
+        {/* Gestão — visão do todo (só o proprietário); ícone de topo, fora dos modos */}
+        {canManage && (
+          <Link
+            href={`${base}/views/gestao`}
+            title="Gestão"
+            aria-label="Gestão"
+            className={cn(
+              'shrink-0 p-1.5 rounded-lg transition-colors',
+              pathname.startsWith(`${base}/views/gestao`)
+                ? 'bg-gray-700 text-orange-400'
+                : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
+            )}
+          >
+            <Gauge className="w-4 h-4" />
+          </Link>
+        )}
+
         <div className="flex-1" />
 
         {/* Ocultar — desktop only */}
@@ -383,7 +400,7 @@ export function Sidebar({
             </Link>
 
             {/* Visões da org — Lista (todos os clientes/status), Gantt, Documentos, Quadros */}
-            {(canManage ? [...VIEWS, { id: 'gestao', label: 'Gestão', icon: Gauge, href: 'views/gestao' }] : VIEWS).map(({ id, label, icon: Icon, href }) => (
+            {VIEWS.map(({ id, label, icon: Icon, href }) => (
               <Link
                 key={id}
                 href={`${base}/${href}`}

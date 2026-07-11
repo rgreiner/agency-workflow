@@ -56,38 +56,42 @@ export function GestaoClient({
 
   return (
     <div className="p-6 max-w-6xl">
-      <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">Gestão</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Visão da operação e do engajamento do time — só para gestores.</p>
+      {/* Abas + filtro da aba ativa na mesma linha */}
+      <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
+        <div className="inline-flex bg-gray-100 rounded-xl p-0.5">
+          {([['operacao', 'Operação'], ['engajamento', 'Engajamento']] as const).map(([v, label]) => (
+            <button key={v} onClick={() => setAba(v)} aria-pressed={aba === v}
+              className={cn('px-3.5 py-1.5 text-sm font-medium rounded-[10px] transition-colors',
+                aba === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
+              {label}
+            </button>
+          ))}
         </div>
-        {pending && <Loader2 className="w-4 h-4 text-gray-300 animate-spin mt-1" />}
-      </div>
-
-      {/* Abas */}
-      <div className="inline-flex bg-gray-100 rounded-xl p-0.5 mb-5">
-        {([['operacao', 'Operação'], ['engajamento', 'Engajamento']] as const).map(([v, label]) => (
-          <button key={v} onClick={() => setAba(v)} aria-pressed={aba === v}
-            className={cn('px-3.5 py-1.5 text-sm font-medium rounded-[10px] transition-colors',
-              aba === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
-            {label}
-          </button>
-        ))}
+        <div className="flex items-center gap-2 flex-wrap">
+          {pending && <Loader2 className="w-4 h-4 text-gray-300 animate-spin" />}
+          {aba === 'operacao' ? (
+            <>
+              {workspaces.length > 1 && (
+                <div className="w-48"><MultiSelect values={wsFilter} onChange={ws => pushParams({ ws })} allLabel="Todos os clientes"
+                  options={workspaces.map(w => ({ value: w.id, label: w.name }))} /></div>
+              )}
+              {gestao && <span className="text-sm text-gray-400 whitespace-nowrap">{gestao.total_ativas} ativas</span>}
+            </>
+          ) : (
+            <div className="w-40"><Select value={String(dias)} onChange={v => pushParams({ dias: parseInt(v, 10) })} options={DIAS_OPTIONS} /></div>
+          )}
+        </div>
       </div>
 
       {aba === 'operacao'
-        ? <Operacao orgSlug={orgSlug} workspaces={workspaces} wsFilter={wsFilter} gestao={gestao}
-            onWs={ws => pushParams({ ws })} />
-        : <Engajamento dias={dias} engajamento={engajamento} onDias={d => pushParams({ dias: d })} />}
+        ? <Operacao orgSlug={orgSlug} gestao={gestao} />
+        : <Engajamento engajamento={engajamento} />}
     </div>
   )
 }
 
 // ── Operação (3.1) — analítico: onde e com quem a pauta trava ────────────────
-function Operacao({ orgSlug, workspaces, wsFilter, gestao, onWs }: {
-  orgSlug: string; workspaces: { id: string; name: string }[]; wsFilter: string[]
-  gestao: GestaoData | null; onWs: (ws: string[]) => void
-}) {
+function Operacao({ orgSlug, gestao }: { orgSlug: string; gestao: GestaoData | null }) {
   const statusConfig = useStatusConfig()
   const [person, setPerson] = useState<string | null>(null)  // uid | 'none' (sem responsável) | null
   if (!gestao) return <p className="text-sm text-gray-400">Sem dados.</p>
@@ -136,15 +140,6 @@ function Operacao({ orgSlug, workspaces, wsFilter, gestao, onWs }: {
 
   return (
     <div className="space-y-6">
-      {/* filtro por cliente */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {workspaces.length > 1 && (
-          <MultiSelect values={wsFilter} onChange={onWs} className="w-52" allLabel="Todos os clientes"
-            options={workspaces.map(w => ({ value: w.id, label: w.name }))} />
-        )}
-        <span className="text-sm text-gray-400">{gestao.total_ativas} atividades ativas</span>
-      </div>
-
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Kpi label="Atrasadas" n={gestao.n_atrasadas} icon={AlertTriangle} tone="red" href={href({ overdue: true })} />
@@ -290,9 +285,7 @@ function countBy(rows: ProblemTask[], key: (t: ProblemTask) => string) {
 }
 
 // ── Engajamento (calendário estilo GitHub por pessoa) ────────────────────────
-function Engajamento({ dias, engajamento, onDias }: {
-  dias: number; engajamento: EngajamentoData | null; onDias: (d: number) => void
-}) {
+function Engajamento({ engajamento }: { engajamento: EngajamentoData | null }) {
   const byUser = useMemo(() => {
     const m: Record<string, Record<string, number>> = {}
     for (const d of engajamento?.daily ?? []) {
@@ -306,10 +299,7 @@ function Engajamento({ dias, engajamento, onDias }: {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="w-40"><Select value={String(dias)} onChange={v => onDias(parseInt(v, 10))} options={DIAS_OPTIONS} /></div>
-        <span className="text-sm text-gray-400">Interação = mudar status, editar campo, comentar ou reagir.</span>
-      </div>
+      <p className="text-sm text-gray-400">Interação = mudar status, editar campo, comentar ou reagir. Ranking pelo total no período.</p>
 
       {engajamento.users.length === 0 ? (
         <p className="text-sm text-gray-400 py-8 text-center">Nenhuma interação no período.</p>
