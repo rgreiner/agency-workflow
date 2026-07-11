@@ -1,5 +1,5 @@
-// Dados da agência exibidos no cabeçalho/rodapé dos documentos (Orçamento, Autorização
-// de Mídia, Pedido de Produção). Hoje fixos da One a One; depois podem ir pra Configurações.
+// Dados/textos PADRÃO dos documentos. Servem de default: a org pode sobrescrever
+// em Configurações → Documentos (org_settings), lido por loadOrgDocs abaixo.
 
 export const AGENCY = {
   nome: 'One a One Comunicação e Estratégia',
@@ -23,3 +23,23 @@ export const DOC_MIDIA_NOTES = [
   { text: 'Colocar número desta autorização na NF na descrição do serviço/produto;', highlight: false },
   { text: 'Enviar NF com prazo mínimo de 30 dias úteis para o vencimento.', highlight: false },
 ]
+
+export interface AgencyInfo { nome: string; razao: string; endereco: string; cnpjFone: string; cidade: string }
+export interface DocNote { text: string; highlight: boolean }
+export interface OrgDocs { agency: AgencyInfo; nfNotes: DocNote[]; midiaNotes: DocNote[] }
+
+/**
+ * Config efetiva de documentos da org: usa o que estiver salvo em org_settings,
+ * caindo nos padrões acima quando ausente. Reusado pelas telas de impressão.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function loadOrgDocs(supabase: any, orgId: string): Promise<OrgDocs> {
+  const { data } = await supabase.from('org_settings')
+    .select('agency_info, doc_nf_notes, doc_midia_notes').eq('org_id', orgId).maybeSingle()
+  const nf = data?.doc_nf_notes, midia = data?.doc_midia_notes
+  return {
+    agency: { ...AGENCY, ...(data?.agency_info ?? {}) },
+    nfNotes:    Array.isArray(nf)    && nf.length    ? nf    : DOC_NF_NOTES,
+    midiaNotes: Array.isArray(midia) && midia.length ? midia : DOC_MIDIA_NOTES,
+  }
+}

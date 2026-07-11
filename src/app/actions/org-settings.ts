@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { revalidatePath } from 'next/cache'
 import type { StatusOverride } from '@/types'
+import type { AgencyInfo, DocNote } from '@/lib/agency'
 
 export async function upsertOrgSettings(
   orgId: string,
@@ -26,6 +27,22 @@ export async function upsertOrgSettings(
 
   if (error) return { error: error.message }
   revalidatePath('/', 'layout')
+}
+
+/** Salva dados da agência + observações legais (Configurações → Documentos; owner/admin). */
+export async function setOrgDocs(orgSlug: string, orgId: string, agency: AgencyInfo, nfNotes: DocNote[], midiaNotes: DocNote[]) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('set_org_docs', {
+    p_user_id: user.id, p_org_id: orgId,
+    p_agency: agency, p_nf_notes: nfNotes, p_midia_notes: midiaNotes,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/settings/documentos`)
+  return {}
 }
 
 export interface ReviewGates { redacao: boolean; design: boolean; finalizacao: boolean }

@@ -1,14 +1,14 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { PrintToolbar } from '@/components/ui/PrintToolbar'
-import { AGENCY, DOC_NF_NOTES } from '@/lib/agency'
+import { loadOrgDocs } from '@/lib/agency'
 import { formatBRL, parseMoney } from '@/lib/midia'
 
 const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
-function dataExtenso(d?: string | null): string {
+function dataExtenso(cidade: string, d?: string | null): string {
   const base = d && d.length >= 10 ? d.slice(0, 10) : new Date().toISOString().slice(0, 10)
   const [y, m, dia] = base.split('-')
-  return `${AGENCY.cidade}, ${Number(dia)} de ${MESES[Number(m) - 1]} de ${y}`
+  return `${cidade}, ${Number(dia)} de ${MESES[Number(m) - 1]} de ${y}`
 }
 
 interface Opcao { fornecedor_id?: string; n_orc?: string; pgto?: string; quant?: string; valor_unit?: string; selecionado?: boolean }
@@ -49,6 +49,7 @@ export default async function OrcamentoPrintPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: settings } = await (supabase as any).from('org_settings').select('logo_url').eq('org_id', org.id).single()
   const logoUrl: string | null = settings?.logo_url ?? null
+  const { agency: AGENCY, nfNotes: DOC_NF_NOTES } = await loadOrgDocs(supabase, org.id)
 
   const itens: ItemOrc[] = Array.isArray(p.detalhe?.itens) ? p.detalhe.itens : []
 
@@ -157,7 +158,7 @@ export default async function OrcamentoPrintPage({
           </div>
 
           {/* Data + assinaturas */}
-          <p className="mt-10 text-gray-700">{dataExtenso(p.emissao)}</p>
+          <p className="mt-10 text-gray-700">{dataExtenso(AGENCY.cidade, p.emissao)}</p>
           <div className="grid grid-cols-2 gap-10 mt-16">
             <div className="text-center"><div className="border-t border-gray-400 pt-1 text-gray-700">{AGENCY.razao}</div></div>
             <div className="text-center"><div className="border-t border-gray-400 pt-1 text-gray-700">{ws?.legal_name || ws?.name || ''}</div></div>

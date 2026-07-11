@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { PrintToolbar } from '@/components/ui/PrintToolbar'
-import { AGENCY } from '@/lib/agency'
+import { loadOrgDocs } from '@/lib/agency'
 import { formatBRL, formatDateBR, parseMoney } from '@/lib/midia'
 
 const TIPO_LABEL: Record<string, string> = { midia: 'Mídia', producao: 'Produção', servico_interno: 'Serviço Interno', fee: 'Fee' }
@@ -27,6 +27,7 @@ export default async function PropostaPrintPage({
   if (p.campaign_id) { const { data: c } = await supabase.from('campaigns').select('name').eq('id', p.campaign_id).single(); campanha = c?.name ?? '' }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: settings } = await (supabase as any).from('org_settings').select('logo_url').eq('org_id', org.id).single()
+  const { agency: AGENCY } = await loadOrgDocs(supabase, org.id)
   const logoUrl: string | null = settings?.logo_url ?? null
 
   const det = (p.detalhe ?? {}) as { introducao?: string; itens?: ItemP[] }

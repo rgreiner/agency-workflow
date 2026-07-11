@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { PrintToolbar } from '@/components/ui/PrintToolbar'
-import { AGENCY, DOC_NF_NOTES } from '@/lib/agency'
+import { loadOrgDocs } from '@/lib/agency'
 import { formatBRL, formatDateBR } from '@/lib/midia'
 
 interface ItemPed { nome?: string; descricao?: string; n_orc?: string; quant?: string; valor?: string }
@@ -48,6 +48,7 @@ export default async function PedidoPrintPage({
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: settings } = await (supabase as any).from('org_settings').select('logo_url').eq('org_id', org.id).single()
+  const { agency: AGENCY, nfNotes: DOC_NF_NOTES } = await loadOrgDocs(supabase, org.id)
   const logoUrl: string | null = settings?.logo_url ?? null
 
   const valor = Number(p.valor ?? 0)

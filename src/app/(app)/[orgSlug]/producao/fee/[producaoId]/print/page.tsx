@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { PrintToolbar } from '@/components/ui/PrintToolbar'
-import { AGENCY } from '@/lib/agency'
+import { loadOrgDocs } from '@/lib/agency'
 import { formatBRL, formatDateBR, parseMoney } from '@/lib/midia'
 
 interface ParcelaFee { vencimento?: string; valor?: string }
@@ -23,6 +23,7 @@ export default async function FeePrintPage({
   const { data: ws } = await (supabase as any).from('workspaces').select('name, legal_name, tax_id').eq('id', p.workspace_id).single()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: settings } = await (supabase as any).from('org_settings').select('logo_url').eq('org_id', org.id).single()
+  const { agency: AGENCY } = await loadOrgDocs(supabase, org.id)
   const logoUrl: string | null = settings?.logo_url ?? null
 
   const det = (p.detalhe ?? {}) as { de?: string; ate?: string; num_parcelas?: string; valor_mensal?: string; parcelas?: ParcelaFee[] }

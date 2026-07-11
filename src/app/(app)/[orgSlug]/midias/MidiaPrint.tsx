@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { PrintToolbar } from '@/components/ui/PrintToolbar'
-import { AGENCY, DOC_MIDIA_NOTES } from '@/lib/agency'
+import { loadOrgDocs } from '@/lib/agency'
 import {
   formatBRL, formatDateBR, labelOf, parseMoney,
   MIDIA_TIPO_OPTIONS, MIDIA_PRAZO_OPTIONS, MIDIA_FATURAMENTO_OPTIONS,
@@ -53,6 +53,7 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: settings } = await (supabase as any).from('org_settings').select('logo_url').eq('org_id', org.id).single()
+  const { agency: AGENCY, midiaNotes: DOC_MIDIA_NOTES } = await loadOrgDocs(supabase, org.id)
   const logoUrl: string | null = settings?.logo_url ?? null
 
   const valor = Number(m.valor ?? 0)
