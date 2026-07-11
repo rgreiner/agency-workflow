@@ -213,10 +213,10 @@ export function PropostaForm({
         {/* Textos */}
         <div className={cardCls}>
           <label className={labelCls}>Introdução</label>
-          <textarea rows={4} value={form.introducao} onChange={e => set('introducao', e.target.value)} className={cn(inputCls, 'resize-none')} />
+          <textarea rows={4} value={form.introducao} onChange={e => set('introducao', e.target.value)} className={cn(inputCls, 'resize-y min-h-[80px]')} />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-            <div><label className={labelCls}>Observação</label><textarea rows={3} value={form.observacao} onChange={e => set('observacao', e.target.value)} className={cn(inputCls, 'resize-none')} /></div>
-            <div><label className={labelCls}>Texto Legal</label><textarea rows={3} value={form.texto_legal} onChange={e => set('texto_legal', e.target.value)} className={cn(inputCls, 'resize-none')} /></div>
+            <div><label className={labelCls}>Observação</label><textarea rows={3} value={form.observacao} onChange={e => set('observacao', e.target.value)} className={cn(inputCls, 'resize-y min-h-[64px]')} /></div>
+            <div><label className={labelCls}>Texto Legal</label><textarea rows={3} value={form.texto_legal} onChange={e => set('texto_legal', e.target.value)} className={cn(inputCls, 'resize-y min-h-[64px]')} /></div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
             <div><label className={labelCls}>Contato</label><input value={form.contato} onChange={e => set('contato', e.target.value)} className={inputCls} /></div>

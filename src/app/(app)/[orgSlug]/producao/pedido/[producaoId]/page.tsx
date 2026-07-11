@@ -30,7 +30,6 @@ export default async function EditarPedidoPage({
   const initial: PedidoValues = {
     workspace_id: s(p.workspace_id), campaign_id: s(p.campaign_id), fornecedor_id: s(det.fornecedor_id),
     titulo: s(p.titulo), emissao: s(p.emissao), entrega: s(det.entrega),
-    codigo_identificador: s(p.codigo_identificador), nota_fiscal: s(p.nota_fiscal),
     faturar: s(p.faturar) || 'contra_cliente', bv_pct: num2br(p.bv_pct), honorarios_pct: num2br(p.honorarios_pct),
     prazo: s(det.prazo) || 'a_vista', contato: s(p.contato), responsavel_id: s(p.responsavel_id),
     situacao: s(p.situacao) || 'em_aberto', observacao: s(p.observacao), texto_legal: s(p.texto_legal),

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Check, Loader2, Plus, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
+import { Combobox } from '@/components/ui/Combobox'
 import { MIDIA_SITUACAO_OPTIONS, MIDIA_PRAZO_OPTIONS, formatBRL, parseMoney } from '@/lib/midia'
 import type { ClienteOpt, MemberOpt } from '../../midias/simplificada/MidiaForm'
 import type { FornecedorOpt } from '@/lib/midia-selectors'
@@ -13,7 +14,7 @@ export interface ItemPed { nome: string; descricao: string; n_orc: string; quant
 export interface Parcela { vencimento: string; valor: string; tipo: string }
 export interface PedidoValues {
   workspace_id: string; campaign_id: string; fornecedor_id: string; titulo: string
-  emissao: string; entrega: string; codigo_identificador: string; nota_fiscal: string
+  emissao: string; entrega: string
   faturar: string; bv_pct: string; honorarios_pct: string; prazo: string
   contato: string; responsavel_id: string; situacao: string; observacao: string; texto_legal: string
   itens: ItemPed[]; parcelas: Parcela[]
@@ -32,7 +33,7 @@ const itemTotal = (it: ItemPed) => (parseInt(it.quant || '1', 10) || 0) * parseM
 function emptyValues(today: string, responsavelId: string): PedidoValues {
   return {
     workspace_id: '', campaign_id: '', fornecedor_id: '', titulo: '',
-    emissao: today, entrega: '', codigo_identificador: '', nota_fiscal: '',
+    emissao: today, entrega: '',
     faturar: 'contra_cliente', bv_pct: '15', honorarios_pct: '0', prazo: 'a_vista',
     contato: '', responsavel_id: responsavelId, situacao: 'em_aberto', observacao: '', texto_legal: '',
     itens: [newItem()], parcelas: [],
@@ -97,7 +98,7 @@ export function PedidoForm({
     if (!form.titulo.trim()) { setError('Informe o título'); return }
 
     const fd = new FormData()
-    const scalars: (keyof PedidoValues)[] = ['workspace_id', 'campaign_id', 'titulo', 'faturar', 'emissao', 'codigo_identificador', 'nota_fiscal', 'contato', 'responsavel_id', 'situacao', 'observacao', 'texto_legal']
+    const scalars: (keyof PedidoValues)[] = ['workspace_id', 'campaign_id', 'titulo', 'faturar', 'emissao', 'contato', 'responsavel_id', 'situacao', 'observacao', 'texto_legal']
     scalars.forEach(k => fd.set(k, String(form[k] ?? '')))
     fd.set('tipo', 'pedido')
     fd.set('bv_pct', String(parseMoney(form.bv_pct)))
@@ -135,11 +136,9 @@ export function PedidoForm({
             <div><label className={labelCls}>Campanha</label>
               <Select value={form.campaign_id} onChange={v => set('campaign_id', v)} options={campanhaOptions} placeholder={form.workspace_id ? 'Selecionar' : 'Escolha o cliente'} /></div>
             <div><label className={labelCls}>Fornecedor <span className="text-red-500">*</span></label>
-              <Select value={form.fornecedor_id} onChange={v => set('fornecedor_id', v)} options={fornecedorOptions} placeholder="Selecionar fornecedor" /></div>
+              <Combobox value={form.fornecedor_id} onChange={v => set('fornecedor_id', v)} options={fornecedorOptions} placeholder="Buscar fornecedor" /></div>
             <div><label className={labelCls}>Emissão</label><input type="date" value={form.emissao} onChange={e => set('emissao', e.target.value)} className={inputCls} /></div>
             <div><label className={labelCls}>Entrega</label><input type="date" value={form.entrega} onChange={e => set('entrega', e.target.value)} className={inputCls} /></div>
-            <div><label className={labelCls}>Código Identificador</label><input value={form.codigo_identificador} onChange={e => set('codigo_identificador', e.target.value)} className={inputCls} /></div>
-            <div><label className={labelCls}>Nota Fiscal</label><input value={form.nota_fiscal} onChange={e => set('nota_fiscal', e.target.value)} className={inputCls} /></div>
           </div>
           <div className="mt-4"><label className={labelCls}>Título <span className="text-red-500">*</span></label>
             <input value={form.titulo} onChange={e => set('titulo', e.target.value)} className={inputCls} required /></div>
@@ -158,7 +157,7 @@ export function PedidoForm({
                   <input value={it.nome} onChange={e => setItem(i, 'nome', e.target.value)} placeholder="Item (ex.: FineArt, Vídeo)" className={cn(inputCls, 'font-medium')} />
                   {form.itens.length > 1 && <button aria-label="Remover" type="button" onClick={() => delItem(i)} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>}
                 </div>
-                <textarea rows={2} value={it.descricao} onChange={e => setItem(i, 'descricao', e.target.value)} placeholder="Descrição" className={cn(inputCls, 'resize-none mb-2')} />
+                <textarea rows={2} value={it.descricao} onChange={e => setItem(i, 'descricao', e.target.value)} placeholder="Descrição" className={cn(inputCls, 'resize-y min-h-[42px] mb-2')} />
                 <div className="grid grid-cols-3 gap-3">
                   <div><label className={labelCls}>Nº Orç.</label><input value={it.n_orc} onChange={e => setItem(i, 'n_orc', e.target.value)} className={cellCls} /></div>
                   <div><label className={labelCls}>Quantidade</label><input value={it.quant} onChange={e => setItem(i, 'quant', e.target.value)} className={cn(cellCls, 'text-right')} /></div>
@@ -175,10 +174,10 @@ export function PedidoForm({
             <div><p className="text-xs text-gray-400">Valor Total</p><p className="text-lg font-semibold text-gray-900">{formatBRL(valorTotal)}</p></div>
             <div><label className={labelCls}>Faturar</label><Select value={form.faturar} onChange={v => set('faturar', v)} options={FATURAR} /></div>
             <div><label className={labelCls}>Prazo</label><Select value={form.prazo} onChange={v => set('prazo', v)} options={MIDIA_PRAZO_OPTIONS} /></div>
-            <div><label className={labelCls}>Comissão BV (%)</label><input inputMode="decimal" value={form.bv_pct} onChange={e => set('bv_pct', e.target.value)} className={inputCls} /><p className="text-xs text-gray-400 mt-1">{formatBRL(bv)} — a receber do fornecedor</p></div>
+            <div><label className={labelCls}>Comissão (%)</label><input inputMode="decimal" value={form.bv_pct} onChange={e => set('bv_pct', e.target.value)} className={inputCls} /><p className="text-xs text-gray-400 mt-1">{formatBRL(bv)} — a receber do fornecedor</p></div>
             <div><label className={labelCls}>Honorários (%)</label><input inputMode="decimal" value={form.honorarios_pct} onChange={e => set('honorarios_pct', e.target.value)} className={inputCls} /><p className="text-xs text-gray-400 mt-1">{formatBRL(honorarios)} — a receber do cliente</p></div>
           </div>
-          <p className="text-xs text-gray-500 mt-3">No Financeiro entram só as comissões: <strong>BV (fornecedor)</strong> e <strong>Honorários (cliente)</strong>. O pagamento do cliente ao fornecedor não é lançado.</p>
+          <p className="text-xs text-gray-500 mt-3">No Financeiro entram só as comissões: <strong>Comissão (fornecedor)</strong> e <strong>Honorários (cliente)</strong>. O pagamento do cliente ao fornecedor não é lançado.</p>
         </div>
 
         {/* Parcelas */}
@@ -209,9 +208,9 @@ export function PedidoForm({
         {/* Textos + status */}
         <div className={cardCls}>
           <label className={labelCls}>Observação</label>
-          <textarea rows={3} value={form.observacao} onChange={e => set('observacao', e.target.value)} className={cn(inputCls, 'resize-none')} />
+          <textarea rows={3} value={form.observacao} onChange={e => set('observacao', e.target.value)} className={cn(inputCls, 'resize-y min-h-[64px]')} />
           <label className={cn(labelCls, 'mt-4')}>Texto Legal</label>
-          <textarea rows={2} value={form.texto_legal} onChange={e => set('texto_legal', e.target.value)} className={cn(inputCls, 'resize-none')} />
+          <textarea rows={2} value={form.texto_legal} onChange={e => set('texto_legal', e.target.value)} className={cn(inputCls, 'resize-y min-h-[42px]')} />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
             <div><label className={labelCls}>Contato</label><input value={form.contato} onChange={e => set('contato', e.target.value)} className={inputCls} /></div>
             <div><label className={labelCls}>Responsável</label><Select value={form.responsavel_id} onChange={v => set('responsavel_id', v)} options={memberOptions} placeholder="Selecionar" /></div>
