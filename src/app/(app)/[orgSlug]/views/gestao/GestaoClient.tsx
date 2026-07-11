@@ -7,7 +7,9 @@ import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/Avatar'
 import { MultiSelect, Select } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
-import { AlertTriangle, UserX, CalendarOff, PauseCircle, Loader2, Activity as ActivityIcon, X, ExternalLink } from 'lucide-react'
+import { AlertTriangle, UserX, CalendarOff, PauseCircle, Loader2, Activity as ActivityIcon, X, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react'
+import { formatBRL } from '@/lib/midia'
+import type { FinanceCategoriaGrupo } from '@/app/actions/financeiro'
 
 export interface ProblemTask { status: string; ws_id: string; ws_name: string; assignees: string[]; dias: number }
 export interface CargaRow { user_id: string; full_name: string | null; avatar_url: string | null; ativas: number; horas: number }
@@ -21,6 +23,16 @@ export interface GestaoData {
 export interface EngUser { user_id: string; full_name: string | null; avatar_url: string | null; total: number; por_tipo: Record<string, number> }
 export interface EngDaily { user_id: string; day: string; n: number }
 export interface EngajamentoData { since: string; until: string; days: number; users: EngUser[]; daily: EngDaily[] }
+export interface TipoTotal { tipo: string; n: number; total: number }
+export interface NTotal { n: number; total: number }
+export interface FinanceiroData {
+  mes: string
+  a_receber: number; a_pagar: number; recebido: number; pago: number
+  a_receber_atrasado: number; a_pagar_atrasado: number
+  producao_pendente: NTotal; producao_faturar: NTotal; producao_por_tipo: TipoTotal[]
+  midia_pendente: NTotal; midia_por_tipo: TipoTotal[]
+  despesas_categoria: { categoria: string; total: number }[]
+}
 
 const DIAS_OPTIONS = [
   { value: '28', label: '4 semanas' },
@@ -31,26 +43,32 @@ const DIAS_OPTIONS = [
 const KIND_LABEL: Record<string, string> = { status: 'status', campo: 'campos', comentario: 'comentários', reacao: 'reações' }
 
 export function GestaoClient({
-  orgSlug, workspaces, wsFilter, dias, aba: abaInicial, gestao, engajamento,
+  orgSlug, workspaces, wsFilter, dias, mes, aba: abaInicial, gestao, engajamento, financeiro, categorias,
 }: {
   orgSlug: string
   workspaces: { id: string; name: string }[]
   wsFilter: string[]
   dias: number
-  aba: 'operacao' | 'engajamento'
+  mes: string
+  aba: 'operacao' | 'engajamento' | 'financeiro'
   gestao: GestaoData | null
   engajamento: EngajamentoData | null
+  financeiro: FinanceiroData | null
+  categorias: FinanceCategoriaGrupo[]
 }) {
   const router = useRouter()
   const [aba, setAba] = useState(abaInicial)
   const [pending, start] = useTransition()
 
-  function pushParams(patch: { ws?: string[]; dias?: number }) {
+  function pushParams(patch: { ws?: string[]; dias?: number; mes?: string }) {
     const ws = patch.ws ?? wsFilter
     const d = patch.dias ?? dias
+    const m = patch.mes ?? mes
     const params = new URLSearchParams()
     if (ws.length) params.set('ws', ws.join(','))
     if (d !== 84) params.set('dias', String(d))
+    if (m !== nowMonth()) params.set('mes', m)
+    if (aba !== 'operacao') params.set('aba', aba)
     start(() => router.push(`/${orgSlug}/views/gestao${params.toString() ? `?${params}` : ''}`))
   }
 
@@ -59,7 +77,7 @@ export function GestaoClient({
       {/* Abas + filtro da aba ativa na mesma linha */}
       <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
         <div className="inline-flex bg-gray-100 rounded-xl p-0.5">
-          {([['operacao', 'Operação'], ['engajamento', 'Engajamento']] as const).map(([v, label]) => (
+          {([['operacao', 'Operação'], ['engajamento', 'Engajamento'], ['financeiro', 'Financeiro']] as const).map(([v, label]) => (
             <button key={v} onClick={() => setAba(v)} aria-pressed={aba === v}
               className={cn('px-3.5 py-1.5 text-sm font-medium rounded-[10px] transition-colors',
                 aba === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
@@ -69,7 +87,7 @@ export function GestaoClient({
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {pending && <Loader2 className="w-4 h-4 text-gray-300 animate-spin" />}
-          {aba === 'operacao' ? (
+          {aba === 'operacao' && (
             <>
               {workspaces.length > 1 && (
                 <div className="w-48"><MultiSelect values={wsFilter} onChange={ws => pushParams({ ws })} allLabel="Todos os clientes"
@@ -77,15 +95,23 @@ export function GestaoClient({
               )}
               {gestao && <span className="text-sm text-gray-400 whitespace-nowrap">{gestao.total_ativas} ativas</span>}
             </>
-          ) : (
+          )}
+          {aba === 'engajamento' && (
             <div className="w-40"><Select value={String(dias)} onChange={v => pushParams({ dias: parseInt(v, 10) })} options={DIAS_OPTIONS} /></div>
+          )}
+          {aba === 'financeiro' && (
+            <div className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-0.5">
+              <button onClick={() => pushParams({ mes: shiftMonth(mes, -1) })} className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 transition"><ChevronLeft className="w-4 h-4" /></button>
+              <span className="px-3 text-sm font-medium text-gray-800 min-w-[110px] text-center">{monthLabel(mes)}</span>
+              <button onClick={() => pushParams({ mes: shiftMonth(mes, 1) })} className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 transition"><ChevronRight className="w-4 h-4" /></button>
+            </div>
           )}
         </div>
       </div>
 
-      {aba === 'operacao'
-        ? <Operacao orgSlug={orgSlug} gestao={gestao} />
-        : <Engajamento engajamento={engajamento} />}
+      {aba === 'operacao' && <Operacao orgSlug={orgSlug} gestao={gestao} />}
+      {aba === 'engajamento' && <Engajamento engajamento={engajamento} />}
+      {aba === 'financeiro' && <Financeiro orgSlug={orgSlug} fin={financeiro} categorias={categorias} />}
     </div>
   )
 }
@@ -252,7 +278,7 @@ function Panel({ title, hint, children }: { title: string; hint?: string; childr
   )
 }
 
-interface BarRowData { label: string; n: number; bg: string; fg: string; href?: string; suffix?: string }
+interface BarRowData { label: string; n: number; bg: string; fg: string; href?: string; suffix?: string; text?: string }
 function Bars({ rows, empty }: { rows: BarRowData[]; empty: string }) {
   if (rows.length === 0) return <p className="text-sm text-gray-400">{empty}</p>
   const max = Math.max(1, ...rows.map(r => r.n))
@@ -264,7 +290,7 @@ function Bars({ rows, empty }: { rows: BarRowData[]; empty: string }) {
             <span className="text-xs text-gray-600 w-36 shrink-0 truncate" title={r.label}>{r.label}</span>
             <div className="flex-1 h-5 rounded-md bg-gray-50 overflow-hidden">
               <div className="h-full rounded-md flex items-center justify-end px-2 gap-1" style={{ width: `${Math.max((r.n / max) * 100, 8)}%`, backgroundColor: r.bg }}>
-                <span className="text-[11px] font-semibold" style={{ color: r.fg }}>{r.n}</span>
+                <span className="text-[11px] font-semibold whitespace-nowrap" style={{ color: r.fg }}>{r.text ?? r.n}</span>
               </div>
             </div>
             {r.suffix && <span className="text-[11px] text-gray-400 shrink-0 w-10 text-right">{r.suffix}</span>}
@@ -283,6 +309,102 @@ function countBy(rows: ProblemTask[], key: (t: ProblemTask) => string) {
   for (const t of rows) m.set(key(t), (m.get(key(t)) ?? 0) + 1)
   return m
 }
+
+// ── Financeiro (macro do mês: fluxo, o que acelerar, despesas) ───────────────
+const TIPO_MIDIA: Record<string, string> = { impressa_jornal: 'Impressa (jornal)', impressa_revista: 'Impressa (revista)', eletronica: 'Eletrônica', externa: 'Externa', digital: 'Digital', outros: 'Outros' }
+
+function Financeiro({ orgSlug, fin, categorias }: { orgSlug: string; fin: FinanceiroData | null; categorias: FinanceCategoriaGrupo[] }) {
+  if (!fin) return <p className="text-sm text-gray-400">Sem dados.</p>
+
+  // categoria (folha) → grupo, p/ o % de despesas
+  const grupoDe = new Map<string, string>()
+  for (const g of categorias) {
+    if (g.filhos.length === 0) grupoDe.set(g.nome, g.nome)
+    else for (const f of g.filhos) grupoDe.set(f.nome, g.nome)
+  }
+  const despGrupo = new Map<string, number>()
+  let despTotal = 0
+  for (const d of fin.despesas_categoria) {
+    const g = grupoDe.get(d.categoria) ?? d.categoria
+    const t = Number(d.total)
+    despGrupo.set(g, (despGrupo.get(g) ?? 0) + t); despTotal += t
+  }
+  const despRows = [...despGrupo.entries()].map(([g, t]) => ({ g, t })).sort((a, b) => b.t - a.t)
+
+  const resultado = Number(fin.recebido) - Number(fin.pago)
+  const margem = Number(fin.recebido) > 0 ? (resultado / Number(fin.recebido)) * 100 : 0
+
+  return (
+    <div className="space-y-6">
+      {/* Fluxo do mês */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <FinKpi label="A receber (mês)" value={fin.a_receber} tone="emerald" href={`/${orgSlug}/financeiro/lancamentos`}
+          hint={Number(fin.a_receber_atrasado) > 0 ? `${formatBRL(fin.a_receber_atrasado)} atrasado` : undefined} />
+        <FinKpi label="A pagar (mês)" value={fin.a_pagar} tone="red" href={`/${orgSlug}/financeiro/lancamentos`}
+          hint={Number(fin.a_pagar_atrasado) > 0 ? `${formatBRL(fin.a_pagar_atrasado)} atrasado` : undefined} />
+        <FinKpi label="Recebido (mês)" value={fin.recebido} tone="emerald" />
+        <FinKpi label="Resultado (mês)" value={resultado} tone={resultado >= 0 ? 'gray' : 'red'} hint={`margem ${margem.toFixed(0)}%`} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Acelerar receita */}
+        <Panel title="A faturar — acelerar receita" hint="aprovado esperando fatura + pendências de aprovação">
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            <FinMini label="Produção a faturar" n={fin.producao_faturar.n} total={fin.producao_faturar.total} href={`/${orgSlug}/financeiro/faturamento`} strong />
+            <FinMini label="Produção p/ aprovar" n={fin.producao_pendente.n} total={fin.producao_pendente.total} href={`/${orgSlug}/producao/orcamento`} />
+            <FinMini label="Mídia a liberar" n={fin.midia_pendente.n} total={fin.midia_pendente.total} href={`/${orgSlug}/midias/simplificada`} />
+          </div>
+          <p className="text-[11px] text-gray-400 mb-1.5">Mídia pendente por tipo (valor bruto)</p>
+          <Bars empty="Nada de mídia pendente." rows={fin.midia_por_tipo.map(t => ({ label: TIPO_MIDIA[t.tipo] ?? t.tipo, n: Number(t.total), bg: '#f97316', fg: '#fff', text: formatBRL(t.total), suffix: `${t.n} un` }))} />
+        </Panel>
+
+        {/* Despesas por grupo (%) */}
+        <Panel title="Onde vai o dinheiro" hint="despesas realizadas do mês, por grupo de categoria">
+          <Bars empty="Sem despesas realizadas no mês." rows={despRows.map(r => ({
+            label: r.g, n: r.t, bg: '#ef4444', fg: '#fff', text: formatBRL(r.t),
+            suffix: despTotal > 0 ? `${Math.round((r.t / despTotal) * 100)}%` : undefined,
+          }))} />
+          {despTotal > 0 && <p className="text-[11px] text-gray-400 mt-3">Total de despesas realizadas: <strong className="text-gray-600">{formatBRL(despTotal)}</strong></p>}
+        </Panel>
+      </div>
+    </div>
+  )
+}
+
+function FinKpi({ label, value, tone, hint, href }: { label: string; value: number | string; tone: string; hint?: string; href?: string }) {
+  const n = Number(value)
+  const color = tone === 'emerald' ? 'text-emerald-600' : tone === 'red' ? 'text-red-600' : n >= 0 ? 'text-gray-900' : 'text-red-600'
+  const inner = (
+    <>
+      <p className="text-[11px] font-medium text-gray-400">{label}</p>
+      <p className={cn('text-xl font-semibold mt-1', color)}>{formatBRL(n)}</p>
+      {hint && <p className="text-[10px] text-gray-400 mt-0.5">{hint}</p>}
+    </>
+  )
+  const cls = 'block rounded-xl border border-gray-200 bg-white px-4 py-3'
+  return href ? <Link href={href} className={cn(cls, 'hover:border-gray-300 transition')}>{inner}</Link> : <div className={cls}>{inner}</div>
+}
+
+function FinMini({ label, n, total, href, strong }: { label: string; n: number; total: number | string; href?: string; strong?: boolean }) {
+  const inner = (
+    <>
+      <p className="text-[11px] text-gray-400 leading-tight">{label}</p>
+      <p className={cn('text-base font-semibold mt-0.5', strong ? 'text-orange-600' : 'text-gray-900')}>{formatBRL(Number(total))}</p>
+      <p className="text-[10px] text-gray-400">{n} {n === 1 ? 'item' : 'itens'}</p>
+    </>
+  )
+  const cls = cn('block rounded-xl border px-3 py-2.5', strong ? 'border-orange-200 bg-orange-50/40' : 'border-gray-100')
+  return href ? <Link href={href} className={cn(cls, 'hover:border-gray-300 transition')}>{inner}</Link> : <div className={cls}>{inner}</div>
+}
+
+const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+function monthLabel(ym: string) { const [y, m] = ym.split('-'); return `${MESES[Number(m) - 1]} ${y}` }
+function shiftMonth(ym: string, delta: number) {
+  const [y, m] = ym.split('-').map(Number)
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1))
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
+function nowMonth() { return new Date().toISOString().slice(0, 7) }
 
 // ── Engajamento (calendário estilo GitHub por pessoa) ────────────────────────
 function Engajamento({ engajamento }: { engajamento: EngajamentoData | null }) {
