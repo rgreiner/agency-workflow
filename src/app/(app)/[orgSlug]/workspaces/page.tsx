@@ -25,7 +25,7 @@ export default async function WorkspacesPage({
     .select('*, campaigns(count)')
     .eq('org_id', org.id)
     .eq('archived', archivedView)
-    .order('created_at', { ascending: false })
+    .order('name', { ascending: true })
 
   return (
     <div className="p-6">
