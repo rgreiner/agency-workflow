@@ -31,18 +31,22 @@ import { MoveTaskProject } from './MoveTaskProject'
 const isHtml = (s: string) => /^\s*</.test(s)
 const stripHtml = (s: string) => s.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
 
-/** Atalho pro briefing (doc) do cliente/campanha, acima do feed de atividade. */
+/**
+ * Atalho pro briefing (doc) do cliente/campanha, acima do feed de atividade.
+ * Abre em NOVA ABA: a tarefa costuma estar numa modal (rota interceptada) e navegar
+ * no mesmo lugar carregava o doc ATRÁS da modal. Nova aba mantém o job intacto.
+ */
 function BriefingLink({ href, label, title }: { href: string; label: string; title?: string | null }) {
   return (
-    <Link href={href}
+    <a href={href} target="_blank" rel="noopener noreferrer"
       className="group flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-orange-100 bg-orange-50/60 hover:bg-orange-50 transition-colors">
       <Target className="w-4 h-4 text-orange-500 shrink-0" />
       <div className="min-w-0 flex-1">
         <p className="text-xs font-semibold text-orange-800">{label}</p>
         {title && <p className="text-[11px] text-orange-600/70 truncate">{title}</p>}
       </div>
-      <ArrowRight className="w-3.5 h-3.5 text-orange-400 shrink-0 transition-transform group-hover:translate-x-0.5" />
-    </Link>
+      <ExternalLink className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+    </a>
   )
 }
 
