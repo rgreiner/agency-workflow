@@ -7,9 +7,9 @@ import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/Avatar'
 import { MultiSelect, Select } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
-import { AlertTriangle, UserX, CalendarOff, PauseCircle, Loader2, Activity as ActivityIcon, X, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react'
+import { AlertTriangle, UserX, CalendarOff, PauseCircle, Loader2, Activity as ActivityIcon, X, ExternalLink, ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import { formatBRL } from '@/lib/midia'
-import type { FinanceCategoriaGrupo } from '@/app/actions/financeiro'
+import { DRE_TEMPLATE, type DreLine } from '@/lib/dre-template'
 
 export interface ProblemTask { status: string; ws_id: string; ws_name: string; assignees: string[]; dias: number }
 export interface CargaRow { user_id: string; full_name: string | null; avatar_url: string | null; ativas: number; horas: number }
@@ -25,7 +25,6 @@ export interface EngDaily { user_id: string; day: string; n: number }
 export interface EngajamentoData { since: string; until: string; days: number; users: EngUser[]; daily: EngDaily[] }
 export interface TipoTotal { tipo: string; n: number; total: number }
 export interface NTotal { n: number; total: number }
-export interface MesV { mes: string; v: number }
 export interface CatMesV { categoria: string; mes: string; v: number }
 export interface FinanceiroData {
   mes: string
@@ -34,8 +33,7 @@ export interface FinanceiroData {
   producao_pendente: NTotal; producao_faturar: NTotal
   midia_pendente: NTotal; midia_por_tipo: TipoTotal[]
   dre_meses: string[]
-  dre_rec_real: MesV[]; dre_rec_prev: MesV[]
-  dre_desp_real: CatMesV[]; dre_desp_prev: CatMesV[]
+  dre_real: CatMesV[]; dre_prev: CatMesV[]
 }
 
 const DIAS_OPTIONS = [
@@ -47,7 +45,7 @@ const DIAS_OPTIONS = [
 const KIND_LABEL: Record<string, string> = { status: 'status', campo: 'campos', comentario: 'comentários', reacao: 'reações' }
 
 export function GestaoClient({
-  orgSlug, workspaces, wsFilter, dias, mes, aba: abaInicial, gestao, engajamento, financeiro, categorias,
+  orgSlug, workspaces, wsFilter, dias, mes, aba: abaInicial, gestao, engajamento, financeiro,
 }: {
   orgSlug: string
   workspaces: { id: string; name: string }[]
@@ -58,7 +56,6 @@ export function GestaoClient({
   gestao: GestaoData | null
   engajamento: EngajamentoData | null
   financeiro: FinanceiroData | null
-  categorias: FinanceCategoriaGrupo[]
 }) {
   const router = useRouter()
   const [aba, setAba] = useState(abaInicial)
@@ -115,7 +112,7 @@ export function GestaoClient({
 
       {aba === 'operacao' && <Operacao orgSlug={orgSlug} gestao={gestao} />}
       {aba === 'engajamento' && <Engajamento engajamento={engajamento} />}
-      {aba === 'financeiro' && <Financeiro orgSlug={orgSlug} fin={financeiro} categorias={categorias} />}
+      {aba === 'financeiro' && <Financeiro orgSlug={orgSlug} fin={financeiro} />}
     </div>
   )
 }
@@ -317,27 +314,52 @@ function countBy(rows: ProblemTask[], key: (t: ProblemTask) => string) {
 // ── Financeiro (macro do mês: fluxo, o que acelerar, despesas) ───────────────
 const TIPO_MIDIA: Record<string, string> = { impressa_jornal: 'Impressa (jornal)', impressa_revista: 'Impressa (revista)', eletronica: 'Eletrônica', externa: 'Externa', digital: 'Digital', outros: 'Outros' }
 
-function Financeiro({ orgSlug, fin, categorias }: { orgSlug: string; fin: FinanceiroData | null; categorias: FinanceCategoriaGrupo[] }) {
+function Financeiro({ orgSlug, fin }: { orgSlug: string; fin: FinanceiroData | null }) {
   if (!fin) return <p className="text-sm text-gray-400">Sem dados.</p>
 
   const resultado = Number(fin.recebido) - Number(fin.pago)
   const margem = Number(fin.recebido) > 0 ? (resultado / Number(fin.recebido)) * 100 : 0
 
-  // ── DRE mensal: receita + despesas por grupo, realizado × previsto ──
-  const grupoDe = new Map<string, string>()
-  for (const g of categorias) {
-    if (g.filhos.length === 0) grupoDe.set(g.nome, g.nome)
-    else for (const f of g.filhos) grupoDe.set(f.nome, g.nome)
-  }
+  // ── DRE mensal pela estrutura contábil (DRE_TEMPLATE) ──
   const meses = fin.dre_meses
-  const recReal = mapMes(fin.dre_rec_real), recPrev = mapMes(fin.dre_rec_prev)
-  const despReal = mapCatMes(fin.dre_desp_real, grupoDe)
-  const despPrev = mapCatMes(fin.dre_desp_prev, grupoDe)
-  const grupos = [...new Set([...despReal.keys(), ...despPrev.keys()])]
-    .map(g => ({ g, tot: meses.reduce((s, m) => s + (despReal.get(g)?.get(m) ?? 0), 0) }))
-    .sort((a, b) => b.tot - a.tot).map(x => x.g)
-  const resReal = (m: string) => (recReal.get(m) ?? 0) - grupos.reduce((s, g) => s + (despReal.get(g)?.get(m) ?? 0), 0)
-  const resPrev = (m: string) => (recPrev.get(m) ?? 0) - grupos.reduce((s, g) => s + (despPrev.get(g)?.get(m) ?? 0), 0)
+  const realMap = catMesMap(fin.dre_real)
+  const prevMap = catMesMap(fin.dre_prev)
+  const gv = (map: Map<string, Map<string, number>>, cat: string, m: string) => map.get(cat)?.get(m) ?? 0
+  const folhasDe = (pred: (l: Extract<DreLine, { kind: 'folha' }>) => boolean) =>
+    DRE_TEMPLATE.filter((l): l is Extract<DreLine, { kind: 'folha' }> => l.kind === 'folha' && pred(l))
+
+  // Percorre o template acumulando as folhas; totais (NNT) = soma corrida.
+  const accR: Record<string, number> = {}, accP: Record<string, number> = {}
+  for (const m of meses) { accR[m] = 0; accP[m] = 0 }
+  const linhas: { line: DreLine; vr: Record<string, number>; vp: Record<string, number> }[] = []
+  for (const line of DRE_TEMPLATE) {
+    const vr: Record<string, number> = {}, vp: Record<string, number> = {}
+    if (line.kind === 'folha') {
+      for (const m of meses) { vr[m] = gv(realMap, line.categoria, m); vp[m] = gv(prevMap, line.categoria, m); accR[m] += vr[m]; accP[m] += vp[m] }
+    } else if (line.kind === 'grupo') {
+      const fs = folhasDe(l => l.grupo === line.code)
+      for (const m of meses) { vr[m] = fs.reduce((s, l) => s + gv(realMap, l.categoria, m), 0); vp[m] = fs.reduce((s, l) => s + gv(prevMap, l.categoria, m), 0) }
+    } else if (line.kind === 'sub') {
+      const fs = folhasDe(l => l.sub === line.code)
+      for (const m of meses) { vr[m] = fs.reduce((s, l) => s + gv(realMap, l.categoria, m), 0); vp[m] = fs.reduce((s, l) => s + gv(prevMap, l.categoria, m), 0) }
+    } else {
+      for (const m of meses) { vr[m] = accR[m]; vp[m] = accP[m] }
+    }
+    linhas.push({ line, vr, vp })
+  }
+  const visivel = linhas.filter(r =>
+    r.line.kind === 'grupo' || r.line.kind === 'total' || meses.some(m => r.vr[m] !== 0 || r.vp[m] !== 0))
+
+  const lbl = (l: DreLine) => l.kind === 'folha' ? l.categoria : l.kind === 'total' ? l.label : `${l.code} ${l.label}`
+  const mesArquivo = fin.mes
+  function exportarCsv() {
+    const numBR = (n: number) => (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false })
+    const head = ['Linha', ...meses.flatMap(m => [`${monthLabel(m)} real`, `${monthLabel(m)} prev`])]
+    const body = visivel.map(({ line, vr, vp }) => [lbl(line), ...meses.flatMap(m => [numBR(vr[m]), numBR(vp[m])])])
+    const csv = [head, ...body].map(r => r.join(';')).join('\n')
+    const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }))
+    const a = document.createElement('a'); a.href = url; a.download = `dre-${mesArquivo}.csv`; a.click(); URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="space-y-6">
@@ -364,60 +386,58 @@ function Financeiro({ orgSlug, fin, categorias }: { orgSlug: string; fin: Financ
         </>}
       </Panel>
 
-      {/* DRE mensal */}
-      <Panel title="DRE mensal" hint="receita e despesas por grupo — realizado (topo) × previsto (cinza), últimos 6 meses">
+      {/* DRE mensal (estrutura contábil) */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-5">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">DRE mensal</h3>
+          <button onClick={exportarCsv} className="inline-flex items-center gap-1 text-xs font-medium text-orange-600 hover:text-orange-700"><Download className="w-3.5 h-3.5" /> CSV</button>
+        </div>
+        <p className="text-[11px] text-gray-400 mb-4">Realizado (topo) × previsto (cinza), em milhares (k). Últimos 6 meses.</p>
         {meses.length === 0 ? <p className="text-sm text-gray-400">Sem dados no período.</p> : (
           <div className="overflow-x-auto -mx-1">
-            <table className="w-full min-w-[640px] text-sm border-collapse">
+            <table className="w-full min-w-[680px] text-sm border-collapse">
               <thead>
                 <tr className="text-[11px] text-gray-400">
-                  <th className="text-left font-medium py-1.5 px-2 sticky left-0 bg-white">Grupo</th>
+                  <th className="text-left font-medium py-1.5 px-2 sticky left-0 bg-white">Linha</th>
                   {meses.map(m => <th key={m} className="text-right font-medium py-1.5 px-2 whitespace-nowrap">{monthLabel(m)}</th>)}
                 </tr>
               </thead>
               <tbody>
-                <DreRow label="Receita" meses={meses} real={m => recReal.get(m) ?? 0} prev={m => recPrev.get(m) ?? 0} tone="emerald" strong />
-                {grupos.map(g => (
-                  <DreRow key={g} label={g} meses={meses} real={m => despReal.get(g)?.get(m) ?? 0} prev={m => despPrev.get(g)?.get(m) ?? 0} tone="red" negativo />
-                ))}
-                <DreRow label="Resultado" meses={meses} real={resReal} prev={resPrev} tone="result" strong topborder />
+                {visivel.map(({ line, vr, vp }, i) => {
+                  const isTotal = line.kind === 'total', isGrupo = line.kind === 'grupo', isSub = line.kind === 'sub'
+                  const strong = isTotal || isGrupo
+                  return (
+                    <tr key={i} className={cn('border-t', isTotal ? 'border-gray-300' : 'border-gray-50', isGrupo && 'bg-gray-50/60')}>
+                      <td className={cn('text-left py-1.5 px-2 sticky left-0 bg-white truncate max-w-[220px]',
+                        isSub && 'pl-5 text-gray-500 text-[13px]', line.kind === 'folha' && 'pl-7 text-gray-600',
+                        strong ? 'font-semibold text-gray-800' : '')} title={lbl(line)}>{lbl(line)}</td>
+                      {meses.map(m => {
+                        const r = vr[m], p = vp[m]
+                        const color = line.kind === 'total' ? (r >= 0 ? 'text-gray-900' : 'text-red-600') : r < 0 ? 'text-red-600' : 'text-gray-700'
+                        return (
+                          <td key={m} className="text-right py-1.5 px-2 tabular-nums whitespace-nowrap">
+                            <span className={cn(strong && 'font-semibold', color)}>{r ? fmtK(r) : '·'}</span>
+                            {p !== 0 && <span className="block text-[10px] text-gray-300 leading-tight">{fmtK(p)}</span>}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         )}
-      </Panel>
+      </div>
     </div>
   )
 }
 
-function DreRow({ label, meses, real, prev, tone, strong, negativo, topborder }: {
-  label: string; meses: string[]; real: (m: string) => number; prev: (m: string) => number
-  tone: 'emerald' | 'red' | 'result'; strong?: boolean; negativo?: boolean; topborder?: boolean
-}) {
-  return (
-    <tr className={cn('border-t', topborder ? 'border-gray-300' : 'border-gray-50')}>
-      <td className={cn('text-left py-1.5 px-2 sticky left-0 bg-white truncate max-w-[160px]', strong ? 'font-semibold text-gray-800' : 'text-gray-600')} title={label}>{label}</td>
-      {meses.map(m => {
-        const r = real(m), p = prev(m)
-        const rColor = tone === 'emerald' ? 'text-emerald-700' : tone === 'red' ? 'text-gray-700' : r >= 0 ? 'text-gray-900' : 'text-red-600'
-        return (
-          <td key={m} className="text-right py-1.5 px-2 tabular-nums whitespace-nowrap">
-            <span className={cn(strong ? 'font-semibold' : '', rColor)}>{r ? `${negativo ? '−' : ''}${fmtK(r)}` : '·'}</span>
-            {p > 0 && <span className="block text-[10px] text-gray-300 leading-tight">{fmtK(p)}</span>}
-          </td>
-        )
-      })}
-    </tr>
-  )
-}
-
-function mapMes(rows: MesV[]) { const m = new Map<string, number>(); for (const r of rows) m.set(r.mes, Number(r.v)); return m }
-function mapCatMes(rows: CatMesV[], grupoDe: Map<string, string>) {
+function catMesMap(rows: CatMesV[]) {
   const m = new Map<string, Map<string, number>>()
   for (const r of rows) {
-    const g = grupoDe.get(r.categoria) ?? r.categoria
-    if (!m.has(g)) m.set(g, new Map())
-    const inner = m.get(g)!
+    if (!m.has(r.categoria)) m.set(r.categoria, new Map())
+    const inner = m.get(r.categoria)!
     inner.set(r.mes, (inner.get(r.mes) ?? 0) + Number(r.v))
   }
   return m
