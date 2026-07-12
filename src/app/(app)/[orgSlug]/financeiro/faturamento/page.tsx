@@ -13,12 +13,13 @@ export default async function FaturamentoPage({
   const { orgSlug } = await params
   const { supabase, orgId } = await assertFinanceAccess(orgSlug)
 
-  // Mídias faturadas (marcadas pela mídia/produção)
+  // Mídias liberadas pro Financeiro (estado unificado 'faturar' = A Faturar).
+  // Aceita 'faturado' legado ainda não lançado (a checagem de lançadas remove os já lançados).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: docsRaw } = await (supabase as any)
     .from('midias')
     .select('id, numero, titulo, valor, desconto_pct, faturamento, workspaces(name), veiculos(name)')
-    .eq('org_id', orgId).eq('situacao', 'faturado').eq('archived', false)
+    .eq('org_id', orgId).in('situacao', ['faturar', 'faturado']).eq('archived', false)
     .order('numero', { ascending: false })
 
   // Quais já foram lançadas (têm lançamento)
@@ -40,14 +41,13 @@ export default async function FaturamentoPage({
   const totalComissao = pendentes.reduce((s, d) => s + comissaoDe(d), 0)
   const totalDocs = pendentes.reduce((s, d) => s + Number(d.valor ?? 0), 0)
 
-  // Produção pronta pro Financeiro conferir e gerar as parcelas (1 lançamento por
-  // parcela via gerar_lancamentos_producao): Fee 'aprovado' e Pedido 'faturar'.
+  // Produção liberada pro Financeiro (estado unificado 'faturar' = A Faturar): Fee e Pedido.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: feesRaw } = await (supabase as any)
     .from('producao')
     .select('id, numero, titulo, tipo, valor, detalhe, workspaces(name)')
     .eq('org_id', orgId).eq('archived', false)
-    .or('and(tipo.eq.fee,situacao.eq.aprovado),and(tipo.eq.pedido,situacao.eq.faturar)')
+    .eq('situacao', 'faturar').in('tipo', ['fee', 'pedido'])
     .order('numero', { ascending: false })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fees = ((feesRaw ?? []) as any[]).map(f => ({
@@ -69,7 +69,7 @@ export default async function FaturamentoPage({
       <div className="flex items-center justify-between gap-3 mb-2">
         <div>
           <h1 className="text-lg font-semibold text-gray-900">Faturamento</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Conferência: revise os valores e <strong>Lance</strong> pro Financeiro</p>
+          <p className="text-gray-500 text-sm mt-0.5">Conferência: revise cliente, datas e documentos e <strong>Fature</strong> pro fluxo de caixa</p>
         </div>
         {pendentes.length > 0 && <GerarLancamentosButton orgSlug={orgSlug} />}
       </div>
@@ -81,14 +81,14 @@ export default async function FaturamentoPage({
             <h2 className="text-sm font-semibold text-gray-800">Fees e pedidos a faturar <span className="text-gray-400 font-normal">({fees.length})</span></h2>
             <span className="text-sm text-gray-500">Total: <strong className="text-gray-900">{formatBRL(totalFees)}</strong></span>
           </div>
-          <p className="text-xs text-gray-400 mb-2">Cada parcela vira 1 lançamento a receber — confira as datas e valores abaixo antes de lançar (clique no <strong className="font-medium text-gray-500">Nx</strong> pra recolher).</p>
+          <p className="text-xs text-gray-400 mb-2">Cada parcela vira 1 lançamento a receber — confira as datas e valores abaixo antes de faturar (clique no <strong className="font-medium text-gray-500">Nx</strong> pra recolher).</p>
           <FaturamentoFeesTable orgSlug={orgSlug} fees={fees} />
         </section>
       )}
 
       {pendentes.length > 0 && (
       <>
-      <h2 className="text-sm font-semibold text-gray-800 mt-6 mb-2">Mídia a lançar <span className="text-gray-400 font-normal">({pendentes.length})</span></h2>
+      <h2 className="text-sm font-semibold text-gray-800 mt-6 mb-2">Mídia a faturar <span className="text-gray-400 font-normal">({pendentes.length})</span></h2>
       <div className="grid grid-cols-3 gap-3 mb-3">
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-400">A conferir (documentos)</p>
@@ -141,7 +141,7 @@ export default async function FaturamentoPage({
         <div className="text-center py-24 bg-white rounded-xl border border-gray-200">
           <Receipt className="w-10 h-10 text-gray-300 mx-auto mb-3" />
           <h3 className="text-gray-900 font-medium">Nada a conferir</h3>
-          <p className="text-gray-500 text-sm mt-1">Quando um <strong>Fee</strong> for aprovado, um <strong>Pedido</strong> marcado como <strong>Faturar</strong>, ou uma <strong>mídia</strong> como <strong>Faturado</strong>, aparece aqui pra conferir e lançar.</p>
+          <p className="text-gray-500 text-sm mt-1">Quando uma mídia, um fee ou um pedido for marcado como <strong>A Faturar</strong>, aparece aqui pra conferir e faturar.</p>
         </div>
       )}
     </div>

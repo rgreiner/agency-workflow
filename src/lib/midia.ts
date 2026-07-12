@@ -49,18 +49,20 @@ export const MIDIA_ABRANGENCIA_OPTIONS = [
   { value: 'internacional', label: 'Internacional' },
 ]
 
+// Estado unificado do handoff pro Financeiro: 'faturar' (= A Faturar, liberado →
+// aparece na conferência) → 'faturado' (conferido, lançado no fluxo de caixa).
 export const MIDIA_SITUACAO_OPTIONS = [
   { value: 'em_aberto', label: 'Em Aberto' },
   { value: 'aprovado', label: 'Aprovado' },
   { value: 'cancelado', label: 'Cancelado' },
-  { value: 'faturar', label: 'Faturar' },
+  { value: 'faturar', label: 'A Faturar' },
   { value: 'faturado', label: 'Faturado' },
 ]
 
-// Fee: aprovar já fatura, então os estados intermediários não fazem sentido.
+// Fee: aprovar libera direto pro Financeiro (estado 'faturar' = A Faturar).
 export const FEE_SITUACAO_OPTIONS = [
   { value: 'em_aberto', label: 'Em Aberto' },
-  { value: 'aprovado', label: 'Aprovado' },
+  { value: 'faturar', label: 'A Faturar' },
   { value: 'cancelado', label: 'Cancelado' },
 ]
 

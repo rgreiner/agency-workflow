@@ -80,14 +80,14 @@ export function FeeForm({
   const cliNome = clientes.find(c => c.id === form.workspace_id)?.name
   const PARCELA_TIPOS = [{ value: 'receber_cliente', label: `Receber do Cliente${cliNome ? ` (${cliNome})` : ''}` }]
 
-  // situacaoAlvo: 'em_aberto' salva rascunho; 'aprovado' aprova e manda pro
-  // Financeiro conferir/lançar (Faturamento). Em edição, undefined mantém a atual.
+  // situacaoAlvo: 'em_aberto' salva rascunho; 'faturar' (A Faturar) manda pro
+  // Financeiro conferir/faturar (Faturamento). Em edição, undefined mantém a atual.
   function handleSubmit(e: React.FormEvent, situacaoAlvo?: string) {
     e.preventDefault()
     setError('')
     if (!form.workspace_id) { setError('Selecione o cliente'); return }
     if (!form.titulo.trim()) { setError('Informe o título'); return }
-    if (situacaoAlvo === 'aprovado' && form.parcelas.length === 0) {
+    if (situacaoAlvo === 'faturar' && form.parcelas.length === 0) {
       setError('Gere as parcelas antes de aprovar (é o que vira o faturamento).'); return
     }
 
@@ -106,7 +106,7 @@ export function FeeForm({
     const parcelas = form.parcelas.map(p => ({ vencimento: p.vencimento, valor: String(parseMoney(p.valor)), tipo: 'receber_cliente' }))
     fd.set('detalhe', JSON.stringify({ de: form.de, ate: form.ate, num_parcelas: form.num_parcelas, valor_mensal: form.valor_mensal, parcelas }))
 
-    setRunning(situacaoAlvo === 'aprovado' ? 'approve' : 'save')
+    setRunning(situacaoAlvo === 'faturar' ? 'approve' : 'save')
     startTransition(async () => {
       const res = await onSubmit(fd)
       if (res?.error) { setError(res.error); setRunning(null); return }
@@ -203,7 +203,7 @@ export function FeeForm({
             className="inline-flex items-center justify-center gap-2 px-5 py-2.5 border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 disabled:opacity-50 transition">
             {isPending && running === 'save' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}Gravar
           </button>
-          <button aria-label="Aprovar" type="button" onClick={e => handleSubmit(e, 'aprovado')} disabled={isPending}
+          <button aria-label="Aprovar" type="button" onClick={e => handleSubmit(e, 'faturar')} disabled={isPending}
             className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
             {isPending && running === 'approve' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}Aprovar
           </button>

@@ -27,7 +27,7 @@ export function GerarFeeButton({ orgSlug, feeId, parcelas }: { orgSlug: string; 
   if (confirm) {
     return (
       <span className="inline-flex items-center gap-2 text-xs">
-        <span className="text-gray-500">Gerar {parcelas > 0 ? `${parcelas}x` : ''}?</span>
+        <span className="text-gray-500">Faturar {parcelas > 0 ? `${parcelas}x` : ''}?</span>
         <button onClick={run} disabled={pending} className="font-medium text-orange-600 hover:text-orange-700 inline-flex items-center gap-1 disabled:opacity-50">
           {pending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Sim'}
         </button>
@@ -40,7 +40,7 @@ export function GerarFeeButton({ orgSlug, feeId, parcelas }: { orgSlug: string; 
       onClick={() => setConfirm(true)}
       className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 text-[#fff] text-xs font-medium rounded-lg hover:bg-orange-700 transition"
     >
-      <Receipt className="w-3.5 h-3.5" /> Gerar lançamentos
+      <Receipt className="w-3.5 h-3.5" /> Faturar
     </button>
   )
 }
