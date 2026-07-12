@@ -2,7 +2,7 @@ import { assertFinanceAccess } from '@/lib/finance'
 import { formatBRL, FATURAMENTO_PAGADOR } from '@/lib/midia'
 import { GerarLancamentosButton } from './GerarLancamentosButton'
 import { LancarButton } from './LancarButton'
-import { GerarFeeButton } from './GerarFeeButton'
+import { FaturamentoFeesTable } from './FaturamentoFeesTable'
 import { Receipt } from 'lucide-react'
 
 export default async function FaturamentoPage({
@@ -54,10 +54,13 @@ export default async function FaturamentoPage({
     id: f.id as string,
     numero: f.numero as number | null,
     titulo: (f.titulo as string) || 'Fee',
-    tipo: f.tipo as string,
     cliente: f.workspaces?.name ?? '—',
     total: Number(f.valor ?? 0),
-    parcelas: Array.isArray(f.detalhe?.parcelas) ? f.detalhe.parcelas.length : 0,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    parcelas: (Array.isArray(f.detalhe?.parcelas) ? f.detalhe.parcelas : []).map((p: any) => ({
+      vencimento: (p?.vencimento as string) ?? '',
+      valor: Number(p?.valor ?? 0),
+    })),
   }))
   const totalFees = fees.reduce((s, f) => s + f.total, 0)
 
@@ -78,32 +81,8 @@ export default async function FaturamentoPage({
             <h2 className="text-sm font-semibold text-gray-800">Fees e pedidos a faturar <span className="text-gray-400 font-normal">({fees.length})</span></h2>
             <span className="text-sm text-gray-500">Total: <strong className="text-gray-900">{formatBRL(totalFees)}</strong></span>
           </div>
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
-            <table className="w-full min-w-[720px]">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-medium text-gray-400">
-                  <th className="text-left px-4 py-3 w-16">Nº</th>
-                  <th className="text-left px-4 py-3">Fee</th>
-                  <th className="text-left px-4 py-3">Cliente</th>
-                  <th className="text-center px-4 py-3">Parcelas</th>
-                  <th className="text-right px-4 py-3">Total</th>
-                  <th className="w-36" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {fees.map(f => (
-                  <tr key={f.id} className="hover:bg-gray-50/50 transition">
-                    <td className="px-4 py-3 text-sm text-gray-400">{f.numero ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{f.titulo}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{f.cliente}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600 text-center">{f.parcelas > 0 ? `${f.parcelas}x` : '—'}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-emerald-600 text-right">{formatBRL(f.total)}</td>
-                    <td className="px-3 py-3 text-right"><GerarFeeButton orgSlug={orgSlug} feeId={f.id} parcelas={f.parcelas} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <p className="text-xs text-gray-400 mb-2">Clique em <strong className="font-medium text-gray-500">Nx</strong> pra conferir as datas e valores de cada parcela antes de lançar.</p>
+          <FaturamentoFeesTable orgSlug={orgSlug} fees={fees} />
         </section>
       )}
 
