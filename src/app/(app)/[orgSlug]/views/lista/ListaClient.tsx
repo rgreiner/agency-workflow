@@ -16,6 +16,7 @@ import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { updateActivityStatus, updateActivityField, setActivityArchived, bulkUpdateStatus, bulkUpdateField, bulkToggleAssignee, bulkSetArchived, createActivityInline } from '@/app/actions/activity'
 import { createClient } from '@/lib/supabase/client'
 import { getUsuarioClient } from '@/lib/auth/client'
+import { setViewPrefs } from '@/app/actions/prefs'
 import { toast } from 'sonner'
 
 // ── Column definitions ────────────────────────────────────────────────────
@@ -101,6 +102,8 @@ interface Props {
   initialPersons?: string[]
   initialStatuses?: string[]
   initialDate?: string
+  /** Preferências salvas no banco (colunas + presets) — seguem o usuário entre máquinas. */
+  dbPrefs?: Record<string, unknown> | null
   view: 'ativas' | 'arquivadas'
   /** Título do cabeçalho (default "Lista de atividades"; na tela de cargo = nome do cargo). */
   title?: string
@@ -118,7 +121,7 @@ interface Props {
 
 // ── Component ─────────────────────────────────────────────────────────────
 
-export function ListaClient({ orgSlug, activities, campMap, members, initialWorkspace, initialPersons, initialStatuses, initialDate, view, title = 'Lista de atividades', routeBase = 'views/lista', breadcrumb, titleActions, secondaryActions, newActivityCampaign }: Props) {
+export function ListaClient({ orgSlug, activities, campMap, members, initialWorkspace, initialPersons, initialStatuses, initialDate, dbPrefs, view, title = 'Lista de atividades', routeBase = 'views/lista', breadcrumb, titleActions, secondaryActions, newActivityCampaign }: Props) {
   const listPath = `/${orgSlug}/${routeBase}`
   const statusConfig = useStatusConfig()
   const isArchivedView = view === 'arquivadas'
@@ -205,11 +208,19 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
     if (id) changeStatus(id, targetStatus)
   }
 
+  // Sincroniza prefs (colunas + presets) no banco, debounced. localStorage segue como cache.
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  function syncDb(prefs: { cols: { visible: Record<ColKey, boolean>; order: ColKey[] }; presets: SavedFilter[] }) {
+    if (syncTimer.current) clearTimeout(syncTimer.current)
+    syncTimer.current = setTimeout(() => { void setViewPrefs(orgSlug, routeBase, prefs as unknown as Record<string, unknown>) }, 700)
+  }
+
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      if (!saved) return
-      const p = JSON.parse(saved)
+      // Prefs do banco (seguem entre máquinas) vencem o localStorage.
+      let p = dbPrefs?.cols as { visible?: Record<ColKey, boolean>; order?: ColKey[] } | undefined
+      if (!p) { const s = localStorage.getItem(STORAGE_KEY); p = s ? JSON.parse(s) : undefined }
+      if (!p) return
       const allKeys = defaultOrder()
       if (p.visible) setCols({ ...defaultCols(), ...p.visible })
       if (Array.isArray(p.order)) {
@@ -217,10 +228,12 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
         setOrder([...ord, ...allKeys.filter(k => !ord.includes(k))])
       }
     } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function savePrefs(visible: Record<ColKey, boolean>, ord: ColKey[]) {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ visible, order: ord })) } catch {}
+    syncDb({ cols: { visible, order: ord }, presets: saved })
   }
 
   useEffect(() => {
@@ -231,9 +244,16 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
     return () => document.removeEventListener('mousedown', onOut)
   }, [])
 
-  // ── Filtros salvos: carrega do localStorage + fecha o "Salvar" ao clicar fora ──
+  // ── Filtros salvos: DB (segue entre máquinas) vence o localStorage ──
   useEffect(() => {
-    try { const s = localStorage.getItem(SAVED_KEY); if (s) setSaved(JSON.parse(s)) } catch {}
+    let next: SavedFilter[] | null = null
+    try {
+      const dbPresets = dbPrefs?.presets as SavedFilter[] | undefined
+      if (dbPresets) next = dbPresets
+      else { const s = localStorage.getItem(SAVED_KEY); if (s) next = JSON.parse(s) }
+    } catch {}
+    if (next) setSaved(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [SAVED_KEY])
 
   // ── Último filtro usado: restaura ao montar e lembra a cada mudança ──
@@ -283,11 +303,12 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
   function persistSaved(next: SavedFilter[]) {
     setSaved(next)
     try { localStorage.setItem(SAVED_KEY, JSON.stringify(next)) } catch {}
+    syncDb({ cols: { visible: cols, order }, presets: next })
   }
   function saveCurrentFilter() {
     const name = saveName.trim()
     if (!name) return
-    persistSaved([...saved, { id: `${Date.now()}`, name, workspaces: filterWorkspaces, persons: filterPersons, statuses: filterStatuses, priorities: filterPriorities, date: filterDate, onlyMine }])
+    persistSaved([...saved, { id: crypto.randomUUID(), name, workspaces: filterWorkspaces, persons: filterPersons, statuses: filterStatuses, priorities: filterPriorities, date: filterDate, onlyMine }])
     setSaveName(''); setSaveOpen(false)
   }
   function applySavedFilter(f: SavedFilter) {

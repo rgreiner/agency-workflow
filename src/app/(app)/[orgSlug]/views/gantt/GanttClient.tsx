@@ -1,13 +1,13 @@
 'use client'
 
 import { useState, useRef, useTransition, useEffect } from 'react'
-import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarGroup } from '@/components/ui/Avatar'
 import { MultiSelect } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { ChevronLeft, ChevronRight, Bookmark, X } from 'lucide-react'
 import { PRIORITY_CONFIG } from '@/types'
+import { setViewPrefs } from '@/app/actions/prefs'
 import { updateActivityDates } from '@/app/actions/activity'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -65,13 +65,14 @@ const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => (
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug, initialWorkspace }: {
+export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug, initialWorkspace, dbPrefs }: {
   activities: Activity[]
   campMap: CampMap
   profiles: Profile[]
   workspaces: Workspace[]
   orgSlug: string
   initialWorkspace?: string
+  dbPrefs?: Record<string, unknown> | null
 }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -96,7 +97,14 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
   const saveRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    try { const s = localStorage.getItem(SAVED_KEY); if (s) setSaved(JSON.parse(s)) } catch {}
+    let next: SavedFilter[] | null = null
+    try {
+      const dbPresets = dbPrefs?.presets as SavedFilter[] | undefined
+      if (dbPresets) next = dbPresets
+      else { const s = localStorage.getItem(SAVED_KEY); if (s) next = JSON.parse(s) }
+    } catch {}
+    if (next) setSaved(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [SAVED_KEY])
 
   useEffect(() => {
@@ -109,6 +117,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
   function persistSaved(next: SavedFilter[]) {
     setSaved(next)
     try { localStorage.setItem(SAVED_KEY, JSON.stringify(next)) } catch {}
+    void setViewPrefs(orgSlug, 'views/gantt', { presets: next })
   }
   function saveCurrentFilter() {
     const name = saveName.trim()

@@ -1,4 +1,5 @@
 import { loadActivityList } from '@/lib/activity-list'
+import { loadViewPrefs } from '@/app/actions/prefs'
 import { ListaClient } from './ListaClient'
 
 export default async function ListaPage({
@@ -16,6 +17,7 @@ export default async function ListaPage({
   // Lista = visão completa: todos os clientes e todos os status (inclui Concluído).
   const data = await loadActivityList(orgSlug, { ws, archived: archivedView, includeConcluido: true })
   if (!data) return null
+  const dbPrefs = await loadViewPrefs(orgSlug, 'views/lista')
 
   return (
     <ListaClient
@@ -27,6 +29,7 @@ export default async function ListaPage({
       initialPersons={csv(persons)}
       initialStatuses={csv(statuses)}
       initialDate={date}
+      dbPrefs={dbPrefs}
       view={archivedView ? 'arquivadas' : 'ativas'}
     />
   )

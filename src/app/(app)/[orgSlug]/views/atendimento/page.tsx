@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { loadActivityList } from '@/lib/activity-list'
+import { loadViewPrefs } from '@/app/actions/prefs'
 import { ListaClient } from '../lista/ListaClient'
 
 /**
@@ -45,6 +46,7 @@ export default async function AtendimentoPage({
     statuses: position?.allowed_statuses,
   })
   if (!data) return null
+  const dbPrefs = await loadViewPrefs(orgSlug, 'views/atendimento')
 
   return (
     <ListaClient
@@ -53,6 +55,7 @@ export default async function AtendimentoPage({
       campMap={data.campMap}
       members={data.members}
       initialWorkspace={ws}
+      dbPrefs={dbPrefs}
       view={archivedView ? 'arquivadas' : 'ativas'}
       title={position?.name ?? 'Atendimento'}
       routeBase="views/atendimento"

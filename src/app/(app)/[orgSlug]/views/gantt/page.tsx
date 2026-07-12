@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { loadViewPrefs } from '@/app/actions/prefs'
 import { GanttClient } from './GanttClient'
 
 export default async function GanttPage({
@@ -53,6 +54,7 @@ export default async function GanttPage({
     .filter(Boolean)
 
   const workspaceList = (workspaces ?? []).map(w => ({ id: w.id, name: w.name }))
+  const dbPrefs = await loadViewPrefs(orgSlug, 'views/gantt')
 
   return (
     <GanttClient
@@ -62,6 +64,7 @@ export default async function GanttPage({
       workspaces={workspaceList}
       orgSlug={orgSlug}
       initialWorkspace={ws}
+      dbPrefs={dbPrefs}
     />
   )
 }
