@@ -12,6 +12,7 @@ import { AutoRefresh } from '@/components/ui/AutoRefresh'
 import { CommentBox } from './CommentBox'
 import { CommentContent } from './CommentContent'
 import { ScrollFeedBottom } from './ScrollFeedBottom'
+import { FeedFilter } from './FeedFilter'
 import { RegenerateDriveButton } from './RegenerateDriveButton'
 import { MuteButton } from './MuteButton'
 import { AssigneeSelector } from './AssigneeSelector'
@@ -504,13 +505,16 @@ export default async function ActivityPage({
           )}
 
           {/* Header */}
-          <div className="px-5 py-3.5 border-b border-gray-200 bg-white shrink-0 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-800">Atividade</h2>
-            <span className="text-xs text-gray-500">{feed.length} registro{feed.length !== 1 ? 's' : ''}</span>
+          <div className="px-5 py-3.5 border-b border-gray-200 bg-white shrink-0 flex items-center justify-between gap-3">
+            <div className="flex items-baseline gap-2 min-w-0">
+              <h2 className="text-sm font-semibold text-gray-800">Atividade</h2>
+              <span className="text-xs text-gray-500 shrink-0">{feed.length} registro{feed.length !== 1 ? 's' : ''}</span>
+            </div>
+            <FeedFilter />
           </div>
 
           {/* Feed */}
-          <div id="activity-feed" className="flex-1 min-h-0 overflow-y-auto scrollbar-thin p-4 space-y-3">
+          <div id="activity-feed" data-feed-filter="tudo" className="flex-1 min-h-0 overflow-y-auto scrollbar-thin p-4 space-y-3">
             {feed.length === 0 && (
               <p className="text-xs text-gray-500 text-center py-8">Nenhuma atividade ainda.</p>
             )}
@@ -518,7 +522,7 @@ export default async function ActivityPage({
             {feed.map(item => {
               if (item.kind === 'comment') {
                 return (
-                  <div key={item.id} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                  <div key={item.id} data-kind="comment" className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
                     <div className="flex items-start gap-3">
                       <Avatar name={item.profile?.full_name ?? '?'} avatarUrl={item.profile?.avatar_url} size="sm" />
                       <div className="flex-1 min-w-0">
@@ -554,7 +558,7 @@ export default async function ActivityPage({
                 const fromCfg = statusConfig.find(s => s.value === item.from)
                 const toCfg   = statusConfig.find(s => s.value === item.to)
                 return (
-                  <div key={item.id} className="flex items-start gap-2.5 text-xs text-gray-500 px-1">
+                  <div key={item.id} data-kind="status" className="flex items-start gap-2.5 text-xs text-gray-500 px-1">
                     <Avatar name={item.profile?.full_name ?? '?'} avatarUrl={item.profile?.avatar_url} size="sm" />
                     <div className="flex-1 min-w-0 pt-0.5">
                       <div className="flex items-center gap-1.5 flex-wrap leading-relaxed">
@@ -578,7 +582,7 @@ export default async function ActivityPage({
 
               // field change
               return (
-                <div key={item.id} className="flex items-start gap-2.5 text-xs text-gray-500 px-1">
+                <div key={item.id} data-kind="field" className="flex items-start gap-2.5 text-xs text-gray-500 px-1">
                   <Avatar name={item.profile?.full_name ?? '?'} avatarUrl={item.profile?.avatar_url} size="sm" />
                   <div className="flex-1 min-w-0 pt-0.5">
                     <div className="flex items-center gap-1.5 flex-wrap leading-relaxed">

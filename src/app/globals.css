@@ -315,3 +315,8 @@ button:focus-visible,
   .no-print { display: none !important; }
   @page { margin: 16mm; }
 }
+
+/* Filtro do feed da tarefa (FeedFilter): esconde por tipo via data-kind. */
+[data-feed-filter="comentarios"] [data-kind="status"],
+[data-feed-filter="comentarios"] [data-kind="field"] { display: none; }
+[data-feed-filter="historico"] [data-kind="comment"] { display: none; }
