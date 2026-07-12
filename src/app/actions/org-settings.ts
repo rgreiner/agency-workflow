@@ -45,6 +45,18 @@ export async function setOrgDocs(orgSlug: string, orgId: string, agency: AgencyI
   return {}
 }
 
+/** Dados bancários da org (usados na cobrança automática). owner/admin/can_finance. */
+export async function setOrgPaymentInfo(orgSlug: string, orgId: string, info: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('set_org_payment_info', { p_user_id: user.id, p_org_id: orgId, p_info: info })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/settings/documentos`)
+  return {}
+}
+
 export interface ReviewGates { redacao: boolean; design: boolean; finalizacao: boolean }
 
 /** Liga/desliga a revisão por IA por gate (Configurações → Revisão IA; owner/admin). */

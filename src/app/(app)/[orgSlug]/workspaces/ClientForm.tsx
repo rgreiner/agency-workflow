@@ -26,6 +26,7 @@ export interface ClientFormValues {
   address_state: string
   payment_terms: string
   atividade: string
+  cobranca_auto: string
 }
 
 const EMPTY: ClientFormValues = {
@@ -33,7 +34,7 @@ const EMPTY: ClientFormValues = {
   legal_name: '', trade_name: '', tax_id: '', state_registration: '', city_registration: '',
   finance_email: '', phone: '', contact_name: '',
   address_zip: '', address_street: '', address_number: '', address_complement: '',
-  address_district: '', address_city: '', address_state: '', payment_terms: '', atividade: '',
+  address_district: '', address_city: '', address_state: '', payment_terms: '', atividade: '', cobranca_auto: 'false',
 }
 
 const COLORS = [
@@ -145,6 +146,15 @@ export function ClientForm({ initial, initialContato, submitLabel = 'Salvar', on
           {field('phone', 'Telefone')}
           {field('contact_name', 'Pessoa de contato')}
         </div>
+        <label className="flex items-start gap-2.5 mt-3 cursor-pointer select-none">
+          <input type="checkbox" checked={form.cobranca_auto === 'true'}
+            onChange={e => setForm(f => ({ ...f, cobranca_auto: e.target.checked ? 'true' : 'false' }))}
+            className="mt-0.5 w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
+          <span className="text-sm text-gray-600">
+            <strong className="text-gray-800">Cobrança automática</strong> — enviar lembrete de vencimento ao e-mail financeiro em D-3, no dia e D+3.
+            <span className="block text-xs text-gray-400 mt-0.5">Só recebíveis do faturamento deste cliente. Precisa do e-mail financeiro preenchido.</span>
+          </span>
+        </label>
       </div>
 
       {/* Endereço */}

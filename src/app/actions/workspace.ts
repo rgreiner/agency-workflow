@@ -70,6 +70,10 @@ export async function createWorkspace(orgSlug: string, formData: FormData) {
     p_user_id: user.id, p_workspace_id: workspaceId, p_data: { ...data, ...readContato(formData) },
   })
   if (e2) return { error: e2.message }
+  if (formData.get('cobranca_auto') === 'true') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from('workspaces').update({ cobranca_auto: true }).eq('id', workspaceId)
+  }
 
   redirect(`/${orgSlug}/workspaces`)
 }
@@ -157,6 +161,9 @@ export async function updateWorkspace(
     p_user_id: user.id, p_workspace_id: workspaceId, p_data: { ...data, ...readContato(formData) },
   })
   if (error) return { error: error.message }
+  // Cobrança automática (opt-in por cliente) — direto na tabela (RLS: manager+).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any).from('workspaces').update({ cobranca_auto: formData.get('cobranca_auto') === 'true' }).eq('id', workspaceId)
   revalidatePath(`/${orgSlug}/workspaces/${workspaceId}`)
   revalidatePath(`/${orgSlug}/workspaces`)
 }

@@ -4,16 +4,17 @@ import { useState, useTransition } from 'react'
 import { toast } from 'sonner'
 import { Check, Loader2, Plus, Trash2, ArrowUp, ArrowDown, Highlighter } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { setOrgDocs } from '@/app/actions/org-settings'
+import { setOrgDocs, setOrgPaymentInfo } from '@/app/actions/org-settings'
 import type { OrgDocs, DocNote, AgencyInfo } from '@/lib/agency'
 
 const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 
-export function DocumentosClient({ orgSlug, orgId, initial }: { orgSlug: string; orgId: string; initial: OrgDocs }) {
+export function DocumentosClient({ orgSlug, orgId, initial, initialPaymentInfo = '' }: { orgSlug: string; orgId: string; initial: OrgDocs; initialPaymentInfo?: string }) {
   const [agency, setAgency] = useState<AgencyInfo>(initial.agency)
   const [nf, setNf] = useState<DocNote[]>(initial.nfNotes)
   const [midia, setMidia] = useState<DocNote[]>(initial.midiaNotes)
+  const [paymentInfo, setPaymentInfo] = useState(initialPaymentInfo)
   const [saving, start] = useTransition()
 
   const setA = (k: keyof AgencyInfo, v: string) => setAgency(a => ({ ...a, [k]: v }))
@@ -21,7 +22,8 @@ export function DocumentosClient({ orgSlug, orgId, initial }: { orgSlug: string;
   function save() {
     start(async () => {
       const r = await setOrgDocs(orgSlug, orgId, agency, nf.filter(n => n.text.trim()), midia.filter(n => n.text.trim()))
-      if (r?.error) toast.error(r.error)
+      const r2 = await setOrgPaymentInfo(orgSlug, orgId, paymentInfo.trim())
+      if (r?.error || r2?.error) toast.error(r?.error || r2?.error)
       else toast.success('Documentos atualizados.')
     })
   }
@@ -49,6 +51,15 @@ export function DocumentosClient({ orgSlug, orgId, initial }: { orgSlug: string;
           <div><label className={labelCls}>CNPJ / Fone</label><input value={agency.cnpjFone} onChange={e => setA('cnpjFone', e.target.value)} className={inputCls} /></div>
           <div><label className={labelCls}>Cidade (na data por extenso)</label><input value={agency.cidade} onChange={e => setA('cidade', e.target.value)} className={inputCls} /></div>
         </div>
+      </section>
+
+      {/* Dados bancários — usados no e-mail de cobrança automática */}
+      <section className="bg-white border border-gray-200 rounded-2xl p-5 mb-4">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Dados bancários (cobrança)</h3>
+        <p className="text-[11px] text-gray-400 mb-3">Aparecem no e-mail de cobrança automática enviado aos clientes (Pix, banco/agência/conta, etc.).</p>
+        <textarea value={paymentInfo} onChange={e => setPaymentInfo(e.target.value)} rows={4}
+          placeholder={'Pix: financeiro@oneaone.com.br\nBanco 000 · Ag 0000 · CC 00000-0 · Amexcom Publicidade Ltda'}
+          className={cn(inputCls, 'resize-y min-h-[80px]')} />
       </section>
 
       <NotesEditor

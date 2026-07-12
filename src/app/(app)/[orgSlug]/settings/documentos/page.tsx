@@ -21,6 +21,8 @@ export default async function DocumentosPage({ params }: { params: Promise<{ org
   if (!m || !['owner', 'admin'].includes(m.role)) redirect(`/${orgSlug}/settings/membros`)
 
   const docs = await loadOrgDocs(supabase, org.id)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: settings } = await (supabase as any).from('org_settings').select('payment_info').eq('org_id', org.id).maybeSingle()
 
-  return <DocumentosClient orgSlug={orgSlug} orgId={org.id} initial={docs} />
+  return <DocumentosClient orgSlug={orgSlug} orgId={org.id} initial={docs} initialPaymentInfo={settings?.payment_info ?? ''} />
 }

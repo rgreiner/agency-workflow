@@ -2,6 +2,7 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
 import { digestJob } from './digest'
+import { cobrancaJob } from './cobranca'
 
 /**
  * Executor de tarefas agendadas. A rota /api/cron (batida pelo crontab do VPS)
@@ -49,7 +50,8 @@ export const JOBS: CronJob[] = [
     },
   },
   digestJob,   // resumo diário 8h30 (BRT)
-  // Futuros (ondas 4/5): 'cobranca', 'contratos', 'btg-sync'.
+  cobrancaJob, // lembrete de vencimento ao cliente 9h (BRT), opt-in por cliente
+  // Futuros (ondas 4/5): 'contratos', 'btg-sync'.
 ]
 
 // ── Runner ───────────────────────────────────────────────────────────────────
