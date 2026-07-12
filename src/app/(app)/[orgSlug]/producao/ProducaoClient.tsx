@@ -127,7 +127,8 @@ export function ProducaoClient({
                         <td className="px-4 py-1.5 text-sm font-medium"><Link href={`${base}/${r.id}`} className="text-gray-900 hover:text-orange-600 transition-colors">{r.titulo}</Link></td>
                         <td className="px-4 py-1.5 text-sm text-gray-900 text-right font-medium tabular-nums">{formatBRL(r.valor)}</td>
                         <td className="px-4 py-1.5">
-                          {archivedView ? (
+                          {archivedView || !situacaoOptions.some(o => o.value === r.situacao) ? (
+                            // Situação terminal (ex.: Fee 'faturado' pelo Financeiro) não é editável pelo dropdown.
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: cor?.bg, color: cor?.text }}>{labelOf(MIDIA_SITUACAO_OPTIONS, r.situacao)}</span>
                           ) : (
                             <Select size="sm" value={r.situacao} onChange={v => changeSituacao(r.id, v)} options={situacaoOptions} />

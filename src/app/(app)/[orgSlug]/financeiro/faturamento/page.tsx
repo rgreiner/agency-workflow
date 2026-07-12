@@ -40,14 +40,14 @@ export default async function FaturamentoPage({
   const totalComissao = pendentes.reduce((s, d) => s + comissaoDe(d), 0)
   const totalDocs = pendentes.reduce((s, d) => s + Number(d.valor ?? 0), 0)
 
-  // Fees/Produção que o Atendimento marcou como "Faturar" — prontos pro Financeiro
-  // conferir e gerar as parcelas (1 lançamento por parcela via gerar_lancamentos_producao).
+  // Produção pronta pro Financeiro conferir e gerar as parcelas (1 lançamento por
+  // parcela via gerar_lancamentos_producao): Fee 'aprovado' e Pedido 'faturar'.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: feesRaw } = await (supabase as any)
     .from('producao')
     .select('id, numero, titulo, tipo, valor, detalhe, workspaces(name)')
-    .eq('org_id', orgId).eq('situacao', 'faturar').eq('archived', false)
-    .in('tipo', ['fee', 'pedido'])
+    .eq('org_id', orgId).eq('archived', false)
+    .or('and(tipo.eq.fee,situacao.eq.aprovado),and(tipo.eq.pedido,situacao.eq.faturar)')
     .order('numero', { ascending: false })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fees = ((feesRaw ?? []) as any[]).map(f => ({
@@ -75,7 +75,7 @@ export default async function FaturamentoPage({
       {fees.length > 0 && (
         <section className="mt-5">
           <div className="flex items-baseline justify-between gap-3 mb-2">
-            <h2 className="text-sm font-semibold text-gray-800">Fees a faturar <span className="text-gray-400 font-normal">({fees.length})</span></h2>
+            <h2 className="text-sm font-semibold text-gray-800">Fees e pedidos a faturar <span className="text-gray-400 font-normal">({fees.length})</span></h2>
             <span className="text-sm text-gray-500">Total: <strong className="text-gray-900">{formatBRL(totalFees)}</strong></span>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
@@ -162,7 +162,7 @@ export default async function FaturamentoPage({
         <div className="text-center py-24 bg-white rounded-xl border border-gray-200">
           <Receipt className="w-10 h-10 text-gray-300 mx-auto mb-3" />
           <h3 className="text-gray-900 font-medium">Nada a conferir</h3>
-          <p className="text-gray-500 text-sm mt-1">Quando o Atendimento marcar um Fee como <strong>Faturar</strong> (ou uma mídia como <strong>Faturado</strong>), aparece aqui pra conferir e lançar.</p>
+          <p className="text-gray-500 text-sm mt-1">Quando um <strong>Fee</strong> for aprovado, um <strong>Pedido</strong> marcado como <strong>Faturar</strong>, ou uma <strong>mídia</strong> como <strong>Faturado</strong>, aparece aqui pra conferir e lançar.</p>
         </div>
       )}
     </div>

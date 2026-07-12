@@ -80,8 +80,8 @@ export function FeeForm({
   const cliNome = clientes.find(c => c.id === form.workspace_id)?.name
   const PARCELA_TIPOS = [{ value: 'receber_cliente', label: `Receber do Cliente${cliNome ? ` (${cliNome})` : ''}` }]
 
-  // situacaoAlvo: 'em_aberto' salva rascunho; 'aprovado' aprova e já fatura
-  // (a RPC gera os lançamentos das parcelas). Em edição, undefined mantém a atual.
+  // situacaoAlvo: 'em_aberto' salva rascunho; 'aprovado' aprova e manda pro
+  // Financeiro conferir/lançar (Faturamento). Em edição, undefined mantém a atual.
   function handleSubmit(e: React.FormEvent, situacaoAlvo?: string) {
     e.preventDefault()
     setError('')
@@ -198,14 +198,14 @@ export function FeeForm({
 
         <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pb-10">
           <button type="button" onClick={() => router.back()} className="px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 transition order-last sm:order-first">Cancelar</button>
-          {/* Gravar = rascunho (Em Aberto). Aprovar e faturar = gera as parcelas em Lançamentos. */}
+          {/* Gravar = rascunho (Em Aberto). Aprovar = vai pro Financeiro conferir e lançar (Faturamento). */}
           <button aria-label="Gravar rascunho" type="submit" disabled={isPending}
             className="inline-flex items-center justify-center gap-2 px-5 py-2.5 border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 disabled:opacity-50 transition">
             {isPending && running === 'save' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}Gravar
           </button>
-          <button aria-label="Aprovar e faturar" type="button" onClick={e => handleSubmit(e, 'aprovado')} disabled={isPending}
+          <button aria-label="Aprovar" type="button" onClick={e => handleSubmit(e, 'aprovado')} disabled={isPending}
             className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
-            {isPending && running === 'approve' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}Aprovar e faturar
+            {isPending && running === 'approve' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}Aprovar
           </button>
         </div>
       </form>
