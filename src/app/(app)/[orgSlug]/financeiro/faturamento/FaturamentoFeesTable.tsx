@@ -22,7 +22,8 @@ export interface FeeView {
  * vira 1 lançamento a receber, então as datas precisam estar claras aqui.
  */
 export function FaturamentoFeesTable({ orgSlug, fees }: { orgSlug: string; fees: FeeView[] }) {
-  const [open, setOpen] = useState<Set<string>>(new Set())
+  // Já nascem expandidos — a conferência das datas fica clara pro Financeiro de cara.
+  const [open, setOpen] = useState<Set<string>>(() => new Set(fees.map(f => f.id)))
   const toggle = (id: string) => setOpen(prev => {
     const next = new Set(prev)
     if (next.has(id)) next.delete(id); else next.add(id)

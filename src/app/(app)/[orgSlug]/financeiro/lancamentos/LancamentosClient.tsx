@@ -475,12 +475,15 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
   const [modo, setModo] = useState('unico')          // unico | parcelado | recorrente
   const [parcelas, setParcelas] = useState('2')
 
+  // Importado (sem row real ainda) e lançamento novo: os anexos ficam "staged"
+  // e só são gravados ao salvar (promover_extrato / create_lancamento os recebem
+  // no payload). Lançamento do Flow já salvo persiste na hora (set_lancamento_anexos).
+  const stageAnexos = imported || !lancamento
   async function persistAnexos(next: Anexo[]) {
     setAnexos(next)
-    if (lancamento) { await setLancamentoAnexos(orgSlug, lancamento.id, next); router.refresh() }
+    if (!stageAnexos && lancamento) { await setLancamentoAnexos(orgSlug, lancamento.id, next); router.refresh() }
   }
   async function onPickFile(file: File) {
-    if (!lancamento) return
     setUploading(true); setError('')
     try {
       const ext = file.name.split('.').pop()?.toLowerCase() || 'pdf'
@@ -516,6 +519,7 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
       const numOrNull = (v: number | string | null) => (v == null ? null : String(v))
       const payload = {
         ...data,
+        anexos,
         situacao: lancamento.situacao,
         data_liquidacao: lancamento.data_liquidacao ?? null,
         valor_realizado: numOrNull(lancamento.valor_realizado),
@@ -538,7 +542,7 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
         ? await updateLancamento(orgSlug, lancamento.id, data)
         : serie
           ? await createLancamentosSerie(orgSlug, data, modo, n)
-          : await createLancamento(orgSlug, data)
+          : await createLancamento(orgSlug, { ...data, anexos })
       if (res?.error) { setError(res.error); return }
       onClose(); router.refresh()
     })
@@ -670,10 +674,10 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
             </div>
           )}
 
-          {lancamento && !imported && (
+          {(lancamento || modo === 'unico') && (
             <div className="border-t border-gray-100 pt-4">
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-medium text-gray-600 inline-flex items-center gap-1.5"><Paperclip className="w-3.5 h-3.5" /> Anexos</label>
+                <label className="text-xs font-medium text-gray-600 inline-flex items-center gap-1.5"><Paperclip className="w-3.5 h-3.5" /> Anexos <span className="font-normal text-gray-400">(NF, boleto, nota)</span></label>
                 <div className="flex items-center gap-1.5">
                   <div className="w-28"><Select value={anexoTipo} onChange={setAnexoTipo} size="sm" options={[{ value: 'NF', label: 'NF' }, { value: 'Boleto', label: 'Boleto' }, { value: 'Outro', label: 'Outro' }]} /></div>
                   <input ref={fileRef} type="file" accept=".pdf,image/*" className="hidden"

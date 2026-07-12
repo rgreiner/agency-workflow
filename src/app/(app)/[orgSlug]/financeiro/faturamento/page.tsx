@@ -81,7 +81,7 @@ export default async function FaturamentoPage({
             <h2 className="text-sm font-semibold text-gray-800">Fees e pedidos a faturar <span className="text-gray-400 font-normal">({fees.length})</span></h2>
             <span className="text-sm text-gray-500">Total: <strong className="text-gray-900">{formatBRL(totalFees)}</strong></span>
           </div>
-          <p className="text-xs text-gray-400 mb-2">Clique em <strong className="font-medium text-gray-500">Nx</strong> pra conferir as datas e valores de cada parcela antes de lançar.</p>
+          <p className="text-xs text-gray-400 mb-2">Cada parcela vira 1 lançamento a receber — confira as datas e valores abaixo antes de lançar (clique no <strong className="font-medium text-gray-500">Nx</strong> pra recolher).</p>
           <FaturamentoFeesTable orgSlug={orgSlug} fees={fees} />
         </section>
       )}

@@ -107,6 +107,7 @@ export interface LancamentoInput {
   forma_pagamento?: string | null
   observacao?: string | null
   recorrente?: boolean
+  anexos?: Anexo[]
 }
 
 /**
