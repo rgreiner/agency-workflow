@@ -21,12 +21,19 @@ export interface BtgConnection {
   lastError: string | null
 }
 
+// postgres.js devolve colunas timestamptz como objeto Date, não string — normaliza
+// pra ISO string aqui (a origem), senão .slice()/formatDateBR() no client quebram.
+function toIso(v: unknown): string | null {
+  if (v == null) return null
+  return v instanceof Date ? v.toISOString() : String(v)
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function row(r: any): BtgConnection {
   return {
     orgId: r.org_id, companyId: r.company_id, accountId: r.account_id,
     refreshToken: r.refresh_token, scopes: r.scopes, status: r.status,
-    connectedAt: r.connected_at, lastSyncAt: r.last_sync_at, lastError: r.last_error,
+    connectedAt: toIso(r.connected_at), lastSyncAt: toIso(r.last_sync_at), lastError: r.last_error,
   }
 }
 
