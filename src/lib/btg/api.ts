@@ -34,9 +34,10 @@ export interface BtgStatement {
 
 async function btgGet<T>(path: string, accessToken: string): Promise<T> {
   const c = btgConfig()
-  const res = await fetch(`${c.apiBase}${path}`, {
-    headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
-  })
+  const headers: Record<string, string> = { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }
+  // Sandbox: força a resposta mockada de sucesso (só existe em sandbox).
+  if (c.env === 'sandbox') headers['x-response'] = 'success'
+  const res = await fetch(`${c.apiBase}${path}`, { headers })
   const text = await res.text()
   if (!res.ok) throw new Error(`BTG API ${res.status} ${path}: ${text.slice(0, 300)}`)
   return JSON.parse(text) as T

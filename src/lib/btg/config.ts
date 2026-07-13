@@ -46,11 +46,14 @@ export function btgConfig(): BtgConfig {
   const apiBase = process.env.BTG_API_BASE
     || (env === 'production' ? 'https://api.empresas.btgpactual.com' : 'https://api.sandbox.empresas.btgpactual.com')
   const site = (process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.oneaone.com.br').replace(/\/$/, '')
+  // No sandbox o token é travado numa empresa de teste fixa (o CNPJ real não tem
+  // rota → 404). Em produção usa o CNPJ real do env.
+  const SANDBOX_COMPANY_ID = '30306294000145'
   return {
     clientId,
     clientSecret,
     env,
-    companyId: process.env.BTG_COMPANY_ID || '',
+    companyId: env === 'sandbox' ? SANDBOX_COMPANY_ID : (process.env.BTG_COMPANY_ID || ''),
     // Escopo do extrato/saldo confirmado no console do app: accounts.readonly (só leitura).
     // Se o BTG não devolver refresh token, acrescentar 'offline_access' via BTG_SCOPES.
     scopes: process.env.BTG_SCOPES || 'openid empresas.btgpactual.com/accounts.readonly',

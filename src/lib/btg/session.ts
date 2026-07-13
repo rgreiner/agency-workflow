@@ -5,6 +5,7 @@
  */
 import { getBtgConnection, updateBtgRefreshToken } from './store'
 import { refreshTokens } from './oauth'
+import { btgConfig } from './config'
 
 export interface BtgAccess {
   accessToken: string
@@ -20,5 +21,8 @@ export async function getBtgAccess(orgId: string): Promise<BtgAccess> {
   if (tokens.refresh_token && tokens.refresh_token !== conn.refreshToken) {
     await updateBtgRefreshToken(orgId, tokens.refresh_token)
   }
-  return { accessToken: tokens.access_token, companyId: conn.companyId, accountId: conn.accountId }
+  // companyId vem da config (sandbox usa a empresa de teste fixa; prod usa o CNPJ
+  // do env). O valor guardado é só fallback/exibição.
+  const companyId = btgConfig().companyId || conn.companyId
+  return { accessToken: tokens.access_token, companyId, accountId: conn.accountId }
 }
