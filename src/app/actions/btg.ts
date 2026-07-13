@@ -58,6 +58,48 @@ export async function conciliarMovimento(orgSlug: string, movementId: string, la
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
 }
 
+export interface ConciliacaoItem { lancamentoId: string; valor: number }
+
+/**
+ * Concilia um movimento com N lançamentos (1 Pix = 2 notas, 5 compras = 1 débito,
+ * baixa parcial). O servidor valida que a soma dos itens bate 100% com o movimento.
+ */
+export async function conciliarMovimentoMulti(orgSlug: string, movementId: string, itens: ConciliacaoItem[]) {
+  const { supabase, userId } = await assertFinanceAccess(orgSlug)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('conciliar_btg_multi', {
+    p_user_id: userId, p_movement_id: movementId,
+    p_itens: itens.map(i => ({ lancamento_id: i.lancamentoId, valor: i.valor })),
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/conciliacao`)
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+}
+
+export interface NovoLancamentoConc {
+  tipo: 'entrada' | 'saida'
+  contato_tipo?: string | null
+  contato_nome?: string | null
+  descricao?: string | null
+  valor: string
+  vencimento?: string | null
+  conta_id?: string | null
+  categoria?: string | null
+}
+
+/** Cria um lançamento em aberto direto da tela de conciliação (movimento sem correspondente). */
+export async function criarLancamentoConc(orgSlug: string, data: NovoLancamentoConc) {
+  const { supabase, orgId, userId } = await assertFinanceAccess(orgSlug)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: id, error } = await (supabase as any).rpc('create_lancamento', {
+    p_user_id: userId, p_org_id: orgId, p_data: { ...data, origem_tipo: 'manual', situacao: 'em_aberto' },
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/conciliacao`)
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+  return { id: id as string }
+}
+
 /** Movimento sem lançamento correspondente (ex.: transferência interna, rendimento). */
 export async function ignorarMovimento(orgSlug: string, movementId: string) {
   const { supabase, userId } = await assertFinanceAccess(orgSlug)
