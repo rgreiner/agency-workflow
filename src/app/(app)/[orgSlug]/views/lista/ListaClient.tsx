@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useTransition, type ReactNode, type Compon
 import Link from 'next/link'
 import { cn, isOverdue, daysUntil, dueLabel } from '@/lib/utils'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority } from '@/types'
+import { ChecklistChip } from '@/components/ui/ChecklistChip'
 import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search, Flag, SignalLow, SignalMedium, SignalHigh, Copy, Archive, ArchiveRestore, X, Calendar, UserPlus, Minus, Circle, User, Bookmark, Loader2 } from 'lucide-react'
 
 // Complexidade → ícone (1/2/3 barras)
@@ -90,6 +91,7 @@ interface Activity {
   due_date: string | null; start_date?: string | null; complexity?: string | null
   redacao_url: string | null; preview_url: string | null; drive_path: string | null; lastComment: LastComment | null
   campaign_id: string; assignees: Assignee[]; assignedIds: string[]
+  checklist?: { done: number; total: number }
 }
 interface CampInfo { name: string; client: string; workspaceId: string }
 interface Props {
@@ -881,6 +883,9 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                                 <span className="text-sm font-medium text-gray-900 group-hover:text-orange-700 transition block truncate">
                                   {activity.title}
                                 </span>
+                                {activity.checklist && activity.checklist.total > 0 && (
+                                  <ChecklistChip done={activity.checklist.done} total={activity.checklist.total} className="mt-1" />
+                                )}
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
                                 {dueBadge}
@@ -935,6 +940,9 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                                   {activity.title}
                                 </span>
                               </Link>
+                              {activity.checklist && activity.checklist.total > 0 && (
+                                <ChecklistChip done={activity.checklist.done} total={activity.checklist.total} className="mt-1" />
+                              )}
                             </div>
 
                             {/* Colunas — na ordem escolhida pelo usuário */}

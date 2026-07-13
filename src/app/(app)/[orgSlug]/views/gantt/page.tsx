@@ -33,7 +33,7 @@ export default async function GanttPage({
 
   const { data: activities } = campIds.length
     ? await supabase.from('activities')
-        .select('id, title, status, priority, start_date, due_date, campaign_id, activity_assignees(profiles(id, full_name, avatar_url))')
+        .select('id, title, status, priority, start_date, due_date, campaign_id, checklist, activity_assignees(profiles(id, full_name, avatar_url))')
         .in('campaign_id', campIds)
         .eq('archived', false)
         .neq('status', 'concluido')

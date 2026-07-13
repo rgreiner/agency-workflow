@@ -503,6 +503,28 @@ export async function setActivityExtraLinks(
   revalidatePath(path)
 }
 
+/** Salva o checklist do job — array [{id, text, done}] (itens sem texto são descartados). */
+export async function setActivityChecklist(
+  path: string,
+  activityId: string,
+  items: { id: string; text: string; done: boolean }[],
+) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const clean = (items ?? [])
+    .map(it => ({ id: String(it.id), text: (it.text ?? '').trim(), done: !!it.done }))
+    .filter(it => it.text)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('set_activity_checklist', {
+    p_user_id: user.id, p_activity_id: activityId, p_items: clean,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(path)
+}
+
 /** Liga/desliga uma reação (emoji) do usuário num comentário. */
 export async function toggleCommentReaction(path: string, commentId: string, emoji: string) {
   const supabase = await createClient()

@@ -23,6 +23,13 @@ export interface ListActivity {
   campaign_id: string
   assignees: { full_name: string | null; avatar_url: string | null }[]
   assignedIds: string[]
+  checklist: { done: number; total: number }
+}
+
+/** Conta itens feitos/total de um checklist jsonb [{id,text,done}]. */
+export function checklistProgress(raw: unknown): { done: number; total: number } {
+  const arr = Array.isArray(raw) ? (raw as { done?: boolean }[]) : []
+  return { done: arr.filter(i => i?.done).length, total: arr.length }
 }
 
 export interface ListMember {
@@ -86,8 +93,10 @@ export async function loadActivityList(
   const campIds = campaigns.map(c => c.id)
 
   const archivedView = !!opts.archived
-  let q = supabase.from('activities')
-    .select('id, title, status, priority, complexity, due_date, start_date, redacao_url, preview_url, drive_path, campaign_id, archived')
+  // checklist é coluna nova (não tipada nos types gerados) → query via cast.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let q = (supabase as any).from('activities')
+    .select('id, title, status, priority, complexity, due_date, start_date, redacao_url, preview_url, drive_path, campaign_id, archived, checklist')
     .in('campaign_id', campIds)
     .eq('archived', archivedView)
   if (!archivedView && !opts.includeConcluido) q = q.neq('status', 'concluido')
@@ -96,7 +105,13 @@ export async function loadActivityList(
     ? await q.order('due_date', { ascending: true, nullsFirst: false })
     : { data: [] }
 
-  const actIds = (rawActivities ?? []).map(a => a.id)
+  type ActRow = {
+    id: string; title: string; status: string; priority: string; complexity: string | null
+    due_date: string | null; start_date: string | null; redacao_url: string | null
+    preview_url: string | null; drive_path: string | null; campaign_id: string; checklist: unknown
+  }
+  const rows = (rawActivities ?? []) as ActRow[]
+  const actIds = rows.map(a => a.id)
   const { data: assigneesData } = actIds.length
     ? await supabase.from('activity_assignees')
         .select('activity_id, user_id, profiles(full_name, avatar_url)')
@@ -154,7 +169,7 @@ export async function loadActivityList(
     }])
   )
 
-  const activities: ListActivity[] = (rawActivities ?? []).map(a => ({
+  const activities: ListActivity[] = rows.map(a => ({
     id: a.id,
     title: a.title,
     status: a.status,
@@ -169,6 +184,7 @@ export async function loadActivityList(
     campaign_id: a.campaign_id,
     assignees: assigneeMap[a.id] ?? [],
     assignedIds: assignedIdsMap[a.id] ?? [],
+    checklist: checklistProgress((a as { checklist?: unknown }).checklist),
   }))
 
   return { orgId: org.id, activities, campMap, members }

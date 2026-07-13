@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { Avatar, AvatarGroup } from '@/components/ui/Avatar'
 import { MultiSelect } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
-import { ChevronLeft, ChevronRight, Bookmark, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Bookmark, X, CheckSquare } from 'lucide-react'
 import { PRIORITY_CONFIG } from '@/types'
 import { setViewPrefs } from '@/app/actions/prefs'
 import { updateActivityDates } from '@/app/actions/activity'
@@ -42,6 +42,7 @@ function isWeekend(d: Date) { return d.getDay() === 0 || d.getDay() === 6 }
 type Activity = {
   id: string; title: string; status: string; priority: string
   start_date: string|null; due_date: string|null; campaign_id: string
+  checklist?: { done?: boolean }[] | null
   activity_assignees: unknown[]
 }
 type Profile   = { id: string; full_name: string|null; avatar_url: string|null }
@@ -412,6 +413,16 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
               {a.title}
             </span>
           </div>
+          {(() => {
+            const total = a.checklist?.length ?? 0
+            if (!total || geo.width <= 90) return null
+            const done = a.checklist?.filter(c => c?.done).length ?? 0
+            return (
+              <span className="text-[10px] font-medium tabular-nums shrink-0 inline-flex items-center gap-0.5" style={{ color: clrs.text, opacity: 0.85 }}>
+                <CheckSquare className="w-2.5 h-2.5" /> {done}/{total}
+              </span>
+            )
+          })()}
           {asns.length > 0 && geo.width > 120 && <AvatarGroup users={asns} max={2} />}
         </div>
 

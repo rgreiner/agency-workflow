@@ -22,6 +22,7 @@ import { ShareJobButton } from './ShareJobButton'
 import { ReactionBar } from './ReactionBar'
 import { ReplyButton } from './ReplyButton'
 import { ExtraLinks } from './ExtraLinks'
+import { Checklist } from './Checklist'
 import { DateRangeEditor } from '@/components/ui/DateRangeEditor'
 import { RecurrenceEditor } from '@/components/ui/RecurrenceEditor'
 import { Avatar } from '@/components/ui/Avatar'
@@ -205,6 +206,10 @@ export default async function ActivityPage({
   // extra_links é coluna nova (não tipada nos types gerados) → acesso por cast.
   const extraLinksRaw = (activity as { extra_links?: unknown }).extra_links
   const extraLinks = Array.isArray(extraLinksRaw) ? (extraLinksRaw as { label: string; url: string }[]) : []
+
+  // checklist (coluna nova, jsonb [{id,text,done}]) → acesso por cast.
+  const checklistRaw = (activity as { checklist?: unknown }).checklist
+  const checklist = Array.isArray(checklistRaw) ? (checklistRaw as { id: string; text: string; done: boolean }[]) : []
 
   // "Drive" (a pasta) NÃO entra aqui — é o caminho da máquina (G:\ / Mac), logo
   // acima. Estes são os links web do Google Drive.
@@ -484,6 +489,8 @@ export default async function ActivityPage({
 
               </div>
             </div>
+
+            <Checklist path={path} activityId={activityId} canEdit={isOrgMember} items={checklist} />
 
             <ExtraLinks path={path} activityId={activityId} canEdit={isOrgMember} links={extraLinks} />
           </div>
