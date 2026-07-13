@@ -238,6 +238,32 @@ export async function setLancamentoAnexos(orgSlug: string, lancamentoId: string,
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
 }
 
+// Anexos recolhidos na conferência do Faturamento ficam no doc de origem e são
+// copiados pro lançamento na geração (ver migration 102).
+export async function setMidiaAnexos(orgSlug: string, midiaId: string, anexos: Anexo[]) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('set_midia_anexos', {
+    p_user_id: user.id, p_midia_id: midiaId, p_anexos: anexos,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/faturamento`)
+}
+
+export async function setProducaoAnexos(orgSlug: string, producaoId: string, anexos: Anexo[]) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('set_producao_anexos', {
+    p_user_id: user.id, p_producao_id: producaoId, p_anexos: anexos,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/faturamento`)
+}
+
 export async function reabrirLancamento(orgSlug: string, lancamentoId: string) {
   const supabase = await createClient()
   const user = await getUsuario()

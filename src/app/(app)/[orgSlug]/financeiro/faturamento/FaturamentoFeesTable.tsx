@@ -1,10 +1,13 @@
 'use client'
 
-import { Fragment, useState } from 'react'
+import { Fragment, useState, useTransition } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
-import { GerarFeeButton } from './GerarFeeButton'
+import { setProducaoSituacao } from '@/app/actions/producao'
+import { setProducaoAnexos, type Anexo } from '@/app/actions/financeiro'
+import { DocsBox, faltando } from './DocsBox'
+import { FaturarButton } from './FaturarButton'
 
 export interface ParcelaView { vencimento: string; valor: number }
 export interface FeeView {
@@ -14,22 +17,10 @@ export interface FeeView {
   cliente: string
   total: number
   parcelas: ParcelaView[]
+  anexos: Anexo[]
 }
 
-/**
- * Tabela de conferência do Faturamento: cada Fee/Pedido é expansível pra mostrar
- * TODAS as parcelas (data + valor) antes de gerar os lançamentos — cada parcela
- * vira 1 lançamento a receber, então as datas precisam estar claras aqui.
- */
 export function FaturamentoFeesTable({ orgSlug, fees }: { orgSlug: string; fees: FeeView[] }) {
-  // Já nascem expandidos — a conferência das datas fica clara pro Financeiro de cara.
-  const [open, setOpen] = useState<Set<string>>(() => new Set(fees.map(f => f.id)))
-  const toggle = (id: string) => setOpen(prev => {
-    const next = new Set(prev)
-    if (next.has(id)) next.delete(id); else next.add(id)
-    return next
-  })
-
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
       <table className="w-full min-w-[720px]">
@@ -44,65 +35,81 @@ export function FaturamentoFeesTable({ orgSlug, fees }: { orgSlug: string; fees:
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
-          {fees.map(f => {
-            const isOpen = open.has(f.id)
-            const n = f.parcelas.length
-            return (
-              <Fragment key={f.id}>
-                <tr className={cn('transition', isOpen ? 'bg-orange-50/40' : 'hover:bg-gray-50/50')}>
-                  <td className="px-4 py-3 text-sm text-gray-400">{f.numero ?? '—'}</td>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{f.titulo}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{f.cliente}</td>
-                  <td className="px-4 py-3 text-center">
-                    {n > 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => toggle(f.id)}
-                        aria-expanded={isOpen}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 active:scale-[0.97] transition"
-                      >
-                        <ChevronRight className={cn('w-3.5 h-3.5 text-gray-400 transition-transform duration-200', isOpen && 'rotate-90')} />
-                        {n}x
-                      </button>
-                    ) : (
-                      <span className="text-sm text-gray-400">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-sm font-medium text-emerald-600 text-right">{formatBRL(f.total)}</td>
-                  <td className="px-3 py-3 text-right"><GerarFeeButton orgSlug={orgSlug} feeId={f.id} parcelas={n} /></td>
-                </tr>
-                {isOpen && n > 0 && (
-                  <tr className="bg-gray-50/40">
-                    <td colSpan={6} className="px-4 pb-4 pt-1">
-                      <div className="rounded-xl border border-gray-100 bg-white overflow-hidden">
-                        <div className="grid grid-cols-[auto_1fr_auto] gap-x-4 text-sm">
-                          <div className="contents text-xs font-medium text-gray-400">
-                            <div className="px-3 py-2 border-b border-gray-100">#</div>
-                            <div className="px-3 py-2 border-b border-gray-100">Vencimento</div>
-                            <div className="px-3 py-2 border-b border-gray-100 text-right">Valor</div>
-                          </div>
-                          {f.parcelas.map((p, i) => (
-                            <div key={i} className="contents">
-                              <div className="px-3 py-2 border-b border-gray-50 text-gray-400 tabular-nums">{i + 1}/{n}</div>
-                              <div className="px-3 py-2 border-b border-gray-50 text-gray-700 tabular-nums">{formatDateBR(p.vencimento)}</div>
-                              <div className="px-3 py-2 border-b border-gray-50 text-gray-900 font-medium text-right tabular-nums">{formatBRL(p.valor)}</div>
-                            </div>
-                          ))}
-                          <div className="contents">
-                            <div className="px-3 py-2 text-xs font-medium text-gray-400" />
-                            <div className="px-3 py-2 text-xs font-medium text-gray-500">Total ({n}x)</div>
-                            <div className="px-3 py-2 text-right font-semibold text-gray-900 tabular-nums">{formatBRL(f.total)}</div>
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
-            )
-          })}
+          {fees.map(f => <FeeRow key={f.id} orgSlug={orgSlug} fee={f} />)}
         </tbody>
       </table>
     </div>
+  )
+}
+
+function FeeRow({ orgSlug, fee }: { orgSlug: string; fee: FeeView }) {
+  // Já nasce expandido — a conferência (datas + documentos) fica clara de cara.
+  const [open, setOpen] = useState(true)
+  const [anexos, setAnexos] = useState<Anexo[]>(fee.anexos)
+  const [, startTransition] = useTransition()
+  const n = fee.parcelas.length
+
+  function persist(next: Anexo[]) {
+    setAnexos(next)
+    startTransition(async () => { await setProducaoAnexos(orgSlug, fee.id, next) })
+  }
+
+  return (
+    <Fragment>
+      <tr className={cn('transition', open ? 'bg-orange-50/40' : 'hover:bg-gray-50/50')}>
+        <td className="px-4 py-3 text-sm text-gray-400">{fee.numero ?? '—'}</td>
+        <td className="px-4 py-3 text-sm font-medium text-gray-900">{fee.titulo}</td>
+        <td className="px-4 py-3 text-sm text-gray-600">{fee.cliente}</td>
+        <td className="px-4 py-3 text-center">
+          {n > 0 ? (
+            <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 active:scale-[0.97] transition">
+              <ChevronRight className={cn('w-3.5 h-3.5 text-gray-400 transition-transform duration-200', open && 'rotate-90')} />
+              {n}x
+            </button>
+          ) : <span className="text-sm text-gray-400">—</span>}
+        </td>
+        <td className="px-4 py-3 text-sm font-medium text-emerald-600 text-right">{formatBRL(fee.total)}</td>
+        <td className="px-3 py-3 text-right">
+          <FaturarButton
+            missing={faltando(anexos)}
+            okToast={n > 0 ? `${n} parcela(s) lançada(s) no financeiro.` : 'Fee lançado no financeiro.'}
+            action={() => setProducaoSituacao(orgSlug, fee.id, 'faturado', 'financeiro/faturamento')}
+          />
+        </td>
+      </tr>
+      {open && (
+        <tr className="bg-gray-50/40">
+          <td colSpan={6} className="px-4 pb-4 pt-1">
+            <div className="grid gap-3 lg:grid-cols-2">
+              {n > 0 && (
+                <div className="rounded-xl border border-gray-100 bg-white overflow-hidden">
+                  <div className="grid grid-cols-[auto_1fr_auto] gap-x-4 text-sm">
+                    <div className="contents text-xs font-medium text-gray-400">
+                      <div className="px-3 py-2 border-b border-gray-100">#</div>
+                      <div className="px-3 py-2 border-b border-gray-100">Vencimento</div>
+                      <div className="px-3 py-2 border-b border-gray-100 text-right">Valor</div>
+                    </div>
+                    {fee.parcelas.map((p, i) => (
+                      <div key={i} className="contents">
+                        <div className="px-3 py-2 border-b border-gray-50 text-gray-400 tabular-nums">{i + 1}/{n}</div>
+                        <div className="px-3 py-2 border-b border-gray-50 text-gray-700 tabular-nums">{formatDateBR(p.vencimento)}</div>
+                        <div className="px-3 py-2 border-b border-gray-50 text-gray-900 font-medium text-right tabular-nums">{formatBRL(p.valor)}</div>
+                      </div>
+                    ))}
+                    <div className="contents">
+                      <div className="px-3 py-2 text-xs font-medium text-gray-400" />
+                      <div className="px-3 py-2 text-xs font-medium text-gray-500">Total ({n}x)</div>
+                      <div className="px-3 py-2 text-right font-semibold text-gray-900 tabular-nums">{formatBRL(fee.total)}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <DocsBox anexos={anexos} onChange={persist} />
+            </div>
+          </td>
+        </tr>
+      )}
+    </Fragment>
   )
 }
