@@ -9,6 +9,7 @@ import { cn, formatDate, isOverdue, parseDateLocal } from '@/lib/utils'
 import Link from 'next/link'
 import { Avatar } from '@/components/ui/Avatar'
 import { WeeklyProgress } from '@/components/dashboard/WeeklyProgress'
+import { ConciliacaoAlert } from '@/components/dashboard/ConciliacaoAlert'
 
 export default async function DashboardPage({
   params,
@@ -163,6 +164,9 @@ export default async function DashboardPage({
         myActiveCount={myActive.length}
         userName={userName}
       />
+
+      {/* ── Aviso de conciliação bancária pendente (só finance; some se 0) ──── */}
+      <ConciliacaoAlert orgSlug={orgSlug} orgId={orgData.id} userId={user.id} />
 
       {/* ── My personal KPIs ──────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
