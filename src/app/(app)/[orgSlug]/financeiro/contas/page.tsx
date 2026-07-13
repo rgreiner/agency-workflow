@@ -1,5 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { ContasClient, type Conta } from './ContasClient'
+import { BtgCard } from './BtgCard'
+import { btgConfigured, btgEnv } from '@/lib/btg/config'
+import { getBtgConnection } from '@/lib/btg/store'
 
 export default async function ContasPage({
   params,
@@ -23,5 +26,24 @@ export default async function ContasPage({
 
   const contas = (contasRaw ?? []) as Conta[]
 
-  return <ContasClient orgSlug={orgSlug} contas={contas} />
+  const conn = await getBtgConnection(org.id)
+  const btg = {
+    configured: btgConfigured(),
+    env: btgEnv(),
+    connected: !!conn?.refreshToken && conn.status !== 'revoked',
+    status: conn?.status ?? null,
+    companyId: conn?.companyId ?? null,
+    accountId: conn?.accountId ?? null,
+    lastSyncAt: conn?.lastSyncAt ?? null,
+    lastError: conn?.lastError ?? null,
+  }
+
+  return (
+    <>
+      <ContasClient orgSlug={orgSlug} contas={contas} />
+      <div className="px-6 pb-8 -mt-2">
+        <BtgCard orgSlug={orgSlug} btg={btg} />
+      </div>
+    </>
+  )
 }
