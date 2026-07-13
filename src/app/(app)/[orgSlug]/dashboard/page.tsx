@@ -14,7 +14,7 @@ import { WeeklyProgress } from '@/components/dashboard/WeeklyProgress'
 import { ConciliacaoAlert } from '@/components/dashboard/ConciliacaoAlert'
 
 interface HomePessoal { concluidas_mes: number; no_prazo_pct: number | null; tempo_medio_dias: number | null; interacoes_30d: number }
-interface HomePessoaRank { user_id: string; full_name: string | null; avatar_url: string | null; concluidas: number; no_prazo_pct: number | null; carga: number }
+interface HomePessoaRank { user_id: string; full_name: string | null; avatar_url: string | null; entregas: number; carga: number; atrasadas: number }
 interface HomeEquipe { em_andamento: number; atrasadas: number; concluidas_mes: number; sla_prazo_pct: number | null; funil: { status: string; n: number }[]; pessoas: HomePessoaRank[] }
 interface HomeFinanceiro { a_receber: number; a_pagar: number; recebido: number; pago: number; a_receber_atrasado: number; a_pagar_atrasado: number; saldo: number }
 interface HomeData { pessoal: HomePessoal; equipe: HomeEquipe | null; financeiro: HomeFinanceiro | null; flags: { pode_time: boolean; pode_financeiro: boolean } }
@@ -262,16 +262,19 @@ export default async function DashboardPage({ params }: { params: Promise<{ orgS
 
             {/* Ranking de desempenho por pessoa */}
             <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h2 className="text-sm font-semibold text-gray-900 mb-4">Desempenho por pessoa</h2>
+              <div className="flex items-baseline justify-between mb-4">
+                <h2 className="text-sm font-semibold text-gray-900">Desempenho por pessoa</h2>
+                <span className="text-xs text-gray-400">pela etapa atual da tarefa</span>
+              </div>
               {equipe.pessoas.length === 0 ? (
                 <p className="text-sm text-gray-400 text-center py-8">Sem dados no período.</p>
               ) : (
                 <div className="space-y-2">
                   <div className="flex items-center gap-3 px-1 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                     <span className="flex-1">Pessoa</span>
-                    <span className="w-16 text-right">Concl.</span>
-                    <span className="w-16 text-right">No prazo</span>
-                    <span className="w-12 text-right">Carga</span>
+                    <span className="w-16 text-right">Entregas</span>
+                    <span className="w-14 text-right">Carga</span>
+                    <span className="w-16 text-right">Atrasadas</span>
                   </div>
                   {equipe.pessoas.map(p => (
                     <div key={p.user_id} className="flex items-center gap-3">
@@ -279,9 +282,9 @@ export default async function DashboardPage({ params }: { params: Promise<{ orgS
                         <Avatar name={p.full_name ?? '?'} avatarUrl={p.avatar_url} size="sm" />
                         <span className="text-sm text-gray-700 truncate">{p.full_name ?? 'Sem nome'}</span>
                       </div>
-                      <span className="w-16 text-right text-sm font-medium text-gray-700 tabular-nums">{p.concluidas}</span>
-                      <span className={cn('w-16 text-right text-sm font-medium tabular-nums', pctColor(p.no_prazo_pct))}>{pct(p.no_prazo_pct)}</span>
-                      <span className="w-12 text-right text-sm text-gray-500 tabular-nums">{p.carga}</span>
+                      <span className="w-16 text-right text-sm font-medium text-emerald-600 tabular-nums">{p.entregas}</span>
+                      <span className="w-14 text-right text-sm text-gray-600 tabular-nums">{p.carga}</span>
+                      <span className={cn('w-16 text-right text-sm font-medium tabular-nums', p.atrasadas > 0 ? 'text-red-600' : 'text-gray-300')}>{p.atrasadas}</span>
                     </div>
                   ))}
                 </div>
