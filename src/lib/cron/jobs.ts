@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
 import { digestJob } from './digest'
 import { cobrancaJob } from './cobranca'
+import { btgSyncJob } from './btg-sync'
 
 /**
  * Executor de tarefas agendadas. A rota /api/cron (batida pelo crontab do VPS)
@@ -49,9 +50,10 @@ export const JOBS: CronJob[] = [
       return `${data ?? 0} lembrete(s) criado(s)`
     },
   },
+  btgSyncJob,  // extrato do BTG 7h (BRT), antes do digest — só orgs conectadas
   digestJob,   // resumo diário 8h30 (BRT)
   cobrancaJob, // lembrete de vencimento ao cliente 9h (BRT), opt-in por cliente
-  // Futuros (ondas 4/5): 'contratos', 'btg-sync'.
+  // Futuro (onda 4): 'contratos'.
 ]
 
 // ── Runner ───────────────────────────────────────────────────────────────────

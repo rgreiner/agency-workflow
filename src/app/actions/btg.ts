@@ -2,9 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { assertFinanceAccess } from '@/lib/finance'
-import { getBtgAccess } from '@/lib/btg/session'
-import { listAccounts, getStatement, flattenMovements } from '@/lib/btg/api'
-import { setBtgAccount, markBtgSynced, markBtgError, deleteBtgConnection } from '@/lib/btg/store'
+import { syncOrgMovements } from '@/lib/btg/sync'
+import { markBtgSynced, markBtgError, deleteBtgConnection } from '@/lib/btg/store'
 
 export async function disconnectBtg(orgSlug: string) {
   const { orgId } = await assertFinanceAccess(orgSlug)
@@ -13,32 +12,71 @@ export async function disconnectBtg(orgSlug: string) {
 }
 
 /**
- * Testa a conexão ponta a ponta: renova o token, lista contas e puxa o extrato dos
- * últimos 7 dias (prova de que o fluxo funciona). Guarda a conta e marca o sync.
+ * Testa a conexão ponta a ponta e já sincroniza os movimentos (30 dias): renova o
+ * token, lista contas, puxa o extrato e faz upsert em btg_movements.
  */
 export async function testBtg(orgSlug: string) {
-  const { orgId } = await assertFinanceAccess(orgSlug)
+  const { supabase, orgId } = await assertFinanceAccess(orgSlug)
   try {
-    const { accessToken, companyId, accountId } = await getBtgAccess(orgId)
-    if (!companyId) return { error: 'Falta o CNPJ (BTG_COMPANY_ID) na configuração do servidor.' }
-
-    const accts = await listAccounts(companyId, accessToken)
-    let conta = accountId
-    if (!conta && accts[0]) { conta = accts[0].accountId; await setBtgAccount(orgId, conta) }
-    if (!conta) return { error: 'Nenhuma conta retornada pelo BTG.' }
-
-    const today = new Date().toISOString().slice(0, 10)
-    const from = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10)
-    const st = await getStatement(companyId, conta, from, today, accessToken)
-    const movimentos = flattenMovements(st).length
-
+    const r = await syncOrgMovements(supabase, orgId)
     await markBtgSynced(orgId)
     revalidatePath(`/${orgSlug}/financeiro/contas`)
-    return { ok: true, contas: accts.length, movimentos, saldo: st.balance?.current ?? null }
+    revalidatePath(`/${orgSlug}/financeiro/conciliacao`)
+    return { ok: true as const, ...r }
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Falha ao consultar o BTG.'
     await markBtgError(orgId, msg)
     revalidatePath(`/${orgSlug}/financeiro/contas`)
-    return { error: msg }
+    return { ok: false as const, error: msg }
   }
+}
+
+/** "Sincronizar agora" na tela de Conciliação — mesma lógica do testBtg. */
+export async function sincronizarBtg(orgSlug: string) {
+  const { supabase, orgId } = await assertFinanceAccess(orgSlug)
+  try {
+    const r = await syncOrgMovements(supabase, orgId)
+    await markBtgSynced(orgId)
+    revalidatePath(`/${orgSlug}/financeiro/conciliacao`)
+    return { ok: true as const, ...r }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Falha ao consultar o BTG.'
+    await markBtgError(orgId, msg)
+    return { ok: false as const, error: msg }
+  }
+}
+
+/** Liga o movimento do banco a um lançamento e dá baixa nele (recebido/pago). */
+export async function conciliarMovimento(orgSlug: string, movementId: string, lancamentoId: string) {
+  const { supabase, userId } = await assertFinanceAccess(orgSlug)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('conciliar_btg_movimento', {
+    p_user_id: userId, p_movement_id: movementId, p_lancamento_id: lancamentoId,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/conciliacao`)
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+}
+
+/** Movimento sem lançamento correspondente (ex.: transferência interna, rendimento). */
+export async function ignorarMovimento(orgSlug: string, movementId: string) {
+  const { supabase, userId } = await assertFinanceAccess(orgSlug)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('ignorar_btg_movimento', {
+    p_user_id: userId, p_movement_id: movementId,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/conciliacao`)
+}
+
+/** Desfaz a conciliação/ignorar — volta o movimento pra pendente (e reabre o lançamento, se ligado). */
+export async function desfazerConciliacaoBtg(orgSlug: string, movementId: string) {
+  const { supabase, userId } = await assertFinanceAccess(orgSlug)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('desfazer_conciliacao_btg', {
+    p_user_id: userId, p_movement_id: movementId,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/conciliacao`)
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
 }

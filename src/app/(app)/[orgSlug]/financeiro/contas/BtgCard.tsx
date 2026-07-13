@@ -45,8 +45,8 @@ export function BtgCard({ orgSlug, btg }: { orgSlug: string; btg: BtgStatus }) {
   function runTest() {
     start(async () => {
       const r = await testBtg(orgSlug)
-      if (r?.error) toast.error(r.error)
-      else toast.success(`OK — ${r.contas} conta(s), ${r.movimentos} movimento(s) nos últimos 7 dias${r.saldo != null ? `, saldo ${r.saldo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : ''}.`)
+      if (!r.ok) toast.error(r.error)
+      else toast.success(`OK — ${r.contas} conta(s), ${r.movimentos} movimento(s) nos últimos 30 dias${r.saldo != null ? `, saldo ${r.saldo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : ''}.`)
     })
   }
   function runDisconnect() {

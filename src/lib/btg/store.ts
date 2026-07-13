@@ -85,3 +85,11 @@ export async function deleteBtgConnection(orgId: string): Promise<void> {
   const sql = await db()
   await sql`delete from btg_connections where org_id = ${orgId}`
 }
+
+/** Orgs com conexão ativa (refresh token presente, não revogada) — usado pelo cron. */
+export async function listConnectedOrgIds(): Promise<string[]> {
+  const sql = await db()
+  const rows = await sql`select org_id from btg_connections where refresh_token is not null and status <> 'revoked'`
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return rows.map((r: any) => r.org_id as string)
+}
