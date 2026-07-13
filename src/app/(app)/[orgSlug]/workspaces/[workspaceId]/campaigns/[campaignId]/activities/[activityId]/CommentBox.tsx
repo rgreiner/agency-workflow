@@ -34,6 +34,35 @@ export function CommentBox({ activityId, members = [], assignedIds = [] }: Props
   const [replyTo, setReplyTo] = useState<{ id: string; author: string; preview: string } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // ── Rascunho local ────────────────────────────────────────────────────────
+  // Não perder o comentário não enviado (fechou o modal, clicou errado, F5…).
+  // Guarda o HTML do editor no localStorage por tarefa; restaura ao voltar e
+  // limpa ao enviar. É local do navegador — some quando o comentário é postado.
+  const DRAFT_KEY = `flow:comment-draft:${activityId}`
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const draftLatest = useRef<{ html: string; empty: boolean } | null>(null)
+  const draftRestored = useRef(false)
+
+  function flushDraft() {
+    if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+    const d = draftLatest.current
+    if (!d) return
+    try {
+      if (d.empty) localStorage.removeItem(DRAFT_KEY)
+      else localStorage.setItem(DRAFT_KEY, d.html)
+    } catch { /* localStorage indisponível (privado/quota) — segue sem rascunho */ }
+  }
+  function scheduleDraftSave(html: string, empty: boolean) {
+    draftLatest.current = { html, empty }
+    if (draftTimer.current) clearTimeout(draftTimer.current)
+    draftTimer.current = setTimeout(flushDraft, 400)
+  }
+  function clearDraft() {
+    if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+    draftLatest.current = null
+    try { localStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
+  }
+
   function optionsFor(query: string): Opt[] {
     const q = norm(query)
     const list: Opt[] = []
@@ -64,6 +93,7 @@ export function CommentBox({ activityId, members = [], assignedIds = [] }: Props
       }),
     ],
     content: '',
+    onUpdate: ({ editor }) => scheduleDraftSave(editor.getHTML(), editor.isEmpty),
     editorProps: {
       handleKeyDown: (_v, event) => {
         if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); submit(); return true }
@@ -91,6 +121,18 @@ export function CommentBox({ activityId, members = [], assignedIds = [] }: Props
     }
     window.addEventListener('flow:reply', onReply)
     return () => window.removeEventListener('flow:reply', onReply)
+  }, [editor])
+
+  // Restaura o rascunho ao montar; salva o pendente ao desmontar (fechou rápido).
+  useEffect(() => {
+    if (!editor || draftRestored.current) return
+    draftRestored.current = true
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY)
+      if (saved && editor.isEmpty) editor.commands.setContent(saved)
+    } catch { /* ignore */ }
+    return () => flushDraft()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor])
 
   async function insertImage(file: File) {
@@ -135,6 +177,7 @@ export function CommentBox({ activityId, members = [], assignedIds = [] }: Props
         setError(result.error)
         toast.error(result.error)
       } else {
+        clearDraft()
         router.refresh()
       }
     })()
