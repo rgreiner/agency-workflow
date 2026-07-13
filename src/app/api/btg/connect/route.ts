@@ -7,20 +7,22 @@ import { getUsuario } from '@/lib/auth/server'
 import { createClient } from '@/lib/supabase/server'
 import { btgConfigured } from '@/lib/btg/config'
 import { authorizeUrl, signState } from '@/lib/btg/oauth'
+import { publicBaseUrl } from '@/lib/btg/url'
 
 export const runtime = 'nodejs'
 
 export async function GET(req: NextRequest) {
   const orgSlug = req.nextUrl.searchParams.get('org') ?? ''
-  const back = (q: string) => NextResponse.redirect(new URL(`/${orgSlug}/financeiro/contas?btg=${q}`, req.url))
+  const base = publicBaseUrl(req)
+  const back = (q: string) => NextResponse.redirect(`${base}/${orgSlug}/financeiro/contas?btg=${q}`)
 
   const user = await getUsuario()
-  if (!user) return NextResponse.redirect(new URL('/login', req.url))
+  if (!user) return NextResponse.redirect(`${base}/login`)
   if (!btgConfigured()) return back('naoconfig')
 
   const supabase = await createClient()
   const { data: org } = await supabase.from('organizations').select('id').eq('slug', orgSlug).single()
-  if (!org) return NextResponse.redirect(new URL('/', req.url))
+  if (!org) return NextResponse.redirect(`${base}/`)
 
   const { data: m } = await supabase
     .from('organization_members').select('role, can_finance')

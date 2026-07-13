@@ -9,6 +9,7 @@ import { btgConfig } from '@/lib/btg/config'
 import { exchangeCode, verifyState } from '@/lib/btg/oauth'
 import { saveBtgConnection, setBtgAccount } from '@/lib/btg/store'
 import { listAccounts } from '@/lib/btg/api'
+import { publicBaseUrl } from '@/lib/btg/url'
 
 export const runtime = 'nodejs'
 
@@ -16,7 +17,8 @@ export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams
   const st = p.get('state') ? verifyState(p.get('state') as string) : null
   const orgSlug = st?.org ?? ''
-  const back = (q: string) => NextResponse.redirect(new URL(`/${orgSlug || ''}/financeiro/contas?btg=${q}`, req.url))
+  const base = publicBaseUrl(req)
+  const back = (q: string) => NextResponse.redirect(`${base}/${orgSlug || ''}/financeiro/contas?btg=${q}`)
 
   if (p.get('error')) return back('erro')
   if (!st || !p.get('code')) return back('erro')
