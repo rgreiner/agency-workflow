@@ -275,6 +275,30 @@ export function Sidebar({
 
   const allExpanded = workspaces.length > 0 && workspaces.every(ws => expanded.has(ws.id))
 
+  // Seção "Espaços" recolhida por padrão (o acesso por cliente é usado menos);
+  // lembra a escolha do usuário e abre sozinha ao entrar num cliente.
+  const ESPACOS_KEY = 'flow:sidebar-espacos-open'
+  const [espacosOpen, setEspacosOpen] = useState(false)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(ESPACOS_KEY)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (saved === '1' || (saved === null && activeWorkspaceId)) setEspacosOpen(true)
+    } catch { /* localStorage indisponível */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (activeWorkspaceId) setEspacosOpen(true)
+  }, [activeWorkspaceId])
+  function toggleEspacos() {
+    setEspacosOpen(o => {
+      const next = !o
+      try { localStorage.setItem(ESPACOS_KEY, next ? '1' : '0') } catch { /* ignore */ }
+      return next
+    })
+  }
+
   async function signOut() {
     await logout()
   }
@@ -441,11 +465,17 @@ export function Sidebar({
         {mode === 'trabalho' && (
         <div>
           <div className="flex items-center justify-between px-4 mb-1.5">
-            <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-[0.08em]">
-              Espaços
-            </span>
+            <button onClick={toggleEspacos} aria-expanded={espacosOpen} className="flex items-center gap-1 group/esp">
+              <ChevronRight className={cn('w-3 h-3 text-gray-600 transition-transform duration-150', espacosOpen && 'rotate-90')} />
+              <span className="text-[11px] font-semibold text-gray-500 group-hover/esp:text-gray-400 uppercase tracking-[0.08em] transition-colors">
+                Espaços
+              </span>
+              {!espacosOpen && workspaces.length > 0 && (
+                <span className="text-[10px] text-gray-600">{workspaces.length}</span>
+              )}
+            </button>
             <div className="flex items-center gap-1">
-              {allExpanded ? (
+              {espacosOpen && (allExpanded ? (
                 <button onClick={collapseAll} className="text-gray-600 hover:text-gray-300 transition" title="Fechar todos">
                   <ChevronsUp className="w-3.5 h-3.5" />
                 </button>
@@ -453,13 +483,14 @@ export function Sidebar({
                 <button onClick={expandAll} className="text-gray-600 hover:text-gray-300 transition" title="Expandir todos">
                   <ChevronsDown className="w-3.5 h-3.5" />
                 </button>
-              )}
+              ))}
               <Link href={`${base}/workspaces/new`} className="text-gray-600 hover:text-gray-300 transition" title="Novo cliente">
                 <Plus className="w-3.5 h-3.5" />
               </Link>
             </div>
           </div>
 
+          {espacosOpen && (
           <div className="space-y-px">
             {workspaces.map(ws => {
               const isOpen = expanded.has(ws.id)
@@ -544,6 +575,7 @@ export function Sidebar({
               </Link>
             )}
           </div>
+          )}
         </div>
         )}
 
