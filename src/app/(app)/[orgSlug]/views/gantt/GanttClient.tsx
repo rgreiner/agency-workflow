@@ -246,18 +246,25 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
   }
 
   // ── Bar geometry ──────────────────────────────────────────────────────
+  // O prazo é INCLUSIVO: uma tarefa 15→17 ocupa 15, 16 E 17. Por isso o fim
+  // exclusivo é a meia-noite do dia SEGUINTE ao prazo — sem isso a barra morria no
+  // começo do dia da entrega (15→17 pintava só 15 e 16) e tarefa sem início virava
+  // uma barra de 1 dia na véspera. Datas são meia-noite local, então a diferença é
+  // múltiplo exato de 24h e round evita erro de arredondamento.
+  const DAY_MS = 86400000
   function barGeometry(start: string|null, end: string|null) {
     if (!end) return null
     const vs = viewStart.getTime()
-    const ve = vs + DAYS * 86400000
-    const bs = start ? fromYMD(start).getTime() : fromYMD(end).getTime() - 86400000
-    const be = fromYMD(end).getTime()
+    const ve = vs + DAYS * DAY_MS
+    const endMs = fromYMD(end).getTime()
+    const be = endMs + DAY_MS                                   // fim exclusivo = fim do dia do prazo
+    const bs = Math.min(start ? fromYMD(start).getTime() : endMs, endMs)
     if (be <= vs || bs >= ve) return null
     const cs = Math.max(bs, vs)
     const ce = Math.min(be, ve)
     return {
-      left:         Math.floor((cs - vs) / 86400000) * DAY_W,
-      width:        Math.max(Math.ceil((ce - cs) / 86400000) * DAY_W, DAY_W),
+      left:         Math.round((cs - vs) / DAY_MS) * DAY_W,
+      width:        Math.max(Math.round((ce - cs) / DAY_MS) * DAY_W, DAY_W),
       clippedLeft:  cs > bs,
       clippedRight: ce < be,
     }
