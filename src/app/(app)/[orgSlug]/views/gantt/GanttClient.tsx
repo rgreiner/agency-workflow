@@ -14,10 +14,19 @@ import { toast } from 'sonner'
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
-const DAY_W    = 44
 const ROW_H    = 44
 const HANDLE_W = 10
-const DAYS     = 35
+
+// Zoom = largura de 1 dia em px. "Dias" é o padrão; zooms menores cabem vários
+// meses na mesma tela (entregas longas / calibrar a pauta com o cliente).
+// A quantidade de dias NÃO é fixa: é medida da largura real (senão sobra faixa vazia).
+const ZOOMS = { dia: 44, semana: 16, mes: 6 } as const
+type Zoom = keyof typeof ZOOMS
+const ZOOM_OPTIONS = [
+  { value: 'dia',    label: 'Zoom: dias' },
+  { value: 'semana', label: 'Zoom: semanas' },
+  { value: 'mes',    label: 'Zoom: meses' },
+]
 const SCRUB_PX_PER_DAY = 64   // px de scroll horizontal por dia (menos sensível que a largura do dia)
 const SCRUB_MAX_STEP   = 4    // máx. de dias por evento de wheel (tira o overshoot da inércia)
 
@@ -171,6 +180,44 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
+
+  // ── Zoom + largura útil ───────────────────────────────────────────────
+  // A régua preenche a largura disponível: DAYS vem da medida do container, não
+  // de um número fixo — era o que deixava a faixa vazia à direita em telas largas.
+  const ZOOM_KEY = 'flow:gantt-zoom'
+  const [zoom, setZoom] = useState<Zoom>('dia')
+  const [viewW, setViewW] = useState(1200)
+  useEffect(() => {
+    try {
+      const s = localStorage.getItem(ZOOM_KEY)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (s === 'semana' || s === 'mes') setZoom(s)
+    } catch { /* localStorage indisponível */ }
+  }, [])
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const ro = new ResizeObserver(entries => {
+      const w = entries[0]?.contentRect.width
+      if (w) setViewW(w)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  function changeZoom(v: string) {
+    const z: Zoom = v === 'semana' ? 'semana' : v === 'mes' ? 'mes' : 'dia'
+    setZoom(z)
+    try { localStorage.setItem(ZOOM_KEY, z) } catch { /* ignore */ }
+  }
+
+  // Cabe o máximo de dias na largura e ESTICA o dia pra fechar exato: sem faixa
+  // vazia à direita e sem barra de rolagem horizontal sobrando.
+  const DAYS  = Math.max(14, Math.floor(viewW / ZOOMS[zoom]))
+  const DAY_W = viewW / DAYS
+  const gridW = viewW
+  const showDayLabel = DAY_W >= 28   // número + dia da semana
+  const showWeekTick = DAY_W >= 12   // só o número, nas segundas
+  const showWeekend  = DAY_W >= 20   // sombra de fim de semana (vira ruído no zoom pequeno)
 
   // ── Calendar days ─────────────────────────────────────────────────────
   const days     = Array.from({ length: DAYS }, (_, i) => addDays(viewStart, i))
@@ -479,8 +526,8 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
 
   function renderRow(a: Activity) {
     return (
-      <div key={a.id} className="relative border-b border-gray-50 last:border-0" style={{ height: ROW_H }}>
-        {days.map((day, i) => isWeekend(day) && (
+      <div key={a.id} className="relative border-b border-gray-50 last:border-0" style={{ height: ROW_H, width: gridW }}>
+        {showWeekend && days.map((day, i) => isWeekend(day) && (
           <div key={i} className="absolute inset-y-0 bg-gray-50/60 pointer-events-none"
                style={{ left: i * DAY_W, width: DAY_W }} />
         ))}
@@ -517,6 +564,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
               { value: 'campanha', label: 'Agrupar por campanha' },
             ]}
           />
+          <Select size="sm" className="w-36" value={zoom} onChange={changeZoom} options={ZOOM_OPTIONS} />
           <button
             onClick={() => { const d = new Date(); d.setDate(d.getDate() - 7); setViewStart(d) }}
             className="px-3 py-1.5 text-sm bg-gray-100 border border-transparent rounded-xl hover:bg-gray-50 transition font-medium text-gray-700">
@@ -625,14 +673,14 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
         <div className="sticky top-0 bg-white z-30 border-b border-gray-200">
 
           {/* Month labels row */}
-          <div className="relative h-6 border-b border-gray-100 select-none">
+          <div className="relative h-6 border-b border-gray-100 select-none" style={{ width: gridW }}>
             {days.map((day, i) => {
               const showMonth = i === 0 || day.getDate() === 1
               if (!showMonth) return null
               return (
-                <span key={i} className="absolute top-0 bottom-0 flex items-center px-2 text-[11px] font-semibold text-gray-500"
-                      style={{ left: i * DAY_W }}>
-                  {day.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                <span key={i} className="absolute top-0 bottom-0 flex items-center px-2 text-[11px] font-semibold text-gray-500 whitespace-nowrap"
+                      style={{ left: i * DAY_W, borderLeft: day.getDate() === 1 ? '1px solid #e5e7eb' : undefined }}>
+                  {day.toLocaleDateString('pt-BR', DAY_W >= 12 ? { month: 'long', year: 'numeric' } : { month: 'short' })}
                 </span>
               )
             })}
@@ -641,28 +689,37 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
           {/* Day numbers — draggable to scrub */}
           <div
             className="flex"
-            style={{ cursor: calRef.current ? 'grabbing' : 'grab', touchAction: 'none' }}
+            style={{ cursor: calRef.current ? 'grabbing' : 'grab', touchAction: 'none', width: gridW }}
             onPointerDown={onCalPointerDown}
             onPointerMove={onCalPointerMove}
             onPointerUp={onCalPointerUp}
             onPointerCancel={() => { calRef.current = null }}
             title="Arraste: ← passado | futuro →"
           >
-            {days.map((day, i) => (
-              <div key={i}
-                className={cn(
-                  'flex flex-col items-center justify-center text-xs border-r border-gray-100 shrink-0 py-1.5 select-none',
-                  isToday(day)    ? 'bg-orange-600 text-[#fff]'
-                  : isWeekend(day) ? 'bg-gray-50 text-gray-400'
-                  : 'text-gray-600'
-                )}
-                style={{ width: DAY_W }}>
-                <span className="font-semibold">{day.getDate()}</span>
-                <span className="text-[10px] opacity-70">
-                  {day.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}
-                </span>
-              </div>
-            ))}
+            {days.map((day, i) => {
+              const monday = day.getDay() === 1
+              const first = day.getDate() === 1
+              // No zoom pequeno o número não cabe: rotula só segundas (semana) ou nada (meses).
+              const label = showDayLabel || (showWeekTick && monday)
+              return (
+                <div key={i}
+                  className={cn(
+                    'flex flex-col items-center justify-center text-xs shrink-0 py-1.5 select-none overflow-hidden',
+                    showWeekTick && 'border-r border-gray-100',
+                    isToday(day) ? 'bg-orange-600 text-[#fff]'
+                    : showWeekend && isWeekend(day) ? 'bg-gray-50 text-gray-400'
+                    : 'text-gray-600'
+                  )}
+                  style={{ width: DAY_W, borderLeft: !showWeekTick && first ? '1px solid #e5e7eb' : undefined }}>
+                  {label && <span className="font-semibold text-[10px] leading-tight">{day.getDate()}</span>}
+                  {showDayLabel && (
+                    <span className="text-[10px] opacity-70">
+                      {day.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
 
