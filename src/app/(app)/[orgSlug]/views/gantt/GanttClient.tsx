@@ -3,7 +3,7 @@
 import { useState, useRef, useTransition, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarGroup } from '@/components/ui/Avatar'
-import { MultiSelect } from '@/components/ui/Select'
+import { MultiSelect, Select } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { ChevronLeft, ChevronRight, Bookmark, X, CheckSquare } from 'lucide-react'
 import { PRIORITY_CONFIG } from '@/types'
@@ -317,6 +317,23 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
 
   // ── Filtering + grouping ──────────────────────────────────────────────
 
+  // Agrupar por responsável (padrão) ou por campanha — o "Gantt sem as pessoas",
+  // pra ver a pauta do cliente e calibrar prazo com ele. Por campanha cada tarefa
+  // aparece UMA vez (por responsável, task com 2 donos aparece nos 2 grupos).
+  const GROUPBY_KEY = 'flow:gantt-groupby'
+  const [groupBy, setGroupBy] = useState<'pessoa' | 'campanha'>('pessoa')
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (localStorage.getItem(GROUPBY_KEY) === 'campanha') setGroupBy('campanha')
+    } catch { /* localStorage indisponível */ }
+  }, [])
+  function changeGroupBy(v: string) {
+    const g: 'pessoa' | 'campanha' = v === 'campanha' ? 'campanha' : 'pessoa'
+    setGroupBy(g)
+    try { localStorage.setItem(GROUPBY_KEY, g) } catch { /* ignore */ }
+  }
+
   const filtered = activities.filter(a => {
     if (filterStatuses.length && !filterStatuses.includes(a.status)) return false
     const camp = campMap[a.campaign_id]
@@ -345,6 +362,20 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
   })
   const groups = Object.values(groupMap).sort((a, b) =>
     (a.profile.full_name ?? '').localeCompare(b.profile.full_name ?? ''))
+
+  // Grupos por campanha: cada tarefa entra uma única vez, ordenado por cliente › campanha.
+  const campGroupMap: Record<string, { key: string; name: string; client: string; activities: Activity[] }> = {}
+  filtered.forEach(a => {
+    const c = campMap[a.campaign_id]
+    if (!campGroupMap[a.campaign_id]) {
+      campGroupMap[a.campaign_id] = {
+        key: a.campaign_id, name: c?.name ?? 'Sem campanha', client: c?.client ?? '', activities: [],
+      }
+    }
+    campGroupMap[a.campaign_id].activities.push(a)
+  })
+  const campGroups = Object.values(campGroupMap).sort((a, b) =>
+    `${a.client} ${a.name}`.localeCompare(`${b.client} ${b.name}`))
 
   // ── Render bar ────────────────────────────────────────────────────────
 
@@ -470,10 +501,22 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
       {/* Header */}
       <div className="flex items-center justify-between mb-4 shrink-0">
         <div>
-          <h1 className="text-lg font-semibold text-gray-900">Gantt por responsável</h1>
+          <h1 className="text-lg font-semibold text-gray-900">
+            Gantt por {groupBy === 'campanha' ? 'campanha' : 'responsável'}
+          </h1>
           <p className="text-gray-500 text-sm">{filtered.length} atividade{filtered.length !== 1 ? 's' : ''}</p>
         </div>
         <div className="flex items-center gap-2">
+          <Select
+            size="sm"
+            className="w-44"
+            value={groupBy}
+            onChange={changeGroupBy}
+            options={[
+              { value: 'pessoa', label: 'Agrupar por responsável' },
+              { value: 'campanha', label: 'Agrupar por campanha' },
+            ]}
+          />
           <button
             onClick={() => { const d = new Date(); d.setDate(d.getDate() - 7); setViewStart(d) }}
             className="px-3 py-1.5 text-sm bg-gray-100 border border-transparent rounded-xl hover:bg-gray-50 transition font-medium text-gray-700">
@@ -623,28 +666,44 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
           </div>
         </div>
 
-        {/* Groups by assignee */}
-        {groups.map(({ profile, activities: ga }) => (
-          <div key={profile.id} className="border-b border-gray-100 last:border-0">
-            {/* Group header — sticky left so name stays visible when scrolling */}
-            <div className="sticky left-0 z-20 flex items-center gap-2.5 px-4 py-2 bg-gray-50/90 border-b border-gray-100 backdrop-blur-sm">
-              <Avatar name={profile.full_name} avatarUrl={profile.avatar_url} size="sm" />
-              <span className="text-sm font-semibold text-gray-800">{profile.full_name ?? '?'}</span>
-              <span className="text-xs text-gray-400">{ga.length} tarefa{ga.length !== 1 ? 's' : ''}</span>
+        {groupBy === 'campanha' ? (
+          /* Groups by campaign — a pauta do cliente, sem duplicar por responsável */
+          campGroups.map(g => (
+            <div key={g.key} className="border-b border-gray-100 last:border-0">
+              <div className="sticky left-0 z-20 flex items-center gap-2.5 px-4 py-2 bg-gray-50/90 border-b border-gray-100 backdrop-blur-sm">
+                <span className="text-sm font-semibold text-gray-800">{g.name}</span>
+                {g.client && <span className="text-xs text-gray-400">{g.client}</span>}
+                <span className="text-xs text-gray-400">· {g.activities.length} tarefa{g.activities.length !== 1 ? 's' : ''}</span>
+              </div>
+              {g.activities.map(a => renderRow(a))}
             </div>
-            {ga.map(a => renderRow(a))}
-          </div>
-        ))}
+          ))
+        ) : (
+          <>
+            {/* Groups by assignee */}
+            {groups.map(({ profile, activities: ga }) => (
+              <div key={profile.id} className="border-b border-gray-100 last:border-0">
+                {/* Group header — sticky left so name stays visible when scrolling */}
+                <div className="sticky left-0 z-20 flex items-center gap-2.5 px-4 py-2 bg-gray-50/90 border-b border-gray-100 backdrop-blur-sm">
+                  <Avatar name={profile.full_name} avatarUrl={profile.avatar_url} size="sm" />
+                  <span className="text-sm font-semibold text-gray-800">{profile.full_name ?? '?'}</span>
+                  <span className="text-xs text-gray-400">{ga.length} tarefa{ga.length !== 1 ? 's' : ''}</span>
+                </div>
+                {ga.map(a => renderRow(a))}
+              </div>
+            ))}
 
-        {unassigned.length > 0 && (
-          <div className="border-t border-gray-100">
-            <div className="sticky left-0 z-20 flex items-center gap-2.5 px-4 py-2 bg-gray-50/90 border-b border-gray-100 backdrop-blur-sm">
-              <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-500 shrink-0">—</div>
-              <span className="text-sm font-semibold text-gray-500">Sem responsável</span>
-              <span className="text-xs text-gray-400">{unassigned.length}</span>
-            </div>
-            {unassigned.map(a => renderRow(a))}
-          </div>
+            {unassigned.length > 0 && (
+              <div className="border-t border-gray-100">
+                <div className="sticky left-0 z-20 flex items-center gap-2.5 px-4 py-2 bg-gray-50/90 border-b border-gray-100 backdrop-blur-sm">
+                  <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-500 shrink-0">—</div>
+                  <span className="text-sm font-semibold text-gray-500">Sem responsável</span>
+                  <span className="text-xs text-gray-400">{unassigned.length}</span>
+                </div>
+                {unassigned.map(a => renderRow(a))}
+              </div>
+            )}
+          </>
         )}
 
         {filtered.length === 0 && (
