@@ -130,7 +130,7 @@ export default async function OrgLayout({
       {modal}
 
       {/* Messenger interno — dock global no canto inferior direito */}
-      <ChatDock orgId={org.id} meId={user.id} members={chatMembers} />
+      <ChatDock orgId={org.id} orgSlug={orgSlug} meId={user.id} members={chatMembers} />
 
       {/* Total de não-lidas (inbox + chat) no título da aba */}
       <TabUnreadBadge />

@@ -12,14 +12,15 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import { Search, X, Minus, Send, MessagesSquare } from 'lucide-react'
+import { Search, X, Minus, Send, MessagesSquare, CheckSquare, ExternalLink } from 'lucide-react'
 import { sendChatMessage, getConversation, getChatOverview, markChatRead, touchPresence, type ChatMsg } from '@/app/actions/chat'
+import { searchActivities, type ActivitySearchResult } from '@/app/actions/search'
 import { playNotifSound } from '@/lib/notif-sound'
 
 interface Member { id: string; name: string; avatarUrl: string | null }
 type Msg = ChatMsg & { pending?: boolean }
 
-export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string; members: Member[] }) {
+export function ChatDock({ orgId, orgSlug, meId, members }: { orgId: string; orgSlug: string; meId: string; members: Member[] }) {
   const memberById = useMemo(() => Object.fromEntries(members.map(m => [m.id, m])), [members])
   const memberIds = useMemo(() => members.map(m => m.id), [members])
   const STORE = `flow:chat:${orgId}:${meId}`
@@ -27,6 +28,7 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
   const [panelOpen, setPanelOpen] = useState(false)
   const [q, setQ] = useState('')
   const [windows, setWindows] = useState<string[]>([])
+  const [pickerFor, setPickerFor] = useState<string | null>(null)   // conversa com a busca de tarefa aberta
   const [minimized, setMinimized] = useState<Set<string>>(new Set())
   const [online, setOnline] = useState<Set<string>>(new Set())
   const [unread, setUnread] = useState<Record<string, number>>({})
@@ -150,6 +152,17 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
   }, [openConvo])
 
   // ── Enviar ────────────────────────────────────────────────────────────────
+  // Insere a tarefa no rascunho (não envia sozinho — a pessoa escreve a dúvida junto).
+  // Vai como "Título — link" numa linha só: o composer é <input> e ele descarta \n.
+  function pickTask(peer: string, a: ActivitySearchResult) {
+    const url = `${window.location.origin}/${orgSlug}/j/${a.id}`
+    setDraft(prev => {
+      const cur = (prev[peer] ?? '').trim()
+      return { ...prev, [peer]: `${cur ? cur + ' ' : ''}${a.title} — ${url} ` }
+    })
+    setPickerFor(null)
+  }
+
   async function send(peer: string) {
     const text = (draft[peer] ?? '').trim()
     if (!text) return
@@ -201,7 +214,19 @@ export function ChatDock({ orgId, meId, members }: { orgId: string; meId: string
             {!isMin && (
               <>
                 <MessageList msgs={msgs[peer] ?? []} meId={meId} />
-                <div className="flex items-center gap-2 p-2 border-t border-gray-100">
+                <div className="relative flex items-center gap-1.5 p-2 border-t border-gray-100">
+                  {pickerFor === peer && (
+                    <TaskPicker orgSlug={orgSlug} onClose={() => setPickerFor(null)} onPick={a => pickTask(peer, a)} />
+                  )}
+                  <button
+                    onClick={() => setPickerFor(p => (p === peer ? null : peer))}
+                    aria-label="Enviar uma tarefa"
+                    title="Enviar uma tarefa"
+                    className={cn('p-1.5 rounded-full transition-colors shrink-0',
+                      pickerFor === peer ? 'bg-orange-100 text-orange-700' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100')}
+                  >
+                    <CheckSquare className="w-4 h-4" />
+                  </button>
                   <input
                     value={draft[peer] ?? ''}
                     onChange={e => setDraft(prev => ({ ...prev, [peer]: e.target.value }))}
@@ -283,6 +308,80 @@ function ChatAvatar({ member, online }: { member: Member; online: boolean }) {
 }
 
 // ── Lista de mensagens (rola pro fim ao mudar) ──────────────────────────────
+/** Busca uma tarefa pra sinalizar no chat ("dúvida nesse job"). */
+function TaskPicker({ orgSlug, onPick, onClose }: {
+  orgSlug: string; onPick: (a: ActivitySearchResult) => void; onClose: () => void
+}) {
+  const [q, setQ] = useState('')
+  const [results, setResults] = useState<ActivitySearchResult[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      if (q.trim().length < 2) { setResults([]); return }
+      setLoading(true)
+      try { setResults((await searchActivities(orgSlug, q)).slice(0, 6)) } finally { setLoading(false) }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [q, orgSlug])
+
+  return (
+    <div className="absolute bottom-full left-0 right-0 mb-1 mx-2 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-10">
+      <div className="flex items-center gap-1.5 px-2.5 py-2 border-b border-gray-100">
+        <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+        <input autoFocus value={q} onChange={e => setQ(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}
+          placeholder="Buscar tarefa…" className="flex-1 min-w-0 text-xs outline-none" />
+        <button onClick={onClose} aria-label="Fechar busca" className="text-gray-400 hover:text-gray-600"><X className="w-3.5 h-3.5" /></button>
+      </div>
+      <div className="max-h-48 overflow-y-auto">
+        {loading && <p className="text-[11px] text-gray-400 px-3 py-2">Buscando…</p>}
+        {!loading && q.trim().length >= 2 && results.length === 0 && (
+          <p className="text-[11px] text-gray-400 px-3 py-2">Nenhuma tarefa encontrada.</p>
+        )}
+        {!loading && q.trim().length < 2 && (
+          <p className="text-[11px] text-gray-400 px-3 py-2">Digite ao menos 2 letras.</p>
+        )}
+        {results.map(a => (
+          <button key={a.id} onClick={() => onPick(a)}
+            className="w-full text-left px-3 py-1.5 hover:bg-orange-50 transition-colors">
+            <p className="text-xs text-gray-800 truncate">{a.title}</p>
+            <p className="text-[10px] text-gray-400 truncate">{a.workspaceName} › {a.campaignName}</p>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Só http(s) vira link — nada de javascript:/data:. O texto é renderizado como nós
+// React (nunca innerHTML), então continua escapado.
+const URL_RE = /(https?:\/\/[^\s]+)/g
+const JOB_RE = /\/j\/[0-9a-f-]{8,}/i
+
+/** Texto da mensagem com os links clicáveis; link de job vira "Abrir tarefa". */
+function MessageText({ text, mine }: { text: string; mine: boolean }) {
+  return (
+    <>
+      {text.split(URL_RE).map((part, i) => {
+        if (!/^https?:\/\//.test(part)) return <span key={i}>{part}</span>
+        const job = JOB_RE.test(part)
+        const trimmed = part.replace(/[.,;)]+$/, '')   // pontuação final não faz parte da URL
+        return (
+          <a key={i} href={trimmed} target="_blank" rel="noopener noreferrer"
+            className={cn(
+              'underline underline-offset-2 break-all inline-flex items-center gap-0.5',
+              mine ? 'text-[#fff] decoration-white/50 hover:decoration-white' : 'text-orange-600 hover:text-orange-700',
+            )}>
+            {job ? <><CheckSquare className="w-3 h-3 shrink-0" /> Abrir tarefa</> : trimmed}
+            {!job && <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />}
+          </a>
+        )
+      })}
+    </>
+  )
+}
+
 function MessageList({ msgs, meId }: { msgs: Msg[]; meId: string }) {
   const endRef = useRef<HTMLDivElement>(null)
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [msgs.length])
@@ -298,7 +397,7 @@ function MessageList({ msgs, meId }: { msgs: Msg[]; meId: string }) {
               mine ? 'bg-orange-600 text-[#fff] rounded-br-sm' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm',
               m.pending && 'opacity-60',
             )}>
-              {m.content}
+              <MessageText text={m.content} mine={mine} />
             </span>
           </div>
         )
