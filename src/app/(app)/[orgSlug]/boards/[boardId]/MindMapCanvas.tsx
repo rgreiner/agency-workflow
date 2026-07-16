@@ -27,7 +27,6 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData }: {
   const [root, setRoot] = useState<MindNode>(initialData.root)
   const [selId, setSelId] = useState(initialData.root.id)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editDraft, setEditDraft] = useState('')
   const [zoom, setZoom] = useState(1)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -36,6 +35,8 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData }: {
 
   const rootRef = useRef(root)
   useEffect(() => { rootRef.current = root }, [root])
+  // Canvas focado já no load: sem isso o teclado só "liga" depois do primeiro clique.
+  useEffect(() => { canvasRef.current?.focus() }, [])
   const pending = useRef<MindNode | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -61,21 +62,25 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData }: {
   const commit = useCallback((next: MindNode) => { setRoot(next); scheduleSave(next) }, [scheduleSave])
 
   // ── Operações ──────────────────────────────────────────────────────────────
-  function startEdit(id: string, text: string) { setEditingId(id); setEditDraft(text) }
-  function commitEdit() {
-    if (!editingId) return
-    commit(updateNode(rootRef.current, editingId, { text: editDraft.trim() }))
-    setEditingId(null)
-  }
+  // O teclado vive no canvas (tabIndex=0): toda vez que a edição acaba o foco TEM
+  // que voltar pra cá, senão some pro body e Tab/Enter param de responder.
+  function focusCanvas() { canvasRef.current?.focus() }
+  function startEdit(id: string) { setEditingId(id) }
+  function stopEdit() { setEditingId(null); focusCanvas() }
+  /** Texto salvo ao digitar — sem rascunho, sem commit no blur (era o que dava corrida). */
+  function setText(id: string, text: string) { commit(updateNode(rootRef.current, id, { text })) }
+
   function addChildTo(id: string) {
     const n = newNode('')
     commit(addChild(rootRef.current, id, n))
-    setSelId(n.id); startEdit(n.id, '')
+    setSelId(n.id); startEdit(n.id)
   }
   function addSiblingTo(id: string) {
+    const r = rootRef.current
+    if (id === r.id) { addChildTo(id); return }   // a raiz não tem irmão
     const n = newNode('')
-    commit(addSibling(rootRef.current, id, n))
-    setSelId(n.id); startEdit(n.id, '')
+    commit(addSibling(r, id, n))
+    setSelId(n.id); startEdit(n.id)
   }
   function del(id: string) {
     const r = rootRef.current
@@ -104,9 +109,9 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData }: {
     if (!node) return
 
     if (e.key === 'Tab') { e.preventDefault(); addChildTo(sel) }
-    else if (e.key === 'Enter') { e.preventDefault(); if (sel === r.id) addChildTo(sel); else addSiblingTo(sel) }
+    else if (e.key === 'Enter') { e.preventDefault(); addSiblingTo(sel) }
     else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); del(sel) }
-    else if (e.key === 'F2') { e.preventDefault(); startEdit(sel, node.text) }
+    else if (e.key === 'F2') { e.preventDefault(); startEdit(sel) }
     else if (e.key === 'ArrowRight') {
       e.preventDefault()
       if (node.collapsed) toggleCollapse(sel)
@@ -244,39 +249,63 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData }: {
               const editing = editingId === ln.node.id
               const kids = ln.node.children.length
               return (
-                <div key={ln.node.id} className="absolute" style={{ left: ln.x, top: ln.y, width: ln.w, height: NODE_H }}>
+                <div key={ln.node.id} className="absolute group" style={{ left: ln.x, top: ln.y, width: ln.w, height: NODE_H }}>
                   <div
-                    onClick={e => { e.stopPropagation(); setSelId(ln.node.id); canvasRef.current?.focus() }}
-                    onDoubleClick={e => { e.stopPropagation(); startEdit(ln.node.id, ln.node.text) }}
+                    onClick={e => { e.stopPropagation(); setSelId(ln.node.id); focusCanvas() }}
+                    onDoubleClick={e => { e.stopPropagation(); setSelId(ln.node.id); startEdit(ln.node.id) }}
                     className={cn(
-                      'w-full h-full flex items-center px-3 rounded-xl border-2 cursor-pointer transition-shadow select-none',
-                      isSel ? 'shadow-md' : 'hover:shadow-sm',
+                      'w-full h-full flex items-center gap-1 pl-3 pr-1.5 rounded-xl border-2 cursor-pointer transition-all select-none',
+                      !isSel && 'hover:shadow-sm',
                     )}
                     style={{
                       backgroundColor: isRoot ? ln.color : `${ln.color}14`,
                       borderColor: isSel ? ln.color : `${ln.color}66`,
+                      // Halo na cor do nó — seleção que se enxerga de longe.
+                      boxShadow: isSel ? `0 0 0 3px ${ln.color}40, 0 2px 8px ${ln.color}30` : undefined,
                     }}
                   >
                     {editing ? (
                       <input
-                        value={editDraft}
-                        onChange={e => setEditDraft(e.target.value)}
-                        onBlur={commitEdit}
+                        value={ln.node.text}
+                        onChange={e => setText(ln.node.id, e.target.value)}
+                        // Só encerra se a edição ainda for DESTE nó: ao criar o próximo,
+                        // o blur do antigo chegaria depois e mataria a edição do novo.
+                        onBlur={() => setEditingId(cur => (cur === ln.node.id ? null : cur))}
                         onKeyDown={e => {
                           e.stopPropagation()
-                          if (e.key === 'Enter') { e.preventDefault(); commitEdit() }
-                          if (e.key === 'Escape') { setEditingId(null) }
+                          if (e.key === 'Enter')       { e.preventDefault(); addSiblingTo(ln.node.id) }
+                          else if (e.key === 'Tab')    { e.preventDefault(); addChildTo(ln.node.id) }
+                          else if (e.key === 'Escape') { e.preventDefault(); stopEdit() }
                         }}
                         placeholder="Novo tópico"
-                        className="w-full bg-transparent text-sm outline-none"
+                        className="flex-1 min-w-0 bg-transparent text-sm outline-none placeholder:text-gray-400"
                         style={{ color: isRoot ? '#fff' : '#1f2937' }}
                         autoFocus
                       />
                     ) : (
-                      <span className={cn('text-sm truncate', isRoot && 'font-semibold')}
+                      <span className={cn('flex-1 min-w-0 text-sm truncate', isRoot && 'font-semibold')}
                         style={{ color: isRoot ? '#fff' : '#1f2937' }}>
-                        {ln.node.text || <span className="text-gray-400">Novo tópico</span>}
+                        {ln.node.text || <span className="opacity-50">Novo tópico</span>}
                       </span>
+                    )}
+
+                    {/* + no fim da caixa = mesmo que Tab. Aparece no hover ou quando selecionado. */}
+                    {!editing && (
+                      <button
+                        onClick={e => { e.stopPropagation(); setSelId(ln.node.id); addChildTo(ln.node.id) }}
+                        title="Novo nó filho (Tab)"
+                        aria-label="Novo nó filho"
+                        className={cn(
+                          'shrink-0 w-5 h-5 rounded-md flex items-center justify-center transition-opacity',
+                          isSel ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+                        )}
+                        style={{
+                          backgroundColor: isRoot ? '#ffffff33' : `${ln.color}22`,
+                          color: isRoot ? '#fff' : ln.color,
+                        }}
+                      >
+                        <Plus className="w-3 h-3" />
+                      </button>
                     )}
                   </div>
 

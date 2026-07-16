@@ -25,10 +25,11 @@ export function emptyMap(title: string): MindMapData {
   return { root: { ...newNode(title || 'Tema central'), color: MIND_COLORS[0] } }
 }
 
-/** Largura do nó estimada pelo texto (o layout roda no server e no client — sem medir DOM). */
+/** Largura do nó estimada pelo texto (o layout roda no server e no client — sem medir DOM).
+ *  A folga cobre o padding + o botão "+" que mora no fim da caixa. */
 export function nodeW(text: string): number {
   const t = text || 'Novo tópico'
-  return Math.min(260, Math.max(112, Math.round(t.length * 7.1) + 30))
+  return Math.min(280, Math.max(128, Math.round(t.length * 7.1) + 52))
 }
 
 export interface LaidNode {
