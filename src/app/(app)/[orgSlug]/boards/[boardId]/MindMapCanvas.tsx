@@ -1,0 +1,311 @@
+'use client'
+
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import Link from 'next/link'
+import { toast } from 'sonner'
+import { createClient } from '@/lib/supabase/client'
+import { updateBoardTitle, deleteBoard } from '@/app/actions/boards'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { cn } from '@/lib/utils'
+import {
+  ChevronLeft, Check, Loader2, Pencil, X, Trash2, ZoomIn, ZoomOut,
+  FileDown, Printer, Plus, Palette,
+} from 'lucide-react'
+import {
+  type MindNode, type MindMapData, MIND_COLORS, NODE_H,
+  newNode, layoutMap, edgePath, addChild, addSibling, removeNode, updateNode,
+  findParent, findNode, toMarkdown, slugify,
+} from '@/types/mindmap'
+
+export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData }: {
+  boardId: string; orgSlug: string; initialTitle: string; initialData: MindMapData
+}) {
+  const supabase = createClient()
+  const [title, setTitle] = useState(initialTitle)
+  const [titleDraft, setTitleDraft] = useState(initialTitle)
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [root, setRoot] = useState<MindNode>(initialData.root)
+  const [selId, setSelId] = useState(initialData.root.id)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState('')
+  const [zoom, setZoom] = useState(1)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [showPalette, setShowPalette] = useState(false)
+
+  const rootRef = useRef(root)
+  useEffect(() => { rootRef.current = root }, [root])
+  const pending = useRef<MindNode | null>(null)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const canvasRef = useRef<HTMLDivElement>(null)
+
+  const layout = useMemo(() => layoutMap(root), [root])
+  const posById = useMemo(() => new Map(layout.nodes.map(n => [n.node.id, n])), [layout])
+
+  // Autosave: mesmo padrão do Quadro (debounce 1200ms), gravando { root }.
+  const scheduleSave = useCallback((next: MindNode) => {
+    pending.current = next
+    setSaveStatus('saving')
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('visual_boards')
+        .update({ data: { root: pending.current }, updated_at: new Date().toISOString() })
+        .eq('id', boardId)
+      setSaveStatus('saved')
+      setTimeout(() => setSaveStatus('idle'), 2000)
+    }, 1200)
+  }, [boardId, supabase])
+
+  const commit = useCallback((next: MindNode) => { setRoot(next); scheduleSave(next) }, [scheduleSave])
+
+  // ── Operações ──────────────────────────────────────────────────────────────
+  function startEdit(id: string, text: string) { setEditingId(id); setEditDraft(text) }
+  function commitEdit() {
+    if (!editingId) return
+    commit(updateNode(rootRef.current, editingId, { text: editDraft.trim() }))
+    setEditingId(null)
+  }
+  function addChildTo(id: string) {
+    const n = newNode('')
+    commit(addChild(rootRef.current, id, n))
+    setSelId(n.id); startEdit(n.id, '')
+  }
+  function addSiblingTo(id: string) {
+    const n = newNode('')
+    commit(addSibling(rootRef.current, id, n))
+    setSelId(n.id); startEdit(n.id, '')
+  }
+  function del(id: string) {
+    const r = rootRef.current
+    if (id === r.id) { toast.error('O tema central não pode ser removido.'); return }
+    const parent = findParent(r, id)
+    commit(removeNode(r, id))
+    setSelId(parent?.id ?? r.id)
+  }
+  function toggleCollapse(id: string) {
+    const n = findNode(rootRef.current, id)
+    if (!n?.children.length) return
+    commit(updateNode(rootRef.current, id, { collapsed: !n.collapsed }))
+  }
+  function paint(color: string) {
+    commit(updateNode(rootRef.current, selId, { color }))
+    setShowPalette(false)
+  }
+
+  // ── Teclado: é o que faz mapa mental valer a pena ──────────────────────────
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (editingId) return
+    const r = rootRef.current
+    const sel = selId
+    const parent = findParent(r, sel)
+    const node = findNode(r, sel)
+    if (!node) return
+
+    if (e.key === 'Tab') { e.preventDefault(); addChildTo(sel) }
+    else if (e.key === 'Enter') { e.preventDefault(); if (sel === r.id) addChildTo(sel); else addSiblingTo(sel) }
+    else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); del(sel) }
+    else if (e.key === 'F2') { e.preventDefault(); startEdit(sel, node.text) }
+    else if (e.key === 'ArrowRight') {
+      e.preventDefault()
+      if (node.collapsed) toggleCollapse(sel)
+      else if (node.children[0]) setSelId(node.children[0].id)
+    }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); if (parent) setSelId(parent.id) }
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (!parent) return
+      const i = parent.children.findIndex(c => c.id === sel)
+      const next = parent.children[i + (e.key === 'ArrowDown' ? 1 : -1)]
+      if (next) setSelId(next.id)
+    }
+  }
+
+  // ── Export ────────────────────────────────────────────────────────────────
+  function exportMd() {
+    const blob = new Blob([toMarkdown(rootRef.current)], { type: 'text/markdown;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `${slugify(title)}.md`
+    a.click()
+    URL.revokeObjectURL(a.href)
+    toast.success('Markdown exportado.')
+  }
+
+  async function saveTitle() {
+    setTitle(titleDraft)
+    setEditingTitle(false)
+    await updateBoardTitle(boardId, titleDraft)
+  }
+
+  const selNode = findNode(root, selId)
+
+  return (
+    <div className="h-full flex flex-col bg-gray-50">
+      {/* Toolbar */}
+      <div className="flex items-center gap-2 px-4 py-2 bg-white border-b border-gray-200 shrink-0">
+        <Link href={`/${orgSlug}/boards`} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition" aria-label="Voltar">
+          <ChevronLeft className="w-4 h-4" />
+        </Link>
+
+        {editingTitle ? (
+          <div className="flex items-center gap-1">
+            <input value={titleDraft} onChange={e => setTitleDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') { setTitleDraft(title); setEditingTitle(false) } }}
+              className="h-8 px-2 text-sm font-semibold bg-gray-100 border border-transparent rounded-lg focus:bg-white focus:border-orange-300 outline-none" autoFocus />
+            <button onClick={saveTitle} aria-label="Salvar título" className="p-1.5 text-gray-400 hover:text-emerald-600"><Check className="w-4 h-4" /></button>
+            <button onClick={() => { setTitleDraft(title); setEditingTitle(false) }} aria-label="Cancelar" className="p-1.5 text-gray-400 hover:text-gray-700"><X className="w-4 h-4" /></button>
+          </div>
+        ) : (
+          <button onClick={() => { setTitleDraft(title); setEditingTitle(true) }}
+            className="inline-flex items-center gap-1.5 px-1.5 py-1 rounded-lg text-sm font-semibold text-gray-900 hover:bg-gray-100 transition">
+            {title} <Pencil className="w-3 h-3 text-gray-400" />
+          </button>
+        )}
+        <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-700">mapa mental</span>
+
+        <div className="flex-1" />
+
+        <span className="text-xs text-gray-400 min-w-[70px] inline-flex items-center gap-1">
+          {saveStatus === 'saving' && <><Loader2 className="w-3 h-3 animate-spin" /> Salvando…</>}
+          {saveStatus === 'saved' && <><Check className="w-3 h-3 text-emerald-500" /> Salvo</>}
+        </span>
+
+        <button onClick={exportMd} title="Exportar markdown (.md)"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition">
+          <FileDown className="w-3.5 h-3.5" /> .md
+        </button>
+        <Link href={`/${orgSlug}/boards/${boardId}/print`} target="_blank" title="Abrir versão de impressão (Salvar como PDF)"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition">
+          <Printer className="w-3.5 h-3.5" /> PDF
+        </Link>
+
+        <div className="flex items-center gap-1 ml-1">
+          <button onClick={() => setZoom(z => Math.max(0.3, z * 0.85))} aria-label="Diminuir zoom" className="p-1.5 border border-gray-200 rounded-lg hover:bg-gray-50"><ZoomOut className="w-3.5 h-3.5 text-gray-500" /></button>
+          <button onClick={() => setZoom(1)} className="px-2 py-1.5 text-[11px] font-semibold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 min-w-[44px]">{Math.round(zoom * 100)}%</button>
+          <button onClick={() => setZoom(z => Math.min(2, z * 1.15))} aria-label="Aumentar zoom" className="p-1.5 border border-gray-200 rounded-lg hover:bg-gray-50"><ZoomIn className="w-3.5 h-3.5 text-gray-500" /></button>
+        </div>
+
+        <button onClick={() => setConfirmDelete(true)} aria-label="Excluir mapa" className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition">
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Barra do nó selecionado */}
+      <div className="flex items-center gap-2 px-4 py-1.5 bg-white border-b border-gray-100 shrink-0 text-xs text-gray-500">
+        <button onClick={() => addChildTo(selId)} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 transition">
+          <Plus className="w-3 h-3" /> Filho <kbd className="text-[10px] text-gray-400">Tab</kbd>
+        </button>
+        <button onClick={() => addSiblingTo(selId)} disabled={selId === root.id}
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40 transition">
+          <Plus className="w-3 h-3" /> Irmão <kbd className="text-[10px] text-gray-400">Enter</kbd>
+        </button>
+        <div className="relative">
+          <button onClick={() => setShowPalette(s => !s)} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 transition">
+            <Palette className="w-3 h-3" /> Cor
+          </button>
+          {showPalette && (
+            <div className="absolute top-full left-0 mt-1 z-20 flex gap-1 p-1.5 bg-white border border-gray-200 rounded-lg shadow-lg">
+              {MIND_COLORS.map(c => (
+                <button key={c} onClick={() => paint(c)} aria-label={`Cor ${c}`}
+                  className="w-5 h-5 rounded-full border border-black/10 hover:scale-110 transition-transform" style={{ backgroundColor: c }} />
+              ))}
+            </div>
+          )}
+        </div>
+        <span className="text-gray-300">·</span>
+        <span className="truncate">Selecionado: <strong className="text-gray-600">{selNode?.text || '(vazio)'}</strong></span>
+        <div className="flex-1" />
+        <span className="text-gray-400 hidden md:block">F2 renomeia · ↑↓←→ navega · Del apaga o ramo</span>
+      </div>
+
+      {/* Canvas */}
+      <div
+        ref={canvasRef}
+        tabIndex={0}
+        onKeyDown={onKeyDown}
+        onClick={() => canvasRef.current?.focus()}
+        className="flex-1 overflow-auto outline-none"
+      >
+        <div style={{ width: layout.width * zoom, height: layout.height * zoom }}>
+          <div style={{ width: layout.width, height: layout.height, transform: `scale(${zoom})`, transformOrigin: '0 0', position: 'relative' }}>
+            <svg width={layout.width} height={layout.height} className="absolute inset-0 pointer-events-none">
+              {layout.edges.map(e => {
+                const from = posById.get(e.fromId), to = posById.get(e.toId)
+                if (!from || !to) return null
+                return <path key={`${e.fromId}-${e.toId}`} d={edgePath(from, to)} fill="none" stroke={to.color} strokeWidth={2} strokeOpacity={0.55} />
+              })}
+            </svg>
+
+            {layout.nodes.map(ln => {
+              const isSel = ln.node.id === selId
+              const isRoot = ln.node.id === root.id
+              const editing = editingId === ln.node.id
+              const kids = ln.node.children.length
+              return (
+                <div key={ln.node.id} className="absolute" style={{ left: ln.x, top: ln.y, width: ln.w, height: NODE_H }}>
+                  <div
+                    onClick={e => { e.stopPropagation(); setSelId(ln.node.id); canvasRef.current?.focus() }}
+                    onDoubleClick={e => { e.stopPropagation(); startEdit(ln.node.id, ln.node.text) }}
+                    className={cn(
+                      'w-full h-full flex items-center px-3 rounded-xl border-2 cursor-pointer transition-shadow select-none',
+                      isSel ? 'shadow-md' : 'hover:shadow-sm',
+                    )}
+                    style={{
+                      backgroundColor: isRoot ? ln.color : `${ln.color}14`,
+                      borderColor: isSel ? ln.color : `${ln.color}66`,
+                    }}
+                  >
+                    {editing ? (
+                      <input
+                        value={editDraft}
+                        onChange={e => setEditDraft(e.target.value)}
+                        onBlur={commitEdit}
+                        onKeyDown={e => {
+                          e.stopPropagation()
+                          if (e.key === 'Enter') { e.preventDefault(); commitEdit() }
+                          if (e.key === 'Escape') { setEditingId(null) }
+                        }}
+                        placeholder="Novo tópico"
+                        className="w-full bg-transparent text-sm outline-none"
+                        style={{ color: isRoot ? '#fff' : '#1f2937' }}
+                        autoFocus
+                      />
+                    ) : (
+                      <span className={cn('text-sm truncate', isRoot && 'font-semibold')}
+                        style={{ color: isRoot ? '#fff' : '#1f2937' }}>
+                        {ln.node.text || <span className="text-gray-400">Novo tópico</span>}
+                      </span>
+                    )}
+                  </div>
+
+                  {kids > 0 && (
+                    <button
+                      onClick={e => { e.stopPropagation(); toggleCollapse(ln.node.id) }}
+                      title={ln.node.collapsed ? 'Expandir ramo' : 'Recolher ramo'}
+                      className="absolute -right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full text-[10px] font-bold text-[#fff] flex items-center justify-center border-2 border-white shadow-sm hover:scale-110 transition-transform"
+                      style={{ backgroundColor: ln.color }}
+                    >
+                      {ln.node.collapsed ? kids : '−'}
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Excluir este mapa mental?"
+        description={`"${title}" e todos os seus ramos serão removidos permanentemente. Essa ação não pode ser desfeita.`}
+        confirmLabel="Excluir mapa"
+        loading={deleting}
+        onConfirm={async () => { setDeleting(true); await deleteBoard(boardId, orgSlug) }}
+        onCancel={() => setConfirmDelete(false)}
+      />
+    </div>
+  )
+}

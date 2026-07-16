@@ -601,6 +601,7 @@ export type Database = {
           org_id: string
           workspace_id: string | null
           title: string
+          kind: string
           data: Json
           created_by: string
           created_at: string
@@ -611,6 +612,7 @@ export type Database = {
           org_id: string
           workspace_id?: string | null
           title?: string
+          kind?: string
           data?: Json
           created_by: string
           created_at?: string
@@ -621,6 +623,7 @@ export type Database = {
           org_id?: string
           workspace_id?: string | null
           title?: string
+          kind?: string
           data?: Json
           created_by?: string
           created_at?: string
