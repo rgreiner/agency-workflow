@@ -60,6 +60,7 @@ export default async function MapaPrintPage({
             })}
             {L.nodes.map(n => {
               const isRoot = n.node.id === rootId
+              const badgeX = n.side === 'left' ? n.x : n.x + n.w
               return (
                 <g key={n.node.id}>
                   <rect x={n.x} y={n.y} width={n.w} height={NODE_H} rx={10}
@@ -72,8 +73,8 @@ export default async function MapaPrintPage({
                   </text>
                   {n.node.collapsed && n.node.children.length > 0 && (
                     <>
-                      <circle cx={n.x + n.w} cy={n.y + NODE_H / 2} r={9} fill={n.color} />
-                      <text x={n.x + n.w} y={n.y + NODE_H / 2 + 3.5} fontSize={10} fontWeight={700}
+                      <circle cx={badgeX} cy={n.y + NODE_H / 2} r={9} fill={n.color} />
+                      <text x={badgeX} y={n.y + NODE_H / 2 + 3.5} fontSize={10} fontWeight={700}
                         fill="#ffffff" textAnchor="middle">{n.node.children.length}</text>
                     </>
                   )}

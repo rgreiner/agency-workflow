@@ -9,12 +9,12 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { cn } from '@/lib/utils'
 import {
   ChevronLeft, Check, Loader2, Pencil, X, Trash2, ZoomIn, ZoomOut,
-  FileDown, Printer, Plus, Palette,
+  FileDown, Printer, Plus, Palette, Crosshair, LayoutGrid, ArrowLeftRight,
 } from 'lucide-react'
 import {
-  type MindNode, type MindMapData, MIND_COLORS, NODE_H,
+  type MindNode, type MindMapData, type LaidNode, MIND_COLORS, NODE_H,
   newNode, layoutMap, edgePath, addChild, addSibling, removeNode, updateNode,
-  findParent, findNode, toMarkdown, slugify,
+  findParent, findNode, toMarkdown, slugify, clearOffsets, hasOffsets,
 } from '@/types/mindmap'
 
 export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData }: {
@@ -35,14 +35,33 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData }: {
 
   const rootRef = useRef(root)
   useEffect(() => { rootRef.current = root }, [root])
-  // Canvas focado já no load: sem isso o teclado só "liga" depois do primeiro clique.
-  useEffect(() => { canvasRef.current?.focus() }, [])
   const pending = useRef<MindNode | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
 
   const layout = useMemo(() => layoutMap(root), [root])
   const posById = useMemo(() => new Map(layout.nodes.map(n => [n.node.id, n])), [layout])
+  const layoutRef = useRef(layout)
+  useEffect(() => { layoutRef.current = layout }, [layout])
+
+  // Arrasto livre: guarda a base no pointerdown pra o delta não acumular erro.
+  const dragRef = useRef<{ id: string; sx: number; sy: number; dx0: number; dy0: number; base: MindNode; moved: boolean } | null>(null)
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+
+  /** Rola o canvas até a raiz ficar no meio da tela. */
+  const centerView = useCallback(() => {
+    const el = canvasRef.current
+    const r = layoutRef.current.nodes.find(n => n.side === 'root')
+    if (!el || !r) return
+    el.scrollLeft = (r.x + r.w / 2) * zoom - el.clientWidth / 2
+    el.scrollTop = (r.y + NODE_H / 2) * zoom - el.clientHeight / 2
+  }, [zoom])
+  // No load: raiz centralizada (o mapa cresce a partir do centro) e canvas focado —
+  // sem o foco o teclado só "liga" depois do primeiro clique.
+  useEffect(() => {
+    centerView()
+    canvasRef.current?.focus()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Autosave: mesmo padrão do Quadro (debounce 1200ms), gravando { root }.
   const scheduleSave = useCallback((next: MindNode) => {
@@ -97,6 +116,44 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData }: {
   function paint(color: string) {
     commit(updateNode(rootRef.current, selId, { color }))
     setShowPalette(false)
+  }
+  function flipSide(id: string) {
+    const cur = posById.get(id)?.side
+    commit(updateNode(rootRef.current, id, { side: cur === 'left' ? 'right' : 'left' }))
+  }
+  function reorganizar() {
+    commit(clearOffsets(rootRef.current))
+    toast.success('Layout automático restaurado.')
+  }
+
+  // ── Arrastar: posição livre; a subárvore acompanha (dx/dy é offset do auto) ──
+  function onNodeDown(e: React.PointerEvent, ln: LaidNode) {
+    if (editingId === ln.node.id) return
+    if ((e.target as HTMLElement).closest('[data-nodrag]')) return
+    if (e.button !== 0) return
+    e.stopPropagation()
+    ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
+    dragRef.current = {
+      id: ln.node.id, sx: e.clientX, sy: e.clientY,
+      dx0: ln.node.dx ?? 0, dy0: ln.node.dy ?? 0, base: rootRef.current, moved: false,
+    }
+    setSelId(ln.node.id)
+    focusCanvas()
+  }
+  function onNodeMove(e: React.PointerEvent) {
+    const d = dragRef.current
+    if (!d) return
+    const dx = (e.clientX - d.sx) / zoom
+    const dy = (e.clientY - d.sy) / zoom
+    // Tolerância: sem isso um clique com 1px de tremida já viraria arrasto.
+    if (!d.moved && Math.abs(dx) + Math.abs(dy) < 4) return
+    if (!d.moved) { d.moved = true; setDraggingId(d.id) }
+    commit(updateNode(d.base, d.id, { dx: Math.round(d.dx0 + dx), dy: Math.round(d.dy0 + dy) }))
+  }
+  function onNodeUp(e: React.PointerEvent) {
+    const d = dragRef.current
+    dragRef.current = null
+    if (d?.moved) { setDraggingId(null); e.stopPropagation() }
   }
 
   // ── Teclado: é o que faz mapa mental valer a pena ──────────────────────────
@@ -187,6 +244,12 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData }: {
         </Link>
 
         <div className="flex items-center gap-1 ml-1">
+          <button onClick={centerView} title="Centralizar o mapa na tela" aria-label="Centralizar"
+            className="p-1.5 border border-gray-200 rounded-lg hover:bg-gray-50"><Crosshair className="w-3.5 h-3.5 text-gray-500" /></button>
+          <button onClick={reorganizar} disabled={!hasOffsets(root)}
+            title={hasOffsets(root) ? 'Reorganizar: volta tudo ao layout automático' : 'Nada foi movido à mão'}
+            aria-label="Reorganizar"
+            className="p-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40"><LayoutGrid className="w-3.5 h-3.5 text-gray-500" /></button>
           <button onClick={() => setZoom(z => Math.max(0.3, z * 0.85))} aria-label="Diminuir zoom" className="p-1.5 border border-gray-200 rounded-lg hover:bg-gray-50"><ZoomOut className="w-3.5 h-3.5 text-gray-500" /></button>
           <button onClick={() => setZoom(1)} className="px-2 py-1.5 text-[11px] font-semibold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 min-w-[44px]">{Math.round(zoom * 100)}%</button>
           <button onClick={() => setZoom(z => Math.min(2, z * 1.15))} aria-label="Aumentar zoom" className="p-1.5 border border-gray-200 rounded-lg hover:bg-gray-50"><ZoomIn className="w-3.5 h-3.5 text-gray-500" /></button>
@@ -219,10 +282,16 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData }: {
             </div>
           )}
         </div>
+        {posById.get(selId)?.depth === 1 && (
+          <button onClick={() => flipSide(selId)} title="Joga o ramo pro outro lado da raiz"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 transition">
+            <ArrowLeftRight className="w-3 h-3" /> Trocar de lado
+          </button>
+        )}
         <span className="text-gray-300">·</span>
         <span className="truncate">Selecionado: <strong className="text-gray-600">{selNode?.text || '(vazio)'}</strong></span>
         <div className="flex-1" />
-        <span className="text-gray-400 hidden md:block">F2 renomeia · ↑↓←→ navega · Del apaga o ramo</span>
+        <span className="text-gray-400 hidden lg:block">F2 renomeia · ↑↓←→ navega · Del apaga · arraste pra posicionar</span>
       </div>
 
       {/* Canvas */}
@@ -246,15 +315,23 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData }: {
             {layout.nodes.map(ln => {
               const isSel = ln.node.id === selId
               const isRoot = ln.node.id === root.id
+              const isLeft = ln.side === 'left'
               const editing = editingId === ln.node.id
               const kids = ln.node.children.length
               return (
                 <div key={ln.node.id} className="absolute group" style={{ left: ln.x, top: ln.y, width: ln.w, height: NODE_H }}>
                   <div
+                    onPointerDown={e => onNodeDown(e, ln)}
+                    onPointerMove={onNodeMove}
+                    onPointerUp={onNodeUp}
+                    onPointerCancel={() => { dragRef.current = null; setDraggingId(null) }}
                     onClick={e => { e.stopPropagation(); setSelId(ln.node.id); focusCanvas() }}
                     onDoubleClick={e => { e.stopPropagation(); setSelId(ln.node.id); startEdit(ln.node.id) }}
                     className={cn(
-                      'w-full h-full flex items-center gap-1 pl-3 pr-1.5 rounded-xl border-2 cursor-pointer transition-all select-none',
+                      'w-full h-full flex items-center gap-1 rounded-xl border-2 transition-shadow select-none touch-none',
+                      // O ramo esquerdo cresce pra esquerda: o "+" acompanha o lado.
+                      isLeft ? 'flex-row-reverse pl-1.5 pr-3' : 'pl-3 pr-1.5',
+                      draggingId === ln.node.id ? 'cursor-grabbing' : 'cursor-grab',
                       !isSel && 'hover:shadow-sm',
                     )}
                     style={{
@@ -292,6 +369,7 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData }: {
                     {/* + no fim da caixa = mesmo que Tab. Aparece no hover ou quando selecionado. */}
                     {!editing && (
                       <button
+                        data-nodrag
                         onClick={e => { e.stopPropagation(); setSelId(ln.node.id); addChildTo(ln.node.id) }}
                         title="Novo nó filho (Tab)"
                         aria-label="Novo nó filho"
@@ -309,11 +387,19 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData }: {
                     )}
                   </div>
 
+                  {/* Contador = botão de recolher/expandir. Fica do lado em que o ramo abre.
+                      Recolhido mostra quantos filhos estão escondidos (e fica sempre visível). */}
                   {kids > 0 && (
                     <button
+                      data-nodrag
                       onClick={e => { e.stopPropagation(); toggleCollapse(ln.node.id) }}
-                      title={ln.node.collapsed ? 'Expandir ramo' : 'Recolher ramo'}
-                      className="absolute -right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full text-[10px] font-bold text-[#fff] flex items-center justify-center border-2 border-white shadow-sm hover:scale-110 transition-transform"
+                      title={ln.node.collapsed ? `Expandir ${kids} nó(s) escondido(s)` : 'Recolher ramo'}
+                      aria-label={ln.node.collapsed ? 'Expandir ramo' : 'Recolher ramo'}
+                      className={cn(
+                        'absolute top-1/2 -translate-y-1/2 w-5 h-5 rounded-full text-[10px] font-bold text-[#fff] flex items-center justify-center border-2 border-white shadow-sm hover:scale-125 transition-all',
+                        isLeft ? '-left-2.5' : '-right-2.5',
+                        ln.node.collapsed || isSel ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+                      )}
                       style={{ backgroundColor: ln.color }}
                     >
                       {ln.node.collapsed ? kids : '−'}
