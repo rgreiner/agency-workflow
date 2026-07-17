@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { filtrarPorAba } from '@/lib/midia'
 import { MidiasClient, type MidiaRow } from '../simplificada/MidiasClient'
 
 export default async function MidiasImpressaPage({
@@ -18,12 +19,13 @@ export default async function MidiasImpressaPage({
   if (!org) return null
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: raw } = await (supabase as any)
+  const baseQ = (supabase as any)
     .from('midias')
     .select('id, numero, serie, titulo, tipo, valor, desconto_pct, faturamento, situacao, archived, workspaces(name), veiculos(name)')
     .eq('org_id', org.id)
     .in('tipo', ['impressa_jornal', 'impressa_revista'])
-    .eq('archived', archivedView)
+
+  const { data: raw } = await filtrarPorAba(baseQ, archivedView)
     .order('numero', { ascending: false })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

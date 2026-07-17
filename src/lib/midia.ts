@@ -59,6 +59,26 @@ export const MIDIA_SITUACAO_OPTIONS = [
   { value: 'faturado', label: 'Faturado' },
 ]
 
+// Situações que mantêm o documento na aba "Ativos" (sendo criado / em aprovação).
+// Ao ser liberado pro faturamento (faturar/faturado) ou cancelado, o documento sai
+// da tela e passa a aparecer na aba "Arquivados" (como se fosse arquivado).
+export const SITUACOES_ATIVAS = ['em_aberto', 'aprovado']
+export const SITUACOES_FORA = ['faturar', 'faturado', 'cancelado']
+
+/**
+ * Aplica na query de listagem o filtro da aba:
+ *  - Ativos (archivedView=false): só sendo criado/em aprovação (não arquivado).
+ *  - Arquivados (archivedView=true): arquivados manualmente OU liberados pro
+ *    faturamento/cancelados (saem da tela "como se fosse arquivado").
+ */
+export function filtrarPorAba<T>(q: T, archivedView: boolean): T {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const anyQ = q as any
+  return (archivedView
+    ? anyQ.or(`archived.eq.true,situacao.in.(${SITUACOES_FORA.join(',')})`)
+    : anyQ.eq('archived', false).in('situacao', SITUACOES_ATIVAS)) as T
+}
+
 // Fee: aprovar libera direto pro Financeiro (estado 'faturar' = A Faturar).
 export const FEE_SITUACAO_OPTIONS = [
   { value: 'em_aberto', label: 'Em Aberto' },

@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { ProducaoClient, type ProducaoRow } from '../ProducaoClient'
-import { FEE_SITUACAO_OPTIONS } from '@/lib/midia'
+import { FEE_SITUACAO_OPTIONS, SITUACOES_ATIVAS, SITUACOES_FORA } from '@/lib/midia'
 
 export default async function FeePage({
   params,
@@ -17,12 +17,16 @@ export default async function FeePage({
   const { data: org } = await supabase.from('organizations').select('id').eq('slug', orgSlug).single()
   if (!org) return null
 
+  // Ativos = sendo criado/em aprovação. Liberados pro faturamento e cancelados vão pra Arquivados.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: raw } = await (supabase as any)
+  const baseQ = (supabase as any)
     .from('producao')
     .select('id, numero, serie, titulo, valor, situacao, archived, workspaces(name)')
-    .eq('org_id', org.id).eq('tipo', 'fee').eq('archived', archivedView)
-    .order('numero', { ascending: false })
+    .eq('org_id', org.id).eq('tipo', 'fee')
+  const { data: raw } = await (archivedView
+    ? baseQ.or(`archived.eq.true,situacao.in.(${SITUACOES_FORA.join(',')})`)
+    : baseQ.eq('archived', false).in('situacao', SITUACOES_ATIVAS)
+  ).order('numero', { ascending: false })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const items: ProducaoRow[] = (raw ?? []).map((r: any) => ({
