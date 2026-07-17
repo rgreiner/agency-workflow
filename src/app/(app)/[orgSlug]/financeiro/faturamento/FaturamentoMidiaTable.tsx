@@ -21,6 +21,8 @@ export interface MidiaView {
   pagador: string
   competencia: string
   vencimento: string
+  previstoAgencia: string
+  diasAgencia: number
   anexos: Anexo[]
 }
 
@@ -86,7 +88,8 @@ function MidiaRow({ orgSlug, midia }: { orgSlug: string; midia: MidiaView }) {
               <dl className="rounded-xl border border-gray-100 bg-white p-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm self-start">
                 <div><dt className="text-xs text-gray-400">Comissão (cobrar de)</dt><dd className="text-gray-700">{midia.pagador}</dd></div>
                 <div><dt className="text-xs text-gray-400">Competência</dt><dd className="text-gray-700 tabular-nums">{formatDateBR(midia.competencia)}</dd></div>
-                <div><dt className="text-xs text-gray-400">Vencimento (dias agência)</dt><dd className="text-gray-900 font-medium tabular-nums">{formatDateBR(midia.vencimento)}</dd></div>
+                <div><dt className="text-xs text-gray-400">Vencimento (veículo)</dt><dd className="text-gray-700 tabular-nums">{formatDateBR(midia.vencimento)}</dd></div>
+                <div><dt className="text-xs text-gray-400">Previsto p/ agência{midia.diasAgencia ? ` (+${midia.diasAgencia}d)` : ''}</dt><dd className="text-gray-900 font-medium tabular-nums">{formatDateBR(midia.previstoAgencia)}</dd></div>
                 <div><dt className="text-xs text-gray-400">Comissão</dt><dd className="text-emerald-600 font-medium tabular-nums">{formatBRL(midia.comissao)}</dd></div>
               </dl>
               <DocsBox anexos={anexos} onChange={persist} />

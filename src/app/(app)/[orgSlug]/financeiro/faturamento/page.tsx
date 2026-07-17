@@ -5,8 +5,9 @@ import { FaturamentoMidiaTable, type MidiaView } from './FaturamentoMidiaTable'
 import type { Anexo } from '@/app/actions/financeiro'
 import { Receipt } from 'lucide-react'
 
-// Vencimento da comissão (espelha gerar_lancamento_midia): base DFM (fim do mês + N)
-// ou data_base, depois + dias da agência.
+// Duas datas (espelham gerar_lancamento_midia):
+//  - vencimento do veículo/cliente = base DFM (fim do mês + N) ou data_base;
+//  - previsto p/ agência = essa base + os dias da agência (é a data do lançamento).
 function addDaysISO(iso: string, k: number): string {
   const [y, m, d] = iso.slice(0, 10).split('-').map(Number)
   return new Date(Date.UTC(y, m - 1, d + k)).toISOString().slice(0, 10)
@@ -15,11 +16,10 @@ function lastDayOfMonthISO(iso: string): string {
   const [y, m] = iso.slice(0, 10).split('-').map(Number)
   return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)
 }
-function midiaVencimento(dataBase: string | null, prazo: string | null, diasAgencia: number): string {
+function midiaVencimentoVeiculo(dataBase: string | null, prazo: string | null): string {
   if (!dataBase) return ''
   const dfm: Record<string, number> = { '10_dfm': 10, '15_dfm': 15, '20_dfm': 20, '30_dfm': 30 }
-  const base = prazo && dfm[prazo] != null ? addDaysISO(lastDayOfMonthISO(dataBase), dfm[prazo]) : dataBase.slice(0, 10)
-  return addDaysISO(base, diasAgencia || 0)
+  return prazo && dfm[prazo] != null ? addDaysISO(lastDayOfMonthISO(dataBase), dfm[prazo]) : dataBase.slice(0, 10)
 }
 
 export default async function FaturamentoPage({
@@ -59,7 +59,12 @@ export default async function FaturamentoPage({
     pagador: FATURAMENTO_PAGADOR[d.faturamento] === 'veiculo'
       ? `${d.veiculos?.name ?? '—'} (veículo)` : `${d.workspaces?.name ?? '—'} (cliente)`,
     competencia: (d.data_base as string) ?? '',
-    vencimento: midiaVencimento(d.data_base ?? null, d.prazo ?? null, Number(d.dias_agencia ?? 0)),
+    vencimento: midiaVencimentoVeiculo(d.data_base ?? null, d.prazo ?? null),
+    previstoAgencia: (() => {
+      const base = midiaVencimentoVeiculo(d.data_base ?? null, d.prazo ?? null)
+      return base ? addDaysISO(base, Number(d.dias_agencia ?? 0)) : ''
+    })(),
+    diasAgencia: Number(d.dias_agencia ?? 0),
     anexos: (Array.isArray(d.anexos) ? d.anexos : []) as Anexo[],
   }))
   const totalComissao = midias.reduce((s, d) => s + d.comissao, 0)
