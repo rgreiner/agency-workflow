@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { SITUACOES_ATIVAS, SITUACOES_FORA } from '@/lib/midia'
+import { filtrarPorAba } from '@/lib/midia'
 import { ProducaoClient, type ProducaoRow } from '../ProducaoClient'
 
 export default async function PedidoPage({
@@ -17,16 +17,14 @@ export default async function PedidoPage({
   const { data: org } = await supabase.from('organizations').select('id').eq('slug', orgSlug).single()
   if (!org) return null
 
-  // Ativos = sendo criado/em aprovação. Liberados pro faturamento e cancelados vão pra Arquivados.
+  // Liberados pro faturamento e cancelados saem da aba Ativos → vão pra Arquivados.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const baseQ = (supabase as any)
     .from('producao')
     .select('id, numero, serie, titulo, valor, situacao, archived, workspaces(name)')
     .eq('org_id', org.id).eq('tipo', 'pedido')
-  const { data: raw } = await (archivedView
-    ? baseQ.or(`archived.eq.true,situacao.in.(${SITUACOES_FORA.join(',')})`)
-    : baseQ.eq('archived', false).in('situacao', SITUACOES_ATIVAS)
-  ).order('numero', { ascending: false })
+  const { data: raw } = await filtrarPorAba(baseQ, archivedView)
+    .order('numero', { ascending: false })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const items: ProducaoRow[] = (raw ?? []).map((r: any) => ({

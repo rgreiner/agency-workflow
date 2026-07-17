@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { filtrarPorAba, SITUACOES_FORA_PROPOSTA } from '@/lib/midia'
 import { ProducaoClient, type ProducaoRow } from '../ProducaoClient'
 
 export default async function OrcamentoPage({
@@ -16,11 +17,13 @@ export default async function OrcamentoPage({
   const { data: org } = await supabase.from('organizations').select('id').eq('slug', orgSlug).single()
   if (!org) return null
 
+  // Só saem da aba Ativos quando faturado ou cancelado (o resto segue visível).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: raw } = await (supabase as any)
+  const baseQ = (supabase as any)
     .from('producao')
     .select('id, numero, serie, titulo, valor, situacao, archived, workspaces(name)')
-    .eq('org_id', org.id).eq('tipo', 'orcamento').eq('archived', archivedView)
+    .eq('org_id', org.id).eq('tipo', 'orcamento')
+  const { data: raw } = await filtrarPorAba(baseQ, archivedView, SITUACOES_FORA_PROPOSTA)
     .order('numero', { ascending: false })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
