@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import {
   FileText, Plus, Building2, PanelLeftClose, PanelLeft, Loader2,
   Folder, FolderOpen, ChevronRight, MoreHorizontal, Pencil, Trash2,
-  FolderPlus, FilePlus, Lock, Archive, ArchiveRestore, Target,
+  FolderPlus, FilePlus, Lock, Archive, ArchiveRestore, Target, ChevronLeft, Landmark,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -37,12 +37,14 @@ interface ShareState {
   currentUserId: string
 }
 
-export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, currentUserId }: {
+export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, currentUserId, clientes = [] }: {
   orgSlug: string
   orgId: string
   currentDocId: string
   docs: Doc[]
   currentUserId: string
+  /** Clientes da org — destino do "Mover para". */
+  clientes?: { id: string; name: string }[]
 }) {
   const router = useRouter()
   const [, start] = useTransition()
@@ -58,6 +60,7 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, currentUserId 
   const [closed, setClosed] = useState<Set<string>>(new Set())
   const [showArchived, setShowArchived] = useState(false)
   const [menu, setMenu] = useState<string | null>(null)
+  const [moveFor, setMoveFor] = useState<string | null>(null)   // menu mostrando a lista de destinos
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const ref = useRef<HTMLDivElement>(null)
@@ -112,6 +115,17 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, currentUserId 
     start(async () => {
       const r = await moveDocument(doc.id, orgSlug, folder ? folder.id : null, folder ? folder.workspace_id : doc.workspace_id)
       if (r?.error) toast.error(r.error); else router.refresh()
+    })
+  }
+  /** Troca o DONO: vai pra raiz do destino (Organização ou cliente). O conteúdo da
+   *  pasta acompanha — a cascata é feita no move_document (migration 114). */
+  function moveToOwner(doc: Doc, workspaceId: string | null, nome: string) {
+    setMenu(null); setMoveFor(null)
+    start(async () => {
+      const r = await moveDocument(doc.id, orgSlug, null, workspaceId)
+      if (r?.error) { toast.error(r.error); return }
+      toast.success(`"${doc.title}" movido para ${nome}.`)
+      router.refresh()
     })
   }
   function del(doc: Doc) {
@@ -188,10 +202,14 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, currentUserId 
             <div className="relative shrink-0">
               <button aria-label="Mais opções" onClick={() => setMenu(menu === `fld:${d.id}` ? null : `fld:${d.id}`)}
                 className="p-0.5 rounded text-gray-400 hover:text-gray-700 opacity-0 group-hover/f:opacity-100 transition"><MoreHorizontal className="w-3.5 h-3.5" /></button>
-              {menu === `fld:${d.id}` && (
+              {menu === `fld:${d.id}` && moveFor === d.id && (
+                <Popover><OwnerList doc={d} clientes={clientes} onPick={moveToOwner} onBack={() => setMoveFor(null)} /></Popover>
+              )}
+              {menu === `fld:${d.id}` && moveFor !== d.id && (
                 <Popover>
                   <PItem icon={<FolderPlus className="w-3.5 h-3.5" />} onClick={() => newFolder(d.workspace_id, d.id)}>Nova subpasta</PItem>
                   <PItem icon={<Pencil className="w-3.5 h-3.5" />} onClick={() => { setMenu(null); setRenamingId(d.id); setRenameValue(d.title) }}>Renomear</PItem>
+                  <PItem icon={<Building2 className="w-3.5 h-3.5" />} onClick={() => setMoveFor(d.id)}>Mover para…</PItem>
                   {!d.parent_id
                     ? <PItem icon={<Lock className="w-3.5 h-3.5" />} onClick={() => openShare(d.id)}>Compartilhar / acesso</PItem>
                     : <PItem icon={<FolderOpen className="w-3.5 h-3.5" />} onClick={() => move(d, null)}>Mover pra raiz</PItem>}
@@ -330,6 +348,32 @@ function DocRow({ doc, orgSlug, active, depth, menuOpen, onMenu, folders, onMove
         )}
       </div>
     </div>
+  )
+}
+
+/** Lista de destinos do "Mover para": Organização ou um cliente.
+ *  Vai pra RAIZ do destino de propósito — deixar dentro de uma pasta de outro dono
+ *  é justamente a inconsistência que a cascata resolve. */
+function OwnerList({ doc, clientes, onPick, onBack }: {
+  doc: Doc
+  clientes: { id: string; name: string }[]
+  onPick: (doc: Doc, workspaceId: string | null, nome: string) => void
+  onBack: () => void
+}) {
+  return (
+    <>
+      <button onClick={onBack}
+        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 transition">
+        <ChevronLeft className="w-3 h-3" /> Mover para
+      </button>
+      <div className="max-h-56 overflow-y-auto border-t border-gray-100 pt-1">
+        <PItem icon={<Landmark className="w-3.5 h-3.5" />} onClick={() => onPick(doc, null, 'Organização')}>Organização</PItem>
+        {clientes.map(c => (
+          <PItem key={c.id} icon={<Building2 className="w-3.5 h-3.5" />} onClick={() => onPick(doc, c.id, c.name)}>{c.name}</PItem>
+        ))}
+        {clientes.length === 0 && <p className="px-3 py-2 text-xs text-gray-400">Nenhum cliente cadastrado.</p>}
+      </div>
+    </>
   )
 }
 

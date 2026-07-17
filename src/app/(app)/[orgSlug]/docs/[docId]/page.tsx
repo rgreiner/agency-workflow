@@ -99,6 +99,7 @@ export default async function DocPage({
         currentDocId={doc.id}
         currentUserId={user.id}
         docs={(allDocs ?? []) as unknown as Parameters<typeof DocsSidebar>[0]['docs']}
+        clientes={(workspaces ?? []).map(w => ({ id: w.id, name: w.name }))}
       />
       <div className="flex-1 min-w-0">
         <DocumentEditor

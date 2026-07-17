@@ -39,6 +39,10 @@ export default async function DocsPage({
     .order('is_folder', { ascending: false })
     .order('title', { ascending: true })
 
+  // Clientes: destino do "Mover para" na árvore lateral.
+  const { data: clientes } = await supabase
+    .from('workspaces').select('id, name').eq('org_id', org.id).neq('archived', true).order('name')
+
   // Na listagem central mostramos os documentos "achatados" (recentes).
   const docs = (rawDocs ?? []).filter(d => !d.is_folder)
   const orgDocs = docs.filter(d => !d.workspace_id)
@@ -66,6 +70,7 @@ export default async function DocsPage({
         currentDocId=""
         currentUserId={user?.id ?? ''}
         docs={(allDocs ?? []) as unknown as Parameters<typeof DocsSidebar>[0]['docs']}
+        clientes={clientes ?? []}
       />
       <div className="flex-1 min-w-0 overflow-y-auto">
         <div className="p-8 max-w-4xl mx-auto">
