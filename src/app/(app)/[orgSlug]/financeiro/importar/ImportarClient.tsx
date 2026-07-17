@@ -2,10 +2,11 @@
 
 import { useState, useRef, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Upload, FileSpreadsheet, Loader2, Check, AlertCircle, Trash2, X, Wallet } from 'lucide-react'
+import { Upload, FileSpreadsheet, Loader2, Check, AlertCircle, Trash2, X, Wallet, ListPlus } from 'lucide-react'
+import { toast } from 'sonner'
 import { formatBRL } from '@/lib/midia'
 import { mapSheetToRows, summarize, seedFromRows, type ExtratoRow, type SeedData } from '@/lib/extrato'
-import { importarExtrato, limparExtrato, seedFinanceFromExtrato } from '@/app/actions/financeiro'
+import { importarExtrato, limparExtrato, seedFinanceFromExtrato, promoverPrevistosExtrato } from '@/app/actions/financeiro'
 
 const CHUNK = 500
 
@@ -39,6 +40,7 @@ export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
   const [clearing, startClear] = useTransition()
   const [confirmClear, setConfirmClear] = useState(false)
   const [seeding, startSeed] = useTransition()
+  const [promoting, startPromote] = useTransition()
 
   function doSeedNow() {
     setError(''); setDone(null)
@@ -46,6 +48,16 @@ export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
       const res = await seedFinanceFromExtrato(orgSlug)
       if (res?.error) { setError(res.error); return }
       setDone({ inserted: 0, updated: 0, ...res?.result })
+      router.refresh()
+    })
+  }
+
+  function doPromover() {
+    setError(''); setDone(null)
+    startPromote(async () => {
+      const res = await promoverPrevistosExtrato(orgSlug)
+      if (res?.error) { setError(res.error); return }
+      toast.success(`${res?.result?.inserted ?? 0} a receber/a pagar trazido(s) pra Lançamentos (conciliação).`)
       router.refresh()
     })
   }
@@ -144,6 +156,12 @@ export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
               className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-orange-600 transition disabled:opacity-50">
               {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wallet className="w-3.5 h-3.5" />}
               Gerar contas, centros e categorias
+            </button>
+            <button onClick={doPromover} disabled={promoting}
+              title="Cria lançamentos 'em aberto' pros a receber/a pagar (Em aberto/Atrasado) do Conta Azul, pra aparecerem na conciliação"
+              className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-orange-600 transition disabled:opacity-50">
+              {promoting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ListPlus className="w-3.5 h-3.5" />}
+              Trazer a receber/a pagar pra Lançamentos
             </button>
             <button onClick={() => setConfirmClear(true)}
               className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-600 transition">

@@ -363,6 +363,26 @@ export async function seedFinanceFromExtrato(orgSlug: string) {
   return { result: data as { contas: number; contas_atualizadas: number; centros: number; categorias: number } }
 }
 
+/** Promove os previstos do Conta Azul (Em aberto/Atrasado) a lançamentos em aberto — viram candidatos da conciliação. */
+export async function promoverPrevistosExtrato(orgSlug: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { data: org } = await supabase
+    .from('organizations').select('id').eq('slug', orgSlug).single()
+  if (!org) return { error: 'Organização não encontrada' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('promover_extrato_previstos', {
+    p_user_id: user.id, p_org_id: org.id,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+  revalidatePath(`/${orgSlug}/financeiro/conciliacao`)
+  return { result: data as { inserted: number } }
+}
+
 /** Apaga todo o extrato importado da org. */
 export async function limparExtrato(orgSlug: string) {
   const supabase = await createClient()
