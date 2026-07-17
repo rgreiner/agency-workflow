@@ -50,15 +50,21 @@ export default async function DashboardPage({ params }: { params: Promise<{ orgS
   const equipe = home?.equipe ?? null
   const financeiro = home?.financeiro ?? null
 
-  // ── Minhas atividades (sou responsável pelo status ATUAL) ─────────────────
+  // ── Minhas atividades: sou responsável E o status atual é da MINHA etapa ───
+  // Antes filtrava por activity_status_assignees (responsável por etapa, marcado por
+  // tarefa). Diagnóstico: 0 de 128 tarefas ativas têm esse campo — a tabela está
+  // vazia, então "Minhas ativas" dava 0 pra TODO MUNDO. Agora cruza o cargo da pessoa
+  // (org_positions.allowed_statuses) com o status atual, igual à Caixa de entrada.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: myMembership } = await (supabase as any)
+    .from('organization_members')
+    .select('org_positions(allowed_statuses)')
+    .eq('org_id', orgData.id).eq('user_id', user.id).maybeSingle()
+  const meusStatus = ((myMembership?.org_positions as { allowed_statuses?: string[] } | null)?.allowed_statuses ?? []) as string[]
+
   const { data: myAssignments } = await supabase
-    .from('activity_status_assignees').select('activity_id, status').eq('user_id', user.id)
+    .from('activity_assignees').select('activity_id').eq('user_id', user.id)
   const myActivityIds = [...new Set((myAssignments ?? []).map(a => a.activity_id))]
-  const myStatusMap = (myAssignments ?? []).reduce<Record<string, string[]>>((acc, a) => {
-    if (!acc[a.activity_id]) acc[a.activity_id] = []
-    acc[a.activity_id].push(a.status)
-    return acc
-  }, {})
 
   const { data: myActivitiesRaw } = myActivityIds.length
     ? await supabase
@@ -66,7 +72,9 @@ export default async function DashboardPage({ params }: { params: Promise<{ orgS
         .select('id, title, status, due_date, campaign_id, campaigns(id, name, workspace_id, workspaces(id, name))')
         .in('id', myActivityIds).eq('archived', false).neq('status', 'concluido')
     : { data: [] }
-  const myActive = (myActivitiesRaw ?? []).filter(a => myStatusMap[a.id]?.includes(a.status))
+  // Sem cargo definido não dá pra saber a etapa da pessoa: mostra tudo em que ela
+  // está, em vez de zerar a tela dela.
+  const myActive = (myActivitiesRaw ?? []).filter(a => !meusStatus.length || meusStatus.includes(a.status))
 
   // ── Concluídas essa semana (pro hero) ─────────────────────────────────────
   const monday = new Date()
