@@ -5,6 +5,7 @@ import { assertFinanceAccess } from '@/lib/finance'
 import { loadConciliacao } from '@/lib/conciliacao'
 import { ConciliacaoClient } from '../../conciliacao/ConciliacaoClient'
 import { ImportarOfxButton } from './ImportarOfxButton'
+import { ContaExtratoList, type ExtratoMov } from './ContaExtratoList'
 
 // Busca da própria API — o builder não alcança o IP público do VPS.
 export const dynamic = 'force-dynamic'
@@ -27,6 +28,23 @@ export default async function ContaPage({
 
   const data = await loadConciliacao(sb, orgId, contaId)
   const pendentesN = data.pendentes.length
+
+  // Movimentações importadas do Conta Azul desta conta (casadas pelo nome da conta).
+  const { data: extratoRaw } = await sb
+    .from('extrato_importado')
+    .select('data_mov, contato, descricao, categoria, valor, situacao')
+    .eq('org_id', orgId).eq('conta', conta.nome)
+    .order('data_mov', { ascending: false })
+    .limit(500)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const extrato: ExtratoMov[] = ((extratoRaw ?? []) as any[]).map(e => ({
+    data: (e.data_mov as string) ?? null,
+    contato: (e.contato as string) ?? null,
+    descricao: (e.descricao as string) ?? null,
+    categoria: (e.categoria as string) ?? null,
+    valor: Number(e.valor ?? 0),
+    situacao: (e.situacao as string) ?? null,
+  }))
 
   return (
     <div>
@@ -65,6 +83,8 @@ export default async function ContaPage({
           </div>
         </div>
       </div>
+
+      <ContaExtratoList movimentos={extrato} />
 
       <ConciliacaoClient orgSlug={orgSlug} {...data} />
     </div>
