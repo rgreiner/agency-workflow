@@ -10,8 +10,10 @@ export interface OfxTxn {
 }
 
 export interface OfxParsed {
-  acctId: string | null   // número da conta no OFX (BANKACCTFROM/ACCTID)
-  bankId: string | null   // código do banco (BANKID)
+  acctId: string | null    // número da conta no OFX (BANKACCTFROM/ACCTID)
+  bankId: string | null    // código do banco (BANKID)
+  saldo: number | null     // saldo do banco (LEDGERBAL/BALAMT) — a "verdade" do extrato
+  saldoData: string | null // data do saldo (DTASOF), ISO
   txns: OfxTxn[]
 }
 
@@ -54,6 +56,12 @@ function parseDate(raw: string): string | null {
 export function parseOfx(text: string): OfxParsed {
   const acctId = field(text, 'ACCTID')
   const bankId = field(text, 'BANKID')
+  // Saldo contábil do extrato (LEDGERBAL) — não confundir com AVAILBAL (disponível).
+  const ledgerBlock = text.match(/<LEDGERBAL>[\s\S]*?(?:<\/LEDGERBAL>|<AVAILBAL>|<\/STMTRS>)/i)?.[0] ?? ''
+  const balRaw = field(ledgerBlock, 'BALAMT')
+  const asofRaw = field(ledgerBlock, 'DTASOF')
+  const saldo = balRaw != null && balRaw !== '' && !isNaN(parseAmount(balRaw)) ? parseAmount(balRaw) : null
+  const saldoData = asofRaw ? parseDate(asofRaw) : null
   const txns: OfxTxn[] = []
 
   // Cada transação começa em <STMTTRN>. Fecha em </STMTTRN> (2.x) ou no próximo <STMTTRN>.
@@ -78,5 +86,5 @@ export function parseOfx(text: string): OfxParsed {
     })
   }
 
-  return { acctId, bankId, txns }
+  return { acctId, bankId, saldo, saldoData, txns }
 }

@@ -124,8 +124,12 @@ export async function desfazerConciliacaoBtg(orgSlug: string, movementId: string
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
 }
 
-/** Importa as transações de um OFX numa conta (aditivo, dedup por FITID). */
-export async function importarOfx(orgSlug: string, contaId: string, txns: OfxTxn[]) {
+/** Importa as transações de um OFX numa conta (aditivo, dedup por FITID). Grava também
+ *  o saldo do banco do extrato (LEDGERBAL), quando vier no arquivo. */
+export async function importarOfx(
+  orgSlug: string, contaId: string, txns: OfxTxn[],
+  saldoBanco?: number | null, saldoBancoData?: string | null,
+) {
   const { supabase, orgId } = await assertFinanceAccess(orgSlug)
   const rows = txns.map(t => ({ fitid: t.fitid, data_mov: t.data, valor: t.valor, tipo: t.tipo, descricao: t.descricao }))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -133,6 +137,12 @@ export async function importarOfx(orgSlug: string, contaId: string, txns: OfxTxn
     p_org_id: orgId, p_conta_id: contaId, p_rows: rows,
   })
   if (error) return { error: error.message }
+  if (saldoBanco != null) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from('contas_financeiras')
+      .update({ saldo_banco: saldoBanco, saldo_banco_data: saldoBancoData ?? null })
+      .eq('id', contaId).eq('org_id', orgId)
+  }
   revalidatePath(`/${orgSlug}/financeiro/contas/${contaId}`)
   revalidatePath(`/${orgSlug}/financeiro/conciliacao`)
   return { result: data as { inserted: number; skipped: number; total: number } }

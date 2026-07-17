@@ -21,7 +21,7 @@ export default async function ContaPage({
 
   const { data: conta } = await sb
     .from('contas_financeiras')
-    .select('id, nome, tipo, cor')
+    .select('id, nome, tipo, cor, saldo_banco, saldo_banco_data')
     .eq('id', contaId).eq('org_id', orgId).maybeSingle()
   if (!conta) notFound()
 
@@ -44,6 +44,12 @@ export default async function ContaPage({
               <p className="text-gray-500 text-sm mt-0.5">
                 Movimentações e conciliação{pendentesN > 0 ? ` — ${pendentesN} pendente(s)` : ''}
               </p>
+              {conta.saldo_banco != null && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Saldo no banco (extrato): <strong className="text-gray-800 tabular-nums">{Number(conta.saldo_banco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
+                  {conta.saldo_banco_data ? ` em ${new Date(conta.saldo_banco_data + 'T00:00:00').toLocaleDateString('pt-BR')}` : ''}
+                </p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">

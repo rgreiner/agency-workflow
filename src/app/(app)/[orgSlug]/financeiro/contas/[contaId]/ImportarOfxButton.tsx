@@ -26,12 +26,13 @@ export function ImportarOfxButton({ orgSlug, contaId }: { orgSlug: string; conta
         return
       }
       startTransition(async () => {
-        const res = await importarOfx(orgSlug, contaId, parsed.txns)
+        const res = await importarOfx(orgSlug, contaId, parsed.txns, parsed.saldo, parsed.saldoData)
         if (res?.error) { toast.error(res.error); return }
         const r = res?.result
         toast.success(
           `OFX importado: ${r?.inserted ?? 0} novo(s)` +
-          (r?.skipped ? `, ${r.skipped} já existia(m)` : '') + '.',
+          (r?.skipped ? `, ${r.skipped} já existia(m)` : '') +
+          (parsed.saldo != null ? ` · saldo do banco: ${parsed.saldo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : '') + '.',
         )
         router.refresh()
       })
