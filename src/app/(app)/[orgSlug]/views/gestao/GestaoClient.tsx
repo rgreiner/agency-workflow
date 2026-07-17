@@ -498,10 +498,13 @@ function Engajamento({ engajamento }: { engajamento: EngajamentoData | null }) {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-gray-400">Interação = mudar status, editar campo, comentar ou reagir. Ranking pelo total no período.</p>
+      <p className="text-sm text-gray-400">
+        Interação = mudar status, editar campo, comentar ou reagir. Ranking pelo total no período —
+        todo membro aparece, inclusive quem ficou em zero.
+      </p>
 
       {engajamento.users.length === 0 ? (
-        <p className="text-sm text-gray-400 py-8 text-center">Nenhuma interação no período.</p>
+        <p className="text-sm text-gray-400 py-8 text-center">Nenhum membro na organização.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {engajamento.users.map((u, i) => (
@@ -511,12 +514,14 @@ function Engajamento({ engajamento }: { engajamento: EngajamentoData | null }) {
                 <Avatar name={u.full_name} avatarUrl={u.avatar_url} size="md" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{u.full_name ?? '—'}</p>
-                  <p className="text-[11px] text-gray-400 truncate">
-                    {Object.entries(u.por_tipo).map(([k, n]) => `${n} ${KIND_LABEL[k] ?? k}`).join(' · ') || 'sem detalhe'}
+                  <p className={cn('text-[11px] truncate', u.total === 0 ? 'text-amber-600' : 'text-gray-400')}>
+                    {u.total === 0
+                      ? 'nenhuma interação no período'
+                      : Object.entries(u.por_tipo).map(([k, n]) => `${n} ${KIND_LABEL[k] ?? k}`).join(' · ') || 'sem detalhe'}
                   </p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-lg font-semibold text-orange-600 leading-none flex items-center gap-1 justify-end"><ActivityIcon className="w-4 h-4" />{u.total}</p>
+                  <p className={cn('text-lg font-semibold leading-none flex items-center gap-1 justify-end', u.total === 0 ? 'text-gray-300' : 'text-orange-600')}><ActivityIcon className="w-4 h-4" />{u.total}</p>
                   <p className="text-[10px] text-gray-400 mt-0.5">interações</p>
                 </div>
               </div>
