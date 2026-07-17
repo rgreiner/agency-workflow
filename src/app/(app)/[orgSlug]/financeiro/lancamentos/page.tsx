@@ -22,7 +22,10 @@ function extratoToLancamento(e: any, contaIdByName: Map<string, string>): Lancam
     descricao: e.descricao ?? null,
     valor: abs,
     valor_realizado: realizado ? abs : null,
-    vencimento: e.venc_original ?? e.data_prevista ?? e.data_mov ?? null,
+    // data_prevista = data REAL esperada (renegociada/parcial); venc_original = vencimento
+    // contratual original. Para o fluxo de caixa vale a prevista — senão um resto renegociado
+    // aparece "Atrasado" no mês do vencimento antigo (ex.: Distribuição de Lucros).
+    vencimento: e.data_prevista ?? e.venc_original ?? e.data_mov ?? null,
     competencia: e.competencia ?? null,
     situacao,
     nf_emitida: !!e.nota_fiscal,
