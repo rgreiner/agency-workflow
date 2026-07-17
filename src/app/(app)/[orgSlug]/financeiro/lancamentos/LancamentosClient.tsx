@@ -302,16 +302,22 @@ function Row({ l, saldo, orgSlug, today, conta, onEdit, onBaixa }: {
         <div className="flex items-start gap-2">
           {isSaida ? <ArrowUpCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" /> : <ArrowDownCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />}
           <div className="min-w-0">
-            <span className="text-gray-900">{l.contato_nome ?? l.descricao ?? '—'}</span>
-            <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-              {l.contato_nome && l.descricao && <span className="text-xs text-gray-500">{l.descricao}</span>}
-              {l.parcela_num && l.parcela_total && (
-                <span className="text-[10px] font-medium text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">{l.parcela_num}/{l.parcela_total}</span>
-              )}
-              {l.categoria && <span className="text-[10px] text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">{l.categoria}</span>}
-              {conta && <span className="inline-flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: conta.cor ?? '#cbd5e1' }} />{conta.nome}</span>}
-              {imported && <span className="text-[10px] font-medium text-sky-700 bg-sky-50 rounded px-1.5 py-0.5">Conta Azul</span>}
-            </div>
+            <div className="text-gray-900 font-medium truncate">{l.contato_nome ?? l.descricao ?? '—'}</div>
+            {l.contato_nome && l.descricao && <div className="text-xs text-gray-500 truncate">{l.descricao}</div>}
+            {(l.parcela_num || l.categoria || conta || imported) && (
+              <div className="flex flex-wrap items-center gap-1 mt-1">
+                {l.parcela_num && l.parcela_total && (
+                  <span className="text-[10px] font-medium text-gray-600 bg-gray-100 rounded-md px-1.5 py-0.5 tabular-nums">{l.parcela_num}/{l.parcela_total}</span>
+                )}
+                {l.categoria && <span className="text-[10px] font-medium text-gray-600 bg-gray-100 rounded-md px-1.5 py-0.5">{l.categoria}</span>}
+                {conta && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-md px-1.5 py-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: conta.cor ?? '#cbd5e1' }} />{conta.nome}
+                  </span>
+                )}
+                {imported && <span className="text-[10px] font-medium text-sky-700 bg-sky-50 rounded-md px-1.5 py-0.5">Conta Azul</span>}
+              </div>
+            )}
           </div>
         </div>
       </td>
