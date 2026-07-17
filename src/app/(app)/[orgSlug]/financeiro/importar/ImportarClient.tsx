@@ -6,7 +6,7 @@ import { Upload, FileSpreadsheet, Loader2, Check, AlertCircle, Trash2, X, Wallet
 import { toast } from 'sonner'
 import { formatBRL } from '@/lib/midia'
 import { mapSheetToRows, summarize, seedFromRows, type ExtratoRow, type SeedData } from '@/lib/extrato'
-import { importarExtrato, limparExtrato, seedFinanceFromExtrato, promoverPrevistosExtrato } from '@/app/actions/financeiro'
+import { importarExtrato, limparExtrato, seedFinanceFromExtrato, promoverPrevistosExtrato, atualizarSaldosContaAzul } from '@/app/actions/financeiro'
 
 const CHUNK = 500
 
@@ -41,6 +41,7 @@ export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
   const [confirmClear, setConfirmClear] = useState(false)
   const [seeding, startSeed] = useTransition()
   const [promoting, startPromote] = useTransition()
+  const [savingSaldos, startSaldos] = useTransition()
 
   function doSeedNow() {
     setError(''); setDone(null)
@@ -58,6 +59,16 @@ export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
       const res = await promoverPrevistosExtrato(orgSlug)
       if (res?.error) { setError(res.error); return }
       toast.success(`${res?.result?.inserted ?? 0} a receber/a pagar trazido(s) pra Lançamentos (conciliação).`)
+      router.refresh()
+    })
+  }
+
+  function doAtualizarSaldos() {
+    setError(''); setDone(null)
+    startSaldos(async () => {
+      const res = await atualizarSaldosContaAzul(orgSlug)
+      if (res?.error) { setError(res.error); return }
+      toast.success(`Saldos atualizados pelo Conta Azul (${res?.result?.contas_atualizadas ?? 0} conta(s)).`)
       router.refresh()
     })
   }
@@ -156,6 +167,12 @@ export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
               className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-orange-600 transition disabled:opacity-50">
               {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wallet className="w-3.5 h-3.5" />}
               Gerar contas, centros e categorias
+            </button>
+            <button onClick={doAtualizarSaldos} disabled={savingSaldos}
+              title="Força o saldo de cada conta = soma dos realizados do Conta Azul (sobrescreve o saldo atual)"
+              className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-orange-600 transition disabled:opacity-50">
+              {savingSaldos ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wallet className="w-3.5 h-3.5" />}
+              Atualizar saldos pelo Conta Azul
             </button>
             <button onClick={doPromover} disabled={promoting}
               title="Cria lançamentos 'em aberto' pros a receber/a pagar (Em aberto/Atrasado) do Conta Azul, pra aparecerem na conciliação"
