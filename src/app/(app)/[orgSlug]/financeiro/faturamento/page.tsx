@@ -22,9 +22,8 @@ function clienteCard(w: any): ContatoCard {
     razao: w?.legal_name || undefined,
     cnpj: w?.tax_id || undefined,
     emailNf: w?.finance_email || undefined,
-    email: w?.email || undefined,
     telefone: w?.phone || undefined,
-    contato: w?.contact || undefined,
+    contato: w?.contact_name || undefined,
     endereco: enderecoDe(w) || undefined,
   }
 }
@@ -33,7 +32,7 @@ function fornVeicCard(r: any, papel: string): ContatoCard | null {
   if (!r) return null
   return { papel, nome: r?.name ?? '—', cnpj: r?.tax_id || undefined, notas: r?.notes || undefined }
 }
-const WS_CONTATO = 'name, legal_name, tax_id, email, finance_email, phone, contact, address_street, address_number, address_complement, address_district, address_city, address_state, address_zip'
+const WS_CONTATO = 'name, legal_name, tax_id, finance_email, phone, contact_name, address_street, address_number, address_complement, address_district, address_city, address_state, address_zip'
 
 // Duas datas (espelham gerar_lancamento_midia):
 //  - vencimento do veículo/cliente = base DFM (fim do mês + N) ou data_base;
