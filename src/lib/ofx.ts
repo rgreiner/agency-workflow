@@ -15,6 +15,23 @@ export interface OfxParsed {
   txns: OfxTxn[]
 }
 
+/**
+ * Decodifica os bytes do OFX no charset certo. Bancos BR variam: BTG exporta UTF-8,
+ * Cresol exporta Windows-1252 (apesar do header dizer o mesmo). Tenta UTF-8; se aparecer
+ * caractere inválido (), refaz como Windows-1252.
+ */
+export function decodeOfxBytes(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+  if (!utf8.includes('�')) return utf8
+  try { return new TextDecoder('windows-1252').decode(bytes) } catch { return utf8 }
+}
+
+/** Linhas do extrato que NÃO são movimento (saldo de abertura etc.) — não importar. */
+function ehNaoMovimento(memo: string): boolean {
+  return /saldo\s+anterior/i.test(memo)
+}
+
 /** Pega o valor de <TAG>valor (até o próximo `<` ou quebra de linha). */
 function field(block: string, tag: string): string | null {
   const m = block.match(new RegExp(`<${tag}>\\s*([^<\\r\\n]*)`, 'i'))
@@ -51,6 +68,7 @@ export function parseOfx(text: string): OfxParsed {
     const amt = parseAmount(amtRaw)
     if (!data || isNaN(amt)) continue
     const memo = field(block, 'MEMO') || field(block, 'NAME') || ''
+    if (ehNaoMovimento(memo)) continue
     txns.push({
       fitid,
       data,

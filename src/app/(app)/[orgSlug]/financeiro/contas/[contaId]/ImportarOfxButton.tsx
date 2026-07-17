@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Upload, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { parseOfx } from '@/lib/ofx'
+import { parseOfx, decodeOfxBytes } from '@/lib/ofx'
 import { importarOfx } from '@/app/actions/btg'
 
 export function ImportarOfxButton({ orgSlug, contaId }: { orgSlug: string; contaId: string }) {
@@ -19,7 +19,7 @@ export function ImportarOfxButton({ orgSlug, contaId }: { orgSlug: string; conta
     if (!file) return
     setBusy(true)
     try {
-      const text = await file.text()
+      const text = decodeOfxBytes(await file.arrayBuffer())
       const parsed = parseOfx(text)
       if (parsed.txns.length === 0) {
         toast.error('Nenhuma transação encontrada no OFX. Confira o arquivo.')
