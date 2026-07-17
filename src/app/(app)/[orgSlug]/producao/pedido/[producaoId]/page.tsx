@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { updateProducao } from '@/app/actions/producao'
 import { loadProducaoSelectors } from '@/lib/midia-selectors'
+import { LockableFormShell } from '@/components/ui/LockableFormShell'
 import { PedidoForm, type PedidoValues, type ItemPed, type Parcela } from '../PedidoForm'
 
 function s(v: unknown): string { return v == null ? '' : String(v) }
@@ -39,16 +40,18 @@ export default async function EditarPedidoPage({
   }
 
   return (
-    <PedidoForm
-      clientes={clientes}
-      fornecedores={fornecedores}
-      members={members}
-      defaultResponsavelId={userId}
-      today={today}
-      redirectTo={`/${orgSlug}/producao/pedido`}
-      initial={initial}
-      submitLabel="Salvar"
-      onSubmit={updateProducao.bind(null, orgSlug, producaoId)}
-    />
+    <LockableFormShell initialLocked={['faturar', 'faturado'].includes(s(p.situacao))}>
+      <PedidoForm
+        clientes={clientes}
+        fornecedores={fornecedores}
+        members={members}
+        defaultResponsavelId={userId}
+        today={today}
+        redirectTo={`/${orgSlug}/producao/pedido`}
+        initial={initial}
+        submitLabel="Salvar"
+        onSubmit={updateProducao.bind(null, orgSlug, producaoId)}
+      />
+    </LockableFormShell>
   )
 }

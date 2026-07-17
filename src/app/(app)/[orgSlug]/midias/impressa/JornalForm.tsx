@@ -102,6 +102,11 @@ export function JornalForm({
     if (!form.workspace_id) { setError('Selecione o cliente'); return }
     if (!form.veiculo_id) { setError('Selecione o veículo'); return }
     if (!form.titulo.trim()) { setError('Informe o título'); return }
+    if (['faturar', 'faturado'].includes(form.situacao)) {
+      if (!form.data_base) { setError('Informe a data base do faturamento antes de liberar.'); return }
+      if (!form.prazo) { setError('Informe o prazo (DFM/à vista) antes de liberar.'); return }
+      if (!form.primeira_veiculacao || !form.ultima_veiculacao) { setError('Informe as datas de veiculação (1ª e última) antes de liberar.'); return }
+    }
 
     const fd = new FormData()
     const scalars: (keyof JornalValues)[] = ['workspace_id', 'campaign_id', 'veiculo_id', 'titulo', 'emissao', 'job', 'aut_veiculo', 'codigo_identificador', 'nota_fiscal', 'abrangencia', 'faturamento', 'prazo', 'data_base', 'dias_agencia', 'primeira_veiculacao', 'ultima_veiculacao', 'contato', 'responsavel_id', 'situacao', 'observacao', 'texto_legal']

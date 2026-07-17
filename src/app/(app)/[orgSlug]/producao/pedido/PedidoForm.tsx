@@ -96,6 +96,10 @@ export function PedidoForm({
     if (!form.workspace_id) { setError('Selecione o cliente'); return }
     if (!form.fornecedor_id) { setError('Selecione o fornecedor'); return }
     if (!form.titulo.trim()) { setError('Informe o título'); return }
+    if (['faturar', 'faturado'].includes(form.situacao)) {
+      if (form.parcelas.length === 0) { setError('Gere as parcelas (comissão/honorários com vencimento) antes de liberar pro faturamento.'); return }
+      if (form.parcelas.some(p => !p.vencimento)) { setError('Toda parcela precisa de data de vencimento antes de liberar.'); return }
+    }
 
     const fd = new FormData()
     const scalars: (keyof PedidoValues)[] = ['workspace_id', 'campaign_id', 'titulo', 'faturar', 'emissao', 'contato', 'responsavel_id', 'situacao', 'observacao', 'texto_legal']

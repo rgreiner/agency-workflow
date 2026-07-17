@@ -3,6 +3,7 @@ import { updateProducao } from '@/app/actions/producao'
 import { loadProducaoSelectors } from '@/lib/midia-selectors'
 import { loadOrgDocs } from '@/lib/agency'
 import { FeeForm, type FeeValues, type ParcelaFee } from '../FeeForm'
+import { LockableFormShell } from '@/components/ui/LockableFormShell'
 
 function s(v: unknown): string { return v == null ? '' : String(v) }
 function num2br(v: unknown): string {
@@ -38,16 +39,18 @@ export default async function EditarFeePage({
   }
 
   return (
-    <FeeForm
-      clientes={clientes}
-      members={members}
-      defaultResponsavelId={userId}
-      today={today}
-      redirectTo={`/${orgSlug}/producao/fee`}
-      initial={initial}
-      submitLabel="Salvar"
-      defaultObservacao={defaultObservacao}
-      onSubmit={updateProducao.bind(null, orgSlug, producaoId)}
-    />
+    <LockableFormShell initialLocked={['faturar', 'faturado'].includes(String(p.situacao ?? ''))}>
+      <FeeForm
+        clientes={clientes}
+        members={members}
+        defaultResponsavelId={userId}
+        today={today}
+        redirectTo={`/${orgSlug}/producao/fee`}
+        initial={initial}
+        submitLabel="Salvar"
+        defaultObservacao={defaultObservacao}
+        onSubmit={updateProducao.bind(null, orgSlug, producaoId)}
+      />
+    </LockableFormShell>
   )
 }

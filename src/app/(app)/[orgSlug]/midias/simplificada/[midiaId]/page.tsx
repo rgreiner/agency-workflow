@@ -4,6 +4,7 @@ import { getUsuario } from '@/lib/auth/server'
 import { updateMidia } from '@/app/actions/midia'
 import { midiaTextoLegalPadrao } from '@/lib/agency'
 import { MidiaForm, type ClienteOpt, type VeiculoOpt, type MemberOpt, type MidiaValues } from '../MidiaForm'
+import { LockableFormShell } from '@/components/ui/LockableFormShell'
 
 function s(v: unknown): string {
   return v == null ? '' : String(v)
@@ -97,16 +98,18 @@ export default async function EditarMidiaPage({
   const defaultTextoLegal = await midiaTextoLegalPadrao(supabase, org.id)
 
   return (
-    <MidiaForm
-      clientes={clientes}
-      veiculos={veiculos}
-      members={members}
-      defaultResponsavelId={user.id}
-      today={today}
-      initial={initial}
-      submitLabel="Salvar"
-      defaultTextoLegal={defaultTextoLegal}
-      onSubmit={updateMidia.bind(null, orgSlug, midiaId)}
-    />
+    <LockableFormShell initialLocked={['faturar', 'faturado'].includes(String(m.situacao ?? ''))}>
+      <MidiaForm
+        clientes={clientes}
+        veiculos={veiculos}
+        members={members}
+        defaultResponsavelId={user.id}
+        today={today}
+        initial={initial}
+        submitLabel="Salvar"
+        defaultTextoLegal={defaultTextoLegal}
+        onSubmit={updateMidia.bind(null, orgSlug, midiaId)}
+      />
+    </LockableFormShell>
   )
 }

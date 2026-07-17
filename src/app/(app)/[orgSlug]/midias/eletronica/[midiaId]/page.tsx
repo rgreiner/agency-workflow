@@ -3,6 +3,7 @@ import { updateMidia } from '@/app/actions/midia'
 import { loadMidiaSelectors } from '@/lib/midia-selectors'
 import { midiaTextoLegalPadrao } from '@/lib/agency'
 import { EletronicaForm, type EletronicaValues, type PecaEl, type Periodo } from '../EletronicaForm'
+import { LockableFormShell } from '@/components/ui/LockableFormShell'
 
 function s(v: unknown): string { return v == null ? '' : String(v) }
 function num2br(v: unknown): string {
@@ -41,17 +42,19 @@ export default async function EditarEletronicaPage({
   }
 
   return (
-    <EletronicaForm
-      clientes={clientes}
-      veiculos={veiculos}
-      members={members}
-      defaultResponsavelId={userId}
-      today={today}
-      redirectTo={`/${orgSlug}/midias/eletronica`}
-      initial={initial}
-      submitLabel="Salvar"
-      defaultTextoLegal={defaultTextoLegal}
-      onSubmit={updateMidia.bind(null, orgSlug, midiaId)}
-    />
+    <LockableFormShell initialLocked={['faturar', 'faturado'].includes(String(m.situacao ?? ''))}>
+      <EletronicaForm
+        clientes={clientes}
+        veiculos={veiculos}
+        members={members}
+        defaultResponsavelId={userId}
+        today={today}
+        redirectTo={`/${orgSlug}/midias/eletronica`}
+        initial={initial}
+        submitLabel="Salvar"
+        defaultTextoLegal={defaultTextoLegal}
+        onSubmit={updateMidia.bind(null, orgSlug, midiaId)}
+      />
+    </LockableFormShell>
   )
 }

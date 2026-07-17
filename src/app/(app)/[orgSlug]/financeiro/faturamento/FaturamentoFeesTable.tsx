@@ -69,8 +69,8 @@ function FeeRow({ orgSlug, fee }: { orgSlug: string; fee: FeeView }) {
     <Fragment>
       <tr className={cn('transition', open ? 'bg-orange-50/40' : 'hover:bg-gray-50/50')}>
         <td className="px-4 py-3 whitespace-nowrap">
-          <Link href={`/${orgSlug}/producao/${fee.tipo}/${fee.id}/print`} target="_blank"
-            title="Abrir documento aprovado (nova aba)"
+          <Link href={`/${orgSlug}/producao/${fee.tipo}/${fee.id}`} target="_blank"
+            title="Abrir o documento em nova aba (somente leitura; não altera o status)"
             className="group/lnk inline-flex items-center gap-1 text-sm text-gray-500 hover:text-orange-600 tabular-nums transition-colors">
             {docNumero(fee.serie, fee.numero)}
             <ExternalLink className="w-3 h-3 opacity-0 group-hover/lnk:opacity-100 transition-opacity" />

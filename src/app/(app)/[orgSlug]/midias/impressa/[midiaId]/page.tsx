@@ -4,6 +4,7 @@ import { loadMidiaSelectors } from '@/lib/midia-selectors'
 import { midiaTextoLegalPadrao } from '@/lib/agency'
 import { ImpressaForm, type ImpressaValues, type Insercao } from '../ImpressaForm'
 import { JornalForm, type JornalValues } from '../JornalForm'
+import { LockableFormShell } from '@/components/ui/LockableFormShell'
 
 function s(v: unknown): string { return v == null ? '' : String(v) }
 function num2br(v: unknown): string {
@@ -52,7 +53,11 @@ export default async function EditarImpressaPage({
       texto_legal: s(m.texto_legal),
       dias: (det.dias as Record<string, string>) ?? {},
     }
-    return <JornalForm {...common} initial={initial} />
+    return (
+      <LockableFormShell initialLocked={['faturar', 'faturado'].includes(String(m.situacao ?? ''))}>
+        <JornalForm {...common} initial={initial} />
+      </LockableFormShell>
+    )
   }
 
   const initial: ImpressaValues = {
@@ -67,5 +72,9 @@ export default async function EditarImpressaPage({
     observacao: s(m.observacao), texto_legal: s(m.texto_legal),
     insercoes: Array.isArray(det.insercoes) ? (det.insercoes as Insercao[]) : [],
   }
-  return <ImpressaForm {...common} initial={initial} />
+  return (
+    <LockableFormShell initialLocked={['faturar', 'faturado'].includes(String(m.situacao ?? ''))}>
+      <ImpressaForm {...common} initial={initial} />
+    </LockableFormShell>
+  )
 }
