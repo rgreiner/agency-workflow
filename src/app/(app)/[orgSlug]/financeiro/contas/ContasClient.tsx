@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Plus, X, Check, Loader2, Pencil, Landmark, Power } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -74,10 +75,10 @@ export function ContasClient({ orgSlug, contas }: { orgSlug: string; contas: Con
               {contas.map(c => (
                 <tr key={c.id} className={cn('hover:bg-gray-50/50 transition', !c.ativo && 'opacity-50')}>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5">
+                    <Link href={`/${orgSlug}/financeiro/contas/${c.id}`} className="flex items-center gap-2.5 group/conta">
                       <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: c.cor ?? '#cbd5e1' }} />
-                      <span className="text-sm font-medium text-gray-900">{c.nome}</span>
-                    </div>
+                      <span className="text-sm font-medium text-gray-900 group-hover/conta:text-orange-600 transition-colors">{c.nome}</span>
+                    </Link>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{c.tipo ? TIPO_LABEL[c.tipo] ?? c.tipo : '—'}</td>
                   <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatBRL(Number(c.saldo_inicial ?? 0))}</td>
@@ -89,6 +90,10 @@ export function ContasClient({ orgSlug, contas }: { orgSlug: string; contas: Con
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex items-center justify-end gap-1.5">
+                      <Link href={`/${orgSlug}/financeiro/contas/${c.id}`}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-50 transition" title="Movimentações e conciliação (OFX)">
+                        <Landmark className="w-3.5 h-3.5" />
+                      </Link>
                       <button onClick={() => setEditing(c)}
                         className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar">
                         <Pencil className="w-3.5 h-3.5" />

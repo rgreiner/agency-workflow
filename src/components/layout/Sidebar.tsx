@@ -94,7 +94,7 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Fluxo de caixa', href: 'financeiro/fluxo-caixa' },
     { label: 'Lançamentos',    href: 'financeiro/lancamentos' },
     { label: 'Faturamento',    href: 'financeiro/faturamento' },
-    { label: 'Conciliação BTG', href: 'financeiro/conciliacao' },
+    { label: 'Conciliação', href: 'financeiro/conciliacao' },
     { label: 'Contas',         href: 'financeiro/contas' },
     { label: 'Categorias',     href: 'financeiro/categorias' },
     { label: 'Importar extrato', href: 'financeiro/importar' },

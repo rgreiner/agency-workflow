@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { assertFinanceAccess } from '@/lib/finance'
 import { syncOrgMovements } from '@/lib/btg/sync'
 import { markBtgSynced, markBtgError, deleteBtgConnection } from '@/lib/btg/store'
+import { type OfxTxn } from '@/lib/ofx'
 
 export async function disconnectBtg(orgSlug: string) {
   const { orgId } = await assertFinanceAccess(orgSlug)
@@ -121,4 +122,18 @@ export async function desfazerConciliacaoBtg(orgSlug: string, movementId: string
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/financeiro/conciliacao`)
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+}
+
+/** Importa as transações de um OFX numa conta (aditivo, dedup por FITID). */
+export async function importarOfx(orgSlug: string, contaId: string, txns: OfxTxn[]) {
+  const { supabase, orgId } = await assertFinanceAccess(orgSlug)
+  const rows = txns.map(t => ({ fitid: t.fitid, data_mov: t.data, valor: t.valor, tipo: t.tipo, descricao: t.descricao }))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('importar_ofx', {
+    p_org_id: orgId, p_conta_id: contaId, p_rows: rows,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/contas/${contaId}`)
+  revalidatePath(`/${orgSlug}/financeiro/conciliacao`)
+  return { result: data as { inserted: number; skipped: number; total: number } }
 }
