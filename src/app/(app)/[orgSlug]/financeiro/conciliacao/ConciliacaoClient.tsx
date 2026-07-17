@@ -81,7 +81,7 @@ export function ConciliacaoClient({
       <div className="flex items-center justify-between gap-3 mb-5">
         <div>
           <h1 className="text-lg font-semibold text-gray-900 inline-flex items-center gap-2">
-            <Landmark className="w-4 h-4 text-gray-400" /> Conciliação BTG
+            <Landmark className="w-4 h-4 text-gray-400" /> Conciliação bancária
           </h1>
           <p className="text-gray-500 text-sm mt-0.5">
             Cruza o extrato do banco com os lançamentos em aberto — a soma tem que bater 100% com o movimento.
@@ -160,10 +160,20 @@ function PendingRow({ orgSlug, movement, candidatos, contas, categorias }: {
   const exact = Math.abs(diff) < 0.005 && selIds.length > 0
 
   const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+  const movT = new Date(movement.dataMov).getTime()
   const filtered = useMemo(() => {
     const q = norm(search)
-    return all.filter(l => !q || norm(`${l.contatoNome ?? ''} ${l.descricao ?? ''}`).includes(q))
-  }, [all, search])
+    const qNum = search.replace(/[^\d]/g, '') // busca por valor (dígitos)
+    const hit = all.filter(l => {
+      if (!q) return true
+      if (norm(`${l.contatoNome ?? ''} ${l.descricao ?? ''}`).includes(q)) return true
+      if (qNum.length >= 2 && (String(Math.round(l.valor * 100)).includes(qNum) || String(Math.round(l.saldo * 100)).includes(qNum))) return true
+      return false
+    })
+    // ordena por proximidade de data ao movimento (mesmo mês / mais perto primeiro)
+    return hit.slice().sort((a, b) =>
+      Math.abs(new Date(a.vencimento ?? 0).getTime() - movT) - Math.abs(new Date(b.vencimento ?? 0).getTime() - movT))
+  }, [all, search, movT])
 
   function toggle(l: LancOption) {
     setSel(prev => {
@@ -242,7 +252,7 @@ function PendingRow({ orgSlug, movement, candidatos, contas, categorias }: {
             <div className="flex items-center gap-2 mb-2">
               <div className="relative flex-1">
                 <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar lançamento por nome…"
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nome ou valor…"
                   className="w-full h-9 pl-9 pr-3 text-sm bg-gray-100 border border-transparent rounded-lg focus:bg-white focus:border-orange-300 focus:ring-2 focus:ring-orange-100 outline-none transition" />
               </div>
               <button onClick={() => setShowCreate(s => !s)}
