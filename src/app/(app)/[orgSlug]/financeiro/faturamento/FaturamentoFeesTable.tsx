@@ -17,7 +17,8 @@ export interface FeeView {
   serie?: string | null
   titulo: string
   cliente: string
-  total: number
+  aFaturar: number      // verde — o que a agência vai receber (a faturar)
+  valorCliente: number  // cinza — valor cheio que o cliente paga (informativo)
   parcelas: ParcelaView[]
   anexos: Anexo[]
 }
@@ -32,7 +33,7 @@ export function FaturamentoFeesTable({ orgSlug, fees }: { orgSlug: string; fees:
             <th className="text-left px-4 py-3">Fee</th>
             <th className="text-left px-4 py-3">Cliente</th>
             <th className="text-center px-4 py-3">Parcelas</th>
-            <th className="text-right px-4 py-3">Total</th>
+            <th className="text-right px-4 py-3">A faturar</th>
             <th className="w-36" />
           </tr>
         </thead>
@@ -71,7 +72,12 @@ function FeeRow({ orgSlug, fee }: { orgSlug: string; fee: FeeView }) {
             </button>
           ) : <span className="text-sm text-gray-400">—</span>}
         </td>
-        <td className="px-4 py-3 text-sm font-medium text-emerald-600 text-right">{formatBRL(fee.total)}</td>
+        <td className="px-4 py-3 text-right">
+          <div className="text-sm font-medium text-emerald-600 tabular-nums">{formatBRL(fee.aFaturar)}</div>
+          {fee.valorCliente > fee.aFaturar + 0.005 && (
+            <div className="text-xs text-gray-400 tabular-nums">cliente paga {formatBRL(fee.valorCliente)}</div>
+          )}
+        </td>
         <td className="px-3 py-3 text-right">
           <FaturarButton
             missing={faltando(anexos)}
@@ -101,8 +107,8 @@ function FeeRow({ orgSlug, fee }: { orgSlug: string; fee: FeeView }) {
                     ))}
                     <div className="contents">
                       <div className="px-3 py-2 text-xs font-medium text-gray-400" />
-                      <div className="px-3 py-2 text-xs font-medium text-gray-500">Total ({n}x)</div>
-                      <div className="px-3 py-2 text-right font-semibold text-gray-900 tabular-nums">{formatBRL(fee.total)}</div>
+                      <div className="px-3 py-2 text-xs font-medium text-gray-500">A faturar ({n}x)</div>
+                      <div className="px-3 py-2 text-right font-semibold text-emerald-600 tabular-nums">{formatBRL(fee.aFaturar)}</div>
                     </div>
                   </div>
                 </div>

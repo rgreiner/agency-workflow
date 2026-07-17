@@ -74,26 +74,44 @@ export default async function FaturamentoPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: feesRaw } = await (supabase as any)
     .from('producao')
-    .select('id, numero, serie, titulo, tipo, valor, detalhe, anexos, workspaces(name)')
+    .select('id, numero, serie, titulo, tipo, valor, bv_pct, honorarios_pct, detalhe, anexos, workspaces(name)')
     .eq('org_id', orgId).eq('archived', false)
     .eq('situacao', 'faturar').in('tipo', ['fee', 'pedido'])
     .order('numero', { ascending: false })
+  // Parcelas que viram lançamento a receber (o que a agência realmente fatura).
+  const RECEBER_TIPOS = ['receber_bv', 'receber_honorarios', 'receber_cliente']
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fees = ((feesRaw ?? []) as any[]).map(f => ({
-    id: f.id as string,
-    numero: f.numero as number | null,
-    serie: f.serie as string | null,
-    titulo: (f.titulo as string) || 'Fee',
-    cliente: f.workspaces?.name ?? '—',
-    total: Number(f.valor ?? 0),
+  const fees = ((feesRaw ?? []) as any[]).map(f => {
+    const valorCheio = Number(f.valor ?? 0)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    parcelas: (Array.isArray(f.detalhe?.parcelas) ? f.detalhe.parcelas : []).map((p: any) => ({
-      vencimento: (p?.vencimento as string) ?? '',
-      valor: Number(p?.valor ?? 0),
-    })),
-    anexos: (Array.isArray(f.anexos) ? f.anexos : []) as Anexo[],
-  }))
-  const totalFees = fees.reduce((s, f) => s + f.total, 0)
+    const todasParc = (Array.isArray(f.detalhe?.parcelas) ? f.detalhe.parcelas : []) as any[]
+    const parcReceber = todasParc.filter(p => RECEBER_TIPOS.includes(p?.tipo))
+    const somaReceber = parcReceber.reduce((s, p) => s + Number(p?.valor ?? 0), 0)
+    // Valor que a agência fatura (verde): comissão BV+honorários no pedido; valor cheio no fee.
+    const aFaturar = somaReceber > 0
+      ? somaReceber
+      : (f.tipo === 'pedido'
+          ? valorCheio * ((Number(f.bv_pct ?? 0) + Number(f.honorarios_pct ?? 0)) / 100)
+          : valorCheio)
+    // Mostra as parcelas a receber (fallback p/ dados antigos sem tipo).
+    const parcExibir = parcReceber.length ? parcReceber : todasParc
+    return {
+      id: f.id as string,
+      numero: f.numero as number | null,
+      serie: f.serie as string | null,
+      titulo: (f.titulo as string) || 'Fee',
+      cliente: f.workspaces?.name ?? '—',
+      aFaturar,
+      valorCliente: valorCheio, // valor cheio (cinza) — o que o cliente paga
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      parcelas: parcExibir.map((p: any) => ({
+        vencimento: (p?.vencimento as string) ?? '',
+        valor: Number(p?.valor ?? 0),
+      })),
+      anexos: (Array.isArray(f.anexos) ? f.anexos : []) as Anexo[],
+    }
+  })
+  const totalFees = fees.reduce((s, f) => s + f.aFaturar, 0)
 
   return (
     <div className="p-6">
@@ -109,7 +127,7 @@ export default async function FaturamentoPage({
         <section className="mt-5">
           <div className="flex items-baseline justify-between gap-3 mb-2">
             <h2 className="text-sm font-semibold text-gray-800">Fees e pedidos a faturar <span className="text-gray-400 font-normal">({fees.length})</span></h2>
-            <span className="text-sm text-gray-500">Total: <strong className="text-gray-900">{formatBRL(totalFees)}</strong></span>
+            <span className="text-sm text-gray-500">A faturar: <strong className="text-emerald-600">{formatBRL(totalFees)}</strong></span>
           </div>
           <p className="text-xs text-gray-400 mb-2">Confira datas, anexe <strong className="font-medium text-gray-500">NF · Boleto · comprovantes</strong> e Fature — cada parcela vira 1 lançamento a receber.</p>
           <FaturamentoFeesTable orgSlug={orgSlug} fees={fees} />
