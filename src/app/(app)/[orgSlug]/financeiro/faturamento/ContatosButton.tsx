@@ -9,11 +9,11 @@ export interface ContatoCard {
   nome: string
   razao?: string
   cnpj?: string
-  emailNf?: string       // e-mail do financeiro (pra onde vai a NF) — em destaque
-  email?: string
-  telefone?: string
+  emailNf?: string                              // e-mail p/ NF (financeiro) — em destaque
+  emails?: { tipo: string; email: string }[]
+  telefones?: { tipo: string; numero: string }[]
+  enderecos?: string[]
   contato?: string
-  endereco?: string
   notas?: string
 }
 
@@ -83,18 +83,18 @@ function CardView({ c }: { c: ContatoCard }) {
             <CopyButton text={c.emailNf} />
           </Linha>
         )}
-        {c.email && c.email !== c.emailNf && (
-          <Linha icon={<Mail className="w-3.5 h-3.5" />} label="E-mail">
-            <a href={`mailto:${c.email}`} className="text-gray-700 hover:underline break-all">{c.email}</a>
-            <CopyButton text={c.email} />
+        {(c.emails ?? []).filter(e => e.email !== c.emailNf).map((e, i) => (
+          <Linha key={`e${i}`} icon={<Mail className="w-3.5 h-3.5" />} label={e.tipo}>
+            <a href={`mailto:${e.email}`} className="text-gray-700 hover:underline break-all">{e.email}</a>
+            <CopyButton text={e.email} />
           </Linha>
-        )}
-        {c.telefone && (
-          <Linha icon={<Phone className="w-3.5 h-3.5" />} label="Telefone">
-            <a href={`tel:${c.telefone.replace(/[^\d+]/g, '')}`} className="text-gray-700 hover:underline">{c.telefone}</a>
-            <CopyButton text={c.telefone} />
+        ))}
+        {(c.telefones ?? []).map((t, i) => (
+          <Linha key={`t${i}`} icon={<Phone className="w-3.5 h-3.5" />} label={t.tipo}>
+            <a href={`tel:${t.numero.replace(/[^\d+]/g, '')}`} className="text-gray-700 hover:underline">{t.numero}</a>
+            <CopyButton text={t.numero} />
           </Linha>
-        )}
+        ))}
         {c.contato && (
           <Linha icon={<User className="w-3.5 h-3.5" />} label="Contato">
             <span className="text-gray-700">{c.contato}</span>
@@ -106,11 +106,11 @@ function CardView({ c }: { c: ContatoCard }) {
             <CopyButton text={c.cnpj} />
           </Linha>
         )}
-        {c.endereco && (
-          <Linha icon={<MapPin className="w-3.5 h-3.5" />} label="Endereço">
-            <span className="text-gray-700">{c.endereco}</span>
+        {(c.enderecos ?? []).map((end, i) => (
+          <Linha key={`a${i}`} icon={<MapPin className="w-3.5 h-3.5" />} label="Endereço">
+            <span className="text-gray-700">{end}</span>
           </Linha>
-        )}
+        ))}
         {c.notas && (
           <Linha icon={<FileText className="w-3.5 h-3.5" />} label="Notas">
             <span className="text-gray-600 whitespace-pre-line">{c.notas}</span>
@@ -118,7 +118,7 @@ function CardView({ c }: { c: ContatoCard }) {
         )}
       </dl>
 
-      {!c.emailNf && !c.email && !c.telefone && !c.cnpj && !c.contato && !c.endereco && !c.notas && (
+      {!c.emailNf && !(c.emails ?? []).length && !(c.telefones ?? []).length && !c.cnpj && !c.contato && !(c.enderecos ?? []).length && !c.notas && (
         <p className="text-xs text-gray-400">Sem dados de contato cadastrados.</p>
       )}
     </div>

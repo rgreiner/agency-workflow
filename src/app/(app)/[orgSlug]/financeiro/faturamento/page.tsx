@@ -7,7 +7,7 @@ import type { Anexo } from '@/app/actions/financeiro'
 import { Receipt } from 'lucide-react'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function enderecoDe(w: any): string {
+function enderecoFlat(w: any): string {
   return [
     w?.address_street, w?.address_number ? `nº ${w.address_number}` : '', w?.address_complement,
     w?.address_district, [w?.address_city, w?.address_state].filter(Boolean).join('/'),
@@ -15,24 +15,43 @@ function enderecoDe(w: any): string {
   ].filter(Boolean).join(' - ')
 }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function clienteCard(w: any): ContatoCard {
+function enderecoJson(e: any): string {
+  return [
+    e?.logradouro, e?.numero ? `nº ${e.numero}` : '', e?.complemento,
+    e?.bairro, [e?.cidade, e?.uf].filter(Boolean).join('/'), e?.cep ? `CEP ${e.cep}` : '',
+  ].filter(Boolean).join(' - ')
+}
+/**
+ * Cartão de contato (cliente/fornecedor/veículo) a partir dos blocos jsonb
+ * emails/telefones/enderecos (itens {tipo,...}). `flat` (só cliente) mescla os campos
+ * antigos finance_email/phone/contact_name/address_*.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function contatoCard(r: any, papel: string, flat = false): ContatoCard | null {
+  if (!r) return null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const emails = (Array.isArray(r.emails) ? r.emails : []).filter((e: any) => e?.email).map((e: any) => ({ tipo: (e.tipo as string) || 'E-mail', email: e.email as string }))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const telefones = (Array.isArray(r.telefones) ? r.telefones : []).filter((t: any) => t?.numero).map((t: any) => ({ tipo: (t.tipo as string) || 'Telefone', numero: t.numero as string }))
+  const enderecos: string[] = (Array.isArray(r.enderecos) ? r.enderecos : []).map(enderecoJson).filter(Boolean)
+  if (flat) {
+    if (r.finance_email && !emails.some((e: { email: string }) => e.email === r.finance_email)) emails.unshift({ tipo: 'Financeiro', email: r.finance_email as string })
+    if (r.phone && !telefones.some((t: { numero: string }) => t.numero === r.phone)) telefones.unshift({ tipo: 'Contato', numero: r.phone as string })
+    const ef = enderecoFlat(r)
+    if (ef && enderecos.length === 0) enderecos.push(ef)
+  }
+  const emailNf = emails.find((e: { tipo: string }) => /financ/i.test(e.tipo))?.email
+    || (flat ? (r.finance_email as string | undefined) : undefined)
+    || emails[0]?.email
   return {
-    papel: 'Cliente',
-    nome: w?.name ?? '—',
-    razao: w?.legal_name || undefined,
-    cnpj: w?.tax_id || undefined,
-    emailNf: w?.finance_email || undefined,
-    telefone: w?.phone || undefined,
-    contato: w?.contact_name || undefined,
-    endereco: enderecoDe(w) || undefined,
+    papel, nome: r.name ?? '—', razao: r.legal_name || undefined, cnpj: r.tax_id || undefined,
+    emailNf: emailNf || undefined, emails, telefones, enderecos,
+    contato: flat ? (r.contact_name || undefined) : undefined,
+    notas: r.notes || undefined,
   }
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function fornVeicCard(r: any, papel: string): ContatoCard | null {
-  if (!r) return null
-  return { papel, nome: r?.name ?? '—', cnpj: r?.tax_id || undefined, notas: r?.notes || undefined }
-}
-const WS_CONTATO = 'name, legal_name, tax_id, finance_email, phone, contact_name, address_street, address_number, address_complement, address_district, address_city, address_state, address_zip'
+const CONTATO_JSON = 'emails, telefones, enderecos'
+const WS_CONTATO = `name, legal_name, tax_id, finance_email, phone, contact_name, address_street, address_number, address_complement, address_district, address_city, address_state, address_zip, ${CONTATO_JSON}`
 
 // Duas datas (espelham gerar_lancamento_midia):
 //  - vencimento do veículo/cliente = base DFM (fim do mês + N) ou data_base;
@@ -64,7 +83,7 @@ export default async function FaturamentoPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: docsRaw } = await (supabase as any)
     .from('midias')
-    .select(`id, numero, serie, titulo, valor, desconto_pct, faturamento, prazo, data_base, dias_agencia, anexos, workspaces(${WS_CONTATO}), veiculos(name, tax_id, notes)`)
+    .select(`id, numero, serie, titulo, valor, desconto_pct, faturamento, prazo, data_base, dias_agencia, anexos, workspaces(${WS_CONTATO}), veiculos(name, tax_id, notes, ${CONTATO_JSON})`)
     .eq('org_id', orgId).in('situacao', ['faturar', 'faturado']).eq('archived', false)
     .order('numero', { ascending: false })
 
@@ -83,7 +102,7 @@ export default async function FaturamentoPage({
     titulo: (d.titulo as string) || '—',
     cliente: d.workspaces?.name ?? '—',
     veiculo: d.veiculos?.name ?? '—',
-    contatos: [clienteCard(d.workspaces), fornVeicCard(d.veiculos, 'Veículo')].filter(Boolean) as ContatoCard[],
+    contatos: [contatoCard(d.workspaces, 'Cliente', true), contatoCard(d.veiculos, 'Veículo')].filter(Boolean) as ContatoCard[],
     valorDoc: Number(d.valor ?? 0),
     comissao: Math.round(Number(d.valor ?? 0) * Number(d.desconto_pct ?? 0)) / 100,
     pagador: FATURAMENTO_PAGADOR[d.faturamento] === 'veiculo'
@@ -111,7 +130,7 @@ export default async function FaturamentoPage({
   // Fornecedores da org (pra montar o contato do pedido a partir de detalhe.fornecedor_id).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: fornRaw } = await (supabase as any)
-    .from('fornecedores').select('id, name, tax_id, notes').eq('org_id', orgId)
+    .from('fornecedores').select(`id, name, tax_id, notes, ${CONTATO_JSON}`).eq('org_id', orgId)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fornMap = new Map<string, any>((fornRaw ?? []).map((f: any) => [f.id, f]))
   // Parcelas que viram lançamento a receber (o que a agência realmente fatura).
@@ -140,7 +159,7 @@ export default async function FaturamentoPage({
       serie: f.serie as string | null,
       titulo: (f.titulo as string) || 'Item',
       cliente: f.workspaces?.name ?? '—',
-      contatos: [clienteCard(f.workspaces), fornVeicCard(fornMap.get(f.detalhe?.fornecedor_id), 'Fornecedor')].filter(Boolean) as ContatoCard[],
+      contatos: [contatoCard(f.workspaces, 'Cliente', true), contatoCard(fornMap.get(f.detalhe?.fornecedor_id), 'Fornecedor')].filter(Boolean) as ContatoCard[],
       aFaturar,
       valorCliente: valorCheio, // valor cheio (cinza) — o que o cliente paga
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
