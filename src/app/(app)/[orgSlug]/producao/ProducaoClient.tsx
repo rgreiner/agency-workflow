@@ -9,9 +9,10 @@ import { cn } from '@/lib/utils'
 import { Select, type SelectOption } from '@/components/ui/Select'
 import { setProducaoSituacao, setProducaoArchived, gerarPedidosDoOrcamento, gerarDocsDaProposta } from '@/app/actions/producao'
 import { MIDIA_SITUACAO_OPTIONS, MIDIA_SITUACAO_COLORS, labelOf, formatBRL } from '@/lib/midia'
+import { docNumero } from '@/lib/doc-series'
 
 export interface ProducaoRow {
-  id: string; numero: number | null; titulo: string; valor: number
+  id: string; numero: number | null; serie?: string | null; titulo: string; valor: number
   situacao: string; archived: boolean; cliente: string
 }
 
@@ -102,7 +103,7 @@ export function ProducaoClient({
           <table className="w-full min-w-[720px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50 text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                <th className="text-left px-4 py-2 w-12">Nº</th>
+                <th className="text-left px-4 py-2 w-20">Nº</th>
                 <th className="text-left px-4 py-2">Título</th>
                 <th className="text-right px-4 py-2 w-32">Valor</th>
                 <th className="text-left px-4 py-2 w-40">Situação</th>
@@ -123,7 +124,7 @@ export function ProducaoClient({
                     const cor = MIDIA_SITUACAO_COLORS[r.situacao]
                     return (
                       <tr key={r.id} className="border-b border-gray-50 hover:bg-orange-50/30 transition-colors">
-                        <td className="px-4 py-1.5 text-sm text-gray-400 tabular-nums">{r.numero ?? '—'}</td>
+                        <td className="px-4 py-1.5 text-sm text-gray-400 tabular-nums whitespace-nowrap">{docNumero(r.serie, r.numero)}</td>
                         <td className="px-4 py-1.5 text-sm font-medium"><Link href={`${base}/${r.id}`} className="text-gray-900 hover:text-orange-600 transition-colors">{r.titulo}</Link></td>
                         <td className="px-4 py-1.5 text-sm text-gray-900 text-right font-medium tabular-nums">{formatBRL(r.valor)}</td>
                         <td className="px-4 py-1.5">

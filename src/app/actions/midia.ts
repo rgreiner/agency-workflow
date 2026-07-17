@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
 const FIELDS = [
-  'workspace_id', 'campaign_id', 'veiculo_id', 'tipo', 'titulo', 'emissao', 'job',
+  'workspace_id', 'campaign_id', 'veiculo_id', 'tipo', 'serie', 'titulo', 'emissao', 'job',
   'aut_veiculo', 'codigo_identificador', 'nota_fiscal', 'pecas', 'praca', 'abrangencia',
   'valor', 'desconto_pct', 'faturamento', 'prazo', 'data_base', 'dias_agencia',
   'primeira_veiculacao', 'ultima_veiculacao', 'contato', 'responsavel_id', 'situacao',

@@ -10,9 +10,10 @@ import { setMidiaSituacao, setMidiaArchived } from '@/app/actions/midia'
 import {
   MIDIA_TIPO_OPTIONS, MIDIA_SITUACAO_OPTIONS, MIDIA_SITUACAO_COLORS, labelOf, formatBRL,
 } from '@/lib/midia'
+import { docNumero } from '@/lib/doc-series'
 
 export interface MidiaRow {
-  id: string; numero: number | null; titulo: string; tipo: string | null
+  id: string; numero: number | null; serie?: string | null; titulo: string; tipo: string | null
   valor: number; desconto_pct: number; faturamento: string | null
   situacao: string; archived: boolean; cliente: string; veiculo: string
 }
@@ -97,7 +98,7 @@ export function MidiasClient({
                 const cor = MIDIA_SITUACAO_COLORS[m.situacao]
                 return (
                   <tr key={m.id} className="hover:bg-gray-50/50 transition">
-                    <td className="px-4 py-3 text-sm text-gray-400">{m.numero ?? '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap tabular-nums">{docNumero(m.serie, m.numero)}</td>
                     <td className="px-4 py-3 text-sm font-medium">
                       <Link href={editHref(m)} className="text-gray-900 hover:text-orange-600 transition">
                         {m.titulo}

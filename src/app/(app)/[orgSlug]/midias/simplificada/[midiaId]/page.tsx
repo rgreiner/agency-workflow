@@ -68,6 +68,7 @@ export default async function EditarMidiaPage({
     campaign_id: s(m.campaign_id),
     veiculo_id: s(m.veiculo_id),
     tipo: s(m.tipo) || 'impressa_jornal',
+    serie: s(m.serie),
     titulo: s(m.titulo),
     emissao: s(m.emissao),
     job: s(m.job),

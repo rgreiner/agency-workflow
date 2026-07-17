@@ -94,7 +94,7 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
             </div>
           </div>
 
-          <h1 className="text-2xl font-light text-gray-900 mt-5 mb-5">Autorização de Mídia {tipoLabel} nº {m.numero ?? ''}</h1>
+          <h1 className="text-2xl font-light text-gray-900 mt-5 mb-5">Autorização de Mídia {tipoLabel} {m.serie ? `— ${m.serie} ${m.numero ?? ''}` : `nº ${m.numero ?? ''}`}</h1>
 
           <div className="space-y-3 mb-6">
             <Row label="Veículo">

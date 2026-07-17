@@ -20,7 +20,7 @@ export default async function MidiasSimplificadaPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: raw } = await (supabase as any)
     .from('midias')
-    .select('id, numero, titulo, tipo, valor, desconto_pct, faturamento, situacao, archived, workspaces(name), veiculos(name)')
+    .select('id, numero, serie, titulo, tipo, valor, desconto_pct, faturamento, situacao, archived, workspaces(name), veiculos(name)')
     .eq('org_id', org.id)
     .eq('archived', archivedView)
     .order('numero', { ascending: false })
@@ -28,7 +28,7 @@ export default async function MidiasSimplificadaPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const midias: MidiaRow[] = (raw ?? []).map((m: any) => ({
     id: m.id,
-    numero: m.numero,
+    numero: m.numero, serie: m.serie,
     titulo: m.titulo,
     tipo: m.tipo,
     valor: Number(m.valor ?? 0),

@@ -35,7 +35,7 @@ export default async function FaturamentoPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: docsRaw } = await (supabase as any)
     .from('midias')
-    .select('id, numero, titulo, valor, desconto_pct, faturamento, prazo, data_base, dias_agencia, anexos, workspaces(name), veiculos(name)')
+    .select('id, numero, serie, titulo, valor, desconto_pct, faturamento, prazo, data_base, dias_agencia, anexos, workspaces(name), veiculos(name)')
     .eq('org_id', orgId).in('situacao', ['faturar', 'faturado']).eq('archived', false)
     .order('numero', { ascending: false })
 
@@ -50,6 +50,7 @@ export default async function FaturamentoPage({
   const midias: MidiaView[] = ((docsRaw ?? []) as any[]).filter(d => !lancadas.has(d.id)).map(d => ({
     id: d.id as string,
     numero: d.numero as number | null,
+    serie: d.serie as string | null,
     titulo: (d.titulo as string) || '—',
     cliente: d.workspaces?.name ?? '—',
     veiculo: d.veiculos?.name ?? '—',
@@ -68,7 +69,7 @@ export default async function FaturamentoPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: feesRaw } = await (supabase as any)
     .from('producao')
-    .select('id, numero, titulo, tipo, valor, detalhe, anexos, workspaces(name)')
+    .select('id, numero, serie, titulo, tipo, valor, detalhe, anexos, workspaces(name)')
     .eq('org_id', orgId).eq('archived', false)
     .eq('situacao', 'faturar').in('tipo', ['fee', 'pedido'])
     .order('numero', { ascending: false })
@@ -76,6 +77,7 @@ export default async function FaturamentoPage({
   const fees = ((feesRaw ?? []) as any[]).map(f => ({
     id: f.id as string,
     numero: f.numero as number | null,
+    serie: f.serie as string | null,
     titulo: (f.titulo as string) || 'Fee',
     cliente: f.workspaces?.name ?? '—',
     total: Number(f.valor ?? 0),

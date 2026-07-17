@@ -19,13 +19,13 @@ export default async function OrcamentoPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: raw } = await (supabase as any)
     .from('producao')
-    .select('id, numero, titulo, valor, situacao, archived, workspaces(name)')
+    .select('id, numero, serie, titulo, valor, situacao, archived, workspaces(name)')
     .eq('org_id', org.id).eq('tipo', 'orcamento').eq('archived', archivedView)
     .order('numero', { ascending: false })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const items: ProducaoRow[] = (raw ?? []).map((r: any) => ({
-    id: r.id, numero: r.numero, titulo: r.titulo, valor: Number(r.valor ?? 0),
+    id: r.id, numero: r.numero, serie: r.serie, titulo: r.titulo, valor: Number(r.valor ?? 0),
     situacao: r.situacao, archived: r.archived, cliente: r.workspaces?.name ?? '—',
   }))
 

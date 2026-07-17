@@ -20,7 +20,7 @@ export default async function MidiasImpressaPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: raw } = await (supabase as any)
     .from('midias')
-    .select('id, numero, titulo, tipo, valor, desconto_pct, faturamento, situacao, archived, workspaces(name), veiculos(name)')
+    .select('id, numero, serie, titulo, tipo, valor, desconto_pct, faturamento, situacao, archived, workspaces(name), veiculos(name)')
     .eq('org_id', org.id)
     .in('tipo', ['impressa_jornal', 'impressa_revista'])
     .eq('archived', archivedView)
@@ -28,7 +28,7 @@ export default async function MidiasImpressaPage({
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const midias: MidiaRow[] = (raw ?? []).map((m: any) => ({
-    id: m.id, numero: m.numero, titulo: m.titulo, tipo: m.tipo,
+    id: m.id, numero: m.numero, serie: m.serie, titulo: m.titulo, tipo: m.tipo,
     valor: Number(m.valor ?? 0), desconto_pct: Number(m.desconto_pct ?? 0),
     faturamento: m.faturamento, situacao: m.situacao, archived: m.archived,
     cliente: m.workspaces?.name ?? '—', veiculo: m.veiculos?.name ?? '—',

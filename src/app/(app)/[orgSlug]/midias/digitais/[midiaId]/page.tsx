@@ -28,6 +28,7 @@ export default async function EditarDigitalPage({
 
   const initial: DigitalValues = {
     workspace_id: s(m.workspace_id), campaign_id: s(m.campaign_id), veiculo_id: s(m.veiculo_id),
+    serie: s(m.serie) || 'MS',
     titulo: s(m.titulo), emissao: s(m.emissao), job: s(m.job), aut_veiculo: s(m.aut_veiculo),
     codigo_identificador: s(m.codigo_identificador), nota_fiscal: s(m.nota_fiscal),
     praca: s(m.praca), abrangencia: s(m.abrangencia) || 'estadual',

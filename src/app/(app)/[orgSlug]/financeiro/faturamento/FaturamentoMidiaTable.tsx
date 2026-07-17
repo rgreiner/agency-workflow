@@ -4,6 +4,7 @@ import { Fragment, useState, useTransition } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
+import { docNumero } from '@/lib/doc-series'
 import { lancarMidia, setMidiaAnexos, type Anexo } from '@/app/actions/financeiro'
 import { DocsBox, faltando } from './DocsBox'
 import { FaturarButton } from './FaturarButton'
@@ -11,6 +12,7 @@ import { FaturarButton } from './FaturarButton'
 export interface MidiaView {
   id: string
   numero: number | null
+  serie?: string | null
   titulo: string
   cliente: string
   veiculo: string
@@ -28,7 +30,7 @@ export function FaturamentoMidiaTable({ orgSlug, midias }: { orgSlug: string; mi
       <table className="w-full min-w-[820px]">
         <thead>
           <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-medium text-gray-400">
-            <th className="text-left px-4 py-3 w-16">Nº</th>
+            <th className="text-left px-4 py-3 w-20">Nº</th>
             <th className="text-left px-4 py-3">Título</th>
             <th className="text-left px-4 py-3">Cliente</th>
             <th className="text-left px-4 py-3">Veículo</th>
@@ -58,7 +60,7 @@ function MidiaRow({ orgSlug, midia }: { orgSlug: string; midia: MidiaView }) {
   return (
     <Fragment>
       <tr className={cn('transition', open ? 'bg-orange-50/40' : 'hover:bg-gray-50/50')}>
-        <td className="px-4 py-3 text-sm text-gray-400">{midia.numero ?? '—'}</td>
+        <td className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap tabular-nums">{docNumero(midia.serie, midia.numero)}</td>
         <td className="px-4 py-3 text-sm font-medium text-gray-900">
           <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} className="inline-flex items-center gap-1 hover:text-orange-600 transition">
             <ChevronRight className={cn('w-3.5 h-3.5 text-gray-400 transition-transform duration-200', open && 'rotate-90')} />

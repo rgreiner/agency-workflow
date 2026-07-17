@@ -4,6 +4,7 @@ import { Fragment, useState, useTransition } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
+import { docNumero } from '@/lib/doc-series'
 import { setProducaoSituacao } from '@/app/actions/producao'
 import { setProducaoAnexos, type Anexo } from '@/app/actions/financeiro'
 import { DocsBox, faltando } from './DocsBox'
@@ -13,6 +14,7 @@ export interface ParcelaView { vencimento: string; valor: number }
 export interface FeeView {
   id: string
   numero: number | null
+  serie?: string | null
   titulo: string
   cliente: string
   total: number
@@ -26,7 +28,7 @@ export function FaturamentoFeesTable({ orgSlug, fees }: { orgSlug: string; fees:
       <table className="w-full min-w-[720px]">
         <thead>
           <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-medium text-gray-400">
-            <th className="text-left px-4 py-3 w-16">Nº</th>
+            <th className="text-left px-4 py-3 w-20">Nº</th>
             <th className="text-left px-4 py-3">Fee</th>
             <th className="text-left px-4 py-3">Cliente</th>
             <th className="text-center px-4 py-3">Parcelas</th>
@@ -57,7 +59,7 @@ function FeeRow({ orgSlug, fee }: { orgSlug: string; fee: FeeView }) {
   return (
     <Fragment>
       <tr className={cn('transition', open ? 'bg-orange-50/40' : 'hover:bg-gray-50/50')}>
-        <td className="px-4 py-3 text-sm text-gray-400">{fee.numero ?? '—'}</td>
+        <td className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap tabular-nums">{docNumero(fee.serie, fee.numero)}</td>
         <td className="px-4 py-3 text-sm font-medium text-gray-900">{fee.titulo}</td>
         <td className="px-4 py-3 text-sm text-gray-600">{fee.cliente}</td>
         <td className="px-4 py-3 text-center">

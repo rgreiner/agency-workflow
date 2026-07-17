@@ -11,13 +11,14 @@ import {
   MIDIA_ABRANGENCIA_OPTIONS, MIDIA_SITUACAO_OPTIONS, FATURAMENTO_PAGADOR,
   formatBRL, parseMoney,
 } from '@/lib/midia'
+import { MIDIA_SERIE_DIGITAL_OPTIONS } from '@/lib/doc-series'
 
 export interface ClienteOpt { id: string; name: string; campaigns: { id: string; name: string }[] }
 export interface VeiculoOpt { id: string; name: string; commission_pct: number | null }
 export interface MemberOpt { id: string; name: string }
 
 export interface MidiaValues {
-  workspace_id: string; campaign_id: string; veiculo_id: string; tipo: string; titulo: string
+  workspace_id: string; campaign_id: string; veiculo_id: string; tipo: string; serie: string; titulo: string
   emissao: string; job: string; aut_veiculo: string; codigo_identificador: string; nota_fiscal: string
   pecas: string; praca: string; abrangencia: string
   valor: string; desconto_pct: string; faturamento: string; prazo: string; data_base: string; dias_agencia: string
@@ -32,7 +33,7 @@ const cardCls = 'bg-white rounded-2xl border border-gray-200 p-5'
 
 function emptyValues(today: string, defaultResponsavelId: string): MidiaValues {
   return {
-    workspace_id: '', campaign_id: '', veiculo_id: '', tipo: 'impressa_jornal', titulo: '',
+    workspace_id: '', campaign_id: '', veiculo_id: '', tipo: 'impressa_jornal', serie: '', titulo: '',
     emissao: today, job: '', aut_veiculo: '', codigo_identificador: '', nota_fiscal: '',
     pecas: '', praca: '', abrangencia: 'local',
     valor: '', desconto_pct: '20', faturamento: 'valor_bruto', prazo: '15_dfm', data_base: today, dias_agencia: '7',
@@ -124,9 +125,17 @@ export function MidiaForm({
 
         {/* Tipo */}
         <div className={cardCls}>
-          <label className={labelCls}>Tipo</label>
-          <div className="max-w-md">
-            <Select value={form.tipo} onChange={v => set('tipo', v)} options={MIDIA_TIPO_OPTIONS} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
+            <div>
+              <label className={labelCls}>Tipo</label>
+              <Select value={form.tipo} onChange={v => set('tipo', v)} options={MIDIA_TIPO_OPTIONS} />
+            </div>
+            {form.tipo === 'digital' && (
+              <div>
+                <label className={labelCls}>Série do documento</label>
+                <Select value={form.serie || 'MS'} onChange={v => set('serie', v)} options={MIDIA_SERIE_DIGITAL_OPTIONS} />
+              </div>
+            )}
           </div>
         </div>
 
