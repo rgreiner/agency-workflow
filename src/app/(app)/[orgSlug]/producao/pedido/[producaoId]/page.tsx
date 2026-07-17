@@ -22,7 +22,7 @@ export default async function EditarPedidoPage({
   const { data: p } = await (supabase as any).from('producao').select('*').eq('id', producaoId).single()
   if (!p) notFound()
 
-  const det = (p.detalhe ?? {}) as { fornecedor_id?: string; entrega?: string; prazo?: string; itens?: ItemPed[]; parcelas?: Parcela[] }
+  const det = (p.detalhe ?? {}) as { fornecedor_id?: string; entrega?: string; prazo?: string; dias_agencia?: number; itens?: ItemPed[]; parcelas?: Parcela[] }
   const parcelas: Parcela[] = Array.isArray(det.parcelas)
     ? det.parcelas.map(pc => ({ vencimento: s(pc.vencimento), valor: num2br(pc.valor), tipo: s(pc.tipo) || 'cliente_paga_fornecedor' }))
     : []
@@ -31,7 +31,8 @@ export default async function EditarPedidoPage({
     workspace_id: s(p.workspace_id), campaign_id: s(p.campaign_id), fornecedor_id: s(det.fornecedor_id),
     titulo: s(p.titulo), emissao: s(p.emissao), entrega: s(det.entrega),
     faturar: s(p.faturar) || 'contra_cliente', bv_pct: num2br(p.bv_pct), honorarios_pct: num2br(p.honorarios_pct),
-    prazo: s(det.prazo) || 'a_vista', contato: s(p.contato), responsavel_id: s(p.responsavel_id),
+    prazo: s(det.prazo) || 'a_vista', dias_agencia: det.dias_agencia != null ? String(det.dias_agencia) : '7',
+    contato: s(p.contato), responsavel_id: s(p.responsavel_id),
     situacao: s(p.situacao) || 'em_aberto', observacao: s(p.observacao), texto_legal: s(p.texto_legal),
     itens: Array.isArray(det.itens) ? det.itens : [],
     parcelas,

@@ -15,7 +15,7 @@ export interface Parcela { vencimento: string; valor: string; tipo: string }
 export interface PedidoValues {
   workspace_id: string; campaign_id: string; fornecedor_id: string; titulo: string
   emissao: string; entrega: string
-  faturar: string; bv_pct: string; honorarios_pct: string; prazo: string
+  faturar: string; bv_pct: string; honorarios_pct: string; prazo: string; dias_agencia: string
   contato: string; responsavel_id: string; situacao: string; observacao: string; texto_legal: string
   itens: ItemPed[]; parcelas: Parcela[]
 }
@@ -34,7 +34,7 @@ function emptyValues(today: string, responsavelId: string): PedidoValues {
   return {
     workspace_id: '', campaign_id: '', fornecedor_id: '', titulo: '',
     emissao: today, entrega: '',
-    faturar: 'contra_cliente', bv_pct: '15', honorarios_pct: '0', prazo: 'a_vista',
+    faturar: 'contra_cliente', bv_pct: '15', honorarios_pct: '0', prazo: 'a_vista', dias_agencia: '7',
     contato: '', responsavel_id: responsavelId, situacao: 'em_aberto', observacao: '', texto_legal: '',
     itens: [newItem()], parcelas: [],
   }
@@ -106,7 +106,8 @@ export function PedidoForm({
     fd.set('valor', String(valorTotal))
     fd.set('redirect_to', redirectTo)
     const parcelas = form.parcelas.map(p => ({ vencimento: p.vencimento, valor: String(parseMoney(p.valor)), tipo: p.tipo }))
-    fd.set('detalhe', JSON.stringify({ fornecedor_id: form.fornecedor_id, entrega: form.entrega, prazo: form.prazo, itens: form.itens, parcelas }))
+    const diasAgencia = parseInt(form.dias_agencia || '7', 10) || 0
+    fd.set('detalhe', JSON.stringify({ fornecedor_id: form.fornecedor_id, entrega: form.entrega, prazo: form.prazo, dias_agencia: diasAgencia, itens: form.itens, parcelas }))
 
     startTransition(async () => {
       const res = await onSubmit(fd)
@@ -176,8 +177,9 @@ export function PedidoForm({
             <div><label className={labelCls}>Prazo</label><Select value={form.prazo} onChange={v => set('prazo', v)} options={MIDIA_PRAZO_OPTIONS} /></div>
             <div><label className={labelCls}>Comissão (%)</label><input inputMode="decimal" value={form.bv_pct} onChange={e => set('bv_pct', e.target.value)} className={inputCls} /><p className="text-xs text-gray-400 mt-1">{formatBRL(bv)} — a receber do fornecedor</p></div>
             <div><label className={labelCls}>Honorários (%)</label><input inputMode="decimal" value={form.honorarios_pct} onChange={e => set('honorarios_pct', e.target.value)} className={inputCls} /><p className="text-xs text-gray-400 mt-1">{formatBRL(honorarios)} — a receber do cliente</p></div>
+            <div><label className={labelCls}>Dias agência</label><input inputMode="numeric" value={form.dias_agencia} onChange={e => set('dias_agencia', e.target.value)} className={inputCls} /><p className="text-xs text-gray-400 mt-1">A comissão entra no caixa {form.dias_agencia || '0'} dia(s) após a cobrança.</p></div>
           </div>
-          <p className="text-xs text-gray-500 mt-3">No Financeiro entram só as comissões: <strong>Comissão (fornecedor)</strong> e <strong>Honorários (cliente)</strong>. O pagamento do cliente ao fornecedor não é lançado.</p>
+          <p className="text-xs text-gray-500 mt-3">No Financeiro entram só as comissões: <strong>Comissão (fornecedor)</strong> e <strong>Honorários (cliente)</strong>, e caem no caixa {form.dias_agencia || '0'} dia(s) após a cobrança. O pagamento do cliente ao fornecedor não é lançado.</p>
         </div>
 
         {/* Parcelas */}

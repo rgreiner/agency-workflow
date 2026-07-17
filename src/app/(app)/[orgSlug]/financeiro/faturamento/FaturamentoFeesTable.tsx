@@ -11,7 +11,7 @@ import { setProducaoAnexos, type Anexo } from '@/app/actions/financeiro'
 import { DocsBox, faltando } from './DocsBox'
 import { FaturarButton } from './FaturarButton'
 
-export interface ParcelaView { vencimento: string; valor: number }
+export interface ParcelaView { vencimento: string; previstoAgencia: string; comissao: boolean; valor: number }
 export interface FeeView {
   id: string
   tipo: string          // 'fee' | 'pedido' — define a rota do documento
@@ -54,9 +54,11 @@ function FeeRow({ orgSlug, fee }: { orgSlug: string; fee: FeeView }) {
   const [anexos, setAnexos] = useState<Anexo[]>(fee.anexos)
   const [, startTransition] = useTransition()
   const n = fee.parcelas.length
-  const vencs = fee.parcelas.map(p => p.vencimento).filter(Boolean).sort()
-  const primeiroVenc = vencs[0]
-  const ultimoVenc = vencs[vencs.length - 1]
+  const temComissao = fee.parcelas.some(p => p.comissao)
+  // Cobrança = data da parcela; agência = recebimento no caixa (+dias na comissão).
+  const cobrs = fee.parcelas.map(p => p.vencimento).filter(Boolean).sort()
+  const agencias = fee.parcelas.map(p => p.previstoAgencia).filter(Boolean).sort()
+  const fmtRange = (ds: string[]) => ds.length === 0 ? '—' : ds.length === 1 ? formatDateBR(ds[0]) : `${formatDateBR(ds[0])} → ${formatDateBR(ds[ds.length - 1])}`
 
   function persist(next: Anexo[]) {
     setAnexos(next)
@@ -86,15 +88,15 @@ function FeeRow({ orgSlug, fee }: { orgSlug: string; fee: FeeView }) {
           ) : <span className="text-sm text-gray-400">—</span>}
         </td>
         <td className="px-4 py-3 text-sm whitespace-nowrap">
-          {vencs.length === 0 ? (
+          {agencias.length === 0 ? (
             <span className="text-gray-300">—</span>
-          ) : vencs.length === 1 ? (
-            <span className="text-gray-700 tabular-nums">{formatDateBR(primeiroVenc)}</span>
-          ) : (
+          ) : temComissao ? (
             <div className="leading-tight">
-              <div className="text-gray-700 tabular-nums">{formatDateBR(primeiroVenc)}</div>
-              <div className="text-xs text-gray-400 tabular-nums">→ {formatDateBR(ultimoVenc)}</div>
+              <div className="text-gray-700 tabular-nums">{fmtRange(agencias)} <span className="text-[10px] text-gray-400 font-medium">agência</span></div>
+              <div className="text-xs text-gray-400 tabular-nums">{fmtRange(cobrs)} cobrança</div>
             </div>
+          ) : (
+            <span className="text-gray-700 tabular-nums">{fmtRange(agencias)}</span>
           )}
         </td>
         <td className="px-4 py-3 text-right">
@@ -126,7 +128,10 @@ function FeeRow({ orgSlug, fee }: { orgSlug: string; fee: FeeView }) {
                     {fee.parcelas.map((p, i) => (
                       <div key={i} className="contents">
                         <div className="px-3 py-2 border-b border-gray-50 text-gray-400 tabular-nums">{i + 1}/{n}</div>
-                        <div className="px-3 py-2 border-b border-gray-50 text-gray-700 tabular-nums">{formatDateBR(p.vencimento)}</div>
+                        <div className="px-3 py-2 border-b border-gray-50 text-gray-700 tabular-nums">
+                          {formatDateBR(p.comissao ? p.previstoAgencia : p.vencimento)}
+                          {p.comissao && <span className="text-xs text-gray-400"> · cobra {formatDateBR(p.vencimento)}</span>}
+                        </div>
                         <div className="px-3 py-2 border-b border-gray-50 text-gray-900 font-medium text-right tabular-nums">{formatBRL(p.valor)}</div>
                       </div>
                     ))}

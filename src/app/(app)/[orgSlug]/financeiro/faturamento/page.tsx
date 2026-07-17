@@ -80,9 +80,11 @@ export default async function FaturamentoPage({
     .order('numero', { ascending: false })
   // Parcelas que viram lançamento a receber (o que a agência realmente fatura).
   const RECEBER_TIPOS = ['receber_bv', 'receber_honorarios', 'receber_cliente']
+  const COMISSAO_TIPOS = ['receber_bv', 'receber_honorarios']
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fees = ((feesRaw ?? []) as any[]).map(f => {
     const valorCheio = Number(f.valor ?? 0)
+    const diasAg = Number(f.detalhe?.dias_agencia ?? 7)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const todasParc = (Array.isArray(f.detalhe?.parcelas) ? f.detalhe.parcelas : []) as any[]
     const parcReceber = todasParc.filter(p => RECEBER_TIPOS.includes(p?.tipo))
@@ -105,10 +107,16 @@ export default async function FaturamentoPage({
       aFaturar,
       valorCliente: valorCheio, // valor cheio (cinza) — o que o cliente paga
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      parcelas: parcExibir.map((p: any) => ({
-        vencimento: (p?.vencimento as string) ?? '',
-        valor: Number(p?.valor ?? 0),
-      })),
+      parcelas: parcExibir.map((p: any) => {
+        const venc = (p?.vencimento as string) ?? ''
+        const comissao = COMISSAO_TIPOS.includes(p?.tipo)
+        return {
+          vencimento: venc,                                            // cobrança (fornecedor/cliente)
+          previstoAgencia: venc && comissao ? addDaysISO(venc, diasAg) : venc,  // + dias agência na comissão
+          comissao,
+          valor: Number(p?.valor ?? 0),
+        }
+      }),
       anexos: (Array.isArray(f.anexos) ? f.anexos : []) as Anexo[],
     }
   })
