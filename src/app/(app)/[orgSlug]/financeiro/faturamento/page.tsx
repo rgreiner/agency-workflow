@@ -97,9 +97,10 @@ export default async function FaturamentoPage({
     const parcExibir = parcReceber.length ? parcReceber : todasParc
     return {
       id: f.id as string,
+      tipo: (f.tipo as string) || 'fee',
       numero: f.numero as number | null,
       serie: f.serie as string | null,
-      titulo: (f.titulo as string) || 'Fee',
+      titulo: (f.titulo as string) || 'Item',
       cliente: f.workspaces?.name ?? '—',
       aFaturar,
       valorCliente: valorCheio, // valor cheio (cinza) — o que o cliente paga

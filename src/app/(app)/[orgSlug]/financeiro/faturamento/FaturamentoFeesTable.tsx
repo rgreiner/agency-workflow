@@ -1,7 +1,8 @@
 'use client'
 
 import { Fragment, useState, useTransition } from 'react'
-import { ChevronRight } from 'lucide-react'
+import Link from 'next/link'
+import { ChevronRight, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
 import { docNumero } from '@/lib/doc-series'
@@ -13,6 +14,7 @@ import { FaturarButton } from './FaturarButton'
 export interface ParcelaView { vencimento: string; valor: number }
 export interface FeeView {
   id: string
+  tipo: string          // 'fee' | 'pedido' — define a rota do documento
   numero: number | null
   serie?: string | null
   titulo: string
@@ -26,13 +28,14 @@ export interface FeeView {
 export function FaturamentoFeesTable({ orgSlug, fees }: { orgSlug: string; fees: FeeView[] }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
-      <table className="w-full min-w-[720px]">
+      <table className="w-full min-w-[860px]">
         <thead>
           <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-medium text-gray-400">
             <th className="text-left px-4 py-3 w-20">Nº</th>
-            <th className="text-left px-4 py-3">Fee</th>
+            <th className="text-left px-4 py-3">Item</th>
             <th className="text-left px-4 py-3">Cliente</th>
             <th className="text-center px-4 py-3">Parcelas</th>
+            <th className="text-left px-4 py-3">Vencimento</th>
             <th className="text-right px-4 py-3">A faturar</th>
             <th className="w-36" />
           </tr>
@@ -51,6 +54,9 @@ function FeeRow({ orgSlug, fee }: { orgSlug: string; fee: FeeView }) {
   const [anexos, setAnexos] = useState<Anexo[]>(fee.anexos)
   const [, startTransition] = useTransition()
   const n = fee.parcelas.length
+  const vencs = fee.parcelas.map(p => p.vencimento).filter(Boolean).sort()
+  const primeiroVenc = vencs[0]
+  const ultimoVenc = vencs[vencs.length - 1]
 
   function persist(next: Anexo[]) {
     setAnexos(next)
@@ -60,7 +66,14 @@ function FeeRow({ orgSlug, fee }: { orgSlug: string; fee: FeeView }) {
   return (
     <Fragment>
       <tr className={cn('transition', open ? 'bg-orange-50/40' : 'hover:bg-gray-50/50')}>
-        <td className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap tabular-nums">{docNumero(fee.serie, fee.numero)}</td>
+        <td className="px-4 py-3 whitespace-nowrap">
+          <Link href={`/${orgSlug}/producao/${fee.tipo}/${fee.id}/print`} target="_blank"
+            title="Abrir documento aprovado (nova aba)"
+            className="group/lnk inline-flex items-center gap-1 text-sm text-gray-500 hover:text-orange-600 tabular-nums transition-colors">
+            {docNumero(fee.serie, fee.numero)}
+            <ExternalLink className="w-3 h-3 opacity-0 group-hover/lnk:opacity-100 transition-opacity" />
+          </Link>
+        </td>
         <td className="px-4 py-3 text-sm font-medium text-gray-900">{fee.titulo}</td>
         <td className="px-4 py-3 text-sm text-gray-600">{fee.cliente}</td>
         <td className="px-4 py-3 text-center">
@@ -71,6 +84,18 @@ function FeeRow({ orgSlug, fee }: { orgSlug: string; fee: FeeView }) {
               {n}x
             </button>
           ) : <span className="text-sm text-gray-400">—</span>}
+        </td>
+        <td className="px-4 py-3 text-sm whitespace-nowrap">
+          {vencs.length === 0 ? (
+            <span className="text-gray-300">—</span>
+          ) : vencs.length === 1 ? (
+            <span className="text-gray-700 tabular-nums">{formatDateBR(primeiroVenc)}</span>
+          ) : (
+            <div className="leading-tight">
+              <div className="text-gray-700 tabular-nums">{formatDateBR(primeiroVenc)}</div>
+              <div className="text-xs text-gray-400 tabular-nums">→ {formatDateBR(ultimoVenc)}</div>
+            </div>
+          )}
         </td>
         <td className="px-4 py-3 text-right">
           <div className="text-sm font-medium text-emerald-600 tabular-nums">{formatBRL(fee.aFaturar)}</div>
@@ -88,7 +113,7 @@ function FeeRow({ orgSlug, fee }: { orgSlug: string; fee: FeeView }) {
       </tr>
       {open && (
         <tr className="bg-gray-50/40">
-          <td colSpan={6} className="px-4 pb-4 pt-1">
+          <td colSpan={7} className="px-4 pb-4 pt-1">
             <div className="grid gap-3 lg:grid-cols-2">
               {n > 0 && (
                 <div className="rounded-xl border border-gray-100 bg-white overflow-hidden">
