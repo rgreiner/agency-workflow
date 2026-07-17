@@ -36,7 +36,7 @@ export default async function PedidoPage({
     <ProducaoClient
       orgSlug={orgSlug} items={items} archivedView={archivedView}
       basePath="producao/pedido" title="Liberação de Produção — Pedido de produção"
-      subtitle="Pedidos aos fornecedores (BV + honorários)" addLabel="Adicionar Pedido"
+      subtitle="Pedidos aos fornecedores (comissão + honorários)" addLabel="Adicionar Pedido"
     />
   )
 }

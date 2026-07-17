@@ -73,7 +73,7 @@ export function PedidoForm({
   const cliNome = clientes.find(c => c.id === form.workspace_id)?.name
   const PARCELA_TIPOS = [
     { value: 'cliente_paga_fornecedor', label: `Cliente paga ao Fornecedor${fornNome ? ` (${fornNome})` : ''}` },
-    { value: 'receber_bv', label: `Receber BV do Fornecedor${fornNome ? ` (${fornNome})` : ''}` },
+    { value: 'receber_bv', label: `Receber Comissão do Fornecedor${fornNome ? ` (${fornNome})` : ''}` },
     { value: 'receber_honorarios', label: `Receber Honorários do Cliente${cliNome ? ` (${cliNome})` : ''}` },
   ]
 

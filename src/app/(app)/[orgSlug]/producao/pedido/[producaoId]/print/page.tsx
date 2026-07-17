@@ -113,7 +113,7 @@ export default async function PedidoPrintPage({
           <div className="bg-gray-50 border border-gray-200 rounded-lg grid grid-cols-4 gap-2 p-4 my-5 text-center">
             <div><p className="text-gray-500 text-[11px]">Valor Total</p><p className="font-semibold">{formatBRL(valor)}</p></div>
             <div><p className="text-gray-500 text-[11px]">Faturar</p><p className="font-semibold">{FATURAR_LABEL[p.faturar] ?? p.faturar ?? '—'}</p></div>
-            <div><p className="text-gray-500 text-[11px]">Comissão (BV)</p><p className="font-semibold">{bvPct.toString().replace('.', ',')}% ({formatBRL(bv)})</p></div>
+            <div><p className="text-gray-500 text-[11px]">Comissão</p><p className="font-semibold">{bvPct.toString().replace('.', ',')}% ({formatBRL(bv)})</p></div>
             <div><p className="text-gray-500 text-[11px]">Entrega</p><p className="font-semibold">{formatDateBR(det.entrega)}</p></div>
           </div>
 

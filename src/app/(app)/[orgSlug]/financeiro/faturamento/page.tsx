@@ -87,7 +87,7 @@ export default async function FaturamentoPage({
     const todasParc = (Array.isArray(f.detalhe?.parcelas) ? f.detalhe.parcelas : []) as any[]
     const parcReceber = todasParc.filter(p => RECEBER_TIPOS.includes(p?.tipo))
     const somaReceber = parcReceber.reduce((s, p) => s + Number(p?.valor ?? 0), 0)
-    // Valor que a agência fatura (verde): comissão BV+honorários no pedido; valor cheio no fee.
+    // Valor que a agência fatura (verde): comissão+honorários no pedido; valor cheio no fee.
     const aFaturar = somaReceber > 0
       ? somaReceber
       : (f.tipo === 'pedido'
