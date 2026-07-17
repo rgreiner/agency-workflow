@@ -232,7 +232,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
           <table className="w-full min-w-[920px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/60 text-xs font-medium text-gray-400">
-                <th className="text-left px-4 py-2.5 font-medium">Data</th>
+                <th className="text-left px-4 py-2.5 font-medium">Vencimento</th>
                 <th className="text-left px-4 py-2.5 font-medium">Resumo do lançamento</th>
                 <th className="text-left px-3 py-2.5 font-medium">Situação</th>
                 <th className="text-right px-4 py-2.5 font-medium">Valor</th>
@@ -278,7 +278,8 @@ function Row({ l, saldo, orgSlug, today, conta, onEdit, onBaixa }: {
   const isSaida = l.tipo === 'saida'
   const isManual = l.origem_tipo === 'manual'
   const imported = l.source === 'importado'
-  const dateShown = paid ? (l.data_liquidacao ?? l.vencimento) : l.vencimento
+  // A coluna mostra o VENCIMENTO; quando baixado, a data da baixa vai como linha secundária.
+  const pagoEm = paid ? (l.data_liquidacao ?? null) : null
   const status = paid
     ? { label: isSaida ? 'Pago' : 'Recebido', cls: 'bg-emerald-50 text-emerald-700' }
     : overdue
@@ -297,7 +298,10 @@ function Row({ l, saldo, orgSlug, today, conta, onEdit, onBaixa }: {
 
   return (
     <tr className={cn('transition', isPending ? 'opacity-50' : 'hover:bg-gray-50/50', l.revisar && 'bg-amber-50/40')}>
-      <td className={cn('px-4 py-2.5 text-sm whitespace-nowrap', overdue ? 'text-red-600 font-medium' : 'text-gray-600')}>{formatDateBR(dateShown)}</td>
+      <td className={cn('px-4 py-2.5 text-sm whitespace-nowrap', overdue ? 'text-red-600 font-medium' : 'text-gray-600')}>
+        <div>{formatDateBR(l.vencimento)}</div>
+        {pagoEm && <div className="text-[11px] text-emerald-600 mt-0.5">{isSaida ? 'pago' : 'receb.'} {formatDateBR(pagoEm)}</div>}
+      </td>
       <td className="px-4 py-2.5 text-sm">
         <div className="flex items-start gap-2">
           {isSaida ? <ArrowUpCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" /> : <ArrowDownCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />}
