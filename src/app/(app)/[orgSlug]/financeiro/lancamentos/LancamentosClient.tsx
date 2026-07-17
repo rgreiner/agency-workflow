@@ -53,17 +53,32 @@ export interface ContaRef { id: string; nome: string; cor: string | null; ativo:
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
-function monthLabel(ym: string) {
-  const [y, m] = ym.split('-')
-  return `${MESES[Number(m) - 1]} ${y}`
+// Período da tela: mês, ano ou intervalo personalizado. A lista mostra SÓ o que cai no período.
+type Periodo =
+  | { tipo: 'mes'; ano: number; mes: number }
+  | { tipo: 'ano'; ano: number }
+  | { tipo: 'custom'; start: string; end: string }
+
+function lastDay(ano: number, mes: number) { return new Date(Date.UTC(ano, mes, 0)).getUTCDate() }
+function periodoRange(p: Periodo): { start: string; end: string } {
+  if (p.tipo === 'ano') return { start: `${p.ano}-01-01`, end: `${p.ano}-12-31` }
+  if (p.tipo === 'custom') return { start: p.start, end: p.end }
+  const mm = String(p.mes).padStart(2, '0')
+  const dd = String(lastDay(p.ano, p.mes)).padStart(2, '0')
+  return { start: `${p.ano}-${mm}-01`, end: `${p.ano}-${mm}-${dd}` }
 }
-function shiftMonth(ym: string, delta: number) {
-  const [y, m] = ym.split('-').map(Number)
-  const d = new Date(Date.UTC(y, m - 1 + delta, 1))
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+function periodoLabel(p: Periodo): string {
+  if (p.tipo === 'ano') return String(p.ano)
+  if (p.tipo === 'custom') return `${formatDateBR(p.start)} – ${formatDateBR(p.end)}`
+  return `${MESES[p.mes - 1]} ${p.ano}`
+}
+function shiftPeriodo(p: Periodo, delta: number): Periodo {
+  if (p.tipo === 'ano') return { tipo: 'ano', ano: p.ano + delta }
+  if (p.tipo === 'custom') return p
+  const d = new Date(Date.UTC(p.ano, p.mes - 1 + delta, 1))
+  return { tipo: 'mes', ano: d.getUTCFullYear(), mes: d.getUTCMonth() + 1 }
 }
 const isPago = (s: string) => s === 'pago' || s === 'recebido'
-const monthOf = (d: string | null) => (d ? d.slice(0, 7) : null)
 const val = (l: Lancamento) => Number(l.valor ?? 0)
 const realVal = (l: Lancamento) => Number(l.valor_realizado ?? l.valor ?? 0)
 // Valor com sinal p/ saldo corrido: entrada soma, saída subtrai (usa o realizado quando liquidado).
@@ -77,7 +92,8 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
   orgSlug: string; lancamentos: Lancamento[]; importadas?: Lancamento[]; contas: ContaRef[]
   categorias: FinanceCategoriaGrupo[]; centros: FinanceCentro[]; today: string
 }) {
-  const [mes, setMes] = useState(today.slice(0, 7))
+  const [periodo, setPeriodo] = useState<Periodo>({ tipo: 'mes', ano: Number(today.slice(0, 4)), mes: Number(today.slice(5, 7)) })
+  const { start: perStart, end: perEnd } = useMemo(() => periodoRange(periodo), [periodo])
   const [contaFilter, setContaFilter] = useState('')
   const [tipoFilter, setTipoFilter] = useState<'todos' | 'entrada' | 'saida'>('todos')
   const [query, setQuery] = useState('')
@@ -106,13 +122,11 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
     })
   }, [merged, tipoFilter, contaFilter, query])
 
-  const liqMonth = (l: Lancamento) => monthOf(l.data_liquidacao ?? l.vencimento)
   // Data efetiva: liquidação (se pago) ou vencimento (se em aberto).
   const effDate = (l: Lancamento) => (isPago(l.situacao) ? (l.data_liquidacao ?? l.vencimento) : l.vencimento)
-  const isCurrentMonth = mes === today.slice(0, 7)
+  const inPeriodo = (l: Lancamento) => { const d = effDate(l); return !!d && d >= perStart && d <= perEnd }
 
-  // Tabela única (estilo extrato): itens do mês por data + saldo corrido projetado.
-  // No mês atual, também carrega os em aberto atrasados de meses anteriores e os sem vencimento.
+  // Tabela única (estilo extrato): só os itens do período selecionado, por data + saldo corrido.
   const rows = useMemo(() => {
     const inView = filtered.filter(l => {
       if (cardFilter) {
@@ -122,13 +136,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
         if (cardFilter === 'desp_aberto' && !(l.tipo === 'saida'   && !p)) return false
         if (cardFilter === 'desp_real'   && !(l.tipo === 'saida'   &&  p)) return false
       }
-      const em = monthOf(effDate(l))
-      if (em === mes) return true
-      if (isCurrentMonth && !isPago(l.situacao)) {
-        if (!l.vencimento) return true
-        if (l.vencimento < today && (!em || em < mes)) return true
-      }
-      return false
+      return inPeriodo(l)
     })
     inView.sort((a, b) => {
       const da = effDate(a) ?? '9999-12-31', db = effDate(b) ?? '9999-12-31'
@@ -138,11 +146,12 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
     let acc = 0
     for (const l of inView) { acc += signedEff(l); out.push({ l, saldo: acc }) }
     return out
-  }, [filtered, mes, today, isCurrentMonth, cardFilter])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, perStart, perEnd, cardFilter])
 
-  // Resumo do mês (estilo Conta Azul): receita/despesa × em aberto/realizada.
+  // Resumo do período (estilo Conta Azul): receita/despesa × em aberto/realizada.
   const resumo = useMemo(() => {
-    const noMes = filtered.filter(l => (isPago(l.situacao) ? liqMonth(l) : monthOf(l.vencimento)) === mes)
+    const noMes = filtered.filter(inPeriodo)
     const s = (arr: Lancamento[], real = false) => arr.reduce((t, l) => t + (real ? realVal(l) : val(l)), 0)
     const recAberto = noMes.filter(l => l.tipo === 'entrada' && !isPago(l.situacao))
     const recReal = noMes.filter(l => l.tipo === 'entrada' && isPago(l.situacao))
@@ -154,7 +163,8 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       receitaAberto, receitaReal, despesaAberto, despesaReal,
       total: receitaReal + receitaAberto - despesaReal - despesaAberto,
     }
-  }, [filtered, mes])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, perStart, perEnd])
 
   const revisarCount = lancamentos.filter(l => l.revisar).length
   const contaMap = useMemo(() => Object.fromEntries(contas.map(c => [c.id, c])), [contas])
@@ -175,11 +185,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
           <p className="text-gray-500 text-sm mt-0.5">Controle mensal — a receber, a pagar, NF e boleto</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <div className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-0.5">
-            <button onClick={() => setMes(m => shiftMonth(m, -1))} className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 transition"><ChevronLeft className="w-4 h-4" /></button>
-            <span className="px-3 text-sm font-medium text-gray-800 min-w-[120px] text-center">{monthLabel(mes)}</span>
-            <button onClick={() => setMes(m => shiftMonth(m, 1))} className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 transition"><ChevronRight className="w-4 h-4" /></button>
-          </div>
+          <PeriodoSelector periodo={periodo} setPeriodo={setPeriodo} today={today} />
           <button onClick={() => setCreating(true)}
             className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition">
             <Plus className="w-4 h-4" /> Nova
@@ -217,7 +223,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
         <Card label="Receitas realizadas" value={resumo.receitaReal} tone="emerald" active={cardFilter === 'rec_real'} onClick={() => toggleCard('rec_real')} />
         <Card label="Despesas em aberto" value={resumo.despesaAberto} tone="red-soft" active={cardFilter === 'desp_aberto'} onClick={() => toggleCard('desp_aberto')} />
         <Card label="Despesas realizadas" value={resumo.despesaReal} tone="red" active={cardFilter === 'desp_real'} onClick={() => toggleCard('desp_real')} />
-        <Card label={`Resultado de ${monthLabel(mes)}`} value={resumo.total} tone="total" highlight active={!cardFilter} onClick={() => setCardFilter(null)} />
+        <Card label={`Resultado de ${periodoLabel(periodo)}`} value={resumo.total} tone="total" highlight active={!cardFilter} onClick={() => setCardFilter(null)} />
       </div>
 
       {revisarCount > 0 && (
@@ -389,6 +395,40 @@ function Row({ l, saldo, orgSlug, today, conta, onEdit, onBaixa }: {
         </div>
       </td>
     </tr>
+  )
+}
+
+const periodoInputCls = 'bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
+
+function PeriodoSelector({ periodo, setPeriodo, today }: { periodo: Periodo; setPeriodo: (p: Periodo) => void; today: string }) {
+  const modeOptions = [{ value: 'mes', label: 'Mês' }, { value: 'ano', label: 'Ano' }, { value: 'custom', label: 'Período' }]
+  function setMode(tipo: string) {
+    if (tipo === periodo.tipo) return
+    if (tipo === 'custom') { const r = periodoRange(periodo); setPeriodo({ tipo: 'custom', start: r.start, end: r.end }); return }
+    const ano = periodo.tipo === 'custom' ? Number((periodo.start || today).slice(0, 4)) : periodo.ano
+    if (tipo === 'ano') { setPeriodo({ tipo: 'ano', ano }); return }
+    const mes = periodo.tipo === 'mes' ? periodo.mes : Number(today.slice(5, 7))
+    setPeriodo({ tipo: 'mes', ano, mes })
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-28"><Select value={periodo.tipo} onChange={setMode} options={modeOptions} size="sm" /></div>
+      {periodo.tipo === 'custom' ? (
+        <div className="flex items-center gap-1.5">
+          <input type="date" value={periodo.start} max={periodo.end || undefined}
+            onChange={e => setPeriodo({ ...periodo, start: e.target.value })} className={periodoInputCls} />
+          <span className="text-gray-400 text-sm">–</span>
+          <input type="date" value={periodo.end} min={periodo.start || undefined}
+            onChange={e => setPeriodo({ ...periodo, end: e.target.value })} className={periodoInputCls} />
+        </div>
+      ) : (
+        <div className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-0.5">
+          <button type="button" onClick={() => setPeriodo(shiftPeriodo(periodo, -1))} className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 transition"><ChevronLeft className="w-4 h-4" /></button>
+          <span className="px-3 text-sm font-medium text-gray-800 min-w-[110px] text-center">{periodoLabel(periodo)}</span>
+          <button type="button" onClick={() => setPeriodo(shiftPeriodo(periodo, 1))} className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 transition"><ChevronRight className="w-4 h-4" /></button>
+        </div>
+      )}
+    </div>
   )
 }
 
