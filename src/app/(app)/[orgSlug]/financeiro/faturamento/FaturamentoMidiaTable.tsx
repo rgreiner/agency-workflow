@@ -8,6 +8,7 @@ import { docNumero } from '@/lib/doc-series'
 import { lancarMidia, setMidiaAnexos, type Anexo } from '@/app/actions/financeiro'
 import { DocsBox, faltando } from './DocsBox'
 import { FaturarButton } from './FaturarButton'
+import { ContatosButton, type ContatoCard } from './ContatosButton'
 
 export interface MidiaView {
   id: string
@@ -16,6 +17,7 @@ export interface MidiaView {
   titulo: string
   cliente: string
   veiculo: string
+  contatos: ContatoCard[]
   valorDoc: number
   comissao: number
   pagador: string
@@ -73,12 +75,15 @@ function MidiaRow({ orgSlug, midia }: { orgSlug: string; midia: MidiaView }) {
         <td className="px-4 py-3 text-sm text-gray-600">{midia.veiculo}</td>
         <td className="px-4 py-3 text-sm text-gray-600 text-right tabular-nums">{formatBRL(midia.valorDoc)}</td>
         <td className="px-4 py-3 text-sm font-medium text-emerald-600 text-right tabular-nums">{formatBRL(midia.comissao)}</td>
-        <td className="px-3 py-3 text-right">
-          <FaturarButton
-            missing={faltando(anexos)}
-            okToast="Comissão lançada no financeiro."
-            action={() => lancarMidia(orgSlug, midia.id)}
-          />
+        <td className="px-3 py-3">
+          <div className="flex items-center justify-end gap-1">
+            <ContatosButton contatos={midia.contatos} titulo={`${docNumero(midia.serie, midia.numero)} · ${midia.titulo}`} />
+            <FaturarButton
+              missing={faltando(anexos)}
+              okToast="Comissão lançada no financeiro."
+              action={() => lancarMidia(orgSlug, midia.id)}
+            />
+          </div>
         </td>
       </tr>
       {open && (

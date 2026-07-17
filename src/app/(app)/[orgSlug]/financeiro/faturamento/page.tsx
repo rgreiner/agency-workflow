@@ -2,8 +2,38 @@ import { assertFinanceAccess } from '@/lib/finance'
 import { formatBRL, FATURAMENTO_PAGADOR } from '@/lib/midia'
 import { FaturamentoFeesTable } from './FaturamentoFeesTable'
 import { FaturamentoMidiaTable, type MidiaView } from './FaturamentoMidiaTable'
+import type { ContatoCard } from './ContatosButton'
 import type { Anexo } from '@/app/actions/financeiro'
 import { Receipt } from 'lucide-react'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function enderecoDe(w: any): string {
+  return [
+    w?.address_street, w?.address_number ? `nº ${w.address_number}` : '', w?.address_complement,
+    w?.address_district, [w?.address_city, w?.address_state].filter(Boolean).join('/'),
+    w?.address_zip ? `CEP ${w.address_zip}` : '',
+  ].filter(Boolean).join(' - ')
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function clienteCard(w: any): ContatoCard {
+  return {
+    papel: 'Cliente',
+    nome: w?.name ?? '—',
+    razao: w?.legal_name || undefined,
+    cnpj: w?.tax_id || undefined,
+    emailNf: w?.finance_email || undefined,
+    email: w?.email || undefined,
+    telefone: w?.phone || undefined,
+    contato: w?.contact || undefined,
+    endereco: enderecoDe(w) || undefined,
+  }
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function fornVeicCard(r: any, papel: string): ContatoCard | null {
+  if (!r) return null
+  return { papel, nome: r?.name ?? '—', cnpj: r?.tax_id || undefined, notas: r?.notes || undefined }
+}
+const WS_CONTATO = 'name, legal_name, tax_id, email, finance_email, phone, contact, address_street, address_number, address_complement, address_district, address_city, address_state, address_zip'
 
 // Duas datas (espelham gerar_lancamento_midia):
 //  - vencimento do veículo/cliente = base DFM (fim do mês + N) ou data_base;
@@ -35,7 +65,7 @@ export default async function FaturamentoPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: docsRaw } = await (supabase as any)
     .from('midias')
-    .select('id, numero, serie, titulo, valor, desconto_pct, faturamento, prazo, data_base, dias_agencia, anexos, workspaces(name), veiculos(name)')
+    .select(`id, numero, serie, titulo, valor, desconto_pct, faturamento, prazo, data_base, dias_agencia, anexos, workspaces(${WS_CONTATO}), veiculos(name, tax_id, notes)`)
     .eq('org_id', orgId).in('situacao', ['faturar', 'faturado']).eq('archived', false)
     .order('numero', { ascending: false })
 
@@ -54,6 +84,7 @@ export default async function FaturamentoPage({
     titulo: (d.titulo as string) || '—',
     cliente: d.workspaces?.name ?? '—',
     veiculo: d.veiculos?.name ?? '—',
+    contatos: [clienteCard(d.workspaces), fornVeicCard(d.veiculos, 'Veículo')].filter(Boolean) as ContatoCard[],
     valorDoc: Number(d.valor ?? 0),
     comissao: Math.round(Number(d.valor ?? 0) * Number(d.desconto_pct ?? 0)) / 100,
     pagador: FATURAMENTO_PAGADOR[d.faturamento] === 'veiculo'
@@ -74,10 +105,16 @@ export default async function FaturamentoPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: feesRaw } = await (supabase as any)
     .from('producao')
-    .select('id, numero, serie, titulo, tipo, valor, bv_pct, honorarios_pct, detalhe, anexos, workspaces(name)')
+    .select(`id, numero, serie, titulo, tipo, valor, bv_pct, honorarios_pct, detalhe, anexos, workspaces(${WS_CONTATO})`)
     .eq('org_id', orgId).eq('archived', false)
     .eq('situacao', 'faturar').in('tipo', ['fee', 'pedido'])
     .order('numero', { ascending: false })
+  // Fornecedores da org (pra montar o contato do pedido a partir de detalhe.fornecedor_id).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: fornRaw } = await (supabase as any)
+    .from('fornecedores').select('id, name, tax_id, notes').eq('org_id', orgId)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fornMap = new Map<string, any>((fornRaw ?? []).map((f: any) => [f.id, f]))
   // Parcelas que viram lançamento a receber (o que a agência realmente fatura).
   const RECEBER_TIPOS = ['receber_bv', 'receber_honorarios', 'receber_cliente']
   const COMISSAO_TIPOS = ['receber_bv', 'receber_honorarios']
@@ -104,6 +141,7 @@ export default async function FaturamentoPage({
       serie: f.serie as string | null,
       titulo: (f.titulo as string) || 'Item',
       cliente: f.workspaces?.name ?? '—',
+      contatos: [clienteCard(f.workspaces), fornVeicCard(fornMap.get(f.detalhe?.fornecedor_id), 'Fornecedor')].filter(Boolean) as ContatoCard[],
       aFaturar,
       valorCliente: valorCheio, // valor cheio (cinza) — o que o cliente paga
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

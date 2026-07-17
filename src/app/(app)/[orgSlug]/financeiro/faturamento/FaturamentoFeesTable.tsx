@@ -10,6 +10,7 @@ import { setProducaoSituacao } from '@/app/actions/producao'
 import { setProducaoAnexos, type Anexo } from '@/app/actions/financeiro'
 import { DocsBox, faltando } from './DocsBox'
 import { FaturarButton } from './FaturarButton'
+import { ContatosButton, type ContatoCard } from './ContatosButton'
 
 export interface ParcelaView { vencimento: string; previstoAgencia: string; comissao: boolean; valor: number }
 export interface FeeView {
@@ -19,6 +20,7 @@ export interface FeeView {
   serie?: string | null
   titulo: string
   cliente: string
+  contatos: ContatoCard[]
   aFaturar: number      // verde — o que a agência vai receber (a faturar)
   valorCliente: number  // cinza — valor cheio que o cliente paga (informativo)
   parcelas: ParcelaView[]
@@ -105,12 +107,15 @@ function FeeRow({ orgSlug, fee }: { orgSlug: string; fee: FeeView }) {
             <div className="text-xs text-gray-400 tabular-nums">cliente paga {formatBRL(fee.valorCliente)}</div>
           )}
         </td>
-        <td className="px-3 py-3 text-right">
-          <FaturarButton
-            missing={faltando(anexos)}
-            okToast={n > 0 ? `${n} parcela(s) lançada(s) no financeiro.` : 'Fee lançado no financeiro.'}
-            action={() => setProducaoSituacao(orgSlug, fee.id, 'faturado', 'financeiro/faturamento')}
-          />
+        <td className="px-3 py-3">
+          <div className="flex items-center justify-end gap-1">
+            <ContatosButton contatos={fee.contatos} titulo={`${docNumero(fee.serie, fee.numero)} · ${fee.titulo}`} />
+            <FaturarButton
+              missing={faltando(anexos)}
+              okToast={n > 0 ? `${n} parcela(s) lançada(s) no financeiro.` : 'Fee lançado no financeiro.'}
+              action={() => setProducaoSituacao(orgSlug, fee.id, 'faturado', 'financeiro/faturamento')}
+            />
+          </div>
         </td>
       </tr>
       {open && (
