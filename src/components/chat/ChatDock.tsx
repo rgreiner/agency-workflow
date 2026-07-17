@@ -153,12 +153,12 @@ export function ChatDock({ orgId, orgSlug, meId, members }: { orgId: string; org
 
   // ── Enviar ────────────────────────────────────────────────────────────────
   // Insere a tarefa no rascunho (não envia sozinho — a pessoa escreve a dúvida junto).
-  // Vai como "Título — link" numa linha só: o composer é <input> e ele descarta \n.
+  // Título e link em linhas próprias: o composer é textarea, então \n sobrevive.
   function pickTask(peer: string, a: ActivitySearchResult) {
     const url = `${window.location.origin}/${orgSlug}/j/${a.id}`
     setDraft(prev => {
       const cur = (prev[peer] ?? '').trim()
-      return { ...prev, [peer]: `${cur ? cur + ' ' : ''}${a.title} — ${url} ` }
+      return { ...prev, [peer]: `${cur ? cur + '\n' : ''}${a.title}\n${url}\n` }
     })
     setPickerFor(null)
   }
@@ -227,12 +227,23 @@ export function ChatDock({ orgId, orgSlug, meId, members }: { orgId: string; org
                   >
                     <CheckSquare className="w-4 h-4" />
                   </button>
-                  <input
+                  {/* textarea (não input): Enter envia, Shift+Enter quebra linha.
+                      Cresce com o conteúdo até ~5 linhas e então rola. */}
+                  <textarea
                     value={draft[peer] ?? ''}
+                    rows={1}
                     onChange={e => setDraft(prev => ({ ...prev, [peer]: e.target.value }))}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); send(peer) } }}
-                    placeholder="Escreva uma mensagem…"
-                    className="flex-1 min-w-0 text-sm bg-gray-50 border border-gray-200 rounded-full px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(peer) }
+                    }}
+                    placeholder="Escreva uma mensagem…  (Shift+Enter quebra linha)"
+                    className="flex-1 min-w-0 text-sm bg-gray-50 border border-gray-200 rounded-2xl px-3 py-1.5 resize-none max-h-24 overflow-y-auto focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    style={{ height: 'auto' }}
+                    ref={el => {
+                      if (!el) return
+                      el.style.height = 'auto'
+                      el.style.height = `${Math.min(el.scrollHeight, 96)}px`
+                    }}
                   />
                   <button onClick={() => send(peer)} disabled={!(draft[peer] ?? '').trim()} aria-label="Enviar mensagem" className="p-2 rounded-full bg-orange-600 text-[#fff] hover:bg-orange-700 disabled:opacity-40 transition shrink-0">
                     <Send className="w-3.5 h-3.5" />

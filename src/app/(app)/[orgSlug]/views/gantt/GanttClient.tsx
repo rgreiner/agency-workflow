@@ -508,7 +508,9 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
               </span>
             )
           })()}
-          {asns.length > 0 && geo.width > 120 && <AvatarGroup users={asns} max={2} />}
+          {/* Agrupado por campanha a leitura é a pauta do cliente: quem faz é ruído
+              (e é interno). Por responsável, o avatar é justamente o contexto. */}
+          {groupBy === 'pessoa' && asns.length > 0 && geo.width > 120 && <AvatarGroup users={asns} max={2} />}
         </div>
 
         {/* Right resize handle */}
