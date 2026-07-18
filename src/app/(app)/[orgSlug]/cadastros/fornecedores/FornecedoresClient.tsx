@@ -3,10 +3,12 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, X, Check, Loader2, Archive, ArchiveRestore, Pencil, Truck } from 'lucide-react'
+import { Plus, X, Check, Loader2, Archive, ArchiveRestore, Pencil, Truck, Search } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { createFornecedor, updateFornecedor, setFornecedorArchived } from '@/app/actions/fornecedor'
 import { ContatoBlocks, type ContatoData } from '@/components/ui/ContatoBlocks'
+import { buscarCnpj } from '@/app/actions/lookup'
 
 export interface Fornecedor {
   id: string; name: string; tipo: string | null; tax_id: string | null; notes: string | null; archived: boolean
@@ -106,6 +108,25 @@ function FornecedorModal({ orgSlug, fornecedor, onClose }: { orgSlug: string; fo
   const [contato, setContato] = useState<ContatoData>({
     enderecos: fornecedor?.enderecos ?? [], telefones: fornecedor?.telefones ?? [], emails: fornecedor?.emails ?? [], contas_bancarias: fornecedor?.contas_bancarias ?? [],
   })
+  const [cnpjBusy, setCnpjBusy] = useState(false)
+
+  async function fetchCnpj() {
+    if (cnpjBusy) return
+    setCnpjBusy(true)
+    const r = await buscarCnpj(form.tax_id)
+    setCnpjBusy(false)
+    if (r.error || !r.data) { toast.error(r.error ?? 'CNPJ não encontrado'); return }
+    const d = r.data
+    setForm(f => ({ ...f, name: f.name.trim() ? f.name : (d.nome_fantasia || d.razao_social) }))
+    setContato(c => {
+      const end = { tipo: 'Comercial', logradouro: d.logradouro, numero: d.numero, complemento: d.complemento, bairro: d.bairro, cidade: d.cidade, uf: d.uf, cep: d.cep }
+      const enderecos = c.enderecos.length ? c.enderecos.map((e, i) => i === 0 ? { ...e, ...end } : e) : [end]
+      const telefones = d.telefone && !c.telefones.some(t => t.numero.trim()) ? [{ tipo: 'Comercial', numero: d.telefone }, ...c.telefones] : c.telefones
+      const emails = d.email && !c.emails.some(e => e.email.trim()) ? [{ tipo: 'Financeiro', email: d.email }, ...c.emails] : c.emails
+      return { ...c, enderecos, telefones, emails }
+    })
+    toast.success('Dados do CNPJ preenchidos.')
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -135,7 +156,15 @@ function FornecedorModal({ orgSlug, fornecedor, onClose }: { orgSlug: string; fo
             <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={inputCls} required /></div>
           <div className="grid grid-cols-2 gap-3">
             <div><label className={labelCls}>Tipo</label><input value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))} placeholder="Gráfica, brindes…" className={inputCls} /></div>
-            <div><label className={labelCls}>CNPJ</label><input value={form.tax_id} onChange={e => setForm(f => ({ ...f, tax_id: e.target.value }))} className={inputCls} /></div>
+            <div><label className={labelCls}>CNPJ</label>
+              <div className="flex gap-2">
+                <input value={form.tax_id} onChange={e => setForm(f => ({ ...f, tax_id: e.target.value }))} placeholder="00.000.000/0000-00" className={inputCls} />
+                <button type="button" onClick={fetchCnpj} disabled={cnpjBusy} title="Buscar dados públicos do CNPJ"
+                  className="inline-flex items-center gap-1.5 px-3 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium hover:bg-gray-200 transition disabled:opacity-50 shrink-0">
+                  {cnpjBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
           </div>
           <div><label className={labelCls}>Observações</label><textarea rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className={cn(inputCls, 'resize-none')} /></div>
           <div className="border-t border-gray-100 pt-4"><ContatoBlocks value={contato} onChange={setContato} /></div>

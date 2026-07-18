@@ -1,7 +1,10 @@
 'use client'
 
-import { Plus, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { Plus, Trash2, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { buscarCep } from '@/app/actions/lookup'
 
 export interface Endereco { tipo: string; logradouro: string; numero: string; complemento: string; bairro: string; cidade: string; uf: string; cep: string }
 export interface Telefone { tipo: string; numero: string }
@@ -17,8 +20,18 @@ const addBtn = 'inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rou
 
 export function ContatoBlocks({ value, onChange }: { value: ContatoData; onChange: (v: ContatoData) => void }) {
   const v = { enderecos: value.enderecos ?? [], telefones: value.telefones ?? [], emails: value.emails ?? [], contas_bancarias: value.contas_bancarias ?? [] }
+  const [cepBusy, setCepBusy] = useState<number | null>(null)
 
   const setEnd = (i: number, k: keyof Endereco, val: string) => onChange({ ...v, enderecos: v.enderecos.map((e, idx) => idx === i ? { ...e, [k]: val } : e) })
+  const patchEnd = (i: number, patch: Partial<Endereco>) => onChange({ ...v, enderecos: v.enderecos.map((e, idx) => idx === i ? { ...e, ...patch } : e) })
+  async function onCepBlur(i: number, cep: string) {
+    if (cep.replace(/\D/g, '').length !== 8) return
+    setCepBusy(i)
+    const r = await buscarCep(cep)
+    setCepBusy(null)
+    if (r.data) patchEnd(i, { logradouro: r.data.logradouro, bairro: r.data.bairro, cidade: r.data.cidade, uf: r.data.uf })
+    else if (r.error) toast.error(r.error)
+  }
   const setTel = (i: number, k: keyof Telefone, val: string) => onChange({ ...v, telefones: v.telefones.map((e, idx) => idx === i ? { ...e, [k]: val } : e) })
   const setEmail = (i: number, k: keyof EmailC, val: string) => onChange({ ...v, emails: v.emails.map((e, idx) => idx === i ? { ...e, [k]: val } : e) })
   const setConta = (i: number, k: keyof ContaBancaria, val: string) => onChange({ ...v, contas_bancarias: v.contas_bancarias.map((e, idx) => idx === i ? { ...e, [k]: val } : e) })
@@ -42,7 +55,10 @@ export function ContatoBlocks({ value, onChange }: { value: ContatoData; onChang
               <button aria-label="Remover" type="button" onClick={() => onChange({ ...v, enderecos: v.enderecos.filter((_, idx) => idx !== i) })} className="col-span-1 text-gray-300 hover:text-red-500 transition justify-self-center"><Trash2 className="w-4 h-4" /></button>
               <input value={e.complemento} onChange={ev => setEnd(i, 'complemento', ev.target.value)} placeholder="Complemento" className={cn(cellCls, 'col-span-5')} />
               <input value={e.uf} onChange={ev => setEnd(i, 'uf', ev.target.value)} placeholder="UF" className={cn(cellCls, 'col-span-2')} />
-              <input value={e.cep} onChange={ev => setEnd(i, 'cep', ev.target.value)} placeholder="CEP" className={cn(cellCls, 'col-span-4')} />
+              <div className="col-span-4 relative">
+                <input value={e.cep} onChange={ev => setEnd(i, 'cep', ev.target.value)} onBlur={ev => onCepBlur(i, ev.target.value)} placeholder="CEP (autopreenche)" className={cn(cellCls, 'pr-8')} />
+                {cepBusy === i && <Loader2 className="w-4 h-4 animate-spin text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2" />}
+              </div>
             </div>
           ))}
         </div>

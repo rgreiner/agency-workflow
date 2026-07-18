@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Check, Loader2 } from 'lucide-react'
+import { Check, Loader2, Search } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ContatoBlocks, emptyContato, type ContatoData } from '@/components/ui/ContatoBlocks'
+import { buscarCnpj, buscarCep } from '@/app/actions/lookup'
 
 export interface ClientFormValues {
   name: string
@@ -62,9 +64,51 @@ export function ClientForm({ initial, initialContato, submitLabel = 'Salvar', on
   const [contato, setContato] = useState<ContatoData>(initialContato ?? emptyContato())
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
+  const [cnpjBusy, setCnpjBusy] = useState(false)
+  const [cepBusy, setCepBusy] = useState(false)
 
   function set<K extends keyof ClientFormValues>(key: K, value: ClientFormValues[K]) {
     setForm(f => ({ ...f, [key]: value }))
+  }
+
+  async function fetchCnpj() {
+    if (cnpjBusy) return
+    setCnpjBusy(true)
+    const r = await buscarCnpj(form.tax_id)
+    setCnpjBusy(false)
+    if (r.error || !r.data) { toast.error(r.error ?? 'CNPJ não encontrado'); return }
+    const d = r.data
+    setForm(f => ({
+      ...f,
+      name: f.name.trim() ? f.name : (d.nome_fantasia || d.razao_social),
+      legal_name: d.razao_social || f.legal_name,
+      trade_name: d.nome_fantasia || f.trade_name,
+      address_zip: d.cep || f.address_zip,
+      address_street: d.logradouro || f.address_street,
+      address_number: d.numero || f.address_number,
+      address_complement: d.complemento || f.address_complement,
+      address_district: d.bairro || f.address_district,
+      address_city: d.cidade || f.address_city,
+      address_state: d.uf || f.address_state,
+      phone: d.telefone || f.phone,
+      atividade: d.atividade || f.atividade,
+    }))
+    toast.success('Dados do CNPJ preenchidos.')
+  }
+
+  async function fetchCep() {
+    if (form.address_zip.replace(/\D/g, '').length !== 8) return
+    setCepBusy(true)
+    const r = await buscarCep(form.address_zip)
+    setCepBusy(false)
+    if (r.data) setForm(f => ({
+      ...f,
+      address_street: r.data!.logradouro || f.address_street,
+      address_district: r.data!.bairro || f.address_district,
+      address_city: r.data!.cidade || f.address_city,
+      address_state: r.data!.uf || f.address_state,
+    }))
+    else if (r.error) toast.error(r.error)
   }
 
   function field(key: keyof ClientFormValues, label: string, opts: { placeholder?: string; type?: string } = {}) {
@@ -114,7 +158,17 @@ export function ClientForm({ initial, initialContato, submitLabel = 'Salvar', on
         </div>
         {field('legal_name', 'Razão social', { placeholder: 'Razão social' })}
         {field('trade_name', 'Nome fantasia', { placeholder: 'Nome fantasia' })}
-        {field('tax_id', 'CNPJ / CPF', { placeholder: '00.000.000/0000-00' })}
+        <div>
+          <label className={labelCls}>CNPJ / CPF</label>
+          <div className="flex gap-2">
+            <input type="text" value={form.tax_id} onChange={e => set('tax_id', e.target.value)}
+              placeholder="00.000.000/0000-00" className={inputCls} />
+            <button type="button" onClick={fetchCnpj} disabled={cnpjBusy} title="Buscar dados públicos do CNPJ (BrasilAPI)"
+              className="inline-flex items-center gap-1.5 px-3 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium hover:bg-gray-200 transition disabled:opacity-50 shrink-0">
+              {cnpjBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />} Buscar
+            </button>
+          </div>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           {field('state_registration', 'Inscrição estadual')}
           {field('city_registration', 'Inscrição municipal')}
@@ -161,7 +215,14 @@ export function ClientForm({ initial, initialContato, submitLabel = 'Salvar', on
       <div>
         <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Endereço</h3>
         <div className="grid grid-cols-6 gap-3">
-          <div className="col-span-6 sm:col-span-2">{field('address_zip', 'CEP')}</div>
+          <div className="col-span-6 sm:col-span-2">
+            <label className={labelCls}>CEP</label>
+            <div className="relative">
+              <input type="text" value={form.address_zip} onChange={e => set('address_zip', e.target.value)} onBlur={fetchCep}
+                placeholder="00000-000" className={inputCls} />
+              {cepBusy && <Loader2 className="w-4 h-4 animate-spin text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />}
+            </div>
+          </div>
           <div className="col-span-6 sm:col-span-3">{field('address_street', 'Rua')}</div>
           <div className="col-span-3 sm:col-span-1">{field('address_number', 'Número')}</div>
           <div className="col-span-3 sm:col-span-2">{field('address_complement', 'Complemento')}</div>
