@@ -507,7 +507,13 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
     return opts
   }, [categorias, form.tipo])
   const contaOptions = useMemo(() => [{ value: '', label: '—' }, ...contas.map(c => ({ value: c.id, label: c.nome }))], [contas])
-  const centroOptions = useMemo(() => [{ value: '', label: '—' }, ...centros.map(c => ({ value: c.nome, label: c.nome }))], [centros])
+  const centroOptions = useMemo(() => {
+    const ativos = centros.filter(c => !c.arquivado)
+    const atual = lancamento?.centro_custo
+    // mantém o centro atual visível/selecionável mesmo se já estiver arquivado
+    const extra = atual && !ativos.some(c => c.nome === atual) ? [{ value: atual, label: `${atual} (arquivado)` }] : []
+    return [{ value: '', label: '—' }, ...ativos.map(c => ({ value: c.nome, label: c.nome })), ...extra]
+  }, [centros, lancamento])
 
   const liquidado = !!lancamento && !imported && (lancamento.situacao === 'pago' || lancamento.situacao === 'recebido')
   const contaNome = lancamento?.conta_id ? contas.find(c => c.id === lancamento.conta_id)?.nome : null

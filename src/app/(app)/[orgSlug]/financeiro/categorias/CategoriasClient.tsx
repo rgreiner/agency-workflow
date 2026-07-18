@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { Plus, Trash2, Loader2, Building2, ChevronRight, Search, CornerDownRight } from 'lucide-react'
+import { Plus, Trash2, Loader2, Building2, ChevronRight, Search, CornerDownRight, Archive, ArchiveRestore } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { setFinanceConfig, type FinanceCategoriaGrupo, type FinanceCentro } from '@/app/actions/financeiro'
 import { toast } from 'sonner'
@@ -23,7 +23,11 @@ export function CategoriasClient({ orgSlug, categorias: initCats, centros: initC
   const [tab, setTab] = useState<Tab>('entrada')
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState<Set<number>>(new Set())
+  const [showArq, setShowArq] = useState(false)
   const [isPending, startTransition] = useTransition()
+
+  const setCentro = (i: number, patch: Partial<FinanceCentro>) => setCentros(prev => prev.map((c, j) => j === i ? { ...c, ...patch } : c))
+  const removeCentro = (i: number) => setCentros(prev => prev.filter((_, j) => j !== i))
 
   const updateGrupo = (gi: number, patch: Partial<FinanceCategoriaGrupo>) =>
     setGrupos(prev => prev.map((g, i) => i === gi ? { ...g, ...patch } : g))
@@ -62,6 +66,9 @@ export function CategoriasClient({ orgSlug, categorias: initCats, centros: initC
       .filter(({ g }) => g.tipo === tab || g.tipo === 'ambos')
       .filter(({ g }) => !q || g.nome.toLowerCase().includes(q) || g.filhos.some(f => f.nome.toLowerCase().includes(q)))
   }, [grupos, tab, query])
+
+  const centrosAtivos = useMemo(() => centros.map((ce, i) => ({ ce, i })).filter(({ ce }) => !ce.arquivado), [centros])
+  const centrosArquivados = useMemo(() => centros.map((ce, i) => ({ ce, i })).filter(({ ce }) => ce.arquivado), [centros])
 
   return (
     <div className="p-6 max-w-4xl">
@@ -148,23 +155,23 @@ export function CategoriasClient({ orgSlug, categorias: initCats, centros: initC
         <Plus className="w-4 h-4" /> Adicionar categoria de {tab === 'entrada' ? 'receita' : 'despesa'}
       </button>
 
-      {/* Centros de custo — grade compacta */}
+      {/* Centros de custo — grade compacta, com arquivamento */}
       <section className="mb-8">
         <div className="flex items-center gap-2 mb-3">
           <Building2 className="w-4 h-4 text-gray-400" />
           <h2 className="text-sm font-semibold text-gray-900">Centros de custo</h2>
-          <span className="text-xs text-gray-400">{centros.length}</span>
+          <span className="text-xs text-gray-400">{centrosAtivos.length}</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {centros.map((ce, i) => (
+          {centrosAtivos.map(({ ce, i }) => (
             <div key={i} className="group flex items-center gap-2 bg-white border border-gray-200 rounded-lg pl-2.5 pr-1.5 py-1.5 hover:border-gray-300 transition-colors">
-              <ColorDot color={ce.cor} onChange={cor => setCentros(prev => prev.map((c, j) => j === i ? { ...c, cor } : c))} />
+              <ColorDot color={ce.cor} onChange={cor => setCentro(i, { cor })} />
               <input value={ce.nome} placeholder="Nome do centro de custo"
-                onChange={e => setCentros(prev => prev.map((c, j) => j === i ? { ...c, nome: e.target.value } : c))} className={rowInput} />
-              <button onClick={() => setCentros(prev => prev.filter((_, j) => j !== i))}
-                className="p-1 rounded text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition shrink-0" title="Remover">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+                onChange={e => setCentro(i, { nome: e.target.value })} className={rowInput} />
+              <button onClick={() => setCentro(i, { arquivado: true })} title="Arquivar (cliente inativo)"
+                className="p-1 rounded text-gray-300 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition shrink-0"><Archive className="w-3.5 h-3.5" /></button>
+              <button onClick={() => removeCentro(i)} title="Remover"
+                className="p-1 rounded text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
             </div>
           ))}
         </div>
@@ -172,6 +179,29 @@ export function CategoriasClient({ orgSlug, categorias: initCats, centros: initC
           className="flex items-center gap-2 px-4 py-2.5 mt-2 text-sm text-orange-600 hover:bg-orange-50/50 rounded-xl border border-dashed border-orange-200 transition w-full justify-center">
           <Plus className="w-4 h-4" /> Adicionar centro de custo
         </button>
+
+        {centrosArquivados.length > 0 && (
+          <div className="mt-3">
+            <button onClick={() => setShowArq(v => !v)} className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition">
+              <ChevronRight className={cn('w-3.5 h-3.5 transition-transform', showArq && 'rotate-90')} />
+              Arquivados · {centrosArquivados.length}
+            </button>
+            {showArq && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                {centrosArquivados.map(({ ce, i }) => (
+                  <div key={i} className="group flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-lg pl-2.5 pr-1.5 py-1.5">
+                    <span className="w-5 h-5 rounded-full shrink-0 border border-gray-200 opacity-60" style={{ backgroundColor: ce.cor ?? '#cbd5e1' }} />
+                    <span className="flex-1 min-w-0 text-sm text-gray-500 truncate">{ce.nome}</span>
+                    <button onClick={() => setCentro(i, { arquivado: false })} title="Desarquivar"
+                      className="p-1 rounded text-gray-400 hover:text-emerald-600 transition shrink-0"><ArchiveRestore className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => removeCentro(i)} title="Remover"
+                      className="p-1 rounded text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       <div className="flex justify-end">

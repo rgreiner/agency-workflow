@@ -432,7 +432,7 @@ export interface FinanceCategoriaGrupo {
   cor: string | null
   filhos: FinanceCategoriaFilho[]
 }
-export interface FinanceCentro { nome: string; cor: string | null }
+export interface FinanceCentro { nome: string; cor: string | null; arquivado?: boolean }
 
 export async function setFinanceConfig(orgSlug: string, categorias: FinanceCategoriaGrupo[], centros: FinanceCentro[]) {
   const supabase = await createClient()
