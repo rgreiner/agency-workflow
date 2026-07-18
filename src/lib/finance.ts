@@ -1,32 +1,21 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
+import { getAccess } from '@/lib/auth/access'
 
 /**
- * Garante que o usuário tem acesso ao Financeiro (can_finance ou owner/admin).
- * Redireciona se não tiver. Retorna o client + ids para a página reusar.
+ * Garante que o usuário tem acesso ao Financeiro (can_finance, cargo "vê tudo" ou
+ * owner/admin). Redireciona se não tiver. Retorna o client + ids p/ a página reusar.
  */
 export async function assertFinanceAccess(orgSlug: string) {
-  const supabase = await createClient()
   const user = await getUsuario()
   if (!user) redirect('/login')
 
-  const { data: org } = await supabase
-    .from('organizations').select('id').eq('slug', orgSlug).single()
-  if (!org) redirect('/')
+  const r = await getAccess(orgSlug)
+  if (!r) redirect('/')
+  if (!r.access.financeiro) redirect(`/${orgSlug}/dashboard`)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: m } = await (supabase as any)
-    .from('organization_members')
-    .select('role, can_finance')
-    .eq('org_id', org.id)
-    .eq('user_id', user.id)
-    .single() as { data: { role: string; can_finance: boolean } | null }
-
-  const allowed = !!m && (m.can_finance || ['owner', 'admin'].includes(m.role))
-  if (!allowed) redirect(`/${orgSlug}/dashboard`)
-
-  return { supabase, orgId: org.id as string, userId: user.id as string }
+  return { supabase: r.supabase, orgId: r.orgId, userId: r.userId }
 }
 
 /**

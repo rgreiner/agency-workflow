@@ -6,6 +6,7 @@ import { updatePosition, deletePosition } from '@/app/actions/settings'
 import { ChevronDown, ChevronUp, Trash2, Check, Loader2, AlertTriangle, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { OperacionalToggles } from './OperacionalToggles'
 
 interface Props {
   position: {
@@ -13,6 +14,9 @@ interface Props {
     name: string
     color: string
     allowed_statuses: string[]
+    op_ver_tudo: boolean
+    op_midias: boolean
+    op_producao: boolean
   }
   orgSlug: string
 }
@@ -34,6 +38,9 @@ export function PositionCard({ position, orgSlug }: Props) {
   const [name, setName] = useState(position.name)
   const [color, setColor] = useState(position.color)
   const [selected, setSelected] = useState<string[]>([...position.allowed_statuses])
+  const [verTudo, setVerTudo] = useState(position.op_ver_tudo)
+  const [midias, setMidias] = useState(position.op_midias)
+  const [producao, setProducao] = useState(position.op_producao)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -41,6 +48,9 @@ export function PositionCard({ position, orgSlug }: Props) {
   const isDirty =
     name !== position.name ||
     color !== position.color ||
+    verTudo !== position.op_ver_tudo ||
+    midias !== position.op_midias ||
+    producao !== position.op_producao ||
     JSON.stringify([...selected].sort()) !== JSON.stringify([...position.allowed_statuses].sort())
 
   function toggleStatus(val: string) {
@@ -66,6 +76,9 @@ export function PositionCard({ position, orgSlug }: Props) {
     fd.append('name', name.trim())
     fd.append('color', color)
     selected.forEach(s => fd.append('statuses', s))
+    fd.append('op_ver_tudo', String(verTudo))
+    fd.append('op_midias', String(midias))
+    fd.append('op_producao', String(producao))
     startTransition(async () => {
       const res = await updatePosition(orgSlug, position.id, fd)
       if (res?.error) {
@@ -154,6 +167,12 @@ export function PositionCard({ position, orgSlug }: Props) {
               </div>
             </div>
           </div>
+
+          {/* Acesso ao Operacional */}
+          <OperacionalToggles
+            verTudo={verTudo} midias={midias} producao={producao}
+            setVerTudo={setVerTudo} setMidias={setMidias} setProducao={setProducao}
+          />
 
           {/* Status checkboxes */}
           <div>

@@ -26,11 +26,12 @@ export default async function CargosPage({
 
   if (!['owner', 'admin'].includes(myMembership?.role ?? '')) notFound()
 
-  const { data: positions } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: positions } = await (supabase as any)
     .from('org_positions')
-    .select('id, name, color, allowed_statuses')
+    .select('id, name, color, allowed_statuses, op_ver_tudo, op_midias, op_producao')
     .eq('org_id', org.id)
-    .order('name')
+    .order('name') as { data: { id: string; name: string; color: string; allowed_statuses: string[]; op_ver_tudo: boolean; op_midias: boolean; op_producao: boolean }[] | null }
 
   return (
     <div>
@@ -47,6 +48,7 @@ export default async function CargosPage({
             position={pos as {
               id: string; name: string; color: string
               allowed_statuses: string[]
+              op_ver_tudo: boolean; op_midias: boolean; op_producao: boolean
             }}
             orgSlug={orgSlug}
           />

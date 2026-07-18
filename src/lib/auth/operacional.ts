@@ -1,37 +1,39 @@
 import 'server-only'
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
+import { getAccess, type OperacionalAccess } from '@/lib/auth/access'
 
 /**
- * Garante acesso a uma área do Operacional. Owner/admin sempre podem; senão exige
- * a flag indicada (`can_finance` p/ Financeiro, `can_vendas` p/ Mídias/Produção/
- * Cadastros). Redireciona p/ a home da org se não tiver permissão. Usado nos
- * layouts dessas rotas (bloqueia por URL, não só esconde na sidebar).
+ * Garante acesso a uma seção do Operacional, olhando CARGO × toggles do membro
+ * (ver `computeAccess`). Redireciona p/ a home da org se não tiver. Usado nos
+ * layouts dessas rotas — bloqueia por URL, não só esconde na sidebar.
  */
-async function requireOperacional(orgSlug: string, flag: 'can_finance' | 'can_vendas'): Promise<void> {
-  const supabase = await createClient()
+type Area = 'midias' | 'producao' | 'financeiro' | 'cadastros'
+
+async function requireArea(orgSlug: string, area: Area): Promise<void> {
   const user = await getUsuario()
   if (!user) redirect('/login')
-
-  const { data: org } = await supabase.from('organizations').select('id').eq('slug', orgSlug).single()
-  if (!org) redirect('/')
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: m } = await (supabase as any)
-    .from('organization_members').select(`role, ${flag}`)
-    .eq('org_id', org.id).eq('user_id', user.id).single() as { data: Record<string, unknown> | null }
-
-  const allowed = !!m && (!!m[flag] || ['owner', 'admin'].includes(String(m.role)))
-  if (!allowed) redirect(`/${orgSlug}`)
+  const r = await getAccess(orgSlug)
+  if (!r) redirect('/')
+  if (!r.access[area as keyof OperacionalAccess]) redirect(`/${orgSlug}`)
 }
 
-/** Financeiro: exige can_finance (ou owner/admin). */
+/** Liberação de mídias: verTudo, ou can_vendas + cargo libera Mídias. */
+export function requireMidias(orgSlug: string): Promise<void> {
+  return requireArea(orgSlug, 'midias')
+}
+
+/** Liberação de Produção: verTudo, ou can_vendas + cargo libera Produção. */
+export function requireProducao(orgSlug: string): Promise<void> {
+  return requireArea(orgSlug, 'producao')
+}
+
+/** Cadastros: verTudo, ou can_vendas OU can_finance. */
+export function requireCadastros(orgSlug: string): Promise<void> {
+  return requireArea(orgSlug, 'cadastros')
+}
+
+/** Financeiro: verTudo, ou can_finance. */
 export function requireFinanceiro(orgSlug: string): Promise<void> {
-  return requireOperacional(orgSlug, 'can_finance')
-}
-
-/** Mídias / Produção / Cadastros: exige can_vendas (ou owner/admin). */
-export function requireVendas(orgSlug: string): Promise<void> {
-  return requireOperacional(orgSlug, 'can_vendas')
+  return requireArea(orgSlug, 'financeiro')
 }

@@ -6,6 +6,7 @@ import { OrgSettingsProvider } from '@/components/providers/OrgSettingsProvider'
 import { UserPrefsProvider } from '@/components/providers/UserPrefsProvider'
 import { ChatDock } from '@/components/chat/ChatDock'
 import { TabUnreadBadge } from '@/components/layout/TabUnreadBadge'
+import { computeAccess, ACCESS_SELECT, type MembershipRow } from '@/lib/auth/access'
 
 export default async function OrgLayout({
   children,
@@ -33,23 +34,16 @@ export default async function OrgLayout({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: membership } = await (supabase as any)
     .from('organization_members')
-    .select('role, can_finance, can_vendas, org_positions(name)')
+    .select(ACCESS_SELECT)
     .eq('org_id', org.id)
     .eq('user_id', user.id)
-    .single() as { data: { role: string; can_finance: boolean; can_vendas: boolean; org_positions: { name: string } | null } | null }
+    .single() as { data: MembershipRow | null }
 
   if (!membership) redirect('/')
 
-  // Permissões do Operacional: flag explícita ou implícita p/ owner/admin.
-  // can_finance → submenus do Financeiro; can_vendas → Mídias/Produção/Cadastros.
-  const isAdminRole = ['owner', 'admin'].includes(membership.role)
-  const canFinance = membership.can_finance || isAdminRole
-  const canVendas = membership.can_vendas || isAdminRole
-
-  // Nome do cargo do usuário (ex.: "Redação") — vira o rótulo da aba de trabalho
-  // no menu superior. Sem cargo (ex.: owner "acesso total") → fallback "Atendimento".
-  const positionName =
-    (membership.org_positions as unknown as { name: string } | null)?.name ?? null
+  // Acesso ao Operacional: cargo × toggles do membro (ver computeAccess).
+  const access = computeAccess(membership)
+  const positionName = access.positionName
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -119,9 +113,11 @@ export default async function OrgLayout({
         logoUrl={orgSettings.logoUrl}
         accentColor={accent}
         positionName={positionName}
-        canFinance={canFinance}
-        canVendas={canVendas}
-        canManage={membership.role === 'owner'}
+        canMidias={access.midias}
+        canProducao={access.producao}
+        canFinance={access.financeiro}
+        canCadastros={access.cadastros}
+        canManage={access.isOwner}
       >
         {children}
       </AppShell>

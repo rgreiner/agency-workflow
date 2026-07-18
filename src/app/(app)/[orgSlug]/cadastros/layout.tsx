@@ -1,4 +1,4 @@
-import { requireVendas } from '@/lib/auth/operacional'
+import { requireCadastros } from '@/lib/auth/operacional'
 
 export default async function VendasLayout({
   children,
@@ -8,6 +8,6 @@ export default async function VendasLayout({
   params: Promise<{ orgSlug: string }>
 }) {
   const { orgSlug } = await params
-  await requireVendas(orgSlug)
+  await requireCadastros(orgSlug)
   return <>{children}</>
 }

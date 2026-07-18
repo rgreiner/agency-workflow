@@ -21,11 +21,15 @@ interface Props {
   accentColor?: string
   /** Nome do cargo do usuário — rótulo da aba de trabalho no menu superior. */
   positionName?: string | null
+  /** Permissão para ver "Liberação de mídias". */
+  canMidias?: boolean
+  /** Permissão para ver "Liberação de Produção". */
+  canProducao?: boolean
   /** Permissão para ver/operar o grupo Financeiro. */
   canFinance?: boolean
-  /** Permissão para ver Mídias / Produção / Cadastros (Vendas). */
-  canVendas?: boolean
-  /** Permissão de gestão (owner/admin/manager) — mostra o item "Gestão". */
+  /** Permissão para ver Cadastros. */
+  canCadastros?: boolean
+  /** Permissão de gestão (owner) — mostra o item "Gestão". */
   canManage?: boolean
   children: React.ReactNode
 }
@@ -36,7 +40,7 @@ interface Props {
  * a própria Sidebar mostra um botão flutuante para reabrir.
  */
 export function AppShell({
-  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, canFinance, canVendas, canManage, children,
+  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, canMidias, canProducao, canFinance, canCadastros, canManage, children,
 }: Props) {
   const [collapsed, setCollapsedState] = useState(false)
 
@@ -61,8 +65,10 @@ export function AppShell({
         logoUrl={logoUrl}
         accentColor={accentColor}
         positionName={positionName}
+        canMidias={canMidias}
+        canProducao={canProducao}
         canFinance={canFinance}
-        canVendas={canVendas}
+        canCadastros={canCadastros}
         canManage={canManage}
         collapsed={collapsed}
         onCollapse={() => setCollapsed(true)}

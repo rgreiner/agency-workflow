@@ -3,9 +3,10 @@
 import { useState, useTransition } from 'react'
 import { STATUS_CONFIG } from '@/types'
 import { createPosition } from '@/app/actions/settings'
-import { Plus, Check, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { OperacionalToggles } from './OperacionalToggles'
 
 interface Props {
   orgSlug: string
@@ -28,6 +29,9 @@ export function NewPositionForm({ orgSlug }: Props) {
   const [name, setName] = useState('')
   const [color, setColor] = useState('#6366f1')
   const [selected, setSelected] = useState<string[]>([])
+  const [verTudo, setVerTudo] = useState(false)
+  const [midias, setMidias] = useState(false)
+  const [producao, setProducao] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
 
@@ -54,6 +58,9 @@ export function NewPositionForm({ orgSlug }: Props) {
     fd.append('name', name.trim())
     fd.append('color', color)
     selected.forEach(s => fd.append('statuses', s))
+    fd.append('op_ver_tudo', String(verTudo))
+    fd.append('op_midias', String(midias))
+    fd.append('op_producao', String(producao))
     startTransition(async () => {
       const res = await createPosition(orgSlug, fd)
       if (res?.error) {
@@ -63,6 +70,7 @@ export function NewPositionForm({ orgSlug }: Props) {
         setName('')
         setColor('#6366f1')
         setSelected([])
+        setVerTudo(false); setMidias(false); setProducao(false)
         setOpen(false)
         toast.success('Cargo criado!')
       }
@@ -128,6 +136,12 @@ export function NewPositionForm({ orgSlug }: Props) {
             </div>
           </div>
         </div>
+
+        {/* Acesso ao Operacional */}
+        <OperacionalToggles
+          verTudo={verTudo} midias={midias} producao={producao}
+          setVerTudo={setVerTudo} setMidias={setMidias} setProducao={setProducao}
+        />
 
         {/* Status checkboxes */}
         <div>

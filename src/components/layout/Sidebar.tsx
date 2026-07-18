@@ -60,11 +60,15 @@ interface SidebarProps {
   accentColor?: string
   /** Nome do cargo — rótulo do item "Trabalhar" quando houver. */
   positionName?: string | null
+  /** Permissão para ver "Liberação de mídias". */
+  canMidias?: boolean
+  /** Permissão para ver "Liberação de Produção". */
+  canProducao?: boolean
   /** Permissão para ver/operar o grupo Financeiro. */
   canFinance?: boolean
-  /** Permissão para ver Mídias / Produção / Cadastros (Vendas). */
-  canVendas?: boolean
-  /** Permissão de gestão (owner/admin/manager) — mostra o item "Gestão". */
+  /** Permissão para ver Cadastros. */
+  canCadastros?: boolean
+  /** Permissão de gestão (owner) — mostra o item "Gestão". */
   canManage?: boolean
   collapsed: boolean
   onCollapse: () => void
@@ -93,11 +97,11 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Painel',         href: 'financeiro/painel' },
     { label: 'Fluxo de caixa', href: 'financeiro/fluxo-caixa' },
     { label: 'Lançamentos',    href: 'financeiro/lancamentos' },
+    { label: 'Inadimplentes',  href: 'financeiro/inadimplentes' },
     { label: 'Faturamento',    href: 'financeiro/faturamento' },
     { label: 'Conciliação', href: 'financeiro/conciliacao' },
     { label: 'Contas',         href: 'financeiro/contas' },
     { label: 'Categorias',     href: 'financeiro/categorias' },
-    { label: 'Importar extrato', href: 'financeiro/importar' },
   ] },
   { id: 'cadastros', label: 'Cadastros', icon: Users, items: [
     { label: 'Clientes',     href: 'workspaces' },
@@ -173,7 +177,7 @@ const MODE_TABS: { m: SidebarMode; Icon: LucideIcon; label: string }[] = [
 
 export function Sidebar({
   orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#f97316', canManage,
-  positionName, canFinance = false, canVendas = false, collapsed, onCollapse, onExpand,
+  positionName, canMidias = false, canProducao = false, canFinance = false, canCadastros = false, collapsed, onCollapse, onExpand,
 }: SidebarProps) {
   const pathname = usePathname()
   const base = `/${orgSlug}`
@@ -181,9 +185,11 @@ export function Sidebar({
   const [mobileOpen, setMobileOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
 
-  // Grupos do Operacional: Financeiro só com canFinance; os demais (Mídias/Produção/
-  // Cadastros) só com canVendas. A seção aparece se tiver ao menos uma permissão.
-  const comercialGroups = COMERCIAL_GROUPS.filter(g => (g.finance ? canFinance : canVendas))
+  // Grupos do Operacional: cada seção aparece conforme cargo × toggles (ver
+  // computeAccess). Mídias/Produção dependem do cargo; Financeiro do can_finance;
+  // Cadastros de can_vendas OU can_finance.
+  const groupVisible: Record<string, boolean> = { midias: canMidias, producao: canProducao, financeiro: canFinance, cadastros: canCadastros }
+  const comercialGroups = COMERCIAL_GROUPS.filter(g => groupVisible[g.id])
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   useEffect(() => {
     try {
@@ -209,7 +215,7 @@ export function Sidebar({
   // Modo da sidebar: "Trabalho" (visões + espaços) × "Operacional" (mídia/produção/
   // financeiro/cadastros) — um contexto por vez p/ reduzir a poluição. O switcher só
   // aparece com permissão; ao navegar, o modo acompanha a página atual.
-  const canOperacional = canFinance || canVendas
+  const canOperacional = canMidias || canProducao || canFinance || canCadastros
   const [mode, setMode] = useState<SidebarMode>(
     () => (canOperacional ? modeForPath(pathname, base) : null) ?? 'trabalho'
   )
