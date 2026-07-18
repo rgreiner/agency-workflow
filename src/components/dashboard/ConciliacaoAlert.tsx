@@ -28,16 +28,16 @@ export async function ConciliacaoAlert({ orgSlug, orgId, userId }: {
   if (n <= 0) return null
 
   return (
-    <Link href={`/${orgSlug}/financeiro/conciliacao`}
+    <Link href={`/${orgSlug}/financeiro/contas`}
       className="group flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mt-5 mb-5 hover:bg-amber-100/70 transition">
       <div className="w-9 h-9 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
         <Landmark className="w-4 h-4" />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-amber-900">
-          {n} conciliação{n === 1 ? '' : 'ões'} bancária{n === 1 ? '' : 's'} pendente{n === 1 ? '' : 's'}
+          {n} movimento{n === 1 ? '' : 's'} bancário{n === 1 ? '' : 's'} a conciliar
         </p>
-        <p className="text-xs text-amber-700/80">Confira os movimentos do BTG e case com os lançamentos.</p>
+        <p className="text-xs text-amber-700/80">Abra a conta e case o extrato com os lançamentos.</p>
       </div>
       <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-800 shrink-0">
         Conciliar <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
