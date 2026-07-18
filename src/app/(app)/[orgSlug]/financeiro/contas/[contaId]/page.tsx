@@ -5,10 +5,11 @@ import { assertFinanceAccess } from '@/lib/finance'
 import { loadConciliacao } from '@/lib/conciliacao'
 import { ConciliacaoClient } from '../../conciliacao/ConciliacaoClient'
 import { ImportarOfxButton } from './ImportarOfxButton'
-import { ContaExtratoList, type ExtratoMov } from './ContaExtratoList'
+import { ContaExtratoView, type Mov } from './ContaExtratoView'
 
 // Busca da própria API — o builder não alcança o IP público do VPS.
 export const dynamic = 'force-dynamic'
+const PAGE = 1000
 
 export default async function ContaPage({
   params,
@@ -22,22 +23,25 @@ export default async function ContaPage({
 
   const { data: conta } = await sb
     .from('contas_financeiras')
-    .select('id, nome, tipo, cor, saldo_banco, saldo_banco_data')
+    .select('id, nome, tipo, cor, saldo_inicial, saldo_banco, saldo_banco_data')
     .eq('id', contaId).eq('org_id', orgId).maybeSingle()
   if (!conta) notFound()
 
-  const data = await loadConciliacao(sb, orgId, contaId)
-  const pendentesN = data.pendentes.length
-
-  // Movimentações importadas do Conta Azul desta conta (casadas pelo nome da conta).
-  const { data: extratoRaw } = await sb
-    .from('extrato_importado')
-    .select('data_mov, contato, descricao, categoria, valor, situacao')
-    .eq('org_id', orgId).eq('conta', conta.nome)
-    .order('data_mov', { ascending: false })
-    .limit(500)
+  // Extrato do Conta Azul desta conta (casado pelo nome da conta), paginado.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const extrato: ExtratoMov[] = ((extratoRaw ?? []) as any[]).map(e => ({
+  const movRaw: any[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await sb
+      .from('extrato_importado')
+      .select('data_mov, contato, descricao, categoria, valor, situacao')
+      .eq('org_id', orgId).eq('conta', conta.nome)
+      .order('data_mov', { ascending: false })
+      .range(from, from + PAGE - 1)
+    if (error || !data || data.length === 0) break
+    movRaw.push(...data)
+    if (data.length < PAGE) break
+  }
+  const movimentos: Mov[] = movRaw.map(e => ({
     data: (e.data_mov as string) ?? null,
     contato: (e.contato as string) ?? null,
     descricao: (e.descricao as string) ?? null,
@@ -45,6 +49,11 @@ export default async function ContaPage({
     valor: Number(e.valor ?? 0),
     situacao: (e.situacao as string) ?? null,
   }))
+
+  // Conciliação OFX (banco × Flow) — só entra na tela quando há extrato bancário importado.
+  const conc = await loadConciliacao(sb, orgId, contaId)
+  const temOfx = conc.pendentes.length + conc.historico.length > 0
+  const today = new Date().toISOString().slice(0, 10)
 
   return (
     <div>
@@ -59,15 +68,7 @@ export default async function ContaPage({
             </span>
             <div>
               <h1 className="text-lg font-semibold text-gray-900">{conta.nome}</h1>
-              <p className="text-gray-500 text-sm mt-0.5">
-                Movimentações e conciliação{pendentesN > 0 ? ` — ${pendentesN} pendente(s)` : ''}
-              </p>
-              {conta.saldo_banco != null && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Saldo no banco (extrato): <strong className="text-gray-800 tabular-nums">{Number(conta.saldo_banco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
-                  {conta.saldo_banco_data ? ` em ${new Date(conta.saldo_banco_data + 'T00:00:00').toLocaleDateString('pt-BR')}` : ''}
-                </p>
-              )}
+              <p className="text-gray-500 text-sm mt-0.5">Conta {conta.tipo}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -84,9 +85,16 @@ export default async function ContaPage({
         </div>
       </div>
 
-      <ContaExtratoList movimentos={extrato} />
+      <ContaExtratoView
+        movimentos={movimentos}
+        saldoInicial={Number(conta.saldo_inicial ?? 0)}
+        saldoBanco={conta.saldo_banco != null ? Number(conta.saldo_banco) : null}
+        saldoBancoData={(conta.saldo_banco_data as string) ?? null}
+        temOfx={temOfx}
+        today={today}
+      />
 
-      <ConciliacaoClient orgSlug={orgSlug} {...data} />
+      {temOfx && <ConciliacaoClient orgSlug={orgSlug} {...conc} />}
     </div>
   )
 }
