@@ -81,8 +81,6 @@ function shiftPeriodo(p: Periodo, delta: number): Periodo {
 const isPago = (s: string) => s === 'pago' || s === 'recebido'
 const val = (l: Lancamento) => Number(l.valor ?? 0)
 const realVal = (l: Lancamento) => Number(l.valor_realizado ?? l.valor ?? 0)
-// Valor com sinal p/ saldo corrido: entrada soma, saída subtrai (usa o realizado quando liquidado).
-const signedEff = (l: Lancamento) => (l.tipo === 'saida' ? -1 : 1) * (isPago(l.situacao) ? realVal(l) : val(l))
 /** "1.234,56" → "1234.56" (string p/ a RPC). Vazio → '0'. */
 const parseBR = (s: string) => { const t = s.trim().replace(/\./g, '').replace(',', '.'); return t === '' ? '0' : t }
 const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
@@ -126,7 +124,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
   const effDate = (l: Lancamento) => (isPago(l.situacao) ? (l.data_liquidacao ?? l.vencimento) : l.vencimento)
   const inPeriodo = (l: Lancamento) => { const d = effDate(l); return !!d && d >= perStart && d <= perEnd }
 
-  // Tabela única (estilo extrato): só os itens do período selecionado, por data + saldo corrido.
+  // Tabela única (estilo extrato): só os itens do período selecionado, ordenados por data.
   const rows = useMemo(() => {
     const inView = filtered.filter(l => {
       if (cardFilter) {
@@ -142,10 +140,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       const da = effDate(a) ?? '9999-12-31', db = effDate(b) ?? '9999-12-31'
       return da < db ? -1 : da > db ? 1 : 0
     })
-    const out: { l: Lancamento; saldo: number }[] = []
-    let acc = 0
-    for (const l of inView) { acc += signedEff(l); out.push({ l, saldo: acc }) }
-    return out
+    return inView
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, perStart, perEnd, cardFilter])
 
@@ -242,15 +237,14 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
                 <th className="text-left px-4 py-2.5 font-medium">Resumo do lançamento</th>
                 <th className="text-left px-3 py-2.5 font-medium">Situação</th>
                 <th className="text-right px-4 py-2.5 font-medium">Valor</th>
-                <th className="text-right px-4 py-2.5 font-medium">Saldo</th>
                 <th className="text-center px-3 py-2.5 font-medium">NF</th>
                 <th className="text-center px-3 py-2.5 font-medium">Boleto</th>
                 <th className="w-44" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {rows.map(({ l, saldo }) => (
-                <Row key={l.id} l={l} saldo={saldo} orgSlug={orgSlug} today={today}
+              {rows.map((l) => (
+                <Row key={l.id} l={l} orgSlug={orgSlug} today={today}
                   conta={l.conta_id ? contaMap[l.conta_id] : undefined} onEdit={setEditing} onBaixa={setBaixa} />
               ))}
             </tbody>
@@ -272,8 +266,8 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
   )
 }
 
-function Row({ l, saldo, orgSlug, today, conta, onEdit, onBaixa }: {
-  l: Lancamento; saldo: number; orgSlug: string; today: string; conta?: ContaRef
+function Row({ l, orgSlug, today, conta, onEdit, onBaixa }: {
+  l: Lancamento; orgSlug: string; today: string; conta?: ContaRef
   onEdit: (l: Lancamento) => void; onBaixa: (l: Lancamento) => void
 }) {
   const router = useRouter()
@@ -342,7 +336,6 @@ function Row({ l, saldo, orgSlug, today, conta, onEdit, onBaixa }: {
       <td className={cn('px-4 py-2.5 text-sm font-medium text-right whitespace-nowrap', isSaida ? 'text-red-600' : 'text-gray-900')}>
         {isSaida ? '− ' : ''}{formatBRL(val(l))}
       </td>
-      <td className={cn('px-4 py-2.5 text-sm text-right tabular-nums whitespace-nowrap', saldo < 0 ? 'text-red-600' : 'text-gray-500')}>{formatBRL(saldo)}</td>
       <td className="px-3 py-2.5 text-center">
         {imported
           ? (l.nf_emitida ? <FileText className="w-4 h-4 text-gray-300 inline" /> : <span className="text-gray-300">—</span>)
