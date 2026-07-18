@@ -47,18 +47,18 @@ export function ContatoBlocks({ value, onChange }: { value: ContatoData; onChang
         <div className="space-y-2">
           {v.enderecos.map((e, i) => (
             <div key={i} className="grid grid-cols-12 gap-2 items-center">
-              <input value={e.tipo} onChange={ev => setEnd(i, 'tipo', ev.target.value)} placeholder="Tipo" className={cn(cellCls, 'col-span-2')} />
-              <input value={e.logradouro} onChange={ev => setEnd(i, 'logradouro', ev.target.value)} placeholder="Logradouro" className={cn(cellCls, 'col-span-4')} />
-              <input value={e.numero} onChange={ev => setEnd(i, 'numero', ev.target.value)} placeholder="Nº" className={cn(cellCls, 'col-span-1')} />
-              <input value={e.bairro} onChange={ev => setEnd(i, 'bairro', ev.target.value)} placeholder="Bairro" className={cn(cellCls, 'col-span-2')} />
-              <input value={e.cidade} onChange={ev => setEnd(i, 'cidade', ev.target.value)} placeholder="Cidade" className={cn(cellCls, 'col-span-2')} />
-              <button aria-label="Remover" type="button" onClick={() => onChange({ ...v, enderecos: v.enderecos.filter((_, idx) => idx !== i) })} className="col-span-1 text-gray-300 hover:text-red-500 transition justify-self-center"><Trash2 className="w-4 h-4" /></button>
-              <input value={e.complemento} onChange={ev => setEnd(i, 'complemento', ev.target.value)} placeholder="Complemento" className={cn(cellCls, 'col-span-5')} />
-              <input value={e.uf} onChange={ev => setEnd(i, 'uf', ev.target.value)} placeholder="UF" className={cn(cellCls, 'col-span-2')} />
-              <div className="col-span-4 relative">
-                <input value={e.cep} onChange={ev => setEnd(i, 'cep', ev.target.value)} onBlur={ev => onCepBlur(i, ev.target.value)} placeholder="CEP (autopreenche)" className={cn(cellCls, 'pr-8')} />
-                {cepBusy === i && <Loader2 className="w-4 h-4 animate-spin text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2" />}
+              <div className="col-span-2 relative">
+                <input value={e.cep} onChange={ev => setEnd(i, 'cep', ev.target.value)} onBlur={ev => onCepBlur(i, ev.target.value)} placeholder="CEP" className={cn(cellCls, 'pr-7')} />
+                {cepBusy === i && <Loader2 className="w-4 h-4 animate-spin text-gray-400 absolute right-2 top-1/2 -translate-y-1/2" />}
               </div>
+              <input value={e.logradouro} onChange={ev => setEnd(i, 'logradouro', ev.target.value)} placeholder="Logradouro" className={cn(cellCls, 'col-span-7')} />
+              <input value={e.numero} onChange={ev => setEnd(i, 'numero', ev.target.value)} placeholder="Número" className={cn(cellCls, 'col-span-2')} />
+              <button aria-label="Remover" type="button" onClick={() => onChange({ ...v, enderecos: v.enderecos.filter((_, idx) => idx !== i) })} className="col-span-1 text-gray-300 hover:text-red-500 transition justify-self-center"><Trash2 className="w-4 h-4" /></button>
+              <input value={e.complemento} onChange={ev => setEnd(i, 'complemento', ev.target.value)} placeholder="Complemento" className={cn(cellCls, 'col-span-3')} />
+              <input value={e.bairro} onChange={ev => setEnd(i, 'bairro', ev.target.value)} placeholder="Bairro" className={cn(cellCls, 'col-span-3')} />
+              <input value={e.cidade} onChange={ev => setEnd(i, 'cidade', ev.target.value)} placeholder="Cidade" className={cn(cellCls, 'col-span-3')} />
+              <input value={e.uf} onChange={ev => setEnd(i, 'uf', ev.target.value)} placeholder="UF" className={cn(cellCls, 'col-span-1')} />
+              <input value={e.tipo} onChange={ev => setEnd(i, 'tipo', ev.target.value)} placeholder="Tipo" className={cn(cellCls, 'col-span-2')} />
             </div>
           ))}
         </div>
