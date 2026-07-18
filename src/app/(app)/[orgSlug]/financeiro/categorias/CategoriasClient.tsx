@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { Plus, Trash2, Loader2, Building2, ChevronRight, CornerDownRight } from 'lucide-react'
+import { useMemo, useState, useTransition } from 'react'
+import { Plus, Trash2, Loader2, Building2, ChevronRight, Search, CornerDownRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { setFinanceConfig, type FinanceCategoriaGrupo, type FinanceCentro } from '@/app/actions/financeiro'
 import { toast } from 'sonner'
@@ -10,8 +10,8 @@ const COR_PRESETS = ['#22c55e', '#3b82f6', '#8b5cf6', '#f97316', '#ec4899', '#ea
 const corReceita = '#22c55e'
 const corDespesa = '#ef4444'
 
-const inputCls =
-  'w-full px-3 py-2 bg-gray-100 border border-transparent rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
+const rowInput =
+  'flex-1 min-w-0 bg-transparent text-sm text-gray-900 placeholder-gray-400 focus:outline-none rounded px-1 py-0.5 focus:bg-gray-50'
 
 type Tab = 'entrada' | 'saida'
 
@@ -21,20 +21,24 @@ export function CategoriasClient({ orgSlug, categorias: initCats, centros: initC
   const [grupos, setGrupos] = useState<FinanceCategoriaGrupo[]>(initCats)
   const [centros, setCentros] = useState<FinanceCentro[]>(initCentros)
   const [tab, setTab] = useState<Tab>('entrada')
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState<Set<number>>(new Set())
   const [isPending, startTransition] = useTransition()
 
-  // helpers que operam sobre o índice REAL no array `grupos` (não o filtrado)
   const updateGrupo = (gi: number, patch: Partial<FinanceCategoriaGrupo>) =>
     setGrupos(prev => prev.map((g, i) => i === gi ? { ...g, ...patch } : g))
   const removeGrupo = (gi: number) => setGrupos(prev => prev.filter((_, i) => i !== gi))
-  const addFilho = (gi: number) =>
+  const addFilho = (gi: number) => {
     setGrupos(prev => prev.map((g, i) => i === gi ? { ...g, filhos: [...g.filhos, { nome: '', cor: g.cor }] } : g))
+    setOpen(prev => new Set(prev).add(gi))
+  }
   const updateFilho = (gi: number, fi: number, nome: string) =>
     setGrupos(prev => prev.map((g, i) => i === gi ? { ...g, filhos: g.filhos.map((f, j) => j === fi ? { ...f, nome } : f) } : g))
   const removeFilho = (gi: number, fi: number) =>
     setGrupos(prev => prev.map((g, i) => i === gi ? { ...g, filhos: g.filhos.filter((_, j) => j !== fi) } : g))
   const addGrupo = () =>
     setGrupos(prev => [...prev, { nome: '', tipo: tab, cor: tab === 'entrada' ? corReceita : corDespesa, filhos: [] }])
+  const toggle = (gi: number) => setOpen(prev => { const n = new Set(prev); if (n.has(gi)) n.delete(gi); else n.add(gi); return n })
 
   function save() {
     const clean = grupos
@@ -48,118 +52,148 @@ export function CategoriasClient({ orgSlug, categorias: initCats, centros: initC
     })
   }
 
-  const totalLeaves = (t: Tab) => grupos.filter(g => g.tipo === t).reduce((s, g) => s + Math.max(g.filhos.length, 1), 0)
+  const count = (t: Tab) => grupos.filter(g => g.tipo === t || g.tipo === 'ambos').length
+
+  // Itens da aba (inclui 'ambos'), filtrados pela busca.
+  const visiveis = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return grupos
+      .map((g, gi) => ({ g, gi }))
+      .filter(({ g }) => g.tipo === tab || g.tipo === 'ambos')
+      .filter(({ g }) => !q || g.nome.toLowerCase().includes(q) || g.filhos.some(f => f.nome.toLowerCase().includes(q)))
+  }, [grupos, tab, query])
 
   return (
-    <div className="p-6 max-w-3xl">
+    <div className="p-6 max-w-4xl">
       <div className="flex items-center justify-between gap-3 mb-5">
         <div>
           <h1 className="text-lg font-semibold text-gray-900">Categorias e centros de custo</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Grupo → categoria, separados por receita e despesa. Cada um com sua cor.</p>
+          <p className="text-gray-500 text-sm mt-0.5">Categorias por receita e despesa (agrupe quando fizer sentido) e centros de custo.</p>
         </div>
-        <button onClick={save} disabled={isPending}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-orange-600 text-[#fff] text-sm font-semibold rounded-xl hover:bg-orange-700 transition disabled:opacity-50 shrink-0">
-          {isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-          Salvar
-        </button>
+        <SaveButton onClick={save} pending={isPending} />
       </div>
 
-      {/* Tabs Receita / Despesa */}
-      <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 text-sm mb-4">
-        <button onClick={() => setTab('entrada')}
-          className={cn('px-4 py-1.5 rounded-md transition', tab === 'entrada' ? 'bg-gray-900 text-[#fff]' : 'text-gray-500 hover:text-gray-700')}>
-          Receita · {totalLeaves('entrada')}
-        </button>
-        <button onClick={() => setTab('saida')}
-          className={cn('px-4 py-1.5 rounded-md transition', tab === 'saida' ? 'bg-gray-900 text-[#fff]' : 'text-gray-500 hover:text-gray-700')}>
-          Despesa · {totalLeaves('saida')}
-        </button>
+      {/* Abas + busca */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 text-sm">
+          <button onClick={() => setTab('entrada')}
+            className={cn('px-4 py-1.5 rounded-md transition', tab === 'entrada' ? 'bg-gray-900 text-[#fff]' : 'text-gray-500 hover:text-gray-700')}>
+            Receita · {count('entrada')}
+          </button>
+          <button onClick={() => setTab('saida')}
+            className={cn('px-4 py-1.5 rounded-md transition', tab === 'saida' ? 'bg-gray-900 text-[#fff]' : 'text-gray-500 hover:text-gray-700')}>
+            Despesa · {count('saida')}
+          </button>
+        </div>
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar categoria"
+            className="w-full pl-9 pr-3 py-2 bg-gray-100 border border-transparent rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent" />
+        </div>
       </div>
 
-      {/* Árvore de grupos da aba ativa */}
-      <div className="space-y-3 mb-8">
-        {grupos.map((g, gi) => g.tipo !== tab ? null : (
-          <div key={gi} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-            {/* Grupo */}
-            <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-50/60 border-b border-gray-100">
-              <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
+      {/* Grade compacta: linha slim quando não tem subcategoria; card colapsável quando tem. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+        {visiveis.map(({ g, gi }) => g.filhos.length === 0 ? (
+          <div key={gi} className="group flex items-center gap-2 bg-white border border-gray-200 rounded-lg pl-2.5 pr-1.5 py-1.5 hover:border-gray-300 transition-colors">
+            <ColorDot color={g.cor} onChange={cor => updateGrupo(gi, { cor })} />
+            <input value={g.nome} placeholder="Nome da categoria"
+              onChange={e => updateGrupo(gi, { nome: e.target.value })} className={cn(rowInput, 'font-medium')} />
+            {g.tipo === 'ambos' && <span className="text-[10px] font-medium text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 shrink-0">ambos</span>}
+            <button onClick={() => addFilho(gi)} title="Adicionar subcategoria"
+              className="p-1 rounded text-gray-300 hover:text-orange-600 opacity-0 group-hover:opacity-100 transition shrink-0"><Plus className="w-3.5 h-3.5" /></button>
+            <button onClick={() => removeGrupo(gi)} title="Remover"
+              className="p-1 rounded text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+          </div>
+        ) : (
+          <div key={gi} className="sm:col-span-2 bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 pl-1.5 pr-1.5 py-1.5 bg-gray-50/60">
+              <button onClick={() => toggle(gi)} className="p-1 rounded text-gray-400 hover:bg-gray-100 transition shrink-0">
+                <ChevronRight className={cn('w-4 h-4 transition-transform', open.has(gi) && 'rotate-90')} />
+              </button>
               <ColorDot color={g.cor} onChange={cor => updateGrupo(gi, { cor })} />
-              <input value={g.nome} placeholder="Nome do grupo (ex.: 3.01 Receitas de Vendas)"
-                onChange={e => updateGrupo(gi, { nome: e.target.value })}
-                className={cn(inputCls, 'flex-1 font-medium')} />
-              <button onClick={() => addFilho(gi)} title="Adicionar categoria"
-                className="p-1.5 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-50 transition"><Plus className="w-4 h-4" /></button>
+              <input value={g.nome} placeholder="Nome do grupo"
+                onChange={e => updateGrupo(gi, { nome: e.target.value })} className={cn(rowInput, 'font-medium')} />
+              <span className="text-[11px] text-gray-400 shrink-0">{g.filhos.length}</span>
+              {g.tipo === 'ambos' && <span className="text-[10px] font-medium text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 shrink-0">ambos</span>}
+              <button onClick={() => addFilho(gi)} title="Adicionar subcategoria"
+                className="p-1 rounded text-gray-400 hover:text-orange-600 transition shrink-0"><Plus className="w-3.5 h-3.5" /></button>
               <button onClick={() => removeGrupo(gi)} title="Remover grupo"
-                className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition"><Trash2 className="w-3.5 h-3.5" /></button>
+                className="p-1 rounded text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
             </div>
-            {/* Filhos */}
-            <div className="divide-y divide-gray-50">
-              {g.filhos.length === 0 && (
-                <p className="text-xs text-gray-400 px-4 py-2.5 pl-11">Grupo sem categorias — vira uma categoria avulsa, ou adicione filhos no “+”.</p>
-              )}
-              {g.filhos.map((f, fi) => (
-                <div key={fi} className="flex items-center gap-2 px-3 py-2 pl-9">
-                  <CornerDownRight className="w-3.5 h-3.5 text-gray-300 shrink-0" />
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: f.cor ?? g.cor ?? '#cbd5e1' }} />
-                  <input value={f.nome} placeholder="Nome da categoria"
-                    onChange={e => updateFilho(gi, fi, e.target.value)} className={cn(inputCls, 'flex-1')} />
-                  <button onClick={() => removeFilho(gi, fi)} title="Remover"
-                    className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition"><Trash2 className="w-3.5 h-3.5" /></button>
-                </div>
-              ))}
-            </div>
+            {open.has(gi) && (
+              <div className="divide-y divide-gray-50">
+                {g.filhos.map((f, fi) => (
+                  <div key={fi} className="flex items-center gap-2 pl-9 pr-1.5 py-1.5">
+                    <CornerDownRight className="w-3.5 h-3.5 text-gray-300 shrink-0" />
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: f.cor ?? g.cor ?? '#cbd5e1' }} />
+                    <input value={f.nome} placeholder="Nome da subcategoria"
+                      onChange={e => updateFilho(gi, fi, e.target.value)} className={rowInput} />
+                    <button onClick={() => removeFilho(gi, fi)} title="Remover"
+                      className="p-1 rounded text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ))}
-        {grupos.filter(g => g.tipo === tab).length === 0 && (
-          <p className="text-sm text-gray-400 px-1 py-4">Nenhum grupo de {tab === 'entrada' ? 'receita' : 'despesa'}. Adicione abaixo.</p>
-        )}
-        <button onClick={addGrupo}
-          className="flex items-center gap-2 px-4 py-2.5 text-sm text-orange-600 hover:bg-orange-50/50 rounded-xl border border-dashed border-orange-200 transition w-full justify-center">
-          <Plus className="w-4 h-4" /> Adicionar grupo de {tab === 'entrada' ? 'receita' : 'despesa'}
-        </button>
       </div>
 
-      {/* Centros de custo (sem hierarquia) */}
+      {visiveis.length === 0 && (
+        <p className="text-sm text-gray-400 px-1 py-4">{query ? 'Nenhuma categoria encontrada.' : `Nenhuma categoria de ${tab === 'entrada' ? 'receita' : 'despesa'}.`}</p>
+      )}
+
+      <button onClick={addGrupo}
+        className="flex items-center justify-center gap-2 px-4 py-2.5 mb-8 text-sm text-orange-600 hover:bg-orange-50/50 rounded-xl border border-dashed border-orange-200 transition w-full">
+        <Plus className="w-4 h-4" /> Adicionar categoria de {tab === 'entrada' ? 'receita' : 'despesa'}
+      </button>
+
+      {/* Centros de custo — grade compacta */}
       <section className="mb-8">
         <div className="flex items-center gap-2 mb-3">
           <Building2 className="w-4 h-4 text-gray-400" />
           <h2 className="text-sm font-semibold text-gray-900">Centros de custo</h2>
+          <span className="text-xs text-gray-400">{centros.length}</span>
         </div>
-        <div className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-50">
-          {centros.length === 0 && <p className="text-sm text-gray-400 px-4 py-4">Nenhum centro de custo. Adicione abaixo.</p>}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {centros.map((ce, i) => (
-            <div key={i} className="flex items-center gap-2 px-3 py-2.5">
+            <div key={i} className="group flex items-center gap-2 bg-white border border-gray-200 rounded-lg pl-2.5 pr-1.5 py-1.5 hover:border-gray-300 transition-colors">
               <ColorDot color={ce.cor} onChange={cor => setCentros(prev => prev.map((c, j) => j === i ? { ...c, cor } : c))} />
               <input value={ce.nome} placeholder="Nome do centro de custo"
-                onChange={e => setCentros(prev => prev.map((c, j) => j === i ? { ...c, nome: e.target.value } : c))}
-                className={cn(inputCls, 'flex-1')} />
+                onChange={e => setCentros(prev => prev.map((c, j) => j === i ? { ...c, nome: e.target.value } : c))} className={rowInput} />
               <button onClick={() => setCentros(prev => prev.filter((_, j) => j !== i))}
-                className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition" title="Remover">
+                className="p-1 rounded text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition shrink-0" title="Remover">
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>
           ))}
-          <button onClick={() => setCentros(prev => [...prev, { nome: '', cor: COR_PRESETS[prev.length % COR_PRESETS.length] }])}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm text-orange-600 hover:bg-orange-50/50 transition w-full">
-            <Plus className="w-4 h-4" /> Adicionar centro de custo
-          </button>
         </div>
+        <button onClick={() => setCentros(prev => [...prev, { nome: '', cor: COR_PRESETS[prev.length % COR_PRESETS.length] }])}
+          className="flex items-center gap-2 px-4 py-2.5 mt-2 text-sm text-orange-600 hover:bg-orange-50/50 rounded-xl border border-dashed border-orange-200 transition w-full justify-center">
+          <Plus className="w-4 h-4" /> Adicionar centro de custo
+        </button>
       </section>
 
       <div className="flex justify-end">
-        <button onClick={save} disabled={isPending}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-orange-600 text-[#fff] text-sm font-semibold rounded-xl hover:bg-orange-700 transition disabled:opacity-50">
-          {isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-          Salvar
-        </button>
+        <SaveButton onClick={save} pending={isPending} />
       </div>
     </div>
   )
 }
 
+function SaveButton({ onClick, pending }: { onClick: () => void; pending: boolean }) {
+  return (
+    <button onClick={onClick} disabled={pending}
+      className="inline-flex items-center gap-2 px-5 py-2.5 bg-orange-600 text-[#fff] text-sm font-semibold rounded-xl hover:bg-orange-700 transition disabled:opacity-50 shrink-0">
+      {pending && <Loader2 className="w-4 h-4 animate-spin" />}
+      Salvar
+    </button>
+  )
+}
+
 function ColorDot({ color, onChange }: { color: string | null; onChange: (c: string) => void }) {
   return (
-    <label className="relative w-6 h-6 rounded-full shrink-0 cursor-pointer border border-gray-200 overflow-hidden" title="Cor"
+    <label className="relative w-5 h-5 rounded-full shrink-0 cursor-pointer border border-gray-200 overflow-hidden" title="Cor"
       style={{ backgroundColor: color ?? '#cbd5e1' }}>
       <input type="color" value={color ?? '#6b7280'} onChange={e => onChange(e.target.value)}
         className="absolute inset-0 opacity-0 cursor-pointer" />
