@@ -4,6 +4,7 @@ import type { Database } from '@/types/database'
 import { digestJob } from './digest'
 import { cobrancaJob } from './cobranca'
 import { btgSyncJob } from './btg-sync'
+import { fechamentoContabilJob } from './fechamento-contabil'
 
 /**
  * Executor de tarefas agendadas. A rota /api/cron (batida pelo crontab do VPS)
@@ -27,6 +28,9 @@ export interface CronJob {
   dailyAfterHour?: number    // 0–23, horário de Brasília
   dailyAfterMinute?: number  // 0–59 (default 0) — junto do dailyAfterHour
   weekdaysOnly?: boolean     // seg–sex apenas (não dispara sáb/dom)
+  /** Dia do mês (1–28) a partir do qual o job roda, uma vez por mês. Combina com
+   *  dailyAfterHour. Limitado a 28 pra não pular fevereiro. */
+  monthlyOnDay?: number
   run: (ctx: CronCtx) => Promise<string>
 }
 
@@ -53,6 +57,7 @@ export const JOBS: CronJob[] = [
   btgSyncJob,  // extrato do BTG 7h (BRT), antes do digest — só orgs conectadas
   digestJob,   // resumo diário 8h30 (BRT)
   cobrancaJob, // lembrete de vencimento ao cliente 9h (BRT), opt-in por cliente
+  fechamentoContabilJob, // abre o fechamento do mes anterior e avisa o Financeiro (nao envia)
   // Futuro (onda 4): 'contratos'.
 ]
 
@@ -68,6 +73,19 @@ function brtParts(d: Date): { date: string; minutes: number } {
 
 function isDue(job: CronJob, lastIso: string | null, nowMs: number, nowD: Date): boolean {
   if (job.everyMinutes != null) return !lastIso || nowMs - new Date(lastIso).getTime() >= job.everyMinutes * 60_000
+
+  // Mensal: a partir do dia N, uma vez por mês. Compara o MÊS da última execução,
+  // então se o cron ficou parado no dia 5 ele ainda dispara no 6, 7… (não pula o mês).
+  if (job.monthlyOnDay != null) {
+    const now = brtParts(nowD)
+    const diaAtual = Number(now.date.slice(8, 10))
+    if (diaAtual < job.monthlyOnDay) return false
+    const threshold = (job.dailyAfterHour ?? 0) * 60 + (job.dailyAfterMinute ?? 0)
+    if (now.minutes < threshold) return false
+    const lastMes = lastIso ? brtParts(new Date(lastIso)).date.slice(0, 7) : ''
+    return lastMes < now.date.slice(0, 7)
+  }
+
   if (job.dailyAfterHour != null) {
     const now = brtParts(nowD)
     // seg–sex: getUTCDay do dia de calendário (0=dom..6=sáb) é estável por fuso
