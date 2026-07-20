@@ -117,6 +117,21 @@ export default async function LancamentosPage({
     .filter((e: any) => !e.import_ref || !promovidos.has(e.import_ref as string))
     .map(e => extratoToLancamento(e, contaIdByName))
 
+  // TEMPORÁRIO — instrumentação do bug "linha Conta Azul não some". Provei via HTTP
+  // que o filtro funciona com os dados reais, mas a tela insiste em mostrar a linha.
+  // Loga os números do request de verdade pra fechar a diferença. Remover depois.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const alvo = importadasRaw.find((e: any) => String(e.import_ref ?? '').includes('NFa 2162'))
+  console.log('[diag-lanc]', JSON.stringify({
+    lancamentos: lancamentos.length,
+    promovidos: promovidos.size,
+    importadasRaw: importadasRaw.length,
+    importadasFinal: importadas.length,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    alvoNoExtrato: !!alvo, alvoFiltrado: alvo ? promovidos.has((alvo as any).import_ref) : null,
+    temLancAlvo: lancamentos.some(l => (l.origem_ref ?? '').includes('NFa 2162')),
+  }))
+
   return (
     <LancamentosClient
       orgSlug={orgSlug}
