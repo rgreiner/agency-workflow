@@ -2,7 +2,7 @@ import 'server-only'
 import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
-import { createTaskFolders, moveTaskFolder, inspectTaskFolder, driveConfigured } from '@/lib/google-drive'
+import { createTaskFolders, moveTaskFolder, inspectTaskFolder, completarSubpastas, driveConfigured } from '@/lib/google-drive'
 import { logSystemError } from '@/lib/system-error'
 
 const DEFAULT_PREFIX = 'G:\\Drives compartilhados\\'
@@ -121,11 +121,14 @@ export async function regenerateActivityDrive(
 export async function relinkActivityDrive(
   supabase: SupabaseClient<Database>,
   params: { campaignId: string; userId: string; activityId: string; folderId: string },
-): Promise<{ ok: boolean; error?: string; faltando?: string[] }> {
+): Promise<{ ok: boolean; error?: string; faltando?: string[]; criadas?: string[] }> {
   if (!driveConfigured()) return { ok: false, error: 'Integração com o Drive não está configurada.' }
   const cfg = await resolve(supabase, params.campaignId)
   const prefix = cfg?.prefix ?? DEFAULT_PREFIX
   try {
+    // Completa o que faltar ANTES de reler: pasta antiga foi criada à mão quando
+    // "Final" era opcional, e sem isso a re-vinculação regravava null pra sempre.
+    const { criadas } = await completarSubpastas(params.folderId)
     const r = await inspectTaskFolder(params.folderId)
     await supabase.rpc('set_activity_drive', {
       p_user_id: params.userId,
@@ -141,7 +144,7 @@ export async function relinkActivityDrive(
     // tarefa de novo. Devolver o que FALTOU evita o "Corrigido." mentiroso, que
     // fazia a pessoa clicar em loop sem entender por que o item não sumia.
     const faltando = (['Redação', 'Final', 'Preview'] as const).filter(n => !r.sub[n])
-    return { ok: true, faltando: [...faltando] }
+    return { ok: true, faltando: [...faltando], criadas }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Falha ao reler a pasta no Drive' }
   }

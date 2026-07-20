@@ -319,6 +319,24 @@ export async function listSubfolders(parentId: string): Promise<{ id: string; na
   return out
 }
 
+/**
+ * Cria as subpastas padrão que estiverem faltando numa pasta de tarefa já existente.
+ * Pastas antigas foram criadas à mão numa época em que "Final" era opcional; hoje a
+ * provisão automática cria as cinco sempre (ensureTaskFolders), então completar as
+ * antigas é padronizar. Devolve quais foram criadas agora.
+ */
+export async function completarSubpastas(folderId: string): Promise<{ criadas: string[] }> {
+  const existentes = await listSubfolders(folderId)
+  const criadas: string[] = []
+  for (const name of SUBFOLDERS) {
+    const achou = existentes.find(s => s.name.trim().toLowerCase() === name.toLowerCase())
+    if (achou) continue
+    await ensureFolder(folderId, name)
+    criadas.push(name)
+  }
+  return { criadas }
+}
+
 /** Descobre (sem criar) uma pasta de tarefa já existente: link, subpastas presentes e caminho. */
 export async function inspectTaskFolder(folderId: string): Promise<TaskFoldersResult> {
   const subList = await listSubfolders(folderId)

@@ -82,6 +82,9 @@ function ItemRow({ orgSlug, item, fixLabel }: { orgSlug: string; item: HealthIte
       if (res?.error) { toast.error(res.error); return }
       // "Corrigido" só quando corrigiu mesmo. Se a subpasta não existe no Drive, o
       // item continua na lista — dizer que deu certo faria a pessoa clicar em loop.
+      // Criou subpasta = corrigiu (sucesso). Continua faltando = alerta, e o item
+      // permanece na lista — dizer "Corrigido" faria a pessoa clicar em loop.
+      if (res?.aviso?.startsWith('Criei')) { setDone(true); toast.success(res.aviso); router.refresh(); return }
       if (res?.aviso) { toast.warning(res.aviso); router.refresh(); return }
       setDone(true)
       toast.success('Corrigido.')

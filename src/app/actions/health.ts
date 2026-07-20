@@ -32,7 +32,10 @@ export async function applyHealthFix(orgSlug: string, fix: HealthFix): Promise<{
       })
       if (!res.ok) return { error: res.error }
       if (res.faltando?.length) {
-        return { ok: true, aviso: `A pasta no Drive não tem a subpasta ${res.faltando.join(', ')} — crie lá e re-vincule.` }
+        return { ok: true, aviso: `A pasta no Drive segue sem ${res.faltando.join(', ')} — confira as permissões da pasta.` }
+      }
+      if (res.criadas?.length) {
+        return { ok: true, aviso: `Criei a subpasta ${res.criadas.join(', ')} no Drive e vinculei.` }
       }
       return { ok: true }
     }

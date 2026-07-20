@@ -139,7 +139,7 @@ async function checkCamposSemLink(supabase: SupabaseClient<Database>, orgId: str
   return {
     id: 'campos-sem-link',
     label: 'Tarefas com campos sem link',
-    description: 'Tarefas com pasta de Drive vinculada mas sem o link de Redação, Final ou Preview — a correção relê a pasta e regrava os links.',
+    description: 'Tarefas com pasta de Drive vinculada mas sem o link de Redação, Final ou Preview. Pasta antiga criada à mão pode não ter a subpasta (era opcional) — a correção cria o que faltar e vincula.',
     fixLabel: 'Re-vincular campos',
     items,
   }
