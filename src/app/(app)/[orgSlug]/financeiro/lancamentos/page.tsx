@@ -62,7 +62,7 @@ export default async function LancamentosPage({
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any
-  const [{ data: raw }, { data: contasRaw }, { data: settings }] = await Promise.all([
+  const [{ data: raw, error: lancErr }, { data: contasRaw }, { data: settings }] = await Promise.all([
     sb.from('lancamentos')
       .select('id, tipo, origem_tipo, origem_ref, parcela_num, parcela_total, contato_nome, descricao, valor, valor_realizado, vencimento, competencia, situacao, nf_emitida, boleto_gerado, revisar, conta_id, categoria, centro_custo, data_liquidacao, forma_pagamento, observacao, juros, multa, desconto, tarifa, anexos')
       .eq('org_id', orgId)
@@ -76,6 +76,13 @@ export default async function LancamentosPage({
       .eq('org_id', orgId)
       .maybeSingle(),
   ])
+
+  // Falhar ALTO. Esta consulta ficou 8 dias devolvendo 400 ("column lancamentos.revisar
+  // does not exist", migration 043 nunca aplicada) e o `?? []` transformava isso numa
+  // lista vazia: a tela mostrava só linhas do Conta Azul, os cards zerados e a dedup
+  // não funcionava — tudo sem uma única mensagem de erro. Lista vazia por falha não é
+  // lista vazia, e o error boundary já sabe mostrar isso.
+  if (lancErr) throw new Error(`Falha ao carregar lançamentos: ${lancErr.message}`)
 
   const lancamentos = (raw ?? []) as Lancamento[]
   const contas = ((contasRaw ?? []) as ContaRef[]).filter(c => c.ativo)
@@ -116,21 +123,6 @@ export default async function LancamentosPage({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .filter((e: any) => !e.import_ref || !promovidos.has(e.import_ref as string))
     .map(e => extratoToLancamento(e, contaIdByName))
-
-  // TEMPORÁRIO — instrumentação do bug "linha Conta Azul não some". Provei via HTTP
-  // que o filtro funciona com os dados reais, mas a tela insiste em mostrar a linha.
-  // Loga os números do request de verdade pra fechar a diferença. Remover depois.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const alvo = importadasRaw.find((e: any) => String(e.import_ref ?? '').includes('NFa 2162'))
-  console.log('[diag-lanc]', JSON.stringify({
-    lancamentos: lancamentos.length,
-    promovidos: promovidos.size,
-    importadasRaw: importadasRaw.length,
-    importadasFinal: importadas.length,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    alvoNoExtrato: !!alvo, alvoFiltrado: alvo ? promovidos.has((alvo as any).import_ref) : null,
-    temLancAlvo: lancamentos.some(l => (l.origem_ref ?? '').includes('NFa 2162')),
-  }))
 
   return (
     <LancamentosClient
