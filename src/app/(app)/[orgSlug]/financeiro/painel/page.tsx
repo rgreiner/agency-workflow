@@ -1,4 +1,5 @@
 import { assertFinanceAccess } from '@/lib/finance'
+import { unwrap } from '@/lib/supabase/unwrap'
 import { formatBRL } from '@/lib/midia'
 import { ArrowDownCircle, ArrowUpCircle, Landmark } from 'lucide-react'
 
@@ -35,7 +36,7 @@ export default async function PainelPage({ params }: { params: Promise<{ orgSlug
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any
-  const [{ data: lancRaw }, { data: contasRaw }] = await Promise.all([
+  const [resLanc, resContas] = await Promise.all([
     sb.from('lancamentos')
       .select('tipo, situacao, valor, valor_realizado, vencimento, data_liquidacao, conta_id')
       .eq('org_id', orgId),
@@ -44,8 +45,9 @@ export default async function PainelPage({ params }: { params: Promise<{ orgSlug
       .eq('org_id', orgId).order('ordem', { ascending: true }),
   ])
 
-  const lanc = (lancRaw ?? []) as LancRow[]
-  const contas = ((contasRaw ?? []) as ContaRow[]).filter(c => c.ativo)
+  // Lista vazia por falha não é lista vazia — numa tela de saldo isso vira decisão errada.
+  const lanc = unwrap<LancRow>(resLanc, 'lançamentos')
+  const contas = unwrap<ContaRow>(resContas, 'contas').filter(c => c.ativo)
   const today = new Date().toISOString().slice(0, 10)
   const mes = today.slice(0, 7)
 

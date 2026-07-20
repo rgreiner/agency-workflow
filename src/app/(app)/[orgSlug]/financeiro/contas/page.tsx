@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { unwrap } from '@/lib/supabase/unwrap'
 import { ContasClient, type Conta } from './ContasClient'
 import { BtgCard } from './BtgCard'
 import { btgConfigured, btgEnv } from '@/lib/btg/config'
@@ -17,14 +18,14 @@ export default async function ContasPage({
   if (!org) return null
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: contasRaw } = await (supabase as any)
+  const resContas = await (supabase as any)
     .from('contas_saldo')
     .select('id, nome, tipo, saldo_inicial, saldo_atual, cor, ativo, ordem')
     .eq('org_id', org.id)
     .order('ordem', { ascending: true })
     .order('nome', { ascending: true })
 
-  const contas = (contasRaw ?? []) as Conta[]
+  const contas = unwrap<Conta>(resContas, 'contas')
 
   const conn = await getBtgConnection(org.id)
   const btg = {

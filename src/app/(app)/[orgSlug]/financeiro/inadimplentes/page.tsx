@@ -1,4 +1,5 @@
 import { assertFinanceAccess } from '@/lib/finance'
+import { unwrap } from '@/lib/supabase/unwrap'
 import { isRealizado, isIgnorado } from '@/lib/extrato'
 import { InadimplentesClient, type AbertoItem } from './InadimplentesClient'
 
@@ -13,7 +14,7 @@ export default async function InadimplentesPage({ params }: { params: Promise<{ 
   const sb = supabase as any
 
   // Flow: lançamentos em aberto (a receber / a pagar não liquidados).
-  const { data: lancRaw } = await sb.from('lancamentos')
+  const resLanc = await sb.from('lancamentos')
     .select('id, tipo, contato_nome, descricao, categoria, vencimento, valor, situacao, origem_tipo, origem_ref')
     .eq('org_id', orgId).eq('situacao', 'em_aberto')
 
@@ -29,8 +30,13 @@ export default async function InadimplentesPage({ params }: { params: Promise<{ 
     if (data.length < PAGE) break
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const lanc = (lancRaw ?? []) as any[]
+  // Espelha o select acima — tipar aqui é o que faz o unwrap valer a pena.
+  interface LancRaw {
+    id: string; tipo: string; contato_nome: string | null; descricao: string | null
+    categoria: string | null; vencimento: string | null; valor: number | string
+    situacao: string; origem_tipo: string | null; origem_ref: string | null
+  }
+  const lanc = unwrap<LancRaw>(resLanc, 'lançamentos')
   const promoted = new Set(lanc.filter(l => l.origem_tipo === 'conta_azul' && l.origem_ref).map(l => l.origem_ref as string))
 
   const itens: AbertoItem[] = []
