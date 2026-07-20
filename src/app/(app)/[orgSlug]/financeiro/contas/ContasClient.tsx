@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, X, Check, Loader2, Pencil, Landmark, Power } from 'lucide-react'
+import { Plus, X, Check, Loader2, Pencil, Landmark, Power, Layers, Eye, EyeOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL } from '@/lib/midia'
 import { Select } from '@/components/ui/Select'
@@ -49,6 +49,53 @@ export function ContasClient({ orgSlug, contas }: { orgSlug: string; contas: Con
   const [creating, setCreating] = useState(false)
   const [isPending, startTransition] = useTransition()
 
+  // Preferências de view por usuário, persistidas por org (mesmo padrão do Fluxo de
+  // caixa). Hidrata no efeito pra não divergir do HTML do servidor.
+  const PREFS_KEY = `contas-view:v1:${orgSlug}`
+  const [agrupar, setAgrupar] = useState(false)
+  const [ocultarInativas, setOcultarInativas] = useState(false)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PREFS_KEY)
+      if (!raw) return
+      const p = JSON.parse(raw)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAgrupar(!!p.agrupar)
+      setOcultarInativas(!!p.ocultarInativas)
+    } catch { /* prefs corrompidas: segue no default */ }
+  }, [PREFS_KEY])
+  function salvarPrefs(next: { agrupar: boolean; ocultarInativas: boolean }) {
+    try { localStorage.setItem(PREFS_KEY, JSON.stringify(next)) } catch { /* ignora */ }
+  }
+  function toggleAgrupar() {
+    setAgrupar(v => { salvarPrefs({ agrupar: !v, ocultarInativas }); return !v })
+  }
+  function toggleOcultarInativas() {
+    setOcultarInativas(v => { salvarPrefs({ agrupar, ocultarInativas: !v }); return !v })
+  }
+
+  const inativas = contas.filter(c => !c.ativo).length
+  const visiveis = useMemo(
+    () => (ocultarInativas ? contas.filter(c => c.ativo) : contas),
+    [contas, ocultarInativas],
+  )
+
+  // Agrupado: uma seção por tipo, na ordem de TIPO_OPTIONS (tipo desconhecido no fim).
+  const grupos = useMemo(() => {
+    if (!agrupar) return null
+    const ordem = TIPO_OPTIONS.map(o => o.value)
+    const porTipo = new Map<string, Conta[]>()
+    for (const c of visiveis) {
+      const t = c.tipo && ordem.includes(c.tipo) ? c.tipo : 'outro'
+      const arr = porTipo.get(t) ?? []
+      arr.push(c)
+      porTipo.set(t, arr)
+    }
+    return ordem
+      .filter(t => porTipo.has(t))
+      .map(t => ({ tipo: t, label: TIPO_LABEL[t] ?? t, itens: porTipo.get(t)! }))
+  }, [agrupar, visiveis])
+
   function toggleAtivo(c: Conta) {
     startTransition(async () => {
       await updateConta(orgSlug, c.id, { ativo: !c.ativo })
@@ -69,56 +116,55 @@ export function ContasClient({ orgSlug, contas }: { orgSlug: string; contas: Con
         </button>
       </div>
 
-      {contas.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-          {contas.map(c => (
-            <div key={c.id}
-              className={cn('group/conta bg-white rounded-2xl border border-gray-200 p-4 flex flex-col gap-3 transition hover:border-gray-300 hover:shadow-sm',
-                !c.ativo && 'opacity-60')}>
-              {/* identidade + tipo */}
-              <div className="flex items-start justify-between gap-2">
-                <Link href={`/${orgSlug}/financeiro/contas/${c.id}`} className="min-w-0 flex items-start gap-2.5">
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0 mt-1.5" style={{ backgroundColor: c.cor ?? '#cbd5e1' }} />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium text-gray-900 truncate group-hover/conta:text-orange-600 transition-colors">{c.nome}</span>
-                    <span className={cn('inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full mt-1',
-                      TIPO_TAG[c.tipo ?? 'outro'] ?? TIPO_TAG.outro)}>
-                      {c.tipo ? TIPO_LABEL[c.tipo] ?? c.tipo : 'Sem tipo'}
-                    </span>
-                  </span>
-                </Link>
-                {!c.ativo && (
-                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 shrink-0">Inativa</span>
-                )}
-              </div>
-
-              {/* saldo — o dado principal do bloco */}
-              <Link href={`/${orgSlug}/financeiro/contas/${c.id}`} className="block">
-                <span className="block text-[11px] text-gray-400">Saldo atual</span>
-                <span className={cn('block text-xl font-semibold tabular-nums',
-                  Number(c.saldo_atual ?? 0) < 0 ? 'text-red-600' : 'text-gray-900')}>
-                  {formatBRL(Number(c.saldo_atual ?? 0))}
-                </span>
-              </Link>
-
-              {/* ações */}
-              <div className="flex items-center gap-1.5 pt-1 border-t border-gray-100 -mb-1">
-                <Link href={`/${orgSlug}/financeiro/contas/${c.id}`}
-                  className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:text-orange-600 hover:bg-orange-50 transition-colors active:scale-[0.97]">
-                  <Landmark className="w-3.5 h-3.5" /> Extrato
-                </Link>
-                <button onClick={() => setEditing(c)}
-                  className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors active:scale-[0.97]">
-                  <Pencil className="w-3.5 h-3.5" /> Editar
-                </button>
-                <button onClick={() => toggleAtivo(c)} disabled={isPending} title={c.ativo ? 'Inativar' : 'Ativar'}
-                  className="ml-auto p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50 active:scale-[0.97]">
-                  <Power className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          ))}
+      {/* Preferências de view — ficam salvas por usuário/org */}
+      {contas.length > 0 && (
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <button onClick={toggleAgrupar}
+            className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors active:scale-[0.97]',
+              agrupar ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50')}>
+            <Layers className="w-3.5 h-3.5" /> Agrupar por tipo
+          </button>
+          {inativas > 0 && (
+            <button onClick={toggleOcultarInativas}
+              className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors active:scale-[0.97]',
+                ocultarInativas ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50')}>
+              {ocultarInativas ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              Ocultar inativas
+              <span className="text-[10px] text-gray-400">({inativas})</span>
+            </button>
+          )}
         </div>
+      )}
+
+      {contas.length > 0 ? (
+        grupos ? (
+          <div className="space-y-6">
+            {grupos.map(g => (
+              <section key={g.tipo}>
+                <div className="flex items-center gap-2 mb-2.5">
+                  <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{g.label}</h2>
+                  <span className="text-[10px] text-gray-400">{g.itens.length}</span>
+                  <span className="ml-auto text-xs text-gray-500 tabular-nums">
+                    {formatBRL(g.itens.reduce((s, c) => s + Number(c.saldo_atual ?? 0), 0))}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {g.itens.map(c => (
+                    <ContaCard key={c.id} conta={c} orgSlug={orgSlug} isPending={isPending}
+                      onEditar={() => setEditing(c)} onToggleAtivo={() => toggleAtivo(c)} />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            {visiveis.map(c => (
+              <ContaCard key={c.id} conta={c} orgSlug={orgSlug} isPending={isPending}
+                onEditar={() => setEditing(c)} onToggleAtivo={() => toggleAtivo(c)} />
+            ))}
+          </div>
+        )
       ) : (
         <div className="text-center py-24 bg-white rounded-xl border border-gray-200">
           <Landmark className="w-10 h-10 text-gray-300 mx-auto mb-3" />
@@ -130,6 +176,58 @@ export function ContasClient({ orgSlug, contas }: { orgSlug: string; contas: Con
       {(creating || editing) && (
         <ContaModal orgSlug={orgSlug} conta={editing} onClose={() => { setCreating(false); setEditing(null) }} />
       )}
+    </div>
+  )
+}
+
+function ContaCard({ conta: c, orgSlug, isPending, onEditar, onToggleAtivo }: {
+  conta: Conta; orgSlug: string; isPending: boolean
+  onEditar: () => void; onToggleAtivo: () => void
+}) {
+  const saldo = Number(c.saldo_atual ?? 0)
+  return (
+    <div className={cn('group/conta bg-white rounded-2xl border border-gray-200 p-4 flex flex-col gap-3 transition hover:border-gray-300 hover:shadow-sm',
+      !c.ativo && 'opacity-60')}>
+      {/* identidade + tipo */}
+      <div className="flex items-start justify-between gap-2">
+        <Link href={`/${orgSlug}/financeiro/contas/${c.id}`} className="min-w-0 flex items-start gap-2.5">
+          <span className="w-2.5 h-2.5 rounded-full shrink-0 mt-1.5" style={{ backgroundColor: c.cor ?? '#cbd5e1' }} />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-gray-900 truncate group-hover/conta:text-orange-600 transition-colors">{c.nome}</span>
+            <span className={cn('inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full mt-1',
+              TIPO_TAG[c.tipo ?? 'outro'] ?? TIPO_TAG.outro)}>
+              {c.tipo ? TIPO_LABEL[c.tipo] ?? c.tipo : 'Sem tipo'}
+            </span>
+          </span>
+        </Link>
+        {!c.ativo && (
+          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 shrink-0">Inativa</span>
+        )}
+      </div>
+
+      {/* saldo — o dado principal do bloco */}
+      <Link href={`/${orgSlug}/financeiro/contas/${c.id}`} className="block">
+        <span className="block text-[11px] text-gray-400">Saldo atual</span>
+        <span className={cn('block text-xl font-semibold tabular-nums', saldo < 0 ? 'text-red-600' : 'text-gray-900')}>
+          {formatBRL(saldo)}
+        </span>
+      </Link>
+
+      {/* ações */}
+      <div className="flex items-center gap-1.5 pt-1 border-t border-gray-100 -mb-1">
+        <Link href={`/${orgSlug}/financeiro/contas/${c.id}`}
+          className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:text-orange-600 hover:bg-orange-50 transition-colors active:scale-[0.97]">
+          <Landmark className="w-3.5 h-3.5" /> Extrato
+        </Link>
+        <button onClick={onEditar}
+          className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors active:scale-[0.97]">
+          <Pencil className="w-3.5 h-3.5" /> Editar
+        </button>
+        <button onClick={onToggleAtivo} disabled={isPending} title={c.ativo ? 'Inativar' : 'Ativar'}
+          className="ml-auto p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50 active:scale-[0.97]">
+          <Power className="w-3.5 h-3.5" />
+        </button>
+      </div>
     </div>
   )
 }
