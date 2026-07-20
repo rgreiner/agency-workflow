@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Check, Loader2, Plus, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
-import { MIDIA_SITUACAO_OPTIONS, MIDIA_PRAZO_OPTIONS, formatBRL, parseMoney, labelOf } from '@/lib/midia'
+import { PRODUCAO_SITUACAO_OPTIONS, MIDIA_PRAZO_OPTIONS, formatBRL, parseMoney, labelOf } from '@/lib/midia'
 import type { ClienteOpt, MemberOpt } from '../../midias/simplificada/MidiaForm'
 
 export interface ItemProposta { tipo: string; nome: string; descricao: string; quantidade: string; valor_unit: string; desconto: string; situacao: string }
@@ -154,7 +154,7 @@ export function PropostaForm({
                     <td className="px-1 py-1"><input value={it.quantidade} onChange={e => setItem(i, 'quantidade', e.target.value)} className={cn(cellCls, 'text-right')} /></td>
                     <td className="px-1 py-1"><input inputMode="decimal" value={it.valor_unit} onChange={e => setItem(i, 'valor_unit', e.target.value)} placeholder="0,00" className={cn(cellCls, 'text-right')} /></td>
                     <td className="px-1 py-1"><input inputMode="decimal" value={it.desconto} onChange={e => setItem(i, 'desconto', e.target.value)} className={cn(cellCls, 'text-right')} /></td>
-                    <td className="px-1 py-1"><Select size="sm" value={it.situacao} onChange={v => setItem(i, 'situacao', v)} options={MIDIA_SITUACAO_OPTIONS} /></td>
+                    <td className="px-1 py-1"><Select size="sm" value={it.situacao} onChange={v => setItem(i, 'situacao', v)} options={PRODUCAO_SITUACAO_OPTIONS} /></td>
                     <td className="px-1 py-1 text-right font-medium whitespace-nowrap">{formatBRL(itemValor(it))}</td>
                     <td className="px-1 py-1 text-right">{form.itens.length > 1 && <button aria-label="Remover" type="button" onClick={() => delItem(i)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-3.5 h-3.5" /></button>}</td>
                   </tr>
@@ -221,7 +221,7 @@ export function PropostaForm({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
             <div><label className={labelCls}>Contato</label><input value={form.contato} onChange={e => set('contato', e.target.value)} className={inputCls} /></div>
             <div><label className={labelCls}>Responsável</label><Select value={form.responsavel_id} onChange={v => set('responsavel_id', v)} options={memberOptions} placeholder="Selecionar" /></div>
-            <div><label className={labelCls}>Situação</label><Select value={form.situacao} onChange={v => set('situacao', v)} options={MIDIA_SITUACAO_OPTIONS} /></div>
+            <div><label className={labelCls}>Situação</label><Select value={form.situacao} onChange={v => set('situacao', v)} options={PRODUCAO_SITUACAO_OPTIONS} /></div>
           </div>
         </div>
 

@@ -59,6 +59,15 @@ export const MIDIA_SITUACAO_OPTIONS = [
   { value: 'faturado', label: 'Faturado' },
 ]
 
+/**
+ * Produção fala outra língua com o MESMO valor guardado. Em mídia, "aprovado" é
+ * literalmente aprovado; em produção, aprovado significa que o job ENTROU EM
+ * PRODUÇÃO (o nome antigo do status da One a One). Mesmo `aprovado` no banco,
+ * rótulo diferente na tela — nada de migrar dado por causa de vocabulário.
+ */
+export const PRODUCAO_SITUACAO_OPTIONS = MIDIA_SITUACAO_OPTIONS.map(o =>
+  o.value === 'aprovado' ? { ...o, label: 'Em produção' } : o)
+
 // Situações que TIRAM o documento da aba "Ativos" (viram "como se fosse arquivado").
 // PP/Fee/Mídia: liberado pro faturamento (faturar/faturado) ou cancelado.
 export const SITUACOES_FORA = ['faturar', 'faturado', 'cancelado']
@@ -93,7 +102,7 @@ export const MIDIA_SITUACAO_COLORS: Record<string, { bg: string; text: string }>
   aprovado:  { bg: '#dcfce7', text: '#15803d' },
   cancelado: { bg: '#fee2e2', text: '#b91c1c' },
   faturar:   { bg: '#dbeafe', text: '#1d4ed8' },
-  faturado:  { bg: '#e0e7ff', text: '#4338ca' },
+  faturado:  { bg: '#ccfbf1', text: '#0f766e' },   // teal — nada de indigo/roxo no app
 }
 
 export function labelOf(options: { value: string; label: string }[], value: string | null | undefined) {

@@ -117,11 +117,16 @@ export default async function LancamentosPage({
   const promovidos = new Set(
     lancamentos.filter(l => l.origem_tipo === 'conta_azul' && l.origem_ref).map(l => l.origem_ref as string),
   )
+  // Descartes vivem FORA do extrato (migration 132) — assim sobrevivem ao reimport,
+  // que apaga e recarrega o arquivo inteiro da Conta Azul.
+  const { data: descRaw } = await sb
+    .from('extrato_descartado').select('import_ref').eq('org_id', orgId)
+  const descartados = new Set(((descRaw ?? []) as { import_ref: string }[]).map(d => d.import_ref))
   const importadas = importadasRaw
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .filter((e: any) => !isIgnorado(e.situacao))
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((e: any) => !e.import_ref || !promovidos.has(e.import_ref as string))
+    .filter((e: any) => !e.import_ref || (!promovidos.has(e.import_ref as string) && !descartados.has(e.import_ref as string)))
     .map(e => extratoToLancamento(e, contaIdByName))
 
   return (

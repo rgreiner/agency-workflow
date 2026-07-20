@@ -453,3 +453,27 @@ export async function updateLancamentosLote(
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
   return { result: res as { atualizados: number; bloqueados: number; total: number } }
 }
+
+/**
+ * Descarta uma linha do extrato importado de forma DURÁVEL. Marcar
+ * situacao='Perdido/Desconsiderado' não resolve: o import da Conta Azul apaga e
+ * recarrega o arquivo inteiro, e a linha volta. O descarte vive fora do extrato,
+ * numa lista por import_ref (migration 132).
+ */
+export async function descartarExtrato(orgSlug: string, importRef: string, motivo?: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { data: org } = await supabase
+    .from('organizations').select('id').eq('slug', orgSlug).single()
+  if (!org) return { error: 'Organização não encontrada' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('descartar_extrato', {
+    p_user_id: user.id, p_org_id: org.id, p_import_ref: importRef, p_motivo: motivo ?? null,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+  revalidatePath(`/${orgSlug}/financeiro/inadimplentes`)
+}

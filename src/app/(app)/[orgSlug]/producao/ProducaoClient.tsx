@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Select, type SelectOption } from '@/components/ui/Select'
 import { setProducaoSituacao, setProducaoArchived, gerarPedidosDoOrcamento, gerarDocsDaProposta } from '@/app/actions/producao'
-import { MIDIA_SITUACAO_OPTIONS, MIDIA_SITUACAO_COLORS, labelOf, formatBRL } from '@/lib/midia'
+import { PRODUCAO_SITUACAO_OPTIONS, MIDIA_SITUACAO_COLORS, labelOf, formatBRL } from '@/lib/midia'
 import { docNumero } from '@/lib/doc-series'
 
 export interface ProducaoRow {
@@ -18,7 +18,7 @@ export interface ProducaoRow {
 
 export function ProducaoClient({
   orgSlug, items, archivedView, basePath, title, subtitle, addLabel, gerarPedidos = false, gerarDocs = false, showPrint = true,
-  situacaoOptions = MIDIA_SITUACAO_OPTIONS,
+  situacaoOptions = PRODUCAO_SITUACAO_OPTIONS,
 }: {
   orgSlug: string; items: ProducaoRow[]; archivedView: boolean
   basePath: string; title: string; subtitle: string; addLabel: string
@@ -130,7 +130,7 @@ export function ProducaoClient({
                         <td className="px-4 py-1.5">
                           {archivedView || !situacaoOptions.some(o => o.value === r.situacao) ? (
                             // Situação terminal (ex.: Fee 'faturado' pelo Financeiro) não é editável pelo dropdown.
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: cor?.bg, color: cor?.text }}>{labelOf(MIDIA_SITUACAO_OPTIONS, r.situacao)}</span>
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: cor?.bg, color: cor?.text }}>{labelOf(PRODUCAO_SITUACAO_OPTIONS, r.situacao)}</span>
                           ) : (
                             <Select size="sm" value={r.situacao} onChange={v => changeSituacao(r.id, v)} options={situacaoOptions} />
                           )}

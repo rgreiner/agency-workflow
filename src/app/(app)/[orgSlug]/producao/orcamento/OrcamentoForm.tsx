@@ -6,7 +6,7 @@ import { ArrowLeft, Check, Loader2, Plus, Trash2, CircleCheck, Circle } from 'lu
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { Combobox } from '@/components/ui/Combobox'
-import { MIDIA_SITUACAO_OPTIONS, formatBRL, parseMoney } from '@/lib/midia'
+import { PRODUCAO_SITUACAO_OPTIONS, formatBRL, parseMoney } from '@/lib/midia'
 import { ItemImageField } from '@/components/ui/ItemImageField'
 import type { ClienteOpt, MemberOpt } from '../../midias/simplificada/MidiaForm'
 import type { FornecedorOpt } from '@/lib/midia-selectors'
@@ -204,7 +204,7 @@ export function OrcamentoForm({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
             <div><label className={labelCls}>Contato</label><input value={form.contato} onChange={e => set('contato', e.target.value)} className={inputCls} /></div>
             <div><label className={labelCls}>Responsável</label><Select value={form.responsavel_id} onChange={v => set('responsavel_id', v)} options={memberOptions} placeholder="Selecionar" /></div>
-            <div><label className={labelCls}>Situação</label><Select value={form.situacao} onChange={v => set('situacao', v)} options={MIDIA_SITUACAO_OPTIONS} /></div>
+            <div><label className={labelCls}>Situação</label><Select value={form.situacao} onChange={v => set('situacao', v)} options={PRODUCAO_SITUACAO_OPTIONS} /></div>
           </div>
         </div>
 

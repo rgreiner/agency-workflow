@@ -11,7 +11,7 @@ import { toast } from 'sonner'
 import {
   setLancamentoFlags, ressincronizarLancamento, marcarLancamentoRevisado,
   createLancamento, createLancamentosSerie, updateLancamento, deleteLancamento, liquidarLancamento, reabrirLancamento,
-  setLancamentoAnexos, promoverExtrato, updateLancamentosLote,
+  setLancamentoAnexos, promoverExtrato, updateLancamentosLote, descartarExtrato,
   type FinanceCategoriaGrupo, type FinanceCentro, type Anexo,
 } from '@/app/actions/financeiro'
 import { uploadFile } from '@/lib/storage/upload-client'
@@ -344,6 +344,7 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [confirmDel, setConfirmDel] = useState(false)
+  const [confirmDescarte, setConfirmDescarte] = useState(false)
   const paid = isPago(l.situacao)
   const overdue = !paid && !!l.vencimento && l.vencimento < today
   const isSaida = l.tipo === 'saida'
@@ -366,6 +367,14 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
   function reabrir() { startTransition(async () => { await reabrirLancamento(orgSlug, l.id); router.refresh() }) }
   function atualizarDoDoc() { startTransition(async () => { await ressincronizarLancamento(orgSlug, l.id); router.refresh() }) }
   function marcarRevisado() { startTransition(async () => { await marcarLancamentoRevisado(orgSlug, l.id); router.refresh() }) }
+  function descartar() {
+    setConfirmDescarte(false)
+    startTransition(async () => {
+      const r = await descartarExtrato(orgSlug, l.import_ref ?? '')
+      if (r?.error) toast.error(r.error)
+      else { toast.success('Linha descartada.'); router.refresh() }
+    })
+  }
   function remover() {
     setConfirmDel(false)
     startTransition(async () => { const r = await deleteLancamento(orgSlug, l.id); if (r?.error) toast.error(r.error); else { toast.success('Lançamento excluído.'); router.refresh() } })
@@ -451,10 +460,25 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
       <td className="px-3 py-2.5">
         <div className="flex items-center justify-end gap-1">
           {imported ? (
-            <button onClick={() => onEdit(l)} title="Editar — vira lançamento do Flow"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
-              <Pencil className="w-3.5 h-3.5" /> Editar
-            </button>
+            <>
+              <button onClick={() => onEdit(l)} title="Editar — vira lançamento do Flow"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
+                <Pencil className="w-3.5 h-3.5" /> Editar
+              </button>
+              <button onClick={() => setConfirmDescarte(true)} disabled={isPending}
+                title="Descartar — some da lista e não volta no próximo import"
+                className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+              <ConfirmDialog
+                open={confirmDescarte} loading={isPending}
+                title="Descartar linha da Conta Azul"
+                description="Ela some da lista e continua fora mesmo depois de reimportar o extrato. O registro na Conta Azul não é alterado."
+                confirmLabel="Descartar"
+                onConfirm={descartar}
+                onCancel={() => setConfirmDescarte(false)}
+              />
+            </>
           ) : (
             <>
               {l.revisar && (
