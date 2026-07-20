@@ -80,6 +80,9 @@ function ItemRow({ orgSlug, item, fixLabel }: { orgSlug: string; item: HealthIte
     start(async () => {
       const res = await applyHealthFix(orgSlug, item.fix!)
       if (res?.error) { toast.error(res.error); return }
+      // "Corrigido" só quando corrigiu mesmo. Se a subpasta não existe no Drive, o
+      // item continua na lista — dizer que deu certo faria a pessoa clicar em loop.
+      if (res?.aviso) { toast.warning(res.aviso); router.refresh(); return }
       setDone(true)
       toast.success('Corrigido.')
       router.refresh()

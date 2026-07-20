@@ -11,7 +11,7 @@ import type { HealthFix } from '@/lib/health/checks'
  * conhece o `HealthFix`; aqui mapeamos cada `kind` pra ação real. Novos checks
  * com correção entram adicionando um `case`.
  */
-export async function applyHealthFix(orgSlug: string, fix: HealthFix): Promise<{ error?: string; ok?: boolean }> {
+export async function applyHealthFix(orgSlug: string, fix: HealthFix): Promise<{ error?: string; ok?: boolean; aviso?: string }> {
   const path = `/${orgSlug}/settings/saude`
   switch (fix.kind) {
     case 'provision-drive': {
@@ -31,6 +31,9 @@ export async function applyHealthFix(orgSlug: string, fix: HealthFix): Promise<{
         campaignId: act.campaign_id, userId: user.id, activityId: fix.activityId, folderId: act.drive_folder_id,
       })
       if (!res.ok) return { error: res.error }
+      if (res.faltando?.length) {
+        return { ok: true, aviso: `A pasta no Drive não tem a subpasta ${res.faltando.join(', ')} — crie lá e re-vincule.` }
+      }
       return { ok: true }
     }
     default:

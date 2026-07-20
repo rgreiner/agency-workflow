@@ -121,7 +121,7 @@ export async function regenerateActivityDrive(
 export async function relinkActivityDrive(
   supabase: SupabaseClient<Database>,
   params: { campaignId: string; userId: string; activityId: string; folderId: string },
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; faltando?: string[] }> {
   if (!driveConfigured()) return { ok: false, error: 'Integração com o Drive não está configurada.' }
   const cfg = await resolve(supabase, params.campaignId)
   const prefix = cfg?.prefix ?? DEFAULT_PREFIX
@@ -137,7 +137,11 @@ export async function relinkActivityDrive(
       p_finalizacao_url: r.sub['Final']?.link ?? null,
       p_preview_url: r.sub['Preview']?.link ?? null,
     })
-    return { ok: true }
+    // A subpasta que não existe no Drive vira link nulo — e o check acusa a mesma
+    // tarefa de novo. Devolver o que FALTOU evita o "Corrigido." mentiroso, que
+    // fazia a pessoa clicar em loop sem entender por que o item não sumia.
+    const faltando = (['Redação', 'Final', 'Preview'] as const).filter(n => !r.sub[n])
+    return { ok: true, faltando: [...faltando] }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Falha ao reler a pasta no Drive' }
   }
