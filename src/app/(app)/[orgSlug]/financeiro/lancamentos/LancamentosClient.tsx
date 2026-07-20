@@ -278,6 +278,10 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa }: {
   const isSaida = l.tipo === 'saida'
   const isManual = l.origem_tipo === 'manual'
   const imported = l.source === 'importado'
+  // Documento anexado vale como "tem NF"/"tem boleto" — é prova, não promessa.
+  // O tipo é o que a pessoa escolhe no seletor ao anexar ('NF' | 'Boleto' | 'Outro').
+  const temAnexoNf = !!l.anexos?.some(a => a.tipo === 'NF')
+  const temAnexoBoleto = !!l.anexos?.some(a => a.tipo === 'Boleto')
   // A coluna mostra o VENCIMENTO; quando baixado, a data da baixa vai como linha secundária.
   const pagoEm = paid ? (l.data_liquidacao ?? null) : null
   const status = paid
@@ -362,10 +366,11 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa }: {
       <td className="px-3 py-2.5 text-center">
         {imported
           ? (l.nf_emitida ? <FileText className="w-4 h-4 text-gray-300 inline" /> : <span className="text-gray-300">—</span>)
-          : <Flag on={l.nf_emitida} onClick={toggleNf} label="NF" />}
+          : <Flag on={l.nf_emitida || temAnexoNf} viaAnexo={temAnexoNf} onClick={toggleNf} label="NF" />}
       </td>
       <td className="px-3 py-2.5 text-center">
-        {imported ? <span className="text-gray-300">—</span> : <Flag on={l.boleto_gerado} onClick={toggleBoleto} label="Boleto" />}
+        {imported ? <span className="text-gray-300">—</span>
+          : <Flag on={l.boleto_gerado || temAnexoBoleto} viaAnexo={temAnexoBoleto} onClick={toggleBoleto} label="Boleto" />}
       </td>
       <td className="px-3 py-2.5">
         <div className="flex items-center justify-end gap-1">
@@ -475,11 +480,17 @@ function Info({ label, value, strong }: { label: string; value: string; strong?:
   )
 }
 
-function Flag({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) {
+function Flag({ on, onClick, label, viaAnexo = false }: {
+  on: boolean; onClick: () => void; label: string
+  /** Ligado porque o documento está ANEXADO, não porque alguém marcou o flag à mão.
+   *  O anexo é prova; o flag é promessa. Vale mais, e o título diz de onde veio. */
+  viaAnexo?: boolean
+}) {
   const Icon = label === 'NF' ? FileText : Receipt
   return (
-    <button onClick={onClick} title={label}
-      className={cn('inline-flex items-center justify-center w-7 h-7 rounded-lg border transition',
+    <button onClick={onClick}
+      title={viaAnexo ? `${label} anexada` : on ? `${label} marcada — clique para desmarcar` : `Marcar ${label}`}
+      className={cn('inline-flex items-center justify-center w-7 h-7 rounded-lg border transition-colors active:scale-[0.97]',
         on ? 'bg-orange-600 border-orange-600 text-[#fff]' : 'border-gray-200 text-gray-300 hover:text-gray-500')}>
       <Icon className="w-3.5 h-3.5" />
     </button>
