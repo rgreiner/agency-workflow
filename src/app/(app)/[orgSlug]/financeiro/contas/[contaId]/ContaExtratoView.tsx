@@ -12,14 +12,7 @@ export interface Mov {
   categoria: string | null
   valor: number          // com sinal (despesa negativa), como vem do extrato
   situacao: string | null
-  realizado: boolean     // decidido no servidor: extrato e lançamento têm situações diferentes
   origem: string         // 'extrato' (Conta Azul) | 'flow' (baixa de lançamento)
-}
-
-export interface Previsto {
-  vencimento: string
-  tipo: 'entrada' | 'saida'
-  valor: number
 }
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -38,8 +31,8 @@ function corSituacao(s: string | null): string {
   return 'bg-gray-100 text-gray-500'
 }
 
-export function ContaExtratoView({ movimentos, previstos, saldoInicial, saldoAtual, saldoBanco, saldoBancoData, temOfx, today }: {
-  movimentos: Mov[]; previstos: Previsto[]; saldoInicial: number; saldoAtual: number
+export function ContaExtratoView({ movimentos, saldoInicial, saldoAtual, saldoBanco, saldoBancoData, temOfx, today }: {
+  movimentos: Mov[]; saldoInicial: number; saldoAtual: number
   saldoBanco: number | null; saldoBancoData: string | null
   temOfx: boolean; today: string
 }) {
@@ -58,18 +51,20 @@ export function ContaExtratoView({ movimentos, previstos, saldoInicial, saldoAtu
 
   // Saldo realizado ao fim de cada dia. O saldo atual NÃO é recalculado aqui — vem da
   // view contas_saldo, fonte única compartilhada com a lista de contas e o painel.
+  // Só chega movimento realizado do servidor (extrato conciliado + baixas do Flow),
+  // então o acumulado não precisa mais filtrar por situação.
   const saldoAteDia = useMemo(() => {
     const sorted = movimentos.filter(m => m.data).sort((a, b) => (a.data! < b.data! ? -1 : a.data! > b.data! ? 1 : 0))
     let acc = saldoInicial
     const map = new Map<string, number>()
-    for (const m of sorted) { if (m.realizado) acc += m.valor; map.set(m.data!, acc) }
+    for (const m of sorted) { acc += m.valor; map.set(m.data!, acc) }
     return map
   }, [movimentos, saldoInicial])
 
   const { dias, entradasMes, saidasMes } = useMemo(() => {
     const noMes = movimentos.filter(m => monthOf(m.data) === mes)
     let ent = 0, sai = 0
-    for (const m of noMes) if (m.realizado) { if (m.valor > 0) ent += m.valor; else sai += -m.valor }
+    for (const m of noMes) { if (m.valor > 0) ent += m.valor; else sai += -m.valor }
     const byDay = new Map<string, Mov[]>()
     for (const m of noMes) { const k = m.data as string; const arr = byDay.get(k) ?? []; arr.push(m); byDay.set(k, arr) }
     const dias = [...byDay.entries()]
@@ -78,25 +73,7 @@ export function ContaExtratoView({ movimentos, previstos, saldoInicial, saldoAtu
     return { dias, entradasMes: ent, saidasMes: sai }
   }, [movimentos, mes, saldoAteDia])
 
-  // Previsto do mês: o que ainda está em aberto vencendo neste mês. O saldo projetado
-  // parte do saldo de HOJE (não do fim do mês) — é a pergunta que importa: "com o que
-  // tenho agora, o mês fecha positivo?".
-  const { aReceber, aPagar, vencidoPagar } = useMemo(() => {
-    let rec = 0, pag = 0, venc = 0
-    for (const p of previstos) {
-      if (monthOf(p.vencimento) !== mes) continue
-      if (p.tipo === 'entrada') { rec += p.valor; continue }
-      pag += p.valor
-      // Vencido é escopado ao mês exibido — senão, navegando pra agosto, apareceria
-      // um "vencido" de julho embaixo do "A pagar" de agosto.
-      if (p.vencimento < today) venc += p.valor
-    }
-    return { aReceber: rec, aPagar: pag, vencidoPagar: venc }
-  }, [previstos, mes, today])
-
   const resultadoMes = entradasMes - saidasMes
-  const saldoProjetado = saldoAtual + aReceber - aPagar
-  const temPrevisto = aReceber > 0 || aPagar > 0
   const diff = saldoBanco != null ? Math.round((saldoBanco - saldoAtual) * 100) / 100 : null
   const bate = diff !== null && Math.abs(diff) < 0.01
 
@@ -146,7 +123,7 @@ export function ContaExtratoView({ movimentos, previstos, saldoInicial, saldoAtu
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100">
+        <div className="grid grid-cols-2 divide-x divide-gray-100">
           <div className="px-4 py-3">
             <p className="text-[11px] font-medium text-gray-400 mb-0.5">Entrou</p>
             <p className="text-base font-semibold text-emerald-600 tabular-nums">{formatBRL(entradasMes)}</p>
@@ -155,29 +132,7 @@ export function ContaExtratoView({ movimentos, previstos, saldoInicial, saldoAtu
             <p className="text-[11px] font-medium text-gray-400 mb-0.5">Saiu</p>
             <p className="text-base font-semibold text-red-600 tabular-nums">{formatBRL(saidasMes)}</p>
           </div>
-          <div className="px-4 py-3">
-            <p className="text-[11px] font-medium text-gray-400 mb-0.5">A receber</p>
-            <p className="text-base font-semibold text-gray-700 tabular-nums">{formatBRL(aReceber)}</p>
-          </div>
-          <div className="px-4 py-3">
-            <p className="text-[11px] font-medium text-gray-400 mb-0.5">A pagar</p>
-            <p className="text-base font-semibold text-gray-700 tabular-nums">{formatBRL(aPagar)}</p>
-            {vencidoPagar > 0 && (
-              <p className="text-[11px] text-red-600 font-medium mt-0.5">{formatBRL(vencidoPagar)} vencido</p>
-            )}
-          </div>
         </div>
-
-        {/* A pergunta que o cabeçalho tem que responder: o mês fecha positivo? */}
-        {temPrevisto && (
-          <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50/50 text-sm text-gray-500 flex items-center gap-1.5 flex-wrap">
-            Saldo projetado no fim de {monthLabel(mes).toLowerCase()}
-            <strong className={cn('font-semibold tabular-nums', saldoProjetado < 0 ? 'text-red-600' : 'text-emerald-600')}>
-              {formatBRL(saldoProjetado)}
-            </strong>
-            <span className="text-[11px] text-gray-400">· hoje {formatBRL(saldoAtual)} + a receber − a pagar</span>
-          </div>
-        )}
       </div>
 
       {/* Extrato por dia */}

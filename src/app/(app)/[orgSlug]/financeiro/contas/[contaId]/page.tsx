@@ -5,7 +5,7 @@ import { assertFinanceAccess } from '@/lib/finance'
 import { loadConciliacao } from '@/lib/conciliacao'
 import { ConciliacaoClient } from '../../conciliacao/ConciliacaoClient'
 import { ImportarOfxButton } from './ImportarOfxButton'
-import { ContaExtratoView, type Mov, type Previsto } from './ContaExtratoView'
+import { ContaExtratoView, type Mov } from './ContaExtratoView'
 
 // Busca da própria API — o builder não alcança o IP público do VPS.
 export const dynamic = 'force-dynamic'
@@ -29,6 +29,10 @@ export default async function ContaPage({
   if (!conta) notFound()
 
   // Extrato do Conta Azul desta conta (casado pelo nome da conta), paginado.
+  // SÓ REALIZADO: a tela da conta mostra o que aconteceu no banco + a fila do OFX a
+  // conciliar. Previsto (Em aberto/Atrasado) é assunto de Lançamentos — decisão do
+  // Rafael. Filtrar aqui também corta ~560 linhas do tráfego na BTG.
+  const REALIZADO_EXTRATO = ['Conciliado', 'Quitado', 'Transferido']
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const movRaw: any[] = []
   for (let from = 0; ; from += PAGE) {
@@ -36,6 +40,7 @@ export default async function ContaPage({
       .from('extrato_importado')
       .select('data_mov, contato, descricao, categoria, valor, situacao')
       .eq('org_id', orgId).eq('conta', conta.nome)
+      .in('situacao', REALIZADO_EXTRATO)
       .order('data_mov', { ascending: false })
       // Desempate obrigatório: data_mov tem milhares de empates e, sem 2ª chave, a
       // ordem varia entre as requisições — a paginação duplicava e perdia linhas.
@@ -45,7 +50,6 @@ export default async function ContaPage({
     movRaw.push(...data)
     if (data.length < PAGE) break
   }
-  const REALIZADO_EXTRATO = new Set(['Conciliado', 'Quitado', 'Transferido'])
   const movimentos: Mov[] = movRaw.map(e => ({
     data: (e.data_mov as string) ?? null,
     contato: (e.contato as string) ?? null,
@@ -53,23 +57,21 @@ export default async function ContaPage({
     categoria: (e.categoria as string) ?? null,
     valor: Number(e.valor ?? 0),
     situacao: (e.situacao as string) ?? null,
-    realizado: REALIZADO_EXTRATO.has((e.situacao as string) ?? ''),
     origem: 'extrato',
   }))
 
-  // Lançamentos da própria conta. Os realizados entram no MESMO timeline do extrato —
-  // sem isso o "saldo do dia" das linhas não chega no "Saldo atual" do topo (que vem
-  // da view contas_saldo e já soma as baixas do Flow). origem_ref is null exclui os
-  // promovidos do extrato, senão o mesmo dinheiro apareceria duas vezes.
+  // Baixas do Flow (lançamentos já pagos/recebidos) entram no MESMO timeline do
+  // extrato — sem isso o "saldo do dia" das linhas não chega no "Saldo atual" do topo
+  // (que vem da view contas_saldo e já soma essas baixas). origem_ref is null exclui
+  // os promovidos do extrato, senão o mesmo dinheiro apareceria duas vezes.
   const { data: lancRaw } = await sb
     .from('lancamentos')
-    .select('tipo, situacao, valor, valor_realizado, vencimento, data_liquidacao, descricao, contato_nome, categoria')
+    .select('tipo, valor, valor_realizado, vencimento, data_liquidacao, descricao, contato_nome, categoria')
     .eq('org_id', orgId).eq('conta_id', contaId).is('origem_ref', null)
+    .in('situacao', ['pago', 'recebido'])
 
-  const PAGO = new Set(['pago', 'recebido'])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const l of (lancRaw ?? []) as any[]) {
-    if (!PAGO.has(l.situacao as string)) continue
     const bruto = Number(l.valor_realizado ?? l.valor ?? 0)
     movimentos.push({
       data: (l.data_liquidacao as string) ?? (l.vencimento as string) ?? null,
@@ -78,21 +80,9 @@ export default async function ContaPage({
       categoria: (l.categoria as string) ?? null,
       valor: l.tipo === 'saida' ? -bruto : bruto,
       situacao: l.tipo === 'saida' ? 'Pago' : 'Recebido',
-      realizado: true,
       origem: 'flow',
     })
   }
-
-  // Previstos (em aberto) da conta — alimentam "a receber / a pagar" e o saldo
-  // projetado do mês no cabeçalho.
-  const previstos: Previsto[] = ((lancRaw ?? []) as Record<string, unknown>[])
-    .filter(l => !PAGO.has(l.situacao as string))
-    .map(l => ({
-      vencimento: (l.vencimento as string) ?? null,
-      tipo: (l.tipo as string) === 'saida' ? 'saida' : 'entrada',
-      valor: Number(l.valor ?? 0),
-    }))
-    .filter(p => p.vencimento && p.valor > 0) as Previsto[]
 
   // Conciliação OFX (banco × Flow) — só entra na tela quando há extrato bancário importado.
   const conc = await loadConciliacao(sb, orgId, contaId)
@@ -131,7 +121,6 @@ export default async function ContaPage({
 
       <ContaExtratoView
         movimentos={movimentos}
-        previstos={previstos}
         saldoInicial={Number(conta.saldo_inicial ?? 0)}
         saldoAtual={Number(conta.saldo_atual ?? 0)}
         saldoBanco={conta.saldo_banco != null ? Number(conta.saldo_banco) : null}
