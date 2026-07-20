@@ -76,15 +76,17 @@ export function ConciliacaoClient({
     router.refresh()
   }
 
+  // Renderizada embutida na tela da conta (a rota global de conciliação não existe
+  // mais), por isso sem padding próprio e com h2 — o h1 da página é o nome da conta.
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between gap-3 mb-5">
+    <div>
+      <div className="flex items-center justify-between gap-3 mb-4">
         <div>
-          <h1 className="text-lg font-semibold text-gray-900 inline-flex items-center gap-2">
-            <Landmark className="w-4 h-4 text-gray-400" /> Conciliação bancária
-          </h1>
+          <h2 className="text-base font-semibold text-gray-900 inline-flex items-center gap-2">
+            <Landmark className="w-4 h-4 text-gray-400" /> A conciliar
+          </h2>
           <p className="text-gray-500 text-sm mt-0.5">
-            Cruza o extrato do banco com os lançamentos em aberto — a soma tem que bater 100% com o movimento.
+            Movimentos que vieram do banco e ainda não têm lançamento — a soma tem que bater 100% com o movimento.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -103,10 +105,12 @@ export function ConciliacaoClient({
       </div>
 
       {pendentes.length === 0 ? (
-        <div className="text-center py-24 bg-white rounded-xl border border-gray-200">
-          <Check className="w-10 h-10 text-emerald-300 mx-auto mb-3" />
-          <h3 className="text-gray-900 font-medium">Tudo conciliado</h3>
-          <p className="text-gray-500 text-sm mt-1">Nenhum movimento pendente. Clique em <strong>Sincronizar agora</strong> pra buscar novos.</p>
+        <div className="flex items-center gap-2.5 bg-white rounded-xl border border-gray-200 px-4 py-3">
+          <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+          <p className="text-sm text-gray-600">
+            <strong className="text-gray-900 font-medium">Tudo conciliado</strong>
+            <span className="text-gray-400"> · nenhum movimento do banco pendente</span>
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
