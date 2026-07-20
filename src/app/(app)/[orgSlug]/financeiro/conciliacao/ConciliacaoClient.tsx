@@ -34,8 +34,13 @@ const STATUS_LABEL: Record<string, string> = { conciliado: 'Conciliado', ignorad
 
 export function ConciliacaoClient({
   orgSlug, pendentes, historico, abertos, contas, categoriasEntrada, categoriasSaida,
+  btgApiAtiva = false,
 }: {
   orgSlug: string; pendentes: MovementView[]; historico: MovementView[]; abertos: LancOption[]
+  /** O app do BTG ainda está em análise; enquanto a API não vale em produção o
+   *  "Sincronizar agora" chamaria um endpoint que não responde. O extrato entra
+   *  por OFX, pelo botão "Importar OFX" no topo da conta. */
+  btgApiAtiva?: boolean
   contas: ContaOpt[]; categoriasEntrada: string[]; categoriasSaida: string[]
 }) {
   const router = useRouter()
@@ -97,10 +102,12 @@ export function ConciliacaoClient({
               Conciliar {autoMovs.length} sugerido{autoMovs.length > 1 ? 's' : ''}
             </button>
           )}
-          <button onClick={runSync} disabled={syncing || isPending}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
-            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} Sincronizar agora
-          </button>
+          {btgApiAtiva && (
+            <button onClick={runSync} disabled={syncing || isPending}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
+              {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} Sincronizar agora
+            </button>
+          )}
         </div>
       </div>
 
