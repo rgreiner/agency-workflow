@@ -109,3 +109,35 @@ export async function enviarFechamento(orgSlug: string, competencia: string) {
     return { error: msg }
   }
 }
+
+/** Configuração do envio à contabilidade (e-mails, dia do disparo, liga/desliga). */
+export async function salvarConfigContabil(
+  orgSlug: string, cfg: { emails: string[]; dia: number; ativo: boolean },
+) {
+  const { supabase, orgId } = await assertFinanceAccess(orgSlug)
+  const emails = cfg.emails.map(e => e.trim()).filter(Boolean)
+  const invalido = emails.find(e => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e))
+  if (invalido) return { error: `E-mail inválido: ${invalido}` }
+  if (cfg.ativo && emails.length === 0) return { error: 'Defina ao menos um e-mail antes de ativar.' }
+  if (cfg.dia < 1 || cfg.dia > 28) return { error: 'O dia precisa estar entre 1 e 28.' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).from('org_settings')
+    .update({ contabil_emails: emails, contabil_dia: cfg.dia, contabil_ativo: cfg.ativo })
+    .eq('org_id', orgId)
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/fechamento`)
+  return { ok: true }
+}
+
+/** Abre o fechamento de uma competência na mão (sem esperar o cron). */
+export async function abrirFechamentoManual(orgSlug: string, competencia: string) {
+  const { supabase, orgId } = await assertFinanceAccess(orgSlug)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('abrir_fechamento_contabil', {
+    p_org_id: orgId, p_competencia: competencia,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/fechamento`)
+  return { ok: true }
+}

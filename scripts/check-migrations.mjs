@@ -35,6 +35,13 @@ const RE = {
  */
 const REMOVIDOS_DE_PROPOSITO = {
   atualizar_saldos_conta_azul: 'dropada na 127 — gravava saldo_inicial = realizado do extrato (dupla contagem)',
+  // 031: revisão de redação guardava o resultado na própria activity. O desenho foi
+  // substituído por set_review + comentário na atividade (lib/review-gate.ts), e as
+  // colunas nunca chegaram a produção. Decisão do Rafael (20/07/2026): não aplicar.
+  redacao_review_status: '031 substituída por set_review + comentário',
+  redacao_review_errors: '031 substituída por set_review + comentário',
+  redacao_review_target: '031 substituída por set_review + comentário',
+  redacao_review_at: '031 substituída por set_review + comentário',
 }
 
 /** Remove comentários pra não capturar objeto citado em texto explicativo. */
@@ -53,8 +60,9 @@ for (const arq of readdirSync(DIR).filter(f => f.endsWith('.sql')).sort()) {
   for (const m of sql.matchAll(RE.column)) add('column', m[1], m[2])
 }
 
-const ignorados = alvos.filter(a => REMOVIDOS_DE_PROPOSITO[a.nome])
-const pendentes = alvos.filter(a => !REMOVIDOS_DE_PROPOSITO[a.nome])
+const excluido = a => REMOVIDOS_DE_PROPOSITO[a.nome] || (a.extra && REMOVIDOS_DE_PROPOSITO[a.extra])
+const ignorados = alvos.filter(excluido)
+const pendentes = alvos.filter(a => !excluido(a))
 alvos.length = 0
 alvos.push(...pendentes)
 

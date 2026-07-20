@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import { Upload, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { parseOfx, decodeOfxBytes } from '@/lib/ofx'
-import { importarOfx } from '@/app/actions/btg'
+import { importarOfx, registrarArquivoOfx } from '@/app/actions/btg'
+import { uploadFile } from '@/lib/storage/upload-client'
 
 export function ImportarOfxButton({ orgSlug, contaId }: { orgSlug: string; contaId: string }) {
   const router = useRouter()
@@ -25,9 +26,25 @@ export function ImportarOfxButton({ orgSlug, contaId }: { orgSlug: string; conta
         toast.error('Nenhuma transação encontrada no OFX. Confira o arquivo.')
         return
       }
+      // Guarda o arquivo ORIGINAL antes de importar: é o documento que a
+      // contabilidade aceita no fechamento mensal. Se o upload falhar, seguimos —
+      // perder o anexo é chato, perder o extrato seria pior.
+      let caminho: string | null = null
+      try {
+        const url = await uploadFile('ofx', `${crypto.randomUUID()}.ofx`, file)
+        caminho = 'ofx/' + url.split('/uploads/ofx/')[1]
+      } catch { caminho = null }
+
       startTransition(async () => {
         const res = await importarOfx(orgSlug, contaId, parsed.txns, parsed.saldo, parsed.saldoData)
         if (res?.error) { toast.error(res.error); return }
+        if (caminho) {
+          const datas = parsed.txns.map(t => t.data).filter(Boolean).sort()
+          await registrarArquivoOfx(orgSlug, contaId, {
+            nome: file.name, caminho, bytes: file.size,
+            periodoIni: datas[0] ?? null, periodoFim: datas[datas.length - 1] ?? null,
+          })
+        }
         const r = res?.result
         toast.success(
           `OFX importado: ${r?.inserted ?? 0} novo(s)` +

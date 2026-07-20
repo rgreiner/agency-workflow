@@ -10,8 +10,11 @@ import { getUsuario } from '@/lib/auth/server'
 
 export const runtime = 'nodejs'
 
-const ALLOWED_BUCKETS = new Set(['avatars', 'org-logos', 'orcamentos', 'boards', 'midia-kits', 'comments', 'briefings', 'lancamentos'])
+const ALLOWED_BUCKETS = new Set(['avatars', 'org-logos', 'orcamentos', 'boards', 'midia-kits', 'comments', 'briefings', 'lancamentos', 'ofx'])
 const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml', 'application/pdf'])
+// OFX chega com type vazio ou octet-stream conforme o banco — o bucket 'ofx' aceita
+// qualquer coisa pequena, porque é o arquivo original do banco que a contabilidade pede.
+const MAX_BYTES_OFX = 5 * 1024 * 1024
 const MAX_BYTES_IMAGE = 2 * 1024 * 1024   // 2 MB (imagens já vêm reduzidas do client)
 const MAX_BYTES_PDF = 20 * 1024 * 1024    // 20 MB (mídia kit)
 
@@ -30,8 +33,8 @@ export async function POST(request: Request) {
 
   if (!ALLOWED_BUCKETS.has(bucket)) return NextResponse.json({ error: 'Bucket inválido' }, { status: 400 })
   if (!(file instanceof File)) return NextResponse.json({ error: 'Arquivo ausente' }, { status: 400 })
-  if (file.type && !ALLOWED_TYPES.has(file.type)) return NextResponse.json({ error: 'Tipo de arquivo não permitido' }, { status: 400 })
-  const maxBytes = file.type === 'application/pdf' ? MAX_BYTES_PDF : MAX_BYTES_IMAGE
+  if (bucket !== 'ofx' && file.type && !ALLOWED_TYPES.has(file.type)) return NextResponse.json({ error: 'Tipo de arquivo não permitido' }, { status: 400 })
+  const maxBytes = bucket === 'ofx' ? MAX_BYTES_OFX : file.type === 'application/pdf' ? MAX_BYTES_PDF : MAX_BYTES_IMAGE
   if (file.size > maxBytes) return NextResponse.json({ error: `Arquivo muito grande (máx ${Math.round(maxBytes / 1024 / 1024)}MB)` }, { status: 400 })
   // path seguro: só letras/dígitos/._-/ e sem traversal
   if (!/^[\w./-]+$/.test(rel) || rel.includes('..')) return NextResponse.json({ error: 'Caminho inválido' }, { status: 400 })

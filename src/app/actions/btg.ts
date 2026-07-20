@@ -5,6 +5,7 @@ import { assertFinanceAccess } from '@/lib/finance'
 import { syncOrgMovements } from '@/lib/btg/sync'
 import { markBtgSynced, markBtgError, deleteBtgConnection } from '@/lib/btg/store'
 import { type OfxTxn } from '@/lib/ofx'
+import { getUsuario } from '@/lib/auth/server'
 
 export async function disconnectBtg(orgSlug: string) {
   const { orgId } = await assertFinanceAccess(orgSlug)
@@ -155,4 +156,22 @@ export async function importarOfx(
   revalidatePath(`/${orgSlug}/financeiro/contas/${contaId}`)
   revalidatePath(`/${orgSlug}/financeiro/conciliacao`)
   return { result: data as { inserted: number; skipped: number; total: number } }
+}
+
+/** Registra o OFX original que acabou de subir pro volume. A contabilidade quer o
+ *  documento do banco, não a nossa renderização — sem isso o pacote mensal vai só
+ *  com a planilha. Falha aqui não derruba o import: o extrato já entrou. */
+export async function registrarArquivoOfx(
+  orgSlug: string, contaId: string,
+  arq: { nome: string; caminho: string; bytes: number; periodoIni: string | null; periodoFim: string | null },
+) {
+  const { supabase, orgId } = await assertFinanceAccess(orgSlug)
+  const user = await getUsuario()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).from('ofx_arquivos').insert({
+    org_id: orgId, conta_id: contaId, nome: arq.nome, caminho: arq.caminho,
+    bytes: arq.bytes, periodo_ini: arq.periodoIni, periodo_fim: arq.periodoFim,
+    created_by: user?.id ?? null,
+  })
+  if (error) return { error: error.message }
 }
