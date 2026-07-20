@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, ArrowDownCircle, ArrowUpCircle, Plug } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ArrowDownCircle, ArrowUpCircle, Plug, Check, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
 
@@ -12,11 +12,18 @@ export interface Mov {
   categoria: string | null
   valor: number          // com sinal (despesa negativa), como vem do extrato
   situacao: string | null
+  realizado: boolean     // decidido no servidor: extrato e lançamento têm situações diferentes
+  origem: string         // 'extrato' (Conta Azul) | 'flow' (baixa de lançamento)
+}
+
+export interface Previsto {
+  vencimento: string
+  tipo: 'entrada' | 'saida'
+  valor: number
 }
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
-const REALIZADO = new Set(['Conciliado', 'Quitado', 'Transferido'])
-const realizado = (s: string | null) => !!s && REALIZADO.has(s)
+const REALIZADO = new Set(['Conciliado', 'Quitado', 'Transferido', 'Pago', 'Recebido'])
 const monthOf = (d: string | null) => (d ? d.slice(0, 7) : null)
 function monthLabel(ym: string) { const [y, m] = ym.split('-'); return `${MESES[Number(m) - 1]} ${y}` }
 function shiftMonth(ym: string, delta: number) {
@@ -31,8 +38,8 @@ function corSituacao(s: string | null): string {
   return 'bg-gray-100 text-gray-500'
 }
 
-export function ContaExtratoView({ movimentos, saldoInicial, saldoAtual, saldoBanco, saldoBancoData, temOfx, today }: {
-  movimentos: Mov[]; saldoInicial: number; saldoAtual: number
+export function ContaExtratoView({ movimentos, previstos, saldoInicial, saldoAtual, saldoBanco, saldoBancoData, temOfx, today }: {
+  movimentos: Mov[]; previstos: Previsto[]; saldoInicial: number; saldoAtual: number
   saldoBanco: number | null; saldoBancoData: string | null
   temOfx: boolean; today: string
 }) {
@@ -55,14 +62,14 @@ export function ContaExtratoView({ movimentos, saldoInicial, saldoAtual, saldoBa
     const sorted = movimentos.filter(m => m.data).sort((a, b) => (a.data! < b.data! ? -1 : a.data! > b.data! ? 1 : 0))
     let acc = saldoInicial
     const map = new Map<string, number>()
-    for (const m of sorted) { if (realizado(m.situacao)) acc += m.valor; map.set(m.data!, acc) }
+    for (const m of sorted) { if (m.realizado) acc += m.valor; map.set(m.data!, acc) }
     return map
   }, [movimentos, saldoInicial])
 
   const { dias, entradasMes, saidasMes } = useMemo(() => {
     const noMes = movimentos.filter(m => monthOf(m.data) === mes)
     let ent = 0, sai = 0
-    for (const m of noMes) if (realizado(m.situacao)) { if (m.valor > 0) ent += m.valor; else sai += -m.valor }
+    for (const m of noMes) if (m.realizado) { if (m.valor > 0) ent += m.valor; else sai += -m.valor }
     const byDay = new Map<string, Mov[]>()
     for (const m of noMes) { const k = m.data as string; const arr = byDay.get(k) ?? []; arr.push(m); byDay.set(k, arr) }
     const dias = [...byDay.entries()]
@@ -71,36 +78,51 @@ export function ContaExtratoView({ movimentos, saldoInicial, saldoAtual, saldoBa
     return { dias, entradasMes: ent, saidasMes: sai }
   }, [movimentos, mes, saldoAteDia])
 
+  // Previsto do mês: o que ainda está em aberto vencendo neste mês. O saldo projetado
+  // parte do saldo de HOJE (não do fim do mês) — é a pergunta que importa: "com o que
+  // tenho agora, o mês fecha positivo?".
+  const { aReceber, aPagar, vencidoPagar } = useMemo(() => {
+    let rec = 0, pag = 0, venc = 0
+    for (const p of previstos) {
+      if (monthOf(p.vencimento) !== mes) continue
+      if (p.tipo === 'entrada') { rec += p.valor; continue }
+      pag += p.valor
+      // Vencido é escopado ao mês exibido — senão, navegando pra agosto, apareceria
+      // um "vencido" de julho embaixo do "A pagar" de agosto.
+      if (p.vencimento < today) venc += p.valor
+    }
+    return { aReceber: rec, aPagar: pag, vencidoPagar: venc }
+  }, [previstos, mes, today])
+
   const resultadoMes = entradasMes - saidasMes
+  const saldoProjetado = saldoAtual + aReceber - aPagar
+  const temPrevisto = aReceber > 0 || aPagar > 0
   const diff = saldoBanco != null ? Math.round((saldoBanco - saldoAtual) * 100) / 100 : null
+  const bate = diff !== null && Math.abs(diff) < 0.01
 
   return (
     <div className="p-6 space-y-5">
-      {/* Saldo */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4">
+      {/* A CONTA — não depende do mês selecionado */}
+      <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4 flex items-start justify-between gap-6 flex-wrap">
+        <div>
           <p className="text-xs font-medium text-gray-400 mb-1">Saldo atual</p>
-          <p className={cn('text-2xl font-semibold tabular-nums', saldoAtual < 0 ? 'text-red-600' : 'text-gray-900')}>{formatBRL(saldoAtual)}</p>
+          <p className={cn('text-3xl font-semibold tabular-nums', saldoAtual < 0 ? 'text-red-600' : 'text-gray-900')}>{formatBRL(saldoAtual)}</p>
           <p className="text-[11px] text-gray-400 mt-1">Realizado do extrato + baixas do Flow</p>
-          {saldoBanco != null && (
-            <p className="text-[11px] mt-1.5">
-              <span className="text-gray-500">No banco </span>
-              <strong className="text-gray-700 tabular-nums">{formatBRL(saldoBanco)}</strong>
-              {saldoBancoData ? <span className="text-gray-400"> em {formatDateBR(saldoBancoData)}</span> : null}
-              {diff !== null && Math.abs(diff) >= 0.01 && (
-                <span className={cn('ml-1 font-medium', diff < 0 ? 'text-red-600' : 'text-amber-600')}>· dif. {formatBRL(diff)}</span>
-              )}
-            </p>
-          )}
         </div>
-        <div className="bg-gray-50 rounded-2xl px-5 py-4">
-          <p className="text-xs font-medium text-gray-400 mb-1">Entradas em {monthLabel(mes)}</p>
-          <p className="text-xl font-semibold text-emerald-600 tabular-nums">{formatBRL(entradasMes)}</p>
-        </div>
-        <div className="bg-gray-50 rounded-2xl px-5 py-4">
-          <p className="text-xs font-medium text-gray-400 mb-1">Saídas em {monthLabel(mes)}</p>
-          <p className="text-xl font-semibold text-red-600 tabular-nums">{formatBRL(saidasMes)}</p>
-        </div>
+
+        {/* Conciliação com o banco: status, não só um número solto */}
+        {saldoBanco != null && (
+          <div className="text-right">
+            <p className="text-xs font-medium text-gray-400 mb-1">No banco</p>
+            <p className="text-lg font-semibold text-gray-700 tabular-nums">{formatBRL(saldoBanco)}</p>
+            <span className={cn('inline-flex items-center gap-1 mt-1.5 text-[11px] font-medium rounded-full px-2 py-0.5',
+              bate ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700')}>
+              {bate ? <Check className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+              {bate ? 'Bate com o Flow' : `Difere em ${formatBRL(Math.abs(diff ?? 0))}`}
+            </span>
+            {saldoBancoData && <p className="text-[11px] text-gray-400 mt-1">extrato de {formatDateBR(saldoBancoData)}</p>}
+          </div>
+        )}
       </div>
 
       {/* Aviso OFX (some quando houver extrato bancário) */}
@@ -111,16 +133,51 @@ export function ContaExtratoView({ movimentos, saldoInicial, saldoAtual, saldoBa
         </div>
       )}
 
-      {/* Navegação de mês + resultado */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-0.5">
-          <button onClick={() => setMes(m => shiftMonth(m, -1))} className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 transition"><ChevronLeft className="w-4 h-4" /></button>
-          <span className="px-3 text-sm font-medium text-gray-800 min-w-[120px] text-center">{monthLabel(mes)}</span>
-          <button onClick={() => setMes(m => shiftMonth(m, 1))} className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 transition"><ChevronRight className="w-4 h-4" /></button>
+      {/* O MÊS — seletor é o título do painel, e tudo que é do mês vive dentro dele */}
+      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+        <div className="flex items-center justify-between gap-3 flex-wrap px-4 py-3 border-b border-gray-100 bg-gray-50/50">
+          <div className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-0.5">
+            <button onClick={() => setMes(m => shiftMonth(m, -1))} className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 transition-colors active:scale-[0.97]"><ChevronLeft className="w-4 h-4" /></button>
+            <span className="px-3 text-sm font-medium text-gray-800 min-w-[120px] text-center">{monthLabel(mes)}</span>
+            <button onClick={() => setMes(m => shiftMonth(m, 1))} className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 transition-colors active:scale-[0.97]"><ChevronRight className="w-4 h-4" /></button>
+          </div>
+          <div className="text-sm text-gray-500">
+            Resultado <strong className={cn('font-medium tabular-nums', resultadoMes < 0 ? 'text-red-600' : 'text-emerald-600')}>{formatBRL(resultadoMes)}</strong>
+          </div>
         </div>
-        <div className="text-sm text-gray-500">
-          Resultado do mês <strong className={cn('font-medium tabular-nums', resultadoMes < 0 ? 'text-red-600' : 'text-emerald-600')}>{formatBRL(resultadoMes)}</strong>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100">
+          <div className="px-4 py-3">
+            <p className="text-[11px] font-medium text-gray-400 mb-0.5">Entrou</p>
+            <p className="text-base font-semibold text-emerald-600 tabular-nums">{formatBRL(entradasMes)}</p>
+          </div>
+          <div className="px-4 py-3">
+            <p className="text-[11px] font-medium text-gray-400 mb-0.5">Saiu</p>
+            <p className="text-base font-semibold text-red-600 tabular-nums">{formatBRL(saidasMes)}</p>
+          </div>
+          <div className="px-4 py-3">
+            <p className="text-[11px] font-medium text-gray-400 mb-0.5">A receber</p>
+            <p className="text-base font-semibold text-gray-700 tabular-nums">{formatBRL(aReceber)}</p>
+          </div>
+          <div className="px-4 py-3">
+            <p className="text-[11px] font-medium text-gray-400 mb-0.5">A pagar</p>
+            <p className="text-base font-semibold text-gray-700 tabular-nums">{formatBRL(aPagar)}</p>
+            {vencidoPagar > 0 && (
+              <p className="text-[11px] text-red-600 font-medium mt-0.5">{formatBRL(vencidoPagar)} vencido</p>
+            )}
+          </div>
         </div>
+
+        {/* A pergunta que o cabeçalho tem que responder: o mês fecha positivo? */}
+        {temPrevisto && (
+          <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50/50 text-sm text-gray-500 flex items-center gap-1.5 flex-wrap">
+            Saldo projetado no fim de {monthLabel(mes).toLowerCase()}
+            <strong className={cn('font-semibold tabular-nums', saldoProjetado < 0 ? 'text-red-600' : 'text-emerald-600')}>
+              {formatBRL(saldoProjetado)}
+            </strong>
+            <span className="text-[11px] text-gray-400">· hoje {formatBRL(saldoAtual)} + a receber − a pagar</span>
+          </div>
+        )}
       </div>
 
       {/* Extrato por dia */}
