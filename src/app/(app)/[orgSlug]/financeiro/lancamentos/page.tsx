@@ -87,14 +87,29 @@ export default async function LancamentosPage({
       .from('extrato_importado')
       .select('import_ref, data_mov, contato, descricao, tipo, conta, forma_pgto, valor, situacao, valor_original, juros, multa, desconto, taxas, competencia, venc_original, data_prevista, observacao, nota_fiscal, categoria, centro_custo')
       .eq('org_id', orgId)
+      // Ordenação obrigatória: sem ela o Postgres devolve as ~6.9k linhas em ordem
+      // arbitrária a cada requisição, e a paginação duplica e perde linhas entre
+      // carregamentos. import_ref é único, então serve de desempate estável.
+      .order('data_mov', { ascending: true, nullsFirst: false })
+      .order('import_ref', { ascending: true })
       .range(from, from + PAGE - 1)
     if (error || !data || data.length === 0) break
     importadasRaw.push(...data)
     if (data.length < PAGE) break
   }
+
+  // Dedup no SERVIDOR: a linha importada que já virou lançamento não deve chegar na
+  // tela. Antes isso era filtrado só no cliente — mandava 523 linhas a mais pro
+  // browser e, quando escapava, a pessoa editava a versão "Conta Azul" (que abre com
+  // anexos vazios) achando que era o lançamento, e concluía que o anexo não salvou.
+  const promovidos = new Set(
+    lancamentos.filter(l => l.origem_tipo === 'conta_azul' && l.origem_ref).map(l => l.origem_ref as string),
+  )
   const importadas = importadasRaw
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .filter((e: any) => !isIgnorado(e.situacao))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .filter((e: any) => !e.import_ref || !promovidos.has(e.import_ref as string))
     .map(e => extratoToLancamento(e, contaIdByName))
 
   return (
