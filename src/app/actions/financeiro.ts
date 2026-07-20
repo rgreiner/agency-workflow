@@ -430,3 +430,26 @@ export async function setFinanceConfig(orgSlug: string, categorias: FinanceCateg
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/financeiro/categorias`)
 }
+
+/**
+ * Edição em lote (barra flutuante em Lançamentos). Só campos que fazem sentido em
+ * lote — vencimento/valor/contato ficam de fora, são únicos por linha.
+ * A RPC PULA os conciliados (pago/recebido ou com baixa parcial) e devolve a
+ * contagem, pra tela dizer o que foi feito em vez de falhar o lote inteiro.
+ */
+export async function updateLancamentosLote(
+  orgSlug: string, ids: string[], data: Record<string, unknown>,
+) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+  if (!ids.length) return { error: 'Nenhum lançamento selecionado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: res, error } = await (supabase as any).rpc('update_lancamentos_lote', {
+    p_user_id: user.id, p_ids: ids, p_data: data,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+  return { result: res as { atualizados: number; bloqueados: number; total: number } }
+}

@@ -11,7 +11,7 @@ import { toast } from 'sonner'
 import {
   setLancamentoFlags, ressincronizarLancamento, marcarLancamentoRevisado,
   createLancamento, createLancamentosSerie, updateLancamento, deleteLancamento, liquidarLancamento, reabrirLancamento,
-  setLancamentoAnexos, promoverExtrato,
+  setLancamentoAnexos, promoverExtrato, updateLancamentosLote,
   type FinanceCategoriaGrupo, type FinanceCentro, type Anexo,
 } from '@/app/actions/financeiro'
 import { uploadFile } from '@/lib/storage/upload-client'
@@ -144,6 +144,31 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, perStart, perEnd, cardFilter])
 
+  // ── Seleção para edição em lote ──────────────────────────────────────────
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
+  const [loteAberto, setLoteAberto] = useState(false)
+  const selecionaveis = useMemo(() => rows.filter(l => podeEditarEmLote(l).ok), [rows])
+
+  // Seleção EFETIVA = o marcado que ainda está visível. Derivada na renderização, e
+  // não sincronizada por efeito: se a pessoa muda o filtro ou o mês, o que saiu de
+  // vista deixa de contar sozinho. Aplicar em lote a algo que ninguém está vendo é a
+  // receita do arrependimento.
+  const selIds = useMemo(
+    () => selecionaveis.filter(l => selecionados.has(l.id)).map(l => l.id),
+    [selecionaveis, selecionados],
+  )
+
+  function toggleUm(id: string) {
+    setSelecionados(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+  function toggleTodos() {
+    setSelecionados(selIds.length === selecionaveis.length ? new Set() : new Set(selecionaveis.map(l => l.id)))
+  }
+
   // Resumo do período (estilo Conta Azul): receita/despesa × em aberto/realizada.
   const resumo = useMemo(() => {
     const noMes = filtered.filter(inPeriodo)
@@ -233,6 +258,16 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
           <table className="w-full min-w-[920px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/60 text-xs font-medium text-gray-400">
+                <th className="pl-4 pr-1 py-2.5 w-8">
+                  {/* Marca só o que é selecionável e está VISÍVEL — respeita o filtro
+                      ativo, senão "todos" pegaria coisa que a pessoa não está vendo. */}
+                  <input type="checkbox"
+                    checked={selecionaveis.length > 0 && selIds.length === selecionaveis.length}
+                    ref={el => { if (el) el.indeterminate = selIds.length > 0 && selIds.length < selecionaveis.length }}
+                    onChange={toggleTodos} disabled={selecionaveis.length === 0}
+                    title={selecionaveis.length ? 'Selecionar os visíveis' : 'Nada selecionável nesta lista'}
+                    className="w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500 disabled:opacity-30 cursor-pointer" />
+                </th>
                 <th className="text-left px-4 py-2.5 font-medium">Vencimento</th>
                 <th className="text-left px-4 py-2.5 font-medium">Resumo do lançamento</th>
                 <th className="text-left px-3 py-2.5 font-medium">Situação</th>
@@ -245,7 +280,8 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
             <tbody className="divide-y divide-gray-50">
               {rows.map((l) => (
                 <Row key={l.id} l={l} orgSlug={orgSlug} today={today}
-                  conta={l.conta_id ? contaMap[l.conta_id] : undefined} onEdit={setEditing} onBaixa={setBaixa} />
+                  conta={l.conta_id ? contaMap[l.conta_id] : undefined} onEdit={setEditing} onBaixa={setBaixa}
+                  selecionado={selecionados.has(l.id)} onToggleSel={toggleUm} />
               ))}
             </tbody>
           </table>
@@ -262,14 +298,49 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       {baixa && (
         <BaixaModal orgSlug={orgSlug} lancamento={baixa} contas={contas} onClose={() => setBaixa(null)} />
       )}
+
+      {/* Barra flutuante da seleção */}
+      {selIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-gray-900 text-[#fff] rounded-2xl shadow-xl px-4 py-3">
+          <span className="text-sm font-medium tabular-nums">
+            {selIds.length} selecionado{selIds.length > 1 ? 's' : ''}
+          </span>
+          <button onClick={() => setLoteAberto(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-orange-600 hover:bg-orange-700 transition-colors active:scale-[0.97]">
+            <Pencil className="w-3.5 h-3.5" /> Editar em lote
+          </button>
+          <button onClick={() => setSelecionados(new Set())}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-[#fff] hover:bg-white/10 transition-colors" title="Limpar seleção">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {loteAberto && (
+        <LoteModal orgSlug={orgSlug} ids={selIds} contas={contas}
+          categorias={categorias} centros={centros}
+          onClose={() => setLoteAberto(false)}
+          onDone={() => { setLoteAberto(false); setSelecionados(new Set()) }} />
+      )}
     </div>
   )
 }
 
-function Row({ l, orgSlug, today, conta, onEdit, onBaixa }: {
+/** Pode entrar numa edição em lote? Linha do Conta Azul ainda não é lançamento, e
+ *  conciliado (baixa total OU parcial) não se mexe — precisa desconciliar antes. */
+export function podeEditarEmLote(l: Lancamento): { ok: boolean; motivo?: string } {
+  if (l.source === 'importado') return { ok: false, motivo: 'Linha do Conta Azul — edite para virar lançamento do Flow primeiro' }
+  if (isPago(l.situacao)) return { ok: false, motivo: 'Já conciliado — desconcilie antes de alterar' }
+  if (Number(l.valor_realizado ?? 0) > 0) return { ok: false, motivo: 'Tem baixa parcial conciliada — desconcilie antes de alterar' }
+  return { ok: true }
+}
+
+function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleSel }: {
   l: Lancamento; orgSlug: string; today: string; conta?: ContaRef
   onEdit: (l: Lancamento) => void; onBaixa: (l: Lancamento) => void
+  selecionado: boolean; onToggleSel: (id: string) => void
 }) {
+  const sel = podeEditarEmLote(l)
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [confirmDel, setConfirmDel] = useState(false)
@@ -302,6 +373,11 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa }: {
 
   return (
     <tr className={cn('group/linha transition-colors', isPending ? 'opacity-50' : 'hover:bg-orange-50/40', l.revisar && 'bg-amber-50/40')}>
+      <td className="pl-4 pr-1 py-2.5">
+        <input type="checkbox" checked={selecionado} disabled={!sel.ok}
+          onChange={() => onToggleSel(l.id)} title={sel.motivo ?? 'Selecionar'}
+          className="w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer" />
+      </td>
       <td className={cn('px-4 py-2.5 text-sm whitespace-nowrap', overdue ? 'text-red-600 font-medium' : 'text-gray-600')}>
         <div>{formatDateBR(l.vencimento)}</div>
         {pagoEm && <div className="text-[11px] text-emerald-600 mt-0.5">{isSaida ? 'pago' : 'receb.'} {formatDateBR(pagoEm)}</div>}
@@ -800,6 +876,110 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Edição em lote. Só entra o campo que a pessoa marcar — o resto fica intacto,
+ * senão um "—" acidental limparia a categoria de 40 lançamentos de uma vez.
+ * Por isso cada campo tem um checkbox de "aplicar", e não só um valor.
+ */
+function LoteModal({ orgSlug, ids, contas, categorias, centros, onClose, onDone }: {
+  orgSlug: string; ids: string[]; contas: ContaRef[]
+  categorias: FinanceCategoriaGrupo[]; centros: FinanceCentro[]
+  onClose: () => void; onDone: () => void
+}) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+  const [erro, setErro] = useState('')
+  const [aplicar, setAplicar] = useState<Record<string, boolean>>({})
+  const [val, setVal] = useState<Record<string, string>>({})
+
+  const contaOptions = useMemo(() => [{ value: '', label: '—' }, ...contas.map(c => ({ value: c.id, label: c.nome }))], [contas])
+  const centroOptions = useMemo(() => [{ value: '', label: '—' },
+    ...centros.filter(c => !c.arquivado).map(c => ({ value: c.nome, label: c.nome }))], [centros])
+  const catOptions = useMemo(() => {
+    const opts: { value: string; label: string }[] = [{ value: '', label: '—' }]
+    for (const g of categorias) {
+      if (g.filhos.length === 0) opts.push({ value: g.nome, label: g.nome })
+      else for (const f of g.filhos) opts.push({ value: f.nome, label: f.nome })
+    }
+    return opts
+  }, [categorias])
+
+  const campos: { key: string; label: string; options: { value: string; label: string }[] }[] = [
+    { key: 'conta_id', label: 'Conta bancária', options: contaOptions },
+    { key: 'categoria', label: 'Categoria', options: catOptions },
+    { key: 'centro_custo', label: 'Centro de custo', options: centroOptions },
+    { key: 'forma_pagamento', label: 'Forma de pagamento', options: FORMA_OPTIONS },
+    { key: 'nf_emitida', label: 'NF emitida', options: [{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }] },
+    { key: 'boleto_gerado', label: 'Boleto gerado', options: [{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }] },
+  ]
+  const marcados = campos.filter(c => aplicar[c.key])
+
+  function salvar() {
+    setErro('')
+    const data: Record<string, unknown> = {}
+    for (const c of marcados) {
+      const v = val[c.key] ?? ''
+      data[c.key] = (c.key === 'nf_emitida' || c.key === 'boleto_gerado') ? v === 'true' : v
+    }
+    startTransition(async () => {
+      const r = await updateLancamentosLote(orgSlug, ids, data)
+      if (r?.error) { setErro(r.error); return }
+      const res = r?.result
+      if (res?.bloqueados) {
+        toast.success(`${res.atualizados} atualizado(s). ${res.bloqueados} pulado(s) por já estarem conciliados.`)
+      } else {
+        toast.success(`${res?.atualizados ?? 0} lançamento(s) atualizado(s).`)
+      }
+      onDone(); router.refresh()
+    })
+  }
+
+  return (
+    <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+      <div className="modal-card w-full max-w-lg bg-white rounded-2xl shadow-xl border border-gray-200">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="text-base font-semibold text-gray-900">Editar {ids.length} lançamento{ids.length > 1 ? 's' : ''}</h2>
+          <button aria-label="Fechar" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="px-6 py-5">
+      <p className="text-xs text-gray-500 mb-4">
+        Marque só o que quer alterar. O que ficar desmarcado permanece como está em cada lançamento.
+        Vencimento, valor e contato não entram em lote — são únicos por linha.
+      </p>
+
+      <div className="space-y-3">
+        {campos.map(c => (
+          <div key={c.key} className="flex items-center gap-3">
+            <input type="checkbox" checked={!!aplicar[c.key]}
+              onChange={() => setAplicar(a => ({ ...a, [c.key]: !a[c.key] }))}
+              className="w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer shrink-0" />
+            <span className={cn('text-sm w-40 shrink-0', aplicar[c.key] ? 'text-gray-900' : 'text-gray-400')}>{c.label}</span>
+            {/* Select não tem prop disabled — o wrapper corta o ponteiro e esmaece,
+                deixando claro que o campo só vale se estiver marcado. */}
+            <div className={cn('flex-1', !aplicar[c.key] && 'opacity-40 pointer-events-none')}>
+              <Select value={val[c.key] ?? ''} onChange={v => setVal(s => ({ ...s, [c.key]: v }))}
+                options={c.options} placeholder="—" />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {erro && <p className="text-sm text-red-600 mt-4">{erro}</p>}
+
+      <div className="flex items-center justify-end gap-2 mt-6">
+        <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition">Cancelar</button>
+        <button onClick={salvar} disabled={isPending || marcados.length === 0}
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
+          {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+          Aplicar a {ids.length}
+        </button>
+      </div>
+        </div>
       </div>
     </div>
   )
