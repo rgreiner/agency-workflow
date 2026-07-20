@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import Link from 'next/link'
 import { AlertTriangle, RotateCw, Home } from 'lucide-react'
+import { isStaleDeployError, tentarRecarregarUmaVez } from '@/lib/stale-deploy'
 
 export default function Error({
   error,
@@ -11,10 +12,15 @@ export default function Error({
   error: Error & { digest?: string }
   reset: () => void
 }) {
+  const stale = isStaleDeployError(error)
+
   useEffect(() => {
     // Loga no console do navegador (e o stack real fica nos logs do servidor).
     console.error(error)
-  }, [error])
+    // Deploy novo com a aba aberta: recarrega sozinho. Se a trava de tempo barrar,
+    // a tela abaixo já é a certa pro caso — mensagem amigável + botão que recarrega.
+    if (stale) tentarRecarregarUmaVez()
+  }, [error, stale])
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-gray-50">
@@ -22,11 +28,15 @@ export default function Error({
         <div className="w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-5">
           <AlertTriangle className="w-7 h-7 text-red-500" />
         </div>
-        <h1 className="text-xl font-semibold text-gray-900">Algo deu errado</h1>
+        <h1 className="text-xl font-semibold text-gray-900">
+          {stale ? 'Esta aba está desatualizada' : 'Algo deu errado'}
+        </h1>
         <p className="text-gray-500 text-sm mt-2">
-          Ocorreu um erro ao carregar esta tela. Você pode tentar novamente.
+          {stale
+            ? 'O sistema foi atualizado enquanto esta aba estava aberta. Recarregue para continuar — nenhum dado foi perdido.'
+            : 'Ocorreu um erro ao carregar esta tela. Você pode tentar novamente.'}
         </p>
-        {error?.message && (
+        {!stale && error?.message && (
           <p className="mt-4 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 font-mono break-words text-left max-h-40 overflow-y-auto">
             {error.message}
           </p>
@@ -36,7 +46,7 @@ export default function Error({
         )}
         <div className="flex items-center justify-center gap-2 mt-6">
           <button
-            onClick={reset}
+            onClick={() => (stale ? window.location.reload() : reset())}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 transition"
           >
             <RotateCw className="w-4 h-4" /> Tentar de novo
