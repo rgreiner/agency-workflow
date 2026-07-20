@@ -3,6 +3,11 @@ import { isRealizado, isIgnorado } from '@/lib/extrato'
 import { LancamentosClient, type Lancamento, type ContaRef } from './LancamentosClient'
 import type { FinanceCategoriaGrupo, FinanceCentro } from '@/app/actions/financeiro'
 
+// A dedup "linha importada que virou lançamento some" depende de ler os dois lados
+// no mesmo request. Sem isso, uma render cacheada mostra a versão Conta Azul de um
+// item já promovido — e a pessoa edita a versão errada (que abre sem anexos).
+export const dynamic = 'force-dynamic'
+
 const PAGE = 1000
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

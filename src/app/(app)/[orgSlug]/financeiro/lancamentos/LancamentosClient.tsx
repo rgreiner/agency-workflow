@@ -297,7 +297,7 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa }: {
   }
 
   return (
-    <tr className={cn('group/linha transition', isPending ? 'opacity-50' : 'hover:bg-gray-50/50', l.revisar && 'bg-amber-50/40')}>
+    <tr className={cn('group/linha transition-colors', isPending ? 'opacity-50' : 'hover:bg-orange-50/40', l.revisar && 'bg-amber-50/40')}>
       <td className={cn('px-4 py-2.5 text-sm whitespace-nowrap', overdue ? 'text-red-600 font-medium' : 'text-gray-600')}>
         <div>{formatDateBR(l.vencimento)}</div>
         {pagoEm && <div className="text-[11px] text-emerald-600 mt-0.5">{isSaida ? 'pago' : 'receb.'} {formatDateBR(pagoEm)}</div>}
@@ -334,6 +334,15 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa }: {
                   </span>
                 )}
                 {imported && <span className="text-[10px] font-medium text-sky-700 bg-sky-50 rounded-md px-1.5 py-0.5">Conta Azul</span>}
+                {/* Anexos na própria linha: dá pra ver que a NF está lá sem abrir o
+                    modal — foi justamente não ver isso que fez parecer que o anexo
+                    não tinha salvado. */}
+                {(l.anexos?.length ?? 0) > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-600 bg-gray-100 rounded-md px-1.5 py-0.5"
+                    title={l.anexos!.map(a => a.nome).join(', ')}>
+                    <Paperclip className="w-2.5 h-2.5" />{l.anexos!.length}
+                  </span>
+                )}
               </div>
             )}
           </div>
