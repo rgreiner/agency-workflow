@@ -1,4 +1,5 @@
 import { assertFinanceAccess } from '@/lib/finance'
+import { unwrap } from '@/lib/supabase/unwrap'
 import { isRealizado, isIgnorado } from '@/lib/extrato'
 import { LancamentosClient, type Lancamento, type ContaRef } from './LancamentosClient'
 import type { FinanceCategoriaGrupo, FinanceCentro } from '@/app/actions/financeiro'
@@ -119,9 +120,14 @@ export default async function LancamentosPage({
   )
   // Descartes vivem FORA do extrato (migration 132) — assim sobrevivem ao reimport,
   // que apaga e recarrega o arquivo inteiro da Conta Azul.
-  const { data: descRaw } = await sb
-    .from('extrato_descartado').select('import_ref').eq('org_id', orgId)
-  const descartados = new Set(((descRaw ?? []) as { import_ref: string }[]).map(d => d.import_ref))
+  // unwrap e não `?? []`: se esta consulta falhar em silêncio, o filtro para de
+  // esconder o que foi descartado e as linhas voltam sem ninguém entender por quê.
+  const descartados = new Set(
+    unwrap<{ import_ref: string }>(
+      await sb.from('extrato_descartado').select('import_ref').eq('org_id', orgId),
+      'descartes do extrato',
+    ).map(d => d.import_ref),
+  )
   const importadas = importadasRaw
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .filter((e: any) => !isIgnorado(e.situacao))
