@@ -69,6 +69,8 @@ export function DateRangeEditor({ activityId, path, startDate, dueDate, canEdit,
 
   const [open,  setOpen]  = useState(false)
   const [phase, setPhase] = useState<'start' | 'end'>('start')
+  // true = entrou pra mexer em UMA data (clicou no chip de início ou de fim)
+  const [soUmaData, setSoUmaData] = useState(false)
   const [hovered, setHovered] = useState<string | null>(null)
 
   const [isPending, startTransition] = useTransition()
@@ -128,6 +130,7 @@ export function DateRangeEditor({ activityId, path, startDate, dueDate, canEdit,
   const closeAndSave = useCallback(() => {
     setOpen(false)
     setHovered(null)
+    setSoUmaData(false)
     saveChanges(localStartRef.current, localEndRef.current)
   }, [saveChanges])
 
@@ -146,6 +149,20 @@ export function DateRangeEditor({ activityId, path, startDate, dueDate, canEdit,
   // ── Day click logic ─────────────────────────────────────────────────────
 
   function handleDayClick(ymd: string) {
+    // Edição de UMA data só: quem entrou clicando no chip de início (ou de fim) quer
+    // mexer naquela data, não refazer o período inteiro. Salva e fecha no primeiro
+    // clique, em vez de obrigar a percorrer as duas pontas.
+    if (soUmaData) {
+      let s = localStartRef.current, e = localEndRef.current
+      if (phase === 'start') s = ymd; else e = ymd
+      // Inverteu a ordem? Empurra a outra ponta junto em vez de recusar o clique.
+      if (s && e && e < s) { if (phase === 'start') e = s; else s = e }
+      setLocalStart(s); localStartRef.current = s
+      setLocalEnd(e); localEndRef.current = e
+      setSoUmaData(false); setOpen(false); setHovered(null)
+      saveChanges(s, e)
+      return
+    }
     if (phase === 'start') {
       // Set start — do NOT clear end (preserve it for smart save)
       setLocalStart(ymd); localStartRef.current = ymd
@@ -193,10 +210,6 @@ export function DateRangeEditor({ activityId, path, startDate, dueDate, canEdit,
 
   // ── Render ──────────────────────────────────────────────────────────────
 
-  const triggerLabel = localStart || localEnd
-    ? `${localStart ? fmtDisplay(localStart) : 'Início'} → ${localEnd ? fmtDisplay(localEnd) : 'Prazo'}`
-    : 'Definir datas'
-
   if (!canEdit) {
     if (compact) {
       const days = daysUntil(localEnd || null)
@@ -241,17 +254,26 @@ export function DateRangeEditor({ activityId, path, startDate, dueDate, canEdit,
       {isPending && <Loader2 className="w-3 h-3 text-orange-500 animate-spin shrink-0" />}
     </button>
   ) : (
-    <button
-      type="button"
-      onClick={() => { decidePos(); setPhase('start'); setOpen(o => !o) }}
-      className="flex items-center gap-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 hover:border-orange-300 hover:bg-orange-50 transition"
-    >
+    /* Duas pontas clicáveis: cada uma abre o calendário JÁ mirando naquela data, e
+       o primeiro clique salva só ela. Antes, qualquer clique obrigava a redefinir
+       início e fim — o incômodo era ter que refazer o que já estava certo. */
+    <span className="inline-flex items-center gap-1 text-xs bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5">
       <Calendar className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-      <span className={cn(localStart || localEnd ? 'text-gray-700' : 'text-gray-400')}>
-        {triggerLabel}
-      </span>
+      <button type="button" title="Editar só o início"
+        onClick={() => { decidePos(); setPhase('start'); setSoUmaData(true); setOpen(true) }}
+        className={cn('px-1.5 py-0.5 rounded-md hover:bg-orange-50 hover:text-orange-700 transition-colors',
+          localStart ? 'text-gray-700' : 'text-gray-400')}>
+        {localStart ? fmtDisplay(localStart) : 'início'}
+      </button>
+      <span className="text-gray-300">→</span>
+      <button type="button" title="Editar só o prazo"
+        onClick={() => { decidePos(); setPhase('end'); setSoUmaData(true); setOpen(true) }}
+        className={cn('px-1.5 py-0.5 rounded-md hover:bg-orange-50 hover:text-orange-700 transition-colors',
+          localEnd ? 'text-gray-700' : 'text-gray-400')}>
+        {localEnd ? fmtDisplay(localEnd) : 'prazo'}
+      </button>
       {isPending && <Loader2 className="w-3 h-3 text-orange-500 animate-spin shrink-0" />}
-    </button>
+    </span>
   )
 
   return (
@@ -272,7 +294,9 @@ export function DateRangeEditor({ activityId, path, startDate, dueDate, canEdit,
         >
           {/* Hint */}
           <p className="text-xs text-gray-400 text-center mb-3">
-            {phase === 'start' ? 'Clique para definir o início' : 'Clique para definir o fim'}
+            {soUmaData
+              ? (phase === 'start' ? 'Escolha o novo início — o prazo não muda' : 'Escolha o novo prazo — o início não muda')
+              : (phase === 'start' ? 'Clique para definir o início' : 'Clique para definir o fim')}
           </p>
 
           {/* Month nav */}

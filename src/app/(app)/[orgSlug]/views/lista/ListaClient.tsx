@@ -1223,24 +1223,30 @@ function StatusDot({
         <Check className="w-2.5 h-2.5" strokeWidth={3.5} />
       </button>
 
+      {/* Painel largo em colunas: com 21 status, a lista de uma coluna rolava e
+          escondia 2/3 das opções. Aqui todos cabem de uma vez — achar vira varredura
+          visual, não rolagem. columns-* deixa o navegador equilibrar as colunas. */}
       {open && (
-        <div className="pop-in absolute left-0 top-6 z-30 w-56 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5 max-h-72 overflow-y-auto">
-          <p className="px-3 pb-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+        <div className="pop-in absolute left-0 top-6 z-30 w-[34rem] max-w-[calc(100vw-2rem)] bg-white rounded-xl border border-gray-200 shadow-lg p-2">
+          <p className="px-1 pb-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
             Mudar status
           </p>
-          {statusConfig.map(s => (
-            <button
-              key={s.value}
-              type="button"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(false); onChange(s.value) }}
-              className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition text-left"
-            >
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: s.bg, color: s.text }}>
-                {s.label}
-              </span>
-              {s.value === current && <Check className="w-3 h-3 text-gray-400 ml-auto shrink-0" />}
-            </button>
-          ))}
+          <div className="columns-2 sm:columns-3 gap-1">
+            {statusConfig.map(s => (
+              <button
+                key={s.value}
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(false); onChange(s.value) }}
+                className={cn('w-full flex items-center gap-1.5 px-1.5 py-1 rounded-lg hover:bg-gray-50 transition-colors text-left break-inside-avoid mb-0.5',
+                  s.value === current && 'bg-gray-50')}
+              >
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full truncate" style={{ backgroundColor: s.bg, color: s.text }}>
+                  {s.label}
+                </span>
+                {s.value === current && <Check className="w-3 h-3 text-gray-400 ml-auto shrink-0" />}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>
