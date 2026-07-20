@@ -18,8 +18,8 @@ export default async function ContasPage({
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: contasRaw } = await (supabase as any)
-    .from('contas_financeiras')
-    .select('id, nome, tipo, saldo_inicial, cor, ativo, ordem')
+    .from('contas_saldo')
+    .select('id, nome, tipo, saldo_inicial, saldo_atual, cor, ativo, ordem')
     .eq('org_id', org.id)
     .order('ordem', { ascending: true })
     .order('nome', { ascending: true })

@@ -31,8 +31,9 @@ function corSituacao(s: string | null): string {
   return 'bg-gray-100 text-gray-500'
 }
 
-export function ContaExtratoView({ movimentos, saldoInicial, saldoBanco, saldoBancoData, temOfx, today }: {
-  movimentos: Mov[]; saldoInicial: number; saldoBanco: number | null; saldoBancoData: string | null
+export function ContaExtratoView({ movimentos, saldoInicial, saldoAtual, saldoBanco, saldoBancoData, temOfx, today }: {
+  movimentos: Mov[]; saldoInicial: number; saldoAtual: number
+  saldoBanco: number | null; saldoBancoData: string | null
   temOfx: boolean; today: string
 }) {
   const months = useMemo(() => {
@@ -48,13 +49,14 @@ export function ContaExtratoView({ movimentos, saldoInicial, saldoBanco, saldoBa
     return past[0] ?? months[0] ?? tm
   })
 
-  // Saldo atual (inicial + realizado de todo o histórico) + saldo realizado ao fim de cada dia.
-  const { saldoAtual, saldoAteDia } = useMemo(() => {
+  // Saldo realizado ao fim de cada dia. O saldo atual NÃO é recalculado aqui — vem da
+  // view contas_saldo, fonte única compartilhada com a lista de contas e o painel.
+  const saldoAteDia = useMemo(() => {
     const sorted = movimentos.filter(m => m.data).sort((a, b) => (a.data! < b.data! ? -1 : a.data! > b.data! ? 1 : 0))
     let acc = saldoInicial
     const map = new Map<string, number>()
     for (const m of sorted) { if (realizado(m.situacao)) acc += m.valor; map.set(m.data!, acc) }
-    return { saldoAtual: acc, saldoAteDia: map }
+    return map
   }, [movimentos, saldoInicial])
 
   const { dias, entradasMes, saidasMes } = useMemo(() => {
@@ -79,7 +81,7 @@ export function ContaExtratoView({ movimentos, saldoInicial, saldoBanco, saldoBa
         <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4">
           <p className="text-xs font-medium text-gray-400 mb-1">Saldo atual</p>
           <p className={cn('text-2xl font-semibold tabular-nums', saldoAtual < 0 ? 'text-red-600' : 'text-gray-900')}>{formatBRL(saldoAtual)}</p>
-          <p className="text-[11px] text-gray-400 mt-1">Inicial {formatBRL(saldoInicial)} + realizado do extrato</p>
+          <p className="text-[11px] text-gray-400 mt-1">Realizado do extrato + baixas do Flow</p>
           {saldoBanco != null && (
             <p className="text-[11px] mt-1.5">
               <span className="text-gray-500">No banco </span>

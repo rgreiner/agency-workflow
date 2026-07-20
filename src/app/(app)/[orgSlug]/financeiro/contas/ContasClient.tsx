@@ -14,6 +14,7 @@ export interface Conta {
   nome: string
   tipo: string | null
   saldo_inicial: number | string
+  saldo_atual: number | string
   cor: string | null
   ativo: boolean
   ordem: number
@@ -66,7 +67,7 @@ export function ContasClient({ orgSlug, contas }: { orgSlug: string; contas: Con
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Conta</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Tipo</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-gray-400">Saldo inicial</th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-gray-400">Saldo atual</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-gray-400">Situação</th>
                 <th className="w-20" />
               </tr>
@@ -81,7 +82,7 @@ export function ContasClient({ orgSlug, contas }: { orgSlug: string; contas: Con
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{c.tipo ? TIPO_LABEL[c.tipo] ?? c.tipo : '—'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatBRL(Number(c.saldo_inicial ?? 0))}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{formatBRL(Number(c.saldo_atual ?? 0))}</td>
                   <td className="px-4 py-3 text-center">
                     <span className={cn('inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full',
                       c.ativo ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500')}>

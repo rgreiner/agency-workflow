@@ -21,9 +21,10 @@ export default async function ContaPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any
 
+  // contas_saldo é a fonte única do saldo (migration 127) — mesma fórmula da lista e do painel.
   const { data: conta } = await sb
-    .from('contas_financeiras')
-    .select('id, nome, tipo, cor, saldo_inicial, saldo_banco, saldo_banco_data')
+    .from('contas_saldo')
+    .select('id, nome, tipo, cor, saldo_inicial, saldo_atual, saldo_banco, saldo_banco_data')
     .eq('id', contaId).eq('org_id', orgId).maybeSingle()
   if (!conta) notFound()
 
@@ -36,6 +37,9 @@ export default async function ContaPage({
       .select('data_mov, contato, descricao, categoria, valor, situacao')
       .eq('org_id', orgId).eq('conta', conta.nome)
       .order('data_mov', { ascending: false })
+      // Desempate obrigatório: data_mov tem milhares de empates e, sem 2ª chave, a
+      // ordem varia entre as requisições — a paginação duplicava e perdia linhas.
+      .order('id', { ascending: false })
       .range(from, from + PAGE - 1)
     if (error || !data || data.length === 0) break
     movRaw.push(...data)
@@ -88,6 +92,7 @@ export default async function ContaPage({
       <ContaExtratoView
         movimentos={movimentos}
         saldoInicial={Number(conta.saldo_inicial ?? 0)}
+        saldoAtual={Number(conta.saldo_atual ?? 0)}
         saldoBanco={conta.saldo_banco != null ? Number(conta.saldo_banco) : null}
         saldoBancoData={(conta.saldo_banco_data as string) ?? null}
         temOfx={temOfx}

@@ -11,7 +11,7 @@ interface LancRow {
   data_liquidacao: string | null
   conta_id: string | null
 }
-interface ContaRow { id: string; nome: string; cor: string | null; saldo_inicial: number | string; ativo: boolean }
+interface ContaRow { id: string; nome: string; cor: string | null; saldo_atual: number | string; ativo: boolean }
 
 const isPago = (s: string) => s === 'pago' || s === 'recebido'
 const val = (l: LancRow) => Number(l.valor ?? 0)
@@ -39,8 +39,8 @@ export default async function PainelPage({ params }: { params: Promise<{ orgSlug
     sb.from('lancamentos')
       .select('tipo, situacao, valor, valor_realizado, vencimento, data_liquidacao, conta_id')
       .eq('org_id', orgId),
-    sb.from('contas_financeiras')
-      .select('id, nome, cor, saldo_inicial, ativo')
+    sb.from('contas_saldo')
+      .select('id, nome, cor, saldo_atual, ativo')
       .eq('org_id', orgId).order('ordem', { ascending: true }),
   ])
 
@@ -62,27 +62,19 @@ export default async function PainelPage({ params }: { params: Promise<{ orgSlug
   const receber = grp('entrada')
   const pagar = grp('saida')
 
-  // Uma passada só pelos lançamentos: saldo realizado por conta + faturamento
-  // (entrada realizada) por mês de liquidação. Evita varrer o array por conta/mês.
-  const realPorConta = new Map<string, number>()
+  // Faturamento (entrada realizada) por mês de liquidação.
   const fatPorMes = new Map<string, number>()
   for (const l of lanc) {
     if (!isPago(l.situacao)) continue
-    if (l.conta_id) {
-      const delta = l.tipo === 'saida' ? -realVal(l) : realVal(l)
-      realPorConta.set(l.conta_id, (realPorConta.get(l.conta_id) ?? 0) + delta)
-    }
     if (l.tipo === 'entrada') {
       const ym = monthOf(l.data_liquidacao ?? l.vencimento)
       if (ym) fatPorMes.set(ym, (fatPorMes.get(ym) ?? 0) + realVal(l))
     }
   }
 
-  // Posição das contas: saldo_inicial + realizados (recebido − pago) por conta.
-  const contasComSaldo = contas.map(c => ({
-    ...c,
-    saldo: Number(c.saldo_inicial ?? 0) + (realPorConta.get(c.id) ?? 0),
-  }))
+  // Posição das contas: vem pronta da view contas_saldo (extrato + baixas do Flow),
+  // a mesma fonte da lista de contas e da tela da conta.
+  const contasComSaldo = contas.map(c => ({ ...c, saldo: Number(c.saldo_atual ?? 0) }))
   const saldoTotal = contasComSaldo.reduce((s, c) => s + c.saldo, 0)
 
   // Faturamento (recebido) — últimos 6 meses por mês de liquidação.
