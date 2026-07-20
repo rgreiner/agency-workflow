@@ -21,12 +21,21 @@ export interface Conta {
 }
 
 const TIPO_OPTIONS = [
-  { value: 'banco', label: 'Conta bancária' },
+  { value: 'banco', label: 'Conta corrente' },
   { value: 'caixa', label: 'Caixa' },
   { value: 'aplicacao', label: 'Aplicação' },
+  { value: 'imobiliario', label: 'Investimento imobiliário' },
   { value: 'outro', label: 'Outro' },
 ]
 const TIPO_LABEL: Record<string, string> = Object.fromEntries(TIPO_OPTIONS.map(o => [o.value, o.label]))
+// Tag por tipo — cor só pra diferenciar a natureza da conta, não é status.
+const TIPO_TAG: Record<string, string> = {
+  banco: 'bg-blue-50 text-blue-700',
+  caixa: 'bg-amber-50 text-amber-700',
+  aplicacao: 'bg-emerald-50 text-emerald-700',
+  imobiliario: 'bg-teal-50 text-teal-700',
+  outro: 'bg-gray-100 text-gray-600',
+}
 
 const COR_PRESETS = ['#f97316', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#eab308', '#14b8a6', '#6b7280']
 
@@ -61,55 +70,54 @@ export function ContasClient({ orgSlug, contas }: { orgSlug: string; contas: Con
       </div>
 
       {contas.length > 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
-          <table className="w-full min-w-[520px]">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/50">
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Conta</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Tipo</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-gray-400">Saldo atual</th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-gray-400">Situação</th>
-                <th className="w-20" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {contas.map(c => (
-                <tr key={c.id} className={cn('hover:bg-gray-50/50 transition', !c.ativo && 'opacity-50')}>
-                  <td className="px-4 py-3">
-                    <Link href={`/${orgSlug}/financeiro/contas/${c.id}`} className="flex items-center gap-2.5 group/conta">
-                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: c.cor ?? '#cbd5e1' }} />
-                      <span className="text-sm font-medium text-gray-900 group-hover/conta:text-orange-600 transition-colors">{c.nome}</span>
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{c.tipo ? TIPO_LABEL[c.tipo] ?? c.tipo : '—'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{formatBRL(Number(c.saldo_atual ?? 0))}</td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={cn('inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full',
-                      c.ativo ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500')}>
-                      {c.ativo ? 'Ativa' : 'Inativa'}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+          {contas.map(c => (
+            <div key={c.id}
+              className={cn('group/conta bg-white rounded-2xl border border-gray-200 p-4 flex flex-col gap-3 transition hover:border-gray-300 hover:shadow-sm',
+                !c.ativo && 'opacity-60')}>
+              {/* identidade + tipo */}
+              <div className="flex items-start justify-between gap-2">
+                <Link href={`/${orgSlug}/financeiro/contas/${c.id}`} className="min-w-0 flex items-start gap-2.5">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0 mt-1.5" style={{ backgroundColor: c.cor ?? '#cbd5e1' }} />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-gray-900 truncate group-hover/conta:text-orange-600 transition-colors">{c.nome}</span>
+                    <span className={cn('inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full mt-1',
+                      TIPO_TAG[c.tipo ?? 'outro'] ?? TIPO_TAG.outro)}>
+                      {c.tipo ? TIPO_LABEL[c.tipo] ?? c.tipo : 'Sem tipo'}
                     </span>
-                  </td>
-                  <td className="px-3 py-3">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <Link href={`/${orgSlug}/financeiro/contas/${c.id}`}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-50 transition" title="Movimentações e conciliação (OFX)">
-                        <Landmark className="w-3.5 h-3.5" />
-                      </Link>
-                      <button onClick={() => setEditing(c)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar">
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => toggleAtivo(c)} disabled={isPending}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition disabled:opacity-50"
-                        title={c.ativo ? 'Inativar' : 'Ativar'}>
-                        <Power className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </span>
+                </Link>
+                {!c.ativo && (
+                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 shrink-0">Inativa</span>
+                )}
+              </div>
+
+              {/* saldo — o dado principal do bloco */}
+              <Link href={`/${orgSlug}/financeiro/contas/${c.id}`} className="block">
+                <span className="block text-[11px] text-gray-400">Saldo atual</span>
+                <span className={cn('block text-xl font-semibold tabular-nums',
+                  Number(c.saldo_atual ?? 0) < 0 ? 'text-red-600' : 'text-gray-900')}>
+                  {formatBRL(Number(c.saldo_atual ?? 0))}
+                </span>
+              </Link>
+
+              {/* ações */}
+              <div className="flex items-center gap-1.5 pt-1 border-t border-gray-100 -mb-1">
+                <Link href={`/${orgSlug}/financeiro/contas/${c.id}`}
+                  className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:text-orange-600 hover:bg-orange-50 transition-colors active:scale-[0.97]">
+                  <Landmark className="w-3.5 h-3.5" /> Extrato
+                </Link>
+                <button onClick={() => setEditing(c)}
+                  className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors active:scale-[0.97]">
+                  <Pencil className="w-3.5 h-3.5" /> Editar
+                </button>
+                <button onClick={() => toggleAtivo(c)} disabled={isPending} title={c.ativo ? 'Inativar' : 'Ativar'}
+                  className="ml-auto p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50 active:scale-[0.97]">
+                  <Power className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       ) : (
         <div className="text-center py-24 bg-white rounded-xl border border-gray-200">

@@ -31,13 +31,15 @@ function corSituacao(s: string | null): string {
   return 'bg-gray-100 text-gray-500'
 }
 
-export function ContaExtratoView({ movimentos, saldoInicial, saldoAtual, saldoBanco, saldoBancoData, temOfx, today, slotConciliacao }: {
+export function ContaExtratoView({ movimentos, saldoInicial, saldoAtual, saldoBanco, saldoBancoData, temOfx, today, slotConciliacao, slotIntegracao }: {
   movimentos: Mov[]; saldoInicial: number; saldoAtual: number
   saldoBanco: number | null; saldoBancoData: string | null
   temOfx: boolean; today: string
   // A fila do OFX entra acima do extrato: é o que pede ação, e a lista abaixo já vem
   // do mais novo pro mais antigo. Não é escopada ao mês, por isso fica fora do painel.
   slotConciliacao?: React.ReactNode
+  /** Integração bancária desta conta (migration 128) — fica no fim, é configuração. */
+  slotIntegracao?: React.ReactNode
 }) {
   const months = useMemo(() => {
     const set = new Set<string>()
@@ -168,9 +170,15 @@ export function ContaExtratoView({ movimentos, saldoInicial, saldoAtual, saldoBa
           </div>
         ))}
         {dias.length === 0 && (
-          <p className="text-sm text-gray-400 px-4 py-12 text-center">Nenhum movimento em {monthLabel(mes)}.</p>
+          <p className="text-sm text-gray-400 px-4 py-12 text-center">
+            Nenhum movimento realizado em {monthLabel(mes)}.
+            <span className="block text-[11px] mt-1">O previsto fica em Lançamentos.</span>
+          </p>
         )}
       </div>
+
+      {/* INTEGRAÇÃO — configuração da conta, fica no fim */}
+      {slotIntegracao}
     </div>
   )
 }

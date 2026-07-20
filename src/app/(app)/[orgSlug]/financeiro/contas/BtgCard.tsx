@@ -27,20 +27,26 @@ const FEEDBACK: Record<string, { ok: boolean; msg: string }> = {
   semrefresh: { ok: false, msg: 'O BTG não retornou refresh token (verifique os escopos, ex.: offline_access).' },
 }
 
-export function BtgCard({ orgSlug, btg }: { orgSlug: string; btg: BtgStatus }) {
+export function BtgCard({ orgSlug, btg, voltarPara }: {
+  orgSlug: string; btg: BtgStatus
+  /** Rota pra limpar o ?btg=... depois do OAuth. O card vive dentro da conta
+   *  vinculada (migration 128), então nem sempre é a listagem. */
+  voltarPara?: string
+}) {
   const router = useRouter()
   const sp = useSearchParams()
   const [pending, start] = useTransition()
   const [confirm, setConfirm] = useState(false)
+  const destino = voltarPara ?? `/${orgSlug}/financeiro/contas`
 
   // Toast do retorno do OAuth (?btg=...), limpando o parâmetro depois.
   useEffect(() => {
     const f = sp.get('btg')
     if (f && FEEDBACK[f]) {
       if (FEEDBACK[f].ok) toast.success(FEEDBACK[f].msg); else toast.error(FEEDBACK[f].msg)
-      router.replace(`/${orgSlug}/financeiro/contas`)
+      router.replace(destino)
     }
-  }, [sp, orgSlug, router])
+  }, [sp, destino, router])
 
   function runTest() {
     start(async () => {

@@ -4,6 +4,9 @@ import { ArrowLeft, Landmark, Plug } from 'lucide-react'
 import { assertFinanceAccess } from '@/lib/finance'
 import { loadConciliacao } from '@/lib/conciliacao'
 import { ConciliacaoClient } from '../../conciliacao/ConciliacaoClient'
+import { BtgCard } from '../BtgCard'
+import { btgConfigured, btgEnv } from '@/lib/btg/config'
+import { getBtgConnection } from '@/lib/btg/store'
 import { ImportarOfxButton } from './ImportarOfxButton'
 import { ContaExtratoView, type Mov } from './ContaExtratoView'
 
@@ -84,6 +87,19 @@ export default async function ContaPage({
     })
   }
 
+  // Integração bancária desta conta (migration 128) — o card mora aqui, não na listagem.
+  const conn = await getBtgConnection(orgId)
+  const btg = conn?.contaId === contaId ? {
+    configured: btgConfigured(),
+    env: btgEnv(),
+    connected: !!conn.refreshToken && conn.status !== 'revoked',
+    status: conn.status ?? null,
+    companyId: conn.companyId ?? null,
+    accountId: conn.accountId ?? null,
+    lastSyncAt: conn.lastSyncAt ?? null,
+    lastError: conn.lastError ?? null,
+  } : null
+
   // Conciliação OFX (banco × Flow) — só entra na tela quando há extrato bancário importado.
   const conc = await loadConciliacao(sb, orgId, contaId)
   const temOfx = conc.pendentes.length + conc.historico.length > 0
@@ -128,6 +144,10 @@ export default async function ContaPage({
         temOfx={temOfx}
         today={today}
         slotConciliacao={temOfx ? <ConciliacaoClient orgSlug={orgSlug} {...conc} /> : null}
+        slotIntegracao={btg ? (
+          <BtgCard orgSlug={orgSlug} btg={btg}
+            voltarPara={`/${orgSlug}/financeiro/contas/${contaId}`} />
+        ) : null}
       />
     </div>
   )

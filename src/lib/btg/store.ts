@@ -11,6 +11,7 @@ async function db() {
 
 export interface BtgConnection {
   orgId: string
+  contaId: string | null   // conta financeira que esta integração alimenta (migration 128)
   companyId: string | null
   accountId: string | null
   refreshToken: string | null
@@ -31,7 +32,7 @@ function toIso(v: unknown): string | null {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function row(r: any): BtgConnection {
   return {
-    orgId: r.org_id, companyId: r.company_id, accountId: r.account_id,
+    orgId: r.org_id, contaId: r.conta_id ?? null, companyId: r.company_id, accountId: r.account_id,
     refreshToken: r.refresh_token, scopes: r.scopes, status: r.status,
     connectedAt: toIso(r.connected_at), lastSyncAt: toIso(r.last_sync_at), lastError: r.last_error,
   }

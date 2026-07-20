@@ -38,12 +38,21 @@ export default async function ContasPage({
     lastError: conn?.lastError ?? null,
   }
 
+  // A integração mora dentro da conta que ela alimenta (migration 128). Aqui ela só
+  // aparece enquanto NÃO estiver vinculada a nenhuma — senão ficaria inalcançável.
+  const orfa = !conn?.contaId
+
   return (
     <>
       <ContasClient orgSlug={orgSlug} contas={contas} />
-      <div className="px-6 pb-8 -mt-2">
-        <BtgCard orgSlug={orgSlug} btg={btg} />
-      </div>
+      {orfa && (
+        <div className="px-6 pb-8 -mt-2">
+          <p className="text-xs text-gray-400 mb-2">
+            Integração sem conta vinculada — assim que apontar pra uma conta, ela passa a aparecer dentro dela.
+          </p>
+          <BtgCard orgSlug={orgSlug} btg={btg} />
+        </div>
+      )}
     </>
   )
 }
