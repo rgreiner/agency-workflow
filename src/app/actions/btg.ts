@@ -138,10 +138,19 @@ export async function importarOfx(
   })
   if (error) return { error: error.message }
   if (saldoBanco != null) {
+    // O LEDGERBAL só vale se for MAIS NOVO que o guardado. Importar um OFX retroativo
+    // (ex.: sex–dom depois de já ter subido o de hoje) trazia um saldo antigo, que
+    // pisava no atual e fazia a diferença banco × Flow ficar negativa.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from('contas_financeiras')
-      .update({ saldo_banco: saldoBanco, saldo_banco_data: saldoBancoData ?? null })
-      .eq('id', contaId).eq('org_id', orgId)
+    const { data: atual } = await (supabase as any).from('contas_financeiras')
+      .select('saldo_banco_data').eq('id', contaId).eq('org_id', orgId).maybeSingle()
+    const anterior = (atual?.saldo_banco_data as string | null) ?? null
+    if (!anterior || !saldoBancoData || saldoBancoData >= anterior) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('contas_financeiras')
+        .update({ saldo_banco: saldoBanco, saldo_banco_data: saldoBancoData ?? null })
+        .eq('id', contaId).eq('org_id', orgId)
+    }
   }
   revalidatePath(`/${orgSlug}/financeiro/contas/${contaId}`)
   revalidatePath(`/${orgSlug}/financeiro/conciliacao`)
