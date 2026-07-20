@@ -297,7 +297,7 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa }: {
   }
 
   return (
-    <tr className={cn('transition', isPending ? 'opacity-50' : 'hover:bg-gray-50/50', l.revisar && 'bg-amber-50/40')}>
+    <tr className={cn('group/linha transition', isPending ? 'opacity-50' : 'hover:bg-gray-50/50', l.revisar && 'bg-amber-50/40')}>
       <td className={cn('px-4 py-2.5 text-sm whitespace-nowrap', overdue ? 'text-red-600 font-medium' : 'text-gray-600')}>
         <div>{formatDateBR(l.vencimento)}</div>
         {pagoEm && <div className="text-[11px] text-emerald-600 mt-0.5">{isSaida ? 'pago' : 'receb.'} {formatDateBR(pagoEm)}</div>}
@@ -306,8 +306,22 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa }: {
         <div className="flex items-start gap-2">
           {isSaida ? <ArrowUpCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" /> : <ArrowDownCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />}
           <div className="min-w-0">
-            <div className="text-gray-900 font-medium truncate">{l.contato_nome ?? l.descricao ?? '—'}</div>
-            {l.contato_nome && l.descricao && <div className="text-xs text-gray-500 truncate">{l.descricao}</div>}
+            {/* Clicar no nome abre o modal (ver/editar). O lápis só aparece no hover
+                pra não poluir a lista — o alvo de clique é a linha toda do texto. */}
+            <button type="button" onClick={() => onEdit(l)}
+              title={imported ? 'Ver e editar — vira lançamento do Flow' : 'Ver e editar'}
+              className="group/nome flex items-center gap-1.5 min-w-0 text-left">
+              <span className="text-gray-900 font-medium truncate group-hover/nome:text-orange-600 transition-colors">
+                {l.contato_nome ?? l.descricao ?? '—'}
+              </span>
+              <Pencil className="w-3 h-3 text-gray-300 shrink-0 opacity-0 group-hover/linha:opacity-100 group-hover/nome:text-orange-500 transition-opacity" />
+            </button>
+            {l.contato_nome && l.descricao && (
+              <button type="button" onClick={() => onEdit(l)}
+                className="block text-xs text-gray-500 truncate text-left max-w-full hover:text-gray-700 transition-colors">
+                {l.descricao}
+              </button>
+            )}
             {(l.parcela_num || l.categoria || conta || imported) && (
               <div className="flex flex-wrap items-center gap-1 mt-1">
                 {l.parcela_num && l.parcela_total && (
