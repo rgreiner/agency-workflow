@@ -382,6 +382,12 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
 
       {loteAberto && (
         <LoteModal orgSlug={orgSlug} ids={selIds} contas={contas}
+          // Direção do lote: só é 'entrada'/'saida' quando TODOS concordam.
+          // Misturado, nenhuma categoria de direção única serve.
+          direcao={(() => {
+            const tipos = new Set(merged.filter(l => selecionados.has(l.id)).map(l => l.tipo))
+            return tipos.size === 1 ? ([...tipos][0] as 'entrada' | 'saida') : null
+          })()}
           categorias={categorias} centros={centros}
           onClose={() => setLoteAberto(false)}
           onDone={() => { setLoteAberto(false); setSelecionados(new Set()) }} />
@@ -1118,9 +1124,11 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, foc
  * senão um "—" acidental limparia a categoria de 40 lançamentos de uma vez.
  * Por isso cada campo tem um checkbox de "aplicar", e não só um valor.
  */
-function LoteModal({ orgSlug, ids, contas, categorias, centros, onClose, onDone }: {
+function LoteModal({ orgSlug, ids, contas, categorias, centros, direcao, onClose, onDone }: {
   orgSlug: string; ids: string[]; contas: ContaRef[]
   categorias: FinanceCategoriaGrupo[]; centros: FinanceCentro[]
+  /** entrada | saida quando o lote é homogêneo; null quando mistura os dois. */
+  direcao: 'entrada' | 'saida' | null
   onClose: () => void; onDone: () => void
 }) {
   const router = useRouter()
@@ -1132,14 +1140,16 @@ function LoteModal({ orgSlug, ids, contas, categorias, centros, onClose, onDone 
   const contaOptions = useMemo(() => [{ value: '', label: '—' }, ...contas.map(c => ({ value: c.id, label: c.nome }))], [contas])
   const centroOptions = useMemo(() => [{ value: '', label: '—' },
     ...centros.filter(c => !c.arquivado).map(c => ({ value: c.nome, label: c.nome }))], [centros])
+  // Receita não pode receber categoria de custo (e vice-versa) — só as marcadas
+  // como 'ambos' servem aos dois. Antes o lote oferecia TODAS, e classificar uma
+  // receita como "Aluguel" corromperia justamente os gráficos de receita x custo.
+  // Lote misturando entradas e saídas: só sobram as 'ambos'.
   const catOptions = useMemo(() => {
-    const opts: { value: string; label: string }[] = [{ value: '', label: '—' }]
-    for (const g of categorias) {
-      if (g.filhos.length === 0) opts.push({ value: g.nome, label: g.nome })
-      else for (const f of g.filhos) opts.push({ value: f.nome, label: f.nome })
-    }
-    return opts
-  }, [categorias])
+    const nomes = direcao
+      ? categoriaNomes(categorias, direcao)
+      : categoriaNomes(categorias, 'entrada').filter(n => categoriaNomes(categorias, 'saida').includes(n))
+    return [{ value: '', label: '—' }, ...nomes.map(n => ({ value: n, label: n }))]
+  }, [categorias, direcao])
 
   const campos: { key: string; label: string; options: { value: string; label: string }[] }[] = [
     { key: 'conta_id', label: 'Conta bancária', options: contaOptions },
