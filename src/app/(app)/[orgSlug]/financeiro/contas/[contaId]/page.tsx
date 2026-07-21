@@ -156,8 +156,10 @@ export default async function ContaPage({
         saldoBancoData={(conta.saldo_banco_data as string) ?? null}
         temOfx={temOfx}
         today={today}
+        pendentesCount={conc.pendentes.length}
         slotConciliacao={temOfx ? (
           <ConciliacaoClient orgSlug={orgSlug} {...conc}
+            compacto={conc.pendentes.length === 0}
             btgApiAtiva={!!btg?.connected && btg.env === 'production'} />
         ) : null}
         slotIntegracao={btg ? (

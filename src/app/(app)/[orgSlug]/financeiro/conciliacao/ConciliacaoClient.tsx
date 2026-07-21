@@ -39,9 +39,12 @@ const moneyStr = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigit
 
 export function ConciliacaoClient({
   orgSlug, pendentes, historico, abertos, contas, categoriasEntrada, categoriasSaida,
-  btgApiAtiva = false,
+  btgApiAtiva = false, compacto = false,
 }: {
   orgSlug: string; pendentes: MovementView[]; historico: MovementView[]; abertos: LancOption[]
+  /** Sem pendências a tela da conta já anuncia "tudo conciliado" numa linha só —
+   *  aqui dentro sobra a tabela par-a-par, sem repetir título nem banner. */
+  compacto?: boolean
   /** O app do BTG ainda está em análise; enquanto a API não vale em produção o
    *  "Sincronizar agora" chamaria um endpoint que não responde. O extrato entra
    *  por OFX, pelo botão "Importar OFX" no topo da conta. */
@@ -52,7 +55,7 @@ export function ConciliacaoClient({
   const [isPending, startTransition] = useTransition()
   const [syncing, setSyncing] = useState(false)
   const [bulking, setBulking] = useState(false)
-  const [showHistorico, setShowHistorico] = useState(false)
+  const [showHistorico, setShowHistorico] = useState(compacto)
 
   const abertosPorTipo = useMemo(() => ({
     entrada: abertos.filter(l => l.tipo === 'entrada'),
@@ -100,7 +103,7 @@ export function ConciliacaoClient({
   // mais), por isso sem padding próprio e com h2 — o h1 da página é o nome da conta.
   return (
     <div>
-      <div className="flex items-center justify-between gap-3 mb-3">
+      {!compacto && <div className="flex items-center justify-between gap-3 mb-3">
         <div>
           <h2 className="text-base font-semibold text-gray-900 inline-flex items-center gap-2">
             <Landmark className="w-4 h-4 text-gray-400" /> Banco × Flow
@@ -124,7 +127,7 @@ export function ConciliacaoClient({
             </button>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* Pendente de conciliação: o total antes de abrir movimento por movimento. */}
       {pendentes.length > 0 && (
@@ -160,13 +163,16 @@ export function ConciliacaoClient({
       )}
 
       {pendentes.length === 0 ? (
-        <div className="flex items-center gap-2.5 bg-white rounded-xl border border-gray-200 px-4 py-3">
-          <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-          <p className="text-sm text-gray-600">
-            <strong className="text-gray-900 font-medium">Tudo conciliado</strong>
-            <span className="text-gray-400"> · nenhum movimento do banco pendente</span>
-          </p>
-        </div>
+        // No modo compacto quem anuncia isso é a linha de fora — não repetir.
+        compacto ? null : (
+          <div className="flex items-center gap-2.5 bg-white rounded-xl border border-gray-200 px-4 py-3">
+            <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+            <p className="text-sm text-gray-600">
+              <strong className="text-gray-900 font-medium">Tudo conciliado</strong>
+              <span className="text-gray-400"> · nenhum movimento do banco pendente</span>
+            </p>
+          </div>
+        )
       ) : (
         <div className="space-y-3">
           {pendentes.map(m => (
@@ -179,13 +185,17 @@ export function ConciliacaoClient({
       )}
 
       {historico.length > 0 && (
-        <div className="mt-6">
-          <button onClick={() => setShowHistorico(s => !s)} className="text-sm text-gray-500 hover:text-gray-700 transition inline-flex items-center gap-1">
-            <ChevronDown className={cn('w-4 h-4 transition-transform', showHistorico && 'rotate-180')} />
-            {showHistorico ? 'Ocultar' : 'Ver'} já conciliados ({historico.length})
-          </button>
+        <div className={compacto ? '' : 'mt-6'}>
+          {/* Compacto: o bloco de fora já é o gatilho; um segundo "ver/ocultar" aqui
+              dentro seria um acordeão dentro de outro. */}
+          {!compacto && (
+            <button onClick={() => setShowHistorico(s => !s)} className="text-sm text-gray-500 hover:text-gray-700 transition inline-flex items-center gap-1">
+              <ChevronDown className={cn('w-4 h-4 transition-transform', showHistorico && 'rotate-180')} />
+              {showHistorico ? 'Ocultar' : 'Ver'} já conciliados ({historico.length})
+            </button>
+          )}
           {showHistorico && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mt-3">
+            <div className={cn('bg-white rounded-xl overflow-hidden', compacto ? '' : 'border border-gray-200 mt-3')}>
               {/* Cabeçalho das duas colunas: deixa explícito o que é banco e o que é Flow. */}
               <div className="hidden sm:grid grid-cols-[1fr_auto_1fr_auto] items-center gap-3 px-4 py-2 bg-gray-50/70 border-b border-gray-100">
                 <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Banco</span>
