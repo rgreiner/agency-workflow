@@ -74,8 +74,8 @@ export default async function ContaPage({
   // Mesmo critério da view contas_saldo (migration 134).
   const refsRealizados = new Set(movRaw.map(e => e.import_ref as string | null).filter(Boolean))
   const { data: lancRaw } = await sb
-    .from('lancamentos')
-    .select('tipo, valor, valor_realizado, vencimento, data_liquidacao, descricao, contato_nome, categoria, origem_ref')
+    .from('lancamentos_doc')
+    .select('tipo, valor, valor_realizado, vencimento, data_liquidacao, descricao, contato_nome, categoria, origem_ref, origem_id, doc_serie, doc_numero, doc_origem, doc_producao_tipo')
     .eq('org_id', orgId).eq('conta_id', contaId)
     .in('situacao', ['pago', 'recebido'])
 
@@ -91,6 +91,11 @@ export default async function ContaPage({
       valor: l.tipo === 'saida' ? -bruto : bruto,
       situacao: l.tipo === 'saida' ? 'Pago' : 'Recebido',
       origem: 'flow',
+      docId: (l.origem_id as string) ?? null,
+      docSerie: (l.doc_serie as string) ?? null,
+      docNumero: (l.doc_numero as number) ?? null,
+      docOrigem: (l.doc_origem as string) ?? null,
+      docProducaoTipo: (l.doc_producao_tipo as string) ?? null,
     })
   }
 
@@ -143,6 +148,7 @@ export default async function ContaPage({
       </div>
 
       <ContaExtratoView
+        orgSlug={orgSlug}
         movimentos={movimentos}
         saldoInicial={Number(conta.saldo_inicial ?? 0)}
         saldoAtual={Number(conta.saldo_atual ?? 0)}

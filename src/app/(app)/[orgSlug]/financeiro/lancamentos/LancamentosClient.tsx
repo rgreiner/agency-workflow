@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
 import { Select } from '@/components/ui/Select'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { DocChip } from '@/components/ui/DocChip'
 import { toast } from 'sonner'
 import {
   setLancamentoFlags, ressincronizarLancamento, marcarLancamentoRevisado,
@@ -45,6 +46,12 @@ export interface Lancamento {
   tarifa: number | string | null
   anexos: Anexo[] | null
   origem_ref?: string | null        // (promovido do extrato) import_ref que este lançamento "assume"
+  // Documento que originou a cobrança (view lancamentos_doc, migration 135).
+  origem_id?: string | null
+  doc_serie?: string | null
+  doc_numero?: number | null
+  doc_origem?: string | null        // producao | midia
+  doc_producao_tipo?: string | null // fee | pedido | proposta | orcamento
   source?: 'flow' | 'importado'     // 'importado' = linha do extrato Conta Azul (read-only até promover)
   import_ref?: string | null        // (source=importado) chave estável no extrato
 }
@@ -411,8 +418,11 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
                 {l.descricao}
               </button>
             )}
-            {(l.parcela_num || l.categoria || conta || imported) && (
+            {(l.parcela_num || l.categoria || conta || imported || l.doc_numero) && (
               <div className="flex flex-wrap items-center gap-1 mt-1">
+                {/* Código do documento (MX 1567 / PP 1783 / FEE 34) — vem primeiro:
+                    é por ele que se liga o recebimento ao trabalho. */}
+                <DocChip orgSlug={orgSlug} doc={{ id: l.origem_id ?? null, serie: l.doc_serie ?? null, numero: l.doc_numero ?? null, origem: l.doc_origem ?? null, producaoTipo: l.doc_producao_tipo }} />
                 {l.parcela_num && l.parcela_total && (
                   <span className="text-[10px] font-medium text-gray-600 bg-gray-100 rounded-md px-1.5 py-0.5 tabular-nums">{l.parcela_num}/{l.parcela_total}</span>
                 )}
@@ -742,7 +752,17 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
           {imported && <p className="text-xs text-sky-800 bg-sky-50 rounded-lg px-3 py-2">Linha importada da <strong>Conta Azul</strong>. Ao salvar, ela vira um lançamento do Flow (editável) e passa a ser a versão oficial — a linha importada some, mesmo após reimportar o extrato.</p>}
-          {readonly && <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">Lançamento gerado por documento ({lancamento?.origem_tipo}). Valor e contato vêm do documento; aqui você ajusta os campos do financeiro.</p>}
+          {readonly && (
+            <div className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2 space-y-1.5">
+              {lancamento?.doc_numero && (
+                <div className="flex items-center gap-2">
+                  <span>Origem:</span>
+                  <DocChip orgSlug={orgSlug} size="md" doc={{ id: lancamento.origem_id ?? null, serie: lancamento.doc_serie ?? null, numero: lancamento.doc_numero ?? null, origem: lancamento.doc_origem ?? null, producaoTipo: lancamento.doc_producao_tipo }} />
+                </div>
+              )}
+              <p>Lançamento gerado por documento ({lancamento?.origem_tipo}). Valor e contato vêm do documento; aqui você ajusta os campos do financeiro.</p>
+            </div>
+          )}
 
           {!readonly && (
             <div>

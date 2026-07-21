@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, ArrowDownCircle, ArrowUpCircle, Plug, Check, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
+import { DocChip } from '@/components/ui/DocChip'
 
 export interface Mov {
   data: string | null
@@ -13,6 +14,12 @@ export interface Mov {
   valor: number          // com sinal (despesa negativa), como vem do extrato
   situacao: string | null
   origem: string         // 'extrato' (Conta Azul) | 'flow' (baixa de lançamento)
+  // Documento que originou a cobrança (só nas baixas do Flow) — MX 1567, PP 1783, FEE 34.
+  docId?: string | null
+  docSerie?: string | null
+  docNumero?: number | null
+  docOrigem?: string | null
+  docProducaoTipo?: string | null
 }
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -31,7 +38,8 @@ function corSituacao(s: string | null): string {
   return 'bg-gray-100 text-gray-500'
 }
 
-export function ContaExtratoView({ movimentos, saldoInicial, saldoAtual, saldoBanco, saldoBancoData, temOfx, today, slotConciliacao, slotIntegracao }: {
+export function ContaExtratoView({ orgSlug, movimentos, saldoInicial, saldoAtual, saldoBanco, saldoBancoData, temOfx, today, slotConciliacao, slotIntegracao }: {
+  orgSlug: string
   movimentos: Mov[]; saldoInicial: number; saldoAtual: number
   saldoBanco: number | null; saldoBancoData: string | null
   temOfx: boolean; today: string
@@ -160,6 +168,7 @@ export function ContaExtratoView({ movimentos, saldoInicial, saldoAtual, saldoBa
                   <div className="text-sm text-gray-800 truncate">{m.contato || m.descricao || '—'}</div>
                   <div className="flex flex-wrap items-center gap-1 mt-0.5">
                     {m.contato && m.descricao && <span className="text-[11px] text-gray-400 truncate">{m.descricao}</span>}
+                    <DocChip orgSlug={orgSlug} doc={{ id: m.docId ?? null, serie: m.docSerie ?? null, numero: m.docNumero ?? null, origem: m.docOrigem ?? null, producaoTipo: m.docProducaoTipo }} />
                     {m.categoria && <span className="text-[10px] text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">{m.categoria}</span>}
                     {m.situacao && <span className={cn('text-[10px] font-medium rounded-full px-2 py-0.5', corSituacao(m.situacao))}>{m.situacao}</span>}
                   </div>

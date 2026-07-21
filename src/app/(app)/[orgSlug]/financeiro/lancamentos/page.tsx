@@ -64,8 +64,9 @@ export default async function LancamentosPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any
   const [{ data: raw, error: lancErr }, { data: contasRaw }, { data: settings }] = await Promise.all([
-    sb.from('lancamentos')
-      .select('id, tipo, origem_tipo, origem_ref, parcela_num, parcela_total, contato_nome, descricao, valor, valor_realizado, vencimento, competencia, situacao, nf_emitida, boleto_gerado, revisar, conta_id, categoria, centro_custo, data_liquidacao, forma_pagamento, observacao, juros, multa, desconto, tarifa, anexos')
+    // lancamentos_doc = lancamentos + série/número do documento de origem (migration 135).
+    sb.from('lancamentos_doc')
+      .select('id, tipo, origem_tipo, origem_ref, origem_id, doc_serie, doc_numero, doc_origem, doc_producao_tipo, parcela_num, parcela_total, contato_nome, descricao, valor, valor_realizado, vencimento, competencia, situacao, nf_emitida, boleto_gerado, revisar, conta_id, categoria, centro_custo, data_liquidacao, forma_pagamento, observacao, juros, multa, desconto, tarifa, anexos')
       .eq('org_id', orgId)
       .order('vencimento', { ascending: true, nullsFirst: false }),
     sb.from('contas_financeiras')
