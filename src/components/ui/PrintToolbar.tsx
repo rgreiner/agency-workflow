@@ -23,6 +23,22 @@ export function PrintToolbar({ backHref, fileName }: { backHref?: string; fileNa
     return () => { document.title = anterior }
   }, [fileName])
 
+  // `?download=1` abre a caixa de salvar já ao carregar — é o que faz o botão da
+  // listagem parecer um download de um clique. Lido do location e não por
+  // useSearchParams pra não exigir Suspense nas 5 rotas de impressão.
+  // Espera as fontes e a logo: disparar antes deixa o PDF sem o cabeçalho.
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has('download')) return
+    let cancelado = false
+    const imagens = Array.from(document.images).map(img => img.complete
+      ? Promise.resolve()
+      : new Promise<void>(ok => { img.onload = img.onerror = () => ok() }))
+    Promise.all([document.fonts?.ready ?? Promise.resolve(), ...imagens]).then(() => {
+      if (!cancelado) setTimeout(() => window.print(), 120)
+    })
+    return () => { cancelado = true }
+  }, [])
+
   return (
     <div className="no-print sticky top-0 z-10 flex items-center justify-between gap-3 bg-gray-100 border-b border-gray-200 px-4 py-2.5">
       <button onClick={() => (backHref ? router.push(backHref) : router.back())}
