@@ -168,7 +168,9 @@ export function ExternaForm({
       producao_valor: form.producao_valor, producao_comissao_pct: form.producao_comissao_pct,
       producao_quantidade: form.producao_quantidade,
       producao_fornecedor_id: form.producao_tipo === 'de_terceiros' ? form.producao_fornecedor_id : '',
-      custo: form.custo, desconto_exibicao: form.desconto_exibicao, localizacoes: form.localizacoes,
+      custo: form.custo, desconto_exibicao: form.desconto_exibicao,
+      // A linha em branco existe só como campo pra digitar — não vira ponto na PI.
+      localizacoes: form.localizacoes.filter(l => l.endereco.trim() || l.cidade.trim()),
     }))
 
     startTransition(async () => {

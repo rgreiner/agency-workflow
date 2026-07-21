@@ -69,6 +69,17 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
   const prodTotal = prodValor * prodQtd
   const prodComissao = prodTotal * (parseMoney(String(det.producao_comissao_pct ?? '')) / 100)
   const showProducao = m.tipo === 'externa' && prodTotal > 0
+  // Pontos do outdoor: é o que define ONDE a peça vai ficar. Sem isso na PI o
+  // veículo não sabe o que reservar e ninguém confere antes de aprovar.
+  const localizacoes: { endereco?: string; cidade?: string }[] =
+    (Array.isArray(det.localizacoes) ? det.localizacoes : [])
+      .filter((l: unknown): l is { endereco?: string; cidade?: string } => !!l && typeof l === 'object')
+      .filter((l: { endereco?: string; cidade?: string }) => (l.endereco ?? '').trim() || (l.cidade ?? '').trim())
+  const veiculacao = [
+    det.bisemana && det.bisemana !== 'outro' ? `Bisemana ${det.bisemana}` : '',
+    det.periodo ? String(det.periodo) : '',
+    det.especie ? String(det.especie) : '',
+  ].filter(Boolean)
   const enderecoCliente = [
     ws?.address_street, ws?.address_number ? `nº ${ws.address_number}` : '', ws?.address_complement,
     ws?.address_district, [ws?.address_city, ws?.address_state].filter(Boolean).join('/'),
@@ -112,8 +123,37 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
             <Row label="Título"><span>{m.titulo}</span></Row>
             {campanha && <Row label="Campanha"><span>{campanha}</span></Row>}
             {(m.praca || m.abrangencia) && <Row label="Praça"><span>{[m.praca, m.abrangencia].filter(Boolean).join(' · ')}</span></Row>}
+            {veiculacao.length > 0 && <Row label="Veiculação"><span>{veiculacao.join(' · ')}</span></Row>}
             {m.pecas && <Row label="Peças"><span className="whitespace-pre-line">{m.pecas}</span></Row>}
           </div>
+
+          {/* Localizações — os pontos contratados. Tabela como no documento que a
+              agência já usa: o veículo lê daqui o que precisa reservar. */}
+          {localizacoes.length > 0 && (
+            <>
+              <div className="border-l-2 border-gray-400 pl-2 mb-2">
+                <span className="font-semibold text-gray-700">
+                  Localizações <span className="font-normal text-gray-500">({localizacoes.length} ponto{localizacoes.length > 1 ? 's' : ''})</span>
+                </span>
+              </div>
+              <table className="w-full mb-6">
+                <thead>
+                  <tr className="border-b border-gray-300 text-[10px] uppercase tracking-wide text-gray-500">
+                    <th className="text-left py-1.5 font-semibold">Endereço / ponto</th>
+                    <th className="text-left py-1.5 font-semibold w-1/3">Cidade</th>
+                  </tr>
+                </thead>
+                <tbody className="[&_td]:py-1.5 [&_tr]:border-b [&_tr]:border-gray-100">
+                  {localizacoes.map((l, i) => (
+                    <tr key={i}>
+                      <td>{l.endereco || '—'}</td>
+                      <td className="text-gray-600">{l.cidade || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
 
           {/* Preços */}
           <div className="border-l-2 border-gray-400 pl-2 mb-2"><span className="font-semibold text-gray-700">Preços</span></div>
