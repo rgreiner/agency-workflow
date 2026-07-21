@@ -256,7 +256,16 @@ export async function liquidarLancamento(orgSlug: string, lancamentoId: string, 
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
 }
 
-export interface Anexo { url: string; nome: string; tipo: string }
+/** Documento do lançamento. `url`/`nome` vazios = número registrado antes do arquivo
+ *  chegar (a NF do fornecedor costuma ser anunciada por e-mail dias antes do PDF).
+ *  Campos novos são opcionais: os ~101 anexos antigos continuam válidos como estão. */
+export interface Anexo {
+  url: string
+  nome: string
+  tipo: string
+  numero?: string
+  emitente?: string   // agencia | fornecedor | cliente
+}
 
 export async function setLancamentoAnexos(orgSlug: string, lancamentoId: string, anexos: Anexo[]) {
   const supabase = await createClient()

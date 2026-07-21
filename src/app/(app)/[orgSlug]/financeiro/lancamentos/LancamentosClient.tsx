@@ -18,6 +18,7 @@ import {
   type FinanceCategoriaGrupo, type FinanceCentro, type Anexo, type ImpactoExclusao,
 } from '@/app/actions/financeiro'
 import { categoriaNomes } from '@/lib/finance-categorias'
+import { EMITENTES, EMITENTE_LABEL, chipDocumento, numeroDoNome, textoBuscavel } from '@/lib/documento-fiscal'
 import { uploadFile } from '@/lib/storage/upload-client'
 import { Paperclip, ExternalLink, CalendarClock } from 'lucide-react'
 
@@ -127,7 +128,9 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
     return merged.filter(l => {
       if (tipoFilter !== 'todos' && l.tipo !== tipoFilter) return false
       if (contaFilter && l.conta_id !== contaFilter) return false
-      if (q && !`${l.contato_nome ?? ''} ${l.descricao ?? ''} ${l.categoria ?? ''}`.toLowerCase().includes(q)) return false
+      // A busca inclui os documentos: procurar por "2163" tem que achar a NF, e
+      // até o nome do arquivo ficava de fora antes disso.
+      if (q && !`${l.contato_nome ?? ''} ${l.descricao ?? ''} ${l.categoria ?? ''} ${l.doc_serie ?? ''} ${l.doc_numero ?? ''} ${textoBuscavel(l.anexos)}`.toLowerCase().includes(q)) return false
       return true
     })
   }, [merged, tipoFilter, contaFilter, query])
@@ -482,10 +485,30 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
                 {/* Anexos na própria linha: dá pra ver que a NF está lá sem abrir o
                     modal — foi justamente não ver isso que fez parecer que o anexo
                     não tinha salvado. */}
-                {(l.anexos?.length ?? 0) > 0 && (
+                {/* Documento COM número vira etiqueta própria (NF 2163 · agência) e
+                    abre o PDF no clique — é por esse número que se procura depois.
+                    O resto continua contado no clipe. */}
+                {l.anexos?.filter(a => a.numero).map((a, k) => (
+                  a.url ? (
+                    <a key={`d${k}`} href={a.url} target="_blank" rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      title={`${a.nome}${a.emitente ? ` — ${EMITENTE_LABEL[a.emitente]}` : ''}`}
+                      className="inline-flex items-center gap-1 text-[10px] font-medium text-orange-700 bg-orange-50 rounded-md px-1.5 py-0.5 hover:bg-orange-100 transition-colors">
+                      {chipDocumento(a)}
+                      {a.emitente && <span className="text-orange-400">· {EMITENTE_LABEL[a.emitente]}</span>}
+                    </a>
+                  ) : (
+                    <span key={`d${k}`} title="Número registrado — arquivo ainda não anexado"
+                      className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-500 border border-dashed border-gray-300 rounded-md px-1.5 py-0.5">
+                      {chipDocumento(a)}
+                      {a.emitente && <span className="text-gray-400">· {EMITENTE_LABEL[a.emitente]}</span>}
+                    </span>
+                  )
+                ))}
+                {(l.anexos?.filter(a => !a.numero && a.url).length ?? 0) > 0 && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-600 bg-gray-100 rounded-md px-1.5 py-0.5"
-                    title={l.anexos!.map(a => a.nome).join(', ')}>
-                    <Paperclip className="w-2.5 h-2.5" />{l.anexos!.length}
+                    title={l.anexos!.filter(a => !a.numero && a.url).map(a => a.nome).join(', ')}>
+                    <Paperclip className="w-2.5 h-2.5" />{l.anexos!.filter(a => !a.numero && a.url).length}
                   </span>
                 )}
               </div>
@@ -742,6 +765,8 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, foc
   const [anexoTipo, setAnexoTipo] = useState('NF')
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  /** Índice do documento que está esperando arquivo (null = anexo novo). */
+  const anexoAlvo = useRef<number | null>(null)
   const [modo, setModo] = useState('unico')          // unico | parcelado | recorrente
   const [parcelas, setParcelas] = useState('2')
 
@@ -755,10 +780,22 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, foc
   }
   async function onPickFile(file: File) {
     setUploading(true); setError('')
+    const alvo = anexoAlvo.current
+    anexoAlvo.current = null
     try {
       const ext = file.name.split('.').pop()?.toLowerCase() || 'pdf'
       const url = await uploadFile('lancamentos', `${crypto.randomUUID()}.${ext}`, file)
-      await persistAnexos([...anexos, { url, nome: file.name, tipo: anexoTipo }])
+      // O número já vinha sendo escrito no NOME do arquivo — então lê de lá, mas
+      // só quando não há ambiguidade (ver numeroDoNome). Nunca sobrescreve um
+      // número que a pessoa digitou.
+      const lido = numeroDoNome(file.name)
+      if (alvo != null && anexos[alvo]) {
+        await persistAnexos(anexos.map((x, j) => (j === alvo
+          ? { ...x, url, nome: file.name, numero: x.numero || lido }
+          : x)))
+      } else {
+        await persistAnexos([...anexos, { url, nome: file.name, tipo: anexoTipo, numero: lido }])
+      }
     } catch (e) { setError(e instanceof Error ? e.message : 'Falha no upload') }
     finally { setUploading(false) }
   }
@@ -975,23 +1012,51 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, foc
                     className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition disabled:opacity-50">
                     {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Anexar
                   </button>
+                  {/* O número da NF costuma chegar antes do PDF — dá pra registrar
+                      só ele e anexar o arquivo na mesma linha quando chegar. */}
+                  <button type="button" onClick={() => persistAnexos([...anexos, { url: '', nome: '', tipo: anexoTipo }])}
+                    title="Registrar o número agora e anexar o arquivo depois"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
+                    <Plus className="w-3.5 h-3.5" /> Só o número
+                  </button>
                 </div>
               </div>
               {anexos.length === 0 ? (
-                <p className="text-xs text-gray-400 py-1">Nenhum anexo. Anexe a NF, o boleto ou outro documento.</p>
+                <p className="text-xs text-gray-400 py-1">Nenhum documento. Anexe a NF, o boleto ou registre só o número.</p>
               ) : (
                 <ul className="space-y-1.5">
-                  {anexos.map((a, i) => (
-                    <li key={i} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
-                      <FileText className="w-4 h-4 text-orange-600 shrink-0" />
-                      <span className="text-[10px] font-medium text-gray-500 bg-gray-200 rounded px-1.5 py-0.5 shrink-0">{a.tipo}</span>
-                      <a href={a.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 text-sm text-gray-700 truncate hover:text-orange-600 inline-flex items-center gap-1">
-                        <span className="truncate">{a.nome}</span><ExternalLink className="w-3 h-3 opacity-50 shrink-0" />
-                      </a>
-                      <button type="button" onClick={() => persistAnexos(anexos.filter((_, j) => j !== i))} aria-label="Remover"
-                        className="text-gray-400 hover:text-red-500 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
-                    </li>
-                  ))}
+                  {anexos.map((a, i) => {
+                    const patch = (p: Partial<Anexo>) => persistAnexos(anexos.map((x, j) => (j === i ? { ...x, ...p } : x)))
+                    const semArquivo = !a.url
+                    return (
+                      <li key={i} className={cn('rounded-lg px-3 py-2', semArquivo ? 'bg-white border border-dashed border-gray-300' : 'bg-gray-50')}>
+                        <div className="flex items-center gap-2">
+                          <FileText className={cn('w-4 h-4 shrink-0', semArquivo ? 'text-gray-300' : 'text-orange-600')} />
+                          <span className="text-[10px] font-medium text-gray-500 bg-gray-200 rounded px-1.5 py-0.5 shrink-0">{a.tipo}</span>
+                          {semArquivo ? (
+                            <>
+                              <span className="flex-1 min-w-0 text-sm text-gray-400 italic truncate">aguardando o arquivo</span>
+                              <button type="button" onClick={() => { anexoAlvo.current = i; fileRef.current?.click() }} disabled={uploading}
+                                className="text-xs font-medium text-orange-600 hover:text-orange-700 shrink-0 disabled:opacity-50">anexar</button>
+                            </>
+                          ) : (
+                            <a href={a.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 text-sm text-gray-700 truncate hover:text-orange-600 inline-flex items-center gap-1">
+                              <span className="truncate">{a.nome}</span><ExternalLink className="w-3 h-3 opacity-50 shrink-0" />
+                            </a>
+                          )}
+                          <button type="button" onClick={() => persistAnexos(anexos.filter((_, j) => j !== i))} aria-label="Remover"
+                            className="text-gray-400 hover:text-red-500 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                        </div>
+                        {/* Número e emitente: é por eles que se procura o documento depois. */}
+                        <div className="flex items-center gap-2 mt-1.5 pl-6">
+                          <input value={a.numero ?? ''} onChange={e => patch({ numero: e.target.value })}
+                            placeholder="nº do documento" inputMode="numeric"
+                            className="w-32 h-7 px-2 text-xs bg-white border border-gray-200 rounded-md focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none" />
+                          <div className="w-36"><Select size="sm" value={a.emitente ?? ''} onChange={v => patch({ emitente: v })} options={[...EMITENTES]} /></div>
+                        </div>
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
             </div>
