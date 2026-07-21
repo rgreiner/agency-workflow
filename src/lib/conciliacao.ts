@@ -2,6 +2,7 @@
 // compartilhada entre a tela global e a tela por-conta. Ver btg_movements (extrato
 // genérico: btg + ofx) e a migration 119.
 import type { MovementView, LancOption, ContaOpt } from '@/app/(app)/[orgSlug]/financeiro/conciliacao/ConciliacaoClient'
+import { categoriaNomes, type CategoriaGrupoLike } from '@/lib/finance-categorias'
 
 const STOP = new Set([
   'ltda', 'me', 'epp', 'sa', 'eireli', 'cia', 'comercio', 'comercial', 'servicos', 'servico',
@@ -121,16 +122,12 @@ export async function loadConciliacao(sb: any, orgId: string, contaId?: string):
   const contas: ContaOpt[] = ((contasRaw ?? []) as Record<string, unknown>[])
     .map(c => ({ id: c.id as string, nome: c.nome as string }))
 
-  const grupos = (settings?.finance_categorias ?? []) as { nome: string; tipo?: string; filhos?: { nome: string }[] }[]
-  const catNames = (dir: 'entrada' | 'saida') => {
-    const out: string[] = []
-    for (const g of grupos) {
-      if (g.tipo && g.tipo !== dir && g.tipo !== 'ambos') continue
-      out.push(g.nome)
-      for (const f of g.filhos ?? []) out.push(f.nome)
-    }
-    return Array.from(new Set(out))
-  }
+  // Mesma regra do modal de Lançamentos (inclusive o 'ambos') — ver lib/finance-categorias.
+  const grupos = (settings?.finance_categorias ?? []) as CategoriaGrupoLike[]
 
-  return { pendentes, historico, abertos, contas, categoriasEntrada: catNames('entrada'), categoriasSaida: catNames('saida') }
+  return {
+    pendentes, historico, abertos, contas,
+    categoriasEntrada: categoriaNomes(grupos, 'entrada'),
+    categoriasSaida: categoriaNomes(grupos, 'saida'),
+  }
 }

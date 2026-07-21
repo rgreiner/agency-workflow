@@ -17,6 +17,7 @@ import {
   impactoExcluirLancamento,
   type FinanceCategoriaGrupo, type FinanceCentro, type Anexo, type ImpactoExclusao,
 } from '@/app/actions/financeiro'
+import { categoriaNomes } from '@/lib/finance-categorias'
 import { uploadFile } from '@/lib/storage/upload-client'
 import { Paperclip, ExternalLink, CalendarClock } from 'lucide-react'
 
@@ -717,14 +718,15 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, foc
   })
 
   const catOptions = useMemo(() => {
-    const opts: { value: string; label: string }[] = [{ value: '', label: '—' }]
-    for (const g of categorias) {
-      if (g.tipo !== form.tipo) continue
-      if (g.filhos.length === 0) opts.push({ value: g.nome, label: g.nome })
-      else for (const f of g.filhos) opts.push({ value: f.nome, label: f.nome })
-    }
-    return opts
-  }, [categorias, form.tipo])
+    const dir = form.tipo === 'saida' ? 'saida' : 'entrada'
+    const nomes = categoriaNomes(categorias, dir)
+    // A categoria já gravada continua listada mesmo que hoje não sirva à direção
+    // (mudou de tipo depois, ou veio do import) — senão editar outro campo do
+    // lançamento apagaria a categoria em silêncio.
+    const atual = lancamento?.categoria
+    const extra = atual && !nomes.includes(atual) ? [atual] : []
+    return [{ value: '', label: '—' }, ...[...nomes, ...extra].map(n => ({ value: n, label: n }))]
+  }, [categorias, form.tipo, lancamento?.categoria])
   const contaOptions = useMemo(() => [{ value: '', label: '—' }, ...contas.map(c => ({ value: c.id, label: c.nome }))], [contas])
   const centroOptions = useMemo(() => {
     const ativos = centros.filter(c => !c.arquivado)
