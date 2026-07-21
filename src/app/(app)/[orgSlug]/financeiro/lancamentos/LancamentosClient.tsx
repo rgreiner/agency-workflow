@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronLeft, ChevronRight, FileText, Receipt, Check, RotateCcw, AlertTriangle, RefreshCw, Plus, X, Loader2, Pencil, Trash2, ArrowDownCircle, ArrowUpCircle, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText, Receipt, Check, RotateCcw, AlertTriangle, RefreshCw, Plus, X, Loader2, Pencil, Trash2, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
 import { Select } from '@/components/ui/Select'
@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import {
   setLancamentoFlags, ressincronizarLancamento, marcarLancamentoRevisado,
   createLancamento, createLancamentosSerie, updateLancamento, deleteLancamento, liquidarLancamento, reabrirLancamento,
+  criarTransferencia,
   setLancamentoAnexos, promoverExtrato, updateLancamentosLote, descartarExtrato,
   impactoExcluirLancamento,
   type FinanceCategoriaGrupo, type FinanceCentro, type Anexo, type ImpactoExclusao,
@@ -112,6 +113,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
   // Recorte pelos cards de resumo (tipo + situação). null = tudo (card "Resultado").
   const [cardFilter, setCardFilter] = useState<null | 'rec_aberto' | 'rec_real' | 'desp_aberto' | 'desp_real'>(null)
   const [creating, setCreating] = useState(false)
+  const [transferindo, setTransferindo] = useState(false)
   const [editing, setEditing] = useState<Lancamento | null>(null)
   // 'vencimento' = veio do botão Renegociar: o modal abre com a data em foco.
   const [editFoco, setEditFoco] = useState<'vencimento' | null>(null)
@@ -252,6 +254,10 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <PeriodoSelector periodo={periodo} setPeriodo={setPeriodo} today={today} />
+          <button onClick={() => setTransferindo(true)}
+            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50 transition active:scale-[0.97]">
+            <ArrowLeftRight className="w-4 h-4" /> Transferência
+          </button>
           <button onClick={() => setCreating(true)}
             className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition">
             <Plus className="w-4 h-4" /> Nova
@@ -361,6 +367,9 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       )}
       {baixa && (
         <BaixaModal orgSlug={orgSlug} lancamento={baixa} contas={contas} onClose={() => setBaixa(null)} />
+      )}
+      {transferindo && (
+        <TransferenciaModal orgSlug={orgSlug} contas={contas} today={today} onClose={() => setTransferindo(false)} />
       )}
 
       {/* Barra flutuante da seleção */}
@@ -1317,6 +1326,98 @@ function BaixaModal({ orgSlug, lancamento, contas, onClose }: {
               className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition">
               {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
               Confirmar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Transferência entre contas: cria os 2 lançamentos ligados (saída na origem +
+ * entrada no destino) de uma vez. Não é receita nem despesa — dinheiro mudando de
+ * conta. Sai já realizada (move o saldo das duas contas).
+ */
+function TransferenciaModal({ orgSlug, contas, today, onClose }: {
+  orgSlug: string; contas: ContaRef[]; today: string; onClose: () => void
+}) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState('')
+  const [form, setForm] = useState({ origem: '', destino: '', valor: '', data: today, descricao: '' })
+
+  const opcoes = useMemo(() => contas.map(c => ({ value: c.id, label: c.nome })), [contas])
+  const nomeDe = (id: string) => contas.find(c => c.id === id)?.nome
+  const podeSalvar = !!form.origem && !!form.destino && form.origem !== form.destino && Number(parseBR(form.valor)) > 0
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    if (form.origem === form.destino) { setError('Origem e destino têm que ser contas diferentes'); return }
+    if (Number(parseBR(form.valor)) <= 0) { setError('Informe um valor maior que zero'); return }
+    startTransition(async () => {
+      const res = await criarTransferencia(orgSlug, {
+        conta_origem_id: form.origem, conta_destino_id: form.destino,
+        valor: parseBR(form.valor), data: form.data, descricao: form.descricao.trim() || null,
+      })
+      if (res?.error) { setError(res.error); return }
+      toast.success(`Transferência de ${nomeDe(form.origem)} para ${nomeDe(form.destino)} registrada`)
+      onClose(); router.refresh()
+    })
+  }
+
+  return (
+    <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+      <div className="modal-card w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-200">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="text-base font-semibold text-gray-900 inline-flex items-center gap-2">
+            <ArrowLeftRight className="w-4 h-4 text-gray-400" /> Nova transferência
+          </h2>
+          <button aria-label="Fechar" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X className="w-5 h-5" /></button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+
+          <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">De (origem)</label>
+              <Select value={form.origem} onChange={v => setForm(f => ({ ...f, origem: v }))} options={opcoes} placeholder="Conta" />
+            </div>
+            <ArrowLeftRight className="w-4 h-4 text-gray-300 mb-2.5" />
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Para (destino)</label>
+              <Select value={form.destino} onChange={v => setForm(f => ({ ...f, destino: v }))} options={opcoes} placeholder="Conta" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Valor (R$)</label>
+              <input type="text" inputMode="decimal" value={form.valor} autoFocus
+                onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} placeholder="0,00" className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Data</label>
+              <input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))} className={inputCls} />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Descrição <span className="text-gray-400 font-normal">(opcional)</span></label>
+            <input type="text" value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
+              placeholder="Ex.: Aporte para pagamento de fornecedores" className={inputCls} />
+          </div>
+
+          <p className="text-[11px] text-gray-400">Cria 2 lançamentos ligados (saída na origem, entrada no destino). Não entra em receita nem despesa.</p>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
+            <button type="submit" disabled={isPending || !podeSalvar}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
+              {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              Transferir
             </button>
           </div>
         </form>
