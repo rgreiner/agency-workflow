@@ -2,6 +2,9 @@ import { assertFinanceAccess } from '@/lib/finance'
 import { unwrap } from '@/lib/supabase/unwrap'
 import { formatBRL } from '@/lib/midia'
 import { ArrowDownCircle, ArrowUpCircle, Landmark } from 'lucide-react'
+import { PainelAnalise, type AnaliseLanc } from './PainelAnalise'
+import type { CategoriaGrupoLike } from '@/lib/finance-categorias'
+import type { FinanceCentro } from '@/app/actions/financeiro'
 
 interface LancRow {
   tipo: string
@@ -11,6 +14,9 @@ interface LancRow {
   vencimento: string | null
   data_liquidacao: string | null
   conta_id: string | null
+  categoria: string | null
+  centro_custo: string | null
+  competencia: string | null
 }
 interface ContaRow { id: string; nome: string; cor: string | null; saldo_atual: number | string; ativo: boolean }
 
@@ -36,18 +42,21 @@ export default async function PainelPage({ params }: { params: Promise<{ orgSlug
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any
-  const [resLanc, resContas] = await Promise.all([
+  const [resLanc, resContas, resSettings] = await Promise.all([
     sb.from('lancamentos')
-      .select('tipo, situacao, valor, valor_realizado, vencimento, data_liquidacao, conta_id')
+      .select('tipo, situacao, valor, valor_realizado, vencimento, data_liquidacao, conta_id, categoria, centro_custo, competencia')
       .eq('org_id', orgId),
     sb.from('contas_saldo')
       .select('id, nome, cor, saldo_atual, ativo')
       .eq('org_id', orgId).order('ordem', { ascending: true }),
+    sb.from('org_settings').select('finance_categorias, finance_centros_custo').eq('org_id', orgId).maybeSingle(),
   ])
 
   // Lista vazia por falha não é lista vazia — numa tela de saldo isso vira decisão errada.
   const lanc = unwrap<LancRow>(resLanc, 'lançamentos')
   const contas = unwrap<ContaRow>(resContas, 'contas').filter(c => c.ativo)
+  const categorias = (resSettings?.data?.finance_categorias ?? []) as CategoriaGrupoLike[]
+  const centros = (resSettings?.data?.finance_centros_custo ?? []) as FinanceCentro[]
   const today = new Date().toISOString().slice(0, 10)
   const mes = today.slice(0, 7)
 
@@ -126,6 +135,9 @@ export default async function PainelPage({ params }: { params: Promise<{ orgSlug
           </ul>
         )}
       </section>
+
+      {/* Análise por período: receita por cliente, faturado por linha, custo por macro */}
+      <PainelAnalise lancamentos={lanc as AnaliseLanc[]} categorias={categorias} centros={centros} />
 
       {/* Faturamento últimos meses */}
       <section className="bg-white border border-gray-200 rounded-xl p-5">

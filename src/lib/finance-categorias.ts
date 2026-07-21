@@ -14,7 +14,38 @@
 export interface CategoriaGrupoLike {
   nome: string
   tipo?: string | null
-  filhos?: { nome: string }[]
+  cor?: string | null
+  filhos?: { nome: string; cor?: string | null }[]
+}
+
+/**
+ * Mapa `nome-da-categoria (lower) → nome do macro-grupo` para agregar por macro
+ * (ex.: "Simples Nacional - DAS" → "Impostos e Taxas"). Categoria de topo sem
+ * filhos mapeia para si mesma. Usado nos gráficos do painel.
+ */
+export function macroPorCategoria(grupos: CategoriaGrupoLike[]): Map<string, string> {
+  const m = new Map<string, string>()
+  for (const g of grupos) {
+    const filhos = g.filhos ?? []
+    if (filhos.length === 0) m.set(g.nome.toLowerCase(), g.nome)
+    else for (const f of filhos) m.set(f.nome.toLowerCase(), g.nome)
+  }
+  return m
+}
+
+/** Mapa `nome (lower) → cor` de todo grupo E filho — para colorir barras por categoria/macro. */
+export function coresPorNome(grupos: CategoriaGrupoLike[]): Map<string, string> {
+  const m = new Map<string, string>()
+  for (const g of grupos) {
+    if (g.cor) m.set(g.nome.toLowerCase(), g.cor)
+    for (const f of g.filhos ?? []) if (f.cor) m.set(f.nome.toLowerCase(), f.cor)
+  }
+  return m
+}
+
+/** É uma transferência entre contas (zero-soma, não é receita nem despesa)? */
+export function isTransferenciaCategoria(categoria: string | null): boolean {
+  return (categoria ?? '').toLowerCase().startsWith('transfer')
 }
 
 /** O grupo serve para lançamentos desta direção? Sem tipo definido, serve para as duas. */
