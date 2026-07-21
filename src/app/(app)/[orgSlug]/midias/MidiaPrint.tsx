@@ -12,6 +12,14 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
     <div className="flex gap-4"><span className="w-28 text-right font-semibold text-gray-500 shrink-0">{label}</span><div className="flex-1">{children}</div></div>
   )
 }
+/** Título de seção com a barra à esquerda, como no documento impresso. */
+function Secao({ titulo }: { titulo: string }) {
+  return (
+    <div className="border-l-2 border-gray-400 pl-2 mb-2">
+      <span className="text-[15px] font-light text-gray-500">{titulo}</span>
+    </div>
+  )
+}
 function lastDayOfMonth(d: string): string {
   const [y, m] = d.split('-').map(Number)
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
@@ -43,8 +51,11 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
   const { data: ws } = await (supabase as any).from('workspaces')
     .select('name, legal_name, tax_id, finance_email, phone, address_street, address_number, address_complement, address_district, address_city, address_state, address_zip')
     .eq('id', m.workspace_id).single()
+  // enderecos/telefones são jsonb no cadastro do veículo e não vinham pra PI —
+  // o documento saía sem o endereço de quem vai receber a autorização.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: veic } = await (supabase as any).from('veiculos').select('name, tax_id, notes').eq('id', m.veiculo_id).single()
+  const { data: veic } = await (supabase as any).from('veiculos')
+    .select('name, tax_id, notes, enderecos, telefones').eq('id', m.veiculo_id).single()
 
   let campanha = ''
   if (m.campaign_id) {
@@ -75,16 +86,29 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
     (Array.isArray(det.localizacoes) ? det.localizacoes : [])
       .filter((l: unknown): l is { endereco?: string; cidade?: string } => !!l && typeof l === 'object')
       .filter((l: { endereco?: string; cidade?: string }) => (l.endereco ?? '').trim() || (l.cidade ?? '').trim())
-  const veiculacao = [
-    det.bisemana && det.bisemana !== 'outro' ? `Bisemana ${det.bisemana}` : '',
-    det.periodo ? String(det.periodo) : '',
-    det.especie ? String(det.especie) : '',
-  ].filter(Boolean)
   const enderecoCliente = [
     ws?.address_street, ws?.address_number ? `nº ${ws.address_number}` : '', ws?.address_complement,
     ws?.address_district, [ws?.address_city, ws?.address_state].filter(Boolean).join('/'),
     ws?.address_zip ? `CEP: ${ws.address_zip}` : '',
   ].filter(Boolean).join(' - ')
+
+  // Endereço e telefone do veículo (primeiro de cada lista do cadastro).
+  const vEnd = Array.isArray(veic?.enderecos) ? veic.enderecos[0] : null
+  const enderecoVeiculo = vEnd ? [
+    vEnd.logradouro, vEnd.numero ? `nº ${vEnd.numero}` : '', vEnd.complemento,
+    vEnd.bairro, [vEnd.cidade, vEnd.uf ?? vEnd.estado].filter(Boolean).join('/'),
+    vEnd.cep ? `CEP: ${vEnd.cep}` : '',
+  ].filter(Boolean).join(' - ') : ''
+  const foneVeiculo = (Array.isArray(veic?.telefones) ? veic.telefones[0]?.numero : '') ?? ''
+
+  const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+  const mesAno = det.mes ? `${MESES[Number(det.mes) - 1] ?? det.mes}/${det.ano ?? ''}` : ''
+  const custoExibicao = parseMoney(String(det.custo ?? '')) || valor
+  const geradoEm = new Date().toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
 
   return (
     <div className="min-h-screen bg-gray-200">
@@ -105,12 +129,18 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
             </div>
           </div>
 
-          <h1 className="text-2xl font-light text-gray-900 mt-5 mb-5">Autorização de Mídia {tipoLabel} {m.serie ? `— ${m.serie} ${m.numero ?? ''}` : `nº ${m.numero ?? ''}`}</h1>
+          <h1 className="text-2xl font-light text-gray-900 mt-5 mb-5">Autorização de Mídia {tipoLabel} nº {m.numero ?? ''}</h1>
 
           <div className="space-y-3 mb-6">
             <Row label="Veículo">
               <p className="font-bold text-gray-900">{veic?.name ?? '—'}</p>
-              {veic?.tax_id && <p className="text-gray-600">CNPJ: {veic.tax_id}</p>}
+              {enderecoVeiculo && <p className="text-gray-600">{enderecoVeiculo}</p>}
+              {(veic?.tax_id || foneVeiculo) && (
+                <p className="text-gray-600">
+                  {[veic?.tax_id ? `CNPJ: ${veic.tax_id}` : '', foneVeiculo ? `Fone: ${foneVeiculo}` : '']
+                    .filter(Boolean).join('  ')}
+                </p>
+              )}
               {veic?.notes && <p className="text-gray-600">{veic.notes}</p>}
             </Row>
             <Row label="Cliente">
@@ -120,85 +150,98 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
               {ws?.tax_id && <p className="text-gray-600">CNPJ: {ws.tax_id}</p>}
               {(ws?.finance_email || ws?.phone) && <p className="text-gray-600">{[ws?.phone, ws?.finance_email].filter(Boolean).join('  ')}</p>}
             </Row>
-            <Row label="Título"><span>{m.titulo}</span></Row>
+            <Row label="Produto"><span>{m.titulo}</span></Row>
             {campanha && <Row label="Campanha"><span>{campanha}</span></Row>}
-            {(m.praca || m.abrangencia) && <Row label="Praça"><span>{[m.praca, m.abrangencia].filter(Boolean).join(' · ')}</span></Row>}
-            {veiculacao.length > 0 && <Row label="Veiculação"><span>{veiculacao.join(' · ')}</span></Row>}
             {m.pecas && <Row label="Peças"><span className="whitespace-pre-line">{m.pecas}</span></Row>}
           </div>
 
-          {/* Localizações — os pontos contratados. Tabela como no documento que a
-              agência já usa: o veículo lê daqui o que precisa reservar. */}
-          {localizacoes.length > 0 && (
-            <>
-              <div className="border-l-2 border-gray-400 pl-2 mb-2">
-                <span className="font-semibold text-gray-700">
-                  Localizações <span className="font-normal text-gray-500">({localizacoes.length} ponto{localizacoes.length > 1 ? 's' : ''})</span>
-                </span>
-              </div>
+          {/* Praça/Espécie e Mês/Bisemana lado a lado — o documento é lido em
+              pares, não em lista corrida. */}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-6">
+            {m.praca && <Row label="Praça"><span>{m.praca}</span></Row>}
+            {det.especie ? <Row label="Espécie"><span>{String(det.especie)}</span></Row> : <div />}
+            {mesAno ? <Row label="Mês"><span>{mesAno}</span></Row> : <div />}
+            {det.bisemana && det.bisemana !== 'outro'
+              ? <Row label="Bisemana"><span>{String(det.bisemana)}</span></Row> : <div />}
+            {det.periodo ? <Row label="Período"><span>{String(det.periodo)}</span></Row> : <div />}
+            {m.abrangencia ? <Row label="Abrangência"><span>{m.abrangencia}</span></Row> : <div />}
+          </div>
+
+          {/* Corpo em duas colunas: o que descreve a veiculação de um lado, o que
+              custa do outro — mesma leitura do documento que a agência já usa. */}
+          <div className="grid grid-cols-2 gap-x-8 items-start">
+            {/* ── Coluna esquerda ── */}
+            <div>
+              {localizacoes.length > 0 && (
+                <>
+                  <Secao titulo="Localizações" />
+                  <ul className="mb-6 space-y-2">
+                    {localizacoes.map((l, i) => (
+                      <li key={i}>{[l.endereco, l.cidade].filter(Boolean).join(' - ')}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {/* Texto legal: documento não editado (vazio ou = padrão) imprime as
+                  notas da config com o destaque; editado imprime o texto próprio. */}
+              <Secao titulo="Texto Legal" />
+              {(() => {
+                const padrao = DOC_MIDIA_NOTES.map(n => n.text).join('\n').trim()
+                const tl = (m.texto_legal ?? '').trim()
+                return !tl || tl === padrao ? (
+                  <>
+                    <p className="font-bold text-gray-900 mb-2">Observações sobre faturamento:</p>
+                    <ul className="list-disc pl-5 space-y-1 mb-2 text-gray-700">
+                      {DOC_MIDIA_NOTES.map((n, i) => (
+                        <li key={i}><span className={n.highlight ? 'bg-yellow-200 px-0.5 font-medium' : ''}>{n.text}</span></li>
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  <p className="text-gray-600 whitespace-pre-line mb-2">{m.texto_legal}</p>
+                )
+              })()}
+            </div>
+
+            {/* ── Coluna direita ── */}
+            <div>
+              {showProducao && (
+                <>
+                  <Secao titulo="Produção" />
+                  <table className="w-full mb-6">
+                    <tbody className="[&_td]:py-1.5 [&_tr]:border-b [&_tr]:border-gray-100">
+                      <tr><td className="text-gray-500">Tipo</td><td className="text-right">{det.producao_tipo === 'no_veiculo' ? 'No veículo' : det.producao_tipo === 'de_terceiros' ? 'De terceiros' : '—'}</td></tr>
+                      {det.pedido_producao ? <tr><td className="text-gray-500">Pedido de Prod.</td><td className="text-right">{String(det.pedido_producao)}</td></tr> : null}
+                      <tr><td className="text-gray-500">Quantidade</td><td className="text-right">{prodQtd}</td></tr>
+                      <tr><td className="text-gray-500">Valor unitário</td><td className="text-right">{formatBRL(prodValor)}</td></tr>
+                      <tr><td className="text-gray-500">Total produção</td><td className="text-right font-semibold">{formatBRL(prodTotal)}</td></tr>
+                      {prodComissao > 0 && <tr><td className="text-gray-500">Comissão produção</td><td className="text-right">{formatBRL(prodComissao)}</td></tr>}
+                    </tbody>
+                  </table>
+                </>
+              )}
+
+              <Secao titulo="Exibição" />
               <table className="w-full mb-6">
-                <thead>
-                  <tr className="border-b border-gray-300 text-[10px] uppercase tracking-wide text-gray-500">
-                    <th className="text-left py-1.5 font-semibold">Endereço / ponto</th>
-                    <th className="text-left py-1.5 font-semibold w-1/3">Cidade</th>
+                <tbody className="[&_td]:py-1.5 [&_tr]:border-b [&_tr]:border-gray-100">
+                  <tr><td className="text-gray-500">Custo</td><td className="text-right">{formatBRL(custoExibicao)}</td></tr>
+                  <tr>
+                    <td className="text-gray-500">Desconto Padrão Agência ($)</td>
+                    <td className="text-right">{descPct.toString().replace('.', ',')}% ({formatBRL(desc)})</td>
                   </tr>
-                </thead>
-                <tbody className="[&_td]:py-1.5 [&_tr]:border-b [&_tr]:border-gray-100">
-                  {localizacoes.map((l, i) => (
-                    <tr key={i}>
-                      <td>{l.endereco || '—'}</td>
-                      <td className="text-gray-600">{l.cidade || '—'}</td>
-                    </tr>
-                  ))}
                 </tbody>
               </table>
-            </>
-          )}
 
-          {/* Preços */}
-          <div className="border-l-2 border-gray-400 pl-2 mb-2"><span className="font-semibold text-gray-700">Preços</span></div>
-          <table className="w-full sm:w-2/3 mb-6">
-            <tbody className="[&_td]:py-1.5 [&_tr]:border-b [&_tr]:border-gray-100">
-              <tr><td className="text-gray-500">Valor</td><td className="text-right">{formatBRL(valor)}</td></tr>
-              <tr><td className="text-gray-500">Desc. Padrão Ag.</td><td className="text-right">{descPct.toString().replace('.', ',')}% ({formatBRL(desc)})</td></tr>
-              <tr><td className="text-gray-500">Prazo</td><td className="text-right">{labelOf(MIDIA_PRAZO_OPTIONS, m.prazo)}{venc ? ` (${formatDateBR(venc)})` : ''}</td></tr>
-              <tr><td className="text-gray-500">{labelOf(MIDIA_FATURAMENTO_OPTIONS, m.faturamento)}</td><td className="text-right font-semibold">{formatBRL(valor)}</td></tr>
-            </tbody>
-          </table>
-
-          {/* Produção (Mídia Externa) */}
-          {showProducao && (
-            <>
-              <div className="border-l-2 border-gray-400 pl-2 mb-2"><span className="font-semibold text-gray-700">Produção</span></div>
-              <table className="w-full sm:w-2/3 mb-6">
+              <Secao titulo="Preços" />
+              <table className="w-full mb-6">
                 <tbody className="[&_td]:py-1.5 [&_tr]:border-b [&_tr]:border-gray-100">
-                  <tr><td className="text-gray-500">Tipo</td><td className="text-right">{det.producao_tipo === 'no_veiculo' ? 'No veículo' : det.producao_tipo === 'de_terceiros' ? 'De terceiros' : '—'}</td></tr>
-                  <tr><td className="text-gray-500">Quantidade</td><td className="text-right">{prodQtd}</td></tr>
-                  <tr><td className="text-gray-500">Valor unitário</td><td className="text-right">{formatBRL(prodValor)}</td></tr>
-                  <tr><td className="text-gray-500">Total produção</td><td className="text-right font-semibold">{formatBRL(prodTotal)}</td></tr>
-                  {prodComissao > 0 && <tr><td className="text-gray-500">Comissão produção</td><td className="text-right">{formatBRL(prodComissao)}</td></tr>}
+                  <tr><td className="text-gray-500">Prazo</td><td className="text-right">{labelOf(MIDIA_PRAZO_OPTIONS, m.prazo)}{venc ? ` (${formatDateBR(venc)})` : ''}</td></tr>
+                  <tr><td className="text-gray-500">{labelOf(MIDIA_FATURAMENTO_OPTIONS, m.faturamento)}</td><td className="text-right font-semibold">{formatBRL(valor)}</td></tr>
                 </tbody>
               </table>
-            </>
-          )}
-
-          {/* Texto legal / observações de faturamento.
-              Documento não editado (texto_legal vazio ou = padrão) → imprime as notas
-              da config com o destaque amarelo. Editado → imprime o texto do documento. */}
-          <div className="border-l-2 border-gray-400 pl-2 mb-2"><span className="font-semibold text-gray-700">Observações sobre faturamento</span></div>
-          {(() => {
-            const padrao = DOC_MIDIA_NOTES.map(n => n.text).join('\n').trim()
-            const tl = (m.texto_legal ?? '').trim()
-            return !tl || tl === padrao ? (
-              <ul className="list-disc pl-5 space-y-1 mb-2 text-gray-700">
-                {DOC_MIDIA_NOTES.map((n, i) => (
-                  <li key={i}><span className={n.highlight ? 'bg-yellow-200 px-0.5 font-medium' : ''}>{n.text}</span></li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-gray-600 whitespace-pre-line mb-2">{m.texto_legal}</p>
-            )
-          })()}
+            </div>
+          </div>
 
           {/* Datas */}
           <div className="grid grid-cols-2 gap-6 mt-6">
@@ -211,6 +254,13 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
           <div className="grid grid-cols-2 gap-10 mt-16">
             <div className="text-center"><div className="border-t border-gray-400 pt-1 text-gray-700">{AGENCY.razao}</div></div>
             <div className="text-center"><div className="border-t border-gray-400 pt-1 text-gray-700">{ws?.legal_name || ws?.name || ''}</div></div>
+          </div>
+
+          {/* Rodapé: identifica o documento e quando saiu — é por ele que se
+              confere se a via impressa é a mais recente. */}
+          <div className="flex justify-between items-center border-t border-gray-300 mt-10 pt-2 text-[10px] text-gray-500">
+            <span>Flow | Autorização de Mídia {tipoLabel} nº {m.numero ?? ''}</span>
+            <span>Gerado em {geradoEm}</span>
           </div>
         </div>
       </div>
