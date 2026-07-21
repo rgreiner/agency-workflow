@@ -115,7 +115,7 @@ export default async function ActivityPage({
     { data: briefingCampanha },
   ] = await Promise.all([
     orgId ? supabase.from('workspaces').select('id, name, campaigns(id, name)').eq('org_id', orgId).eq('archived', false).eq('campaigns.archived', false).order('name') : Promise.resolve({ data: [] }),
-    (user && orgId) ? supabase.from('organization_members').select('role').eq('org_id', orgId).eq('user_id', user.id).single() : Promise.resolve({ data: null }),
+    (user && orgId) ? supabase.from('organization_members').select('role, org_positions(allowed_statuses)').eq('org_id', orgId).eq('user_id', user.id).single() : Promise.resolve({ data: null }),
     orgId ? supabase.from('organization_members').select('user_id, profiles!user_id(id, full_name, email, avatar_url)').eq('org_id', orgId) : Promise.resolve({ data: [] }),
     commentIds.length ? sb.from('activity_comment_reactions').select('comment_id, user_id, emoji').in('comment_id', commentIds) : Promise.resolve({ data: [] }),
     orgRow?.id ? sb.from('org_settings').select('status_overrides').eq('org_id', orgRow.id).single() : Promise.resolve({ data: null }),
@@ -125,6 +125,13 @@ export default async function ActivityPage({
     sb.from('documents').select('id, title').eq('briefing_campaign_id', campaignId).eq('archived', false).maybeSingle(),
   ])
   const muted = !!muteRow
+
+  // Quem move a tarefa precisa cobrir o status ATUAL no cargo (migration 133).
+  // owner/admin passam por cima — o facilitador não tem cargo e ficaria travado.
+  const meuPapel = (membership as { role?: string } | null)?.role ?? ''
+  const meusStatus = (((membership as { org_positions?: { allowed_statuses?: string[] } | null } | null)
+    ?.org_positions)?.allowed_statuses ?? []) as string[]
+  const ignoraCargo = meuPapel === 'owner' || meuPapel === 'admin'
 
   const moveProjects = (projWs ?? []).flatMap((w: { id: string; name: string; campaigns?: { id: string; name: string }[] }) =>
     ((w.campaigns as unknown as { id: string; name: string }[]) ?? []).map(c => ({
@@ -300,6 +307,8 @@ export default async function ActivityPage({
                     currentStatus={activity.status}
                     path={path}
                     compact
+                    meusStatus={meusStatus}
+                    ignoraCargo={ignoraCargo}
                   />
 
                   {/* Datas */}

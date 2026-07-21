@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useEffect } from 'react'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { updateActivityStatus } from '@/app/actions/activity'
 import { cn } from '@/lib/utils'
-import { ChevronDown, Check, Loader2, Search } from 'lucide-react'
+import { ChevronDown, Check, Loader2, Search, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 
 const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim()
@@ -14,9 +14,14 @@ interface Props {
   currentStatus: string
   path: string
   compact?: boolean
+  /** Status que o cargo da pessoa cobre. Vazio = sem cargo ou cargo não
+   *  configurado → não trava (a regra vive no servidor; aqui é só antecipar). */
+  meusStatus?: string[]
+  /** owner/admin passam por cima da trava de cargo. */
+  ignoraCargo?: boolean
 }
 
-export function StatusChanger({ activityId, currentStatus, path, compact }: Props) {
+export function StatusChanger({ activityId, currentStatus, path, compact, meusStatus = [], ignoraCargo = false }: Props) {
   const [selected, setSelected] = useState(currentStatus)
   const [comment, setComment] = useState('')
   const [open, setOpen] = useState(false)
@@ -27,6 +32,15 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
   const statusConfig = useStatusConfig()
   const selectedCfg = statusConfig.find(s => s.value === selected)!
   const changed = selected !== currentStatus
+
+  // A permissão é sobre o status ATUAL — quem é dono da etapa decide quando ela
+  // termina. O servidor revalida; isto aqui só evita o clique que já vai falhar.
+  const podeMover = ignoraCargo || meusStatus.length === 0 || meusStatus.includes(currentStatus)
+
+  // "Avançar" = próximo da ordem. Fluxo real (Design → Revisão etc.) vem depois;
+  // por ora a ordem da lista já cobre a maioria dos casos.
+  const idxAtual = statusConfig.findIndex(s => s.value === currentStatus)
+  const proximo = idxAtual >= 0 && idxAtual < statusConfig.length - 1 ? statusConfig[idxAtual + 1] : null
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -70,19 +84,37 @@ export function StatusChanger({ activityId, currentStatus, path, compact }: Prop
   if (compact) {
     return (
       <div ref={ref} className="relative">
-        <button
-          type="button"
-          onClick={() => { setOpen(o => !o); setQuery('') }}
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          aria-label={`Status: ${selectedCfg.label} — alterar`}
-          style={{ backgroundColor: selectedCfg.bg, color: selectedCfg.text }}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
-        >
-          {isPending ? <Loader2 aria-hidden className="w-3 h-3 animate-spin" /> : null}
-          {selectedCfg.label}
-          <ChevronDown aria-hidden className={cn('w-3.5 h-3.5 transition-transform', open && 'rotate-180')} />
-        </button>
+        <span className="inline-flex items-stretch rounded-lg overflow-hidden">
+          <button
+            type="button"
+            disabled={!podeMover}
+            onClick={() => { setOpen(o => !o); setQuery('') }}
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            aria-label={`Status: ${selectedCfg.label} — alterar`}
+            title={podeMover ? undefined : `Seu cargo não cobre ${selectedCfg.label} — quem cuida dessa etapa é que move`}
+            style={{ backgroundColor: selectedCfg.bg, color: selectedCfg.text }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isPending ? <Loader2 aria-hidden className="w-3 h-3 animate-spin" /> : null}
+            {selectedCfg.label}
+            <ChevronDown aria-hidden className={cn('w-3.5 h-3.5 transition-transform', open && 'rotate-180')} />
+          </button>
+          {/* Avançar: um clique pro próximo da ordem, sem abrir o seletor. */}
+          {proximo && podeMover && (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => applyStatus(proximo.value)}
+              title={`Avançar para ${proximo.label}`}
+              aria-label={`Avançar para ${proximo.label}`}
+              style={{ backgroundColor: selectedCfg.bg, color: selectedCfg.text }}
+              className="flex items-center px-1.5 border-l border-black/10 hover:brightness-95 transition disabled:opacity-50"
+            >
+              <ChevronRight aria-hidden className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </span>
 
         {open && (
           <div
