@@ -16,7 +16,13 @@ import type { FornecedorOpt } from '@/lib/midia-selectors'
 export interface Localizacao { endereco: string; cidade: string }
 export interface ExternaValues {
   workspace_id: string; campaign_id: string; veiculo_id: string; titulo: string
-  emissao: string; job: string; aut_veiculo: string; codigo_identificador: string; nota_fiscal: string
+  emissao: string
+  // Job, Aut. no Veículo, Código Identificador e Nota Fiscal saíram da TELA da
+  // Externa (21/07/2026): herança do Siga que ninguém preenchia (0 registros com
+  // valor) e que a PI nunca imprimiu. Continuam aqui como PASSAGEM: são lidos do
+  // banco e reenviados como estavam, senão editar a MX apagaria a coluna — o que
+  // morderia no dia em que um import do Siga trouxesse esses valores.
+  job: string; aut_veiculo: string; codigo_identificador: string; nota_fiscal: string
   mes: string; ano: string; bisemana: string; periodo: string; praca: string; abrangencia: string; especie: string
   negociacao: string; producao_tipo: string; pedido_producao: string
   producao_valor: string; producao_comissao_pct: string; producao_quantidade: string
@@ -203,10 +209,6 @@ export function ExternaForm({
             <div><label className={labelCls}>Veículo <span className="text-red-500">*</span></label>
               <Select value={form.veiculo_id} onChange={onVeiculoChange} options={veiculoOptions} placeholder="Selecionar veículo" /></div>
             <div><label className={labelCls}>Emissão</label><input type="date" value={form.emissao} onChange={e => set('emissao', e.target.value)} className={inputCls} /></div>
-            <div><label className={labelCls}>Job</label><input value={form.job} onChange={e => set('job', e.target.value)} className={inputCls} /></div>
-            <div><label className={labelCls}>Aut. no Veículo</label><input value={form.aut_veiculo} onChange={e => set('aut_veiculo', e.target.value)} className={inputCls} /></div>
-            <div><label className={labelCls}>Código Identificador</label><input value={form.codigo_identificador} onChange={e => set('codigo_identificador', e.target.value)} className={inputCls} /></div>
-            <div><label className={labelCls}>Nota Fiscal</label><input value={form.nota_fiscal} onChange={e => set('nota_fiscal', e.target.value)} className={inputCls} /></div>
           </div>
           <div className="mt-4"><label className={labelCls}>Produto / Título <span className="text-red-500">*</span></label>
             <input value={form.titulo} onChange={e => set('titulo', e.target.value)} className={inputCls} required /></div>
