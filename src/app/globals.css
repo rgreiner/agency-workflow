@@ -320,3 +320,6 @@ button:focus-visible,
 [data-feed-filter="comentarios"] [data-kind="status"],
 [data-feed-filter="comentarios"] [data-kind="field"] { display: none; }
 [data-feed-filter="historico"] [data-kind="comment"] { display: none; }
+/* No modo "Histórico" o grupo recolhido não faz sentido: abre tudo e some o gatilho. */
+[data-feed-filter="historico"] [data-history-toggle] { display: none; }
+[data-feed-filter="historico"] [data-history-list] { display: block !important; }

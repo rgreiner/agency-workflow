@@ -13,6 +13,7 @@ import { CommentBox } from './CommentBox'
 import { CommentContent } from './CommentContent'
 import { ScrollFeedBottom } from './ScrollFeedBottom'
 import { FeedFilter } from './FeedFilter'
+import { HistoryGroup } from './HistoryGroup'
 import { RegenerateDriveButton } from './RegenerateDriveButton'
 import { MuteButton } from './MuteButton'
 import { AssigneeSelector } from './AssigneeSelector'
@@ -209,6 +210,97 @@ export default async function ActivityPage({
   const overdue = isOverdue(activity.due_date)
 
   const path = `/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}/activities/${activityId}`
+
+  // Render de um item do feed — extraído para poder agrupar movimentações consecutivas.
+  function renderItem(item: FeedItem) {
+    if (item.kind === 'comment') {
+      return (
+        <div key={item.id} data-kind="comment" className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <Avatar name={item.profile?.full_name ?? '?'} avatarUrl={item.profile?.avatar_url} size="sm" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-xs font-semibold text-gray-800">{item.profile?.full_name ?? 'Usuário'}</span>
+                <span className="text-[10px] text-gray-500">{formatDate(item.at)}</span>
+              </div>
+              {item.replyTo && commentsById.has(item.replyTo) && (
+                <div className="mb-1.5 border-l-2 border-orange-200 pl-2 py-0.5 bg-gray-50 rounded-r text-xs text-gray-500">
+                  <span className="font-medium text-gray-600">{commentsById.get(item.replyTo)!.author}</span>
+                  <span className="block line-clamp-2">{commentsById.get(item.replyTo)!.content}</span>
+                </div>
+              )}
+              <CommentContent
+                path={path}
+                commentId={item.id}
+                content={item.content}
+                edited={item.edited}
+                canEdit={!!user && item.authorId === user.id}
+                canDelete={!!user && (item.authorId === user.id || isOwner)}
+              />
+              <div className="flex items-center justify-between gap-3">
+                <ReactionBar path={path} commentId={item.id} currentUserId={user?.id ?? ''} reactions={reactionsByComment.get(item.id) ?? []} />
+                <div className="mt-2 shrink-0"><ReplyButton id={item.id} author={item.profile?.full_name ?? 'Usuário'} preview={(isHtml(item.content) ? stripHtml(item.content) : item.content).slice(0, 80)} /></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    if (item.kind === 'status') {
+      const fromCfg = statusConfig.find(s => s.value === item.from)
+      const toCfg   = statusConfig.find(s => s.value === item.to)
+      return (
+        <div key={item.id} data-kind="status" className="flex items-start gap-2.5 text-xs text-gray-500 px-1">
+          <Avatar name={item.profile?.full_name ?? '?'} avatarUrl={item.profile?.avatar_url} size="sm" />
+          <div className="flex-1 min-w-0 pt-0.5">
+            <div className="flex items-center gap-1.5 flex-wrap leading-relaxed">
+              <span className="font-medium text-gray-700">{item.profile?.full_name ?? 'Sistema'}</span>
+              <span>moveu de</span>
+              {fromCfg
+                ? <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: fromCfg.bg, color: fromCfg.text }}>{fromCfg.label}</span>
+                : <span className="text-gray-500">início</span>
+              }
+              <ArrowRight className="w-3 h-3 text-gray-300 shrink-0" />
+              {toCfg && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: toCfg.bg, color: toCfg.text }}>{toCfg.label}</span>}
+            </div>
+            {item.comment && (
+              <p className="text-[11px] text-gray-500 mt-1 italic whitespace-pre-wrap break-words">"{item.comment}"</p>
+            )}
+            <p className="text-[10px] text-gray-500 mt-0.5">{formatDate(item.at)}</p>
+          </div>
+        </div>
+      )
+    }
+
+    // field change
+    return (
+      <div key={item.id} data-kind="field" className="flex items-start gap-2.5 text-xs text-gray-500 px-1">
+        <Avatar name={item.profile?.full_name ?? '?'} avatarUrl={item.profile?.avatar_url} size="sm" />
+        <div className="flex-1 min-w-0 pt-0.5">
+          <div className="flex items-center gap-1.5 flex-wrap leading-relaxed">
+            <span className="font-medium text-gray-700">{item.profile?.full_name ?? 'Sistema'}</span>
+            <Pencil className="w-3 h-3 text-gray-300 shrink-0" />
+            <span>alterou <span className="font-medium text-gray-600">{FIELD_LABELS[item.field] ?? item.field}</span></span>
+          </div>
+          {item.newVal && (
+            <p className="text-[11px] text-gray-500 mt-0.5">→ {item.newVal.slice(0, 60)}{item.newVal.length > 60 ? '…' : ''}</p>
+          )}
+          <p className="text-[10px] text-gray-500 mt-0.5">{formatDate(item.at)}</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Corridas de movimentações consecutivas (status/campo) viram um grupo recolhível;
+  // comentário sempre fica solto, como item próprio.
+  const feedRuns: FeedItem[][] = []
+  for (const item of feed) {
+    const last = feedRuns[feedRuns.length - 1]
+    if (item.kind !== 'comment' && last && last[0].kind !== 'comment') last.push(item)
+    else feedRuns.push([item])
+  }
+
 
   // extra_links é coluna nova (não tipada nos types gerados) → acesso por cast.
   const extraLinksRaw = (activity as { extra_links?: unknown }).extra_links
@@ -535,85 +627,11 @@ export default async function ActivityPage({
               <p className="text-xs text-gray-500 text-center py-8">Nenhuma atividade ainda.</p>
             )}
 
-            {feed.map(item => {
-              if (item.kind === 'comment') {
-                return (
-                  <div key={item.id} data-kind="comment" className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                    <div className="flex items-start gap-3">
-                      <Avatar name={item.profile?.full_name ?? '?'} avatarUrl={item.profile?.avatar_url} size="sm" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className="text-xs font-semibold text-gray-800">{item.profile?.full_name ?? 'Usuário'}</span>
-                          <span className="text-[10px] text-gray-500">{formatDate(item.at)}</span>
-                        </div>
-                        {item.replyTo && commentsById.has(item.replyTo) && (
-                          <div className="mb-1.5 border-l-2 border-orange-200 pl-2 py-0.5 bg-gray-50 rounded-r text-xs text-gray-500">
-                            <span className="font-medium text-gray-600">{commentsById.get(item.replyTo)!.author}</span>
-                            <span className="block line-clamp-2">{commentsById.get(item.replyTo)!.content}</span>
-                          </div>
-                        )}
-                        <CommentContent
-                          path={path}
-                          commentId={item.id}
-                          content={item.content}
-                          edited={item.edited}
-                          canEdit={!!user && item.authorId === user.id}
-                          canDelete={!!user && (item.authorId === user.id || isOwner)}
-                        />
-                        <div className="flex items-center justify-between gap-3">
-                          <ReactionBar path={path} commentId={item.id} currentUserId={user?.id ?? ''} reactions={reactionsByComment.get(item.id) ?? []} />
-                          <div className="mt-2 shrink-0"><ReplyButton id={item.id} author={item.profile?.full_name ?? 'Usuário'} preview={(isHtml(item.content) ? stripHtml(item.content) : item.content).slice(0, 80)} /></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              }
-
-              if (item.kind === 'status') {
-                const fromCfg = statusConfig.find(s => s.value === item.from)
-                const toCfg   = statusConfig.find(s => s.value === item.to)
-                return (
-                  <div key={item.id} data-kind="status" className="flex items-start gap-2.5 text-xs text-gray-500 px-1">
-                    <Avatar name={item.profile?.full_name ?? '?'} avatarUrl={item.profile?.avatar_url} size="sm" />
-                    <div className="flex-1 min-w-0 pt-0.5">
-                      <div className="flex items-center gap-1.5 flex-wrap leading-relaxed">
-                        <span className="font-medium text-gray-700">{item.profile?.full_name ?? 'Sistema'}</span>
-                        <span>moveu de</span>
-                        {fromCfg
-                          ? <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: fromCfg.bg, color: fromCfg.text }}>{fromCfg.label}</span>
-                          : <span className="text-gray-500">início</span>
-                        }
-                        <ArrowRight className="w-3 h-3 text-gray-300 shrink-0" />
-                        {toCfg && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: toCfg.bg, color: toCfg.text }}>{toCfg.label}</span>}
-                      </div>
-                      {item.comment && (
-                        <p className="text-[11px] text-gray-500 mt-1 italic whitespace-pre-wrap break-words">"{item.comment}"</p>
-                      )}
-                      <p className="text-[10px] text-gray-500 mt-0.5">{formatDate(item.at)}</p>
-                    </div>
-                  </div>
-                )
-              }
-
-              // field change
-              return (
-                <div key={item.id} data-kind="field" className="flex items-start gap-2.5 text-xs text-gray-500 px-1">
-                  <Avatar name={item.profile?.full_name ?? '?'} avatarUrl={item.profile?.avatar_url} size="sm" />
-                  <div className="flex-1 min-w-0 pt-0.5">
-                    <div className="flex items-center gap-1.5 flex-wrap leading-relaxed">
-                      <span className="font-medium text-gray-700">{item.profile?.full_name ?? 'Sistema'}</span>
-                      <Pencil className="w-3 h-3 text-gray-300 shrink-0" />
-                      <span>alterou <span className="font-medium text-gray-600">{FIELD_LABELS[item.field] ?? item.field}</span></span>
-                    </div>
-                    {item.newVal && (
-                      <p className="text-[11px] text-gray-500 mt-0.5">→ {item.newVal.slice(0, 60)}{item.newVal.length > 60 ? '…' : ''}</p>
-                    )}
-                    <p className="text-[10px] text-gray-500 mt-0.5">{formatDate(item.at)}</p>
-                  </div>
-                </div>
-              )
-            })}
+            {feedRuns.map(run =>
+              run.length > 1
+                ? <HistoryGroup key={run[0].id} count={run.length}>{run.map(renderItem)}</HistoryGroup>
+                : renderItem(run[0])
+            )}
             <ScrollFeedBottom feedId="activity-feed" count={feed.length} />
           </div>
 
