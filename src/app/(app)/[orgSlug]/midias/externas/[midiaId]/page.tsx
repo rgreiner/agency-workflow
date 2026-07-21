@@ -18,7 +18,7 @@ export default async function EditarExternaPage({
   params: Promise<{ orgSlug: string; midiaId: string }>
 }) {
   const { orgSlug, midiaId } = await params
-  const { supabase, orgId, clientes, veiculos, members, userId, today } = await loadMidiaSelectors(orgSlug)
+  const { supabase, orgId, clientes, veiculos, fornecedores, members, userId, today } = await loadMidiaSelectors(orgSlug)
   const defaultTextoLegal = await midiaTextoLegalPadrao(supabase, orgId)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -37,6 +37,7 @@ export default async function EditarExternaPage({
     negociacao: s(det.negociacao) || 'custos_normais', producao_tipo: s(det.producao_tipo) || 'no_veiculo',
     pedido_producao: s(det.pedido_producao),
     producao_valor: s(det.producao_valor), producao_comissao_pct: s(det.producao_comissao_pct), producao_quantidade: s(det.producao_quantidade),
+    producao_fornecedor_id: s(det.producao_fornecedor_id),
     custo: s(det.custo), desconto_exibicao: s(det.desconto_exibicao) || '0',
     desconto_pct: num2br(m.desconto_pct), faturamento: s(m.faturamento) || 'valor_bruto',
     prazo: s(m.prazo) || 'a_vista', data_base: s(m.data_base), dias_agencia: s(m.dias_agencia) || '7',
@@ -51,6 +52,7 @@ export default async function EditarExternaPage({
       <ExternaForm
         clientes={clientes}
         veiculos={veiculos}
+      fornecedores={fornecedores}
         members={members}
         defaultResponsavelId={userId}
         today={today}

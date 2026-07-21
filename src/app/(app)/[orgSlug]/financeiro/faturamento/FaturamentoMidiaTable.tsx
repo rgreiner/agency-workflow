@@ -20,6 +20,9 @@ export interface MidiaView {
   contatos: ContatoCard[]
   valorDoc: number
   comissao: number
+  /** Comissão da produção (migration 132) — vira um 2º lançamento, com outro pagador. */
+  comissaoProducao: number
+  pagadorProducao: string
   pagador: string
   competencia: string
   vencimento: string
@@ -74,7 +77,16 @@ function MidiaRow({ orgSlug, midia }: { orgSlug: string; midia: MidiaView }) {
         <td className="px-4 py-3 text-sm text-gray-600">{midia.cliente}</td>
         <td className="px-4 py-3 text-sm text-gray-600">{midia.veiculo}</td>
         <td className="px-4 py-3 text-sm text-gray-600 text-right tabular-nums">{formatBRL(midia.valorDoc)}</td>
-        <td className="px-4 py-3 text-sm font-medium text-emerald-600 text-right tabular-nums">{formatBRL(midia.comissao)}</td>
+        <td className="px-4 py-3 text-sm font-medium text-emerald-600 text-right tabular-nums">
+          {formatBRL(midia.comissao + midia.comissaoProducao)}
+          {/* Dois lançamentos vão nascer daqui — a conferência tem que mostrar isso
+              ANTES do clique, senão o segundo aparece do nada em Lançamentos. */}
+          {midia.comissaoProducao > 0 && (
+            <span className="block text-[11px] font-normal text-gray-500" title={`Produção paga por ${midia.pagadorProducao}`}>
+              {formatBRL(midia.comissao)} veic. + {formatBRL(midia.comissaoProducao)} prod.
+            </span>
+          )}
+        </td>
         <td className="px-3 py-3">
           <div className="flex items-center justify-end gap-1">
             <ContatosButton contatos={midia.contatos} titulo={`${docNumero(midia.serie, midia.numero)} · ${midia.titulo}`} />

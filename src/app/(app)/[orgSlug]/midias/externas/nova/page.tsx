@@ -9,13 +9,14 @@ export default async function NovaExternaPage({
   params: Promise<{ orgSlug: string }>
 }) {
   const { orgSlug } = await params
-  const { supabase, orgId, clientes, veiculos, members, userId, today } = await loadMidiaSelectors(orgSlug)
+  const { supabase, orgId, clientes, veiculos, fornecedores, members, userId, today } = await loadMidiaSelectors(orgSlug)
   const defaultTextoLegal = await midiaTextoLegalPadrao(supabase, orgId)
 
   return (
     <ExternaForm
       clientes={clientes}
       veiculos={veiculos}
+      fornecedores={fornecedores}
       members={members}
       defaultResponsavelId={userId}
       today={today}

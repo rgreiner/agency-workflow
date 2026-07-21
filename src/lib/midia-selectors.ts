@@ -25,6 +25,13 @@ export async function loadMidiaSelectors(orgSlug: string) {
     .from('veiculos').select('id, name, commission_pct').eq('org_id', org.id).eq('archived', false).order('name')
   const veiculos = (veicRaw ?? []) as VeiculoOpt[]
 
+  // Fornecedores entram aqui por causa da PRODUÇÃO da Mídia Externa: quando ela é
+  // "De Terceiros", quem paga a comissão é o fornecedor, não o veículo.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: fornRaw } = await (supabase as any)
+    .from('fornecedores').select('id, name').eq('org_id', org.id).eq('archived', false).order('name')
+  const fornecedores = (fornRaw ?? []) as FornecedorOpt[]
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: memRaw } = await (supabase as any)
     .from('organization_members').select('profiles!user_id(id, full_name, email)').eq('org_id', org.id)
@@ -34,7 +41,7 @@ export async function loadMidiaSelectors(orgSlug: string) {
   })).filter((m: MemberOpt) => m.id)
 
   const today = new Date().toISOString().slice(0, 10)
-  return { supabase, orgId: org.id as string, userId: user.id as string, clientes, veiculos, members, today }
+  return { supabase, orgId: org.id as string, userId: user.id as string, clientes, veiculos, fornecedores, members, today }
 }
 
 export interface FornecedorOpt { id: string; name: string }

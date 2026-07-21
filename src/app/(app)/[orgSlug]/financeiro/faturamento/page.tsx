@@ -1,5 +1,5 @@
 import { assertFinanceAccess } from '@/lib/finance'
-import { formatBRL, FATURAMENTO_PAGADOR } from '@/lib/midia'
+import { formatBRL, parseMoney, FATURAMENTO_PAGADOR } from '@/lib/midia'
 import { FaturamentoFeesTable } from './FaturamentoFeesTable'
 import { FaturamentoMidiaTable, type MidiaView } from './FaturamentoMidiaTable'
 import type { ContatoCard } from './ContatosButton'
@@ -83,7 +83,7 @@ export default async function FaturamentoPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: docsRaw } = await (supabase as any)
     .from('midias')
-    .select(`id, numero, serie, titulo, valor, desconto_pct, faturamento, prazo, data_base, dias_agencia, anexos, workspaces(${WS_CONTATO}), veiculos(name, tax_id, notes, ${CONTATO_JSON})`)
+    .select(`id, numero, serie, titulo, valor, desconto_pct, faturamento, prazo, data_base, dias_agencia, detalhe, anexos, workspaces(${WS_CONTATO}), veiculos(name, tax_id, notes, ${CONTATO_JSON})`)
     .eq('org_id', orgId).in('situacao', ['faturar', 'faturado']).eq('archived', false)
     .order('numero', { ascending: false })
 
@@ -93,6 +93,24 @@ export default async function FaturamentoPage({
     .from('lancamentos').select('origem_id').eq('org_id', orgId).eq('origem_tipo', 'midia')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const lancadas = new Set<string>((lancRaw ?? []).map((l: any) => l.origem_id))
+
+  // Fornecedores: usados no contato do Pedido (detalhe.fornecedor_id) E como pagador
+  // da comissão de produção da Mídia Externa quando ela é "De Terceiros" (migration 132).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: fornRaw } = await (supabase as any)
+    .from('fornecedores').select(`id, name, tax_id, notes, ${CONTATO_JSON}`).eq('org_id', orgId)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fornMap = new Map<string, any>((fornRaw ?? []).map((f: any) => [f.id, f]))
+
+  /** Mesma conta da RPC gerar_lancamento_midia — o valor conferido tem que ser o lançado.
+   *  Os campos são TEXTO do form ("1.234,56"), então lê com parseMoney, igual ao _br_num. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function comissaoProducaoDe(det: any): number {
+    const v = parseMoney(String(det?.producao_valor ?? ''))
+    const q = Math.max(1, parseInt(String(det?.producao_quantidade ?? '1'), 10) || 1)
+    const pct = parseMoney(String(det?.producao_comissao_pct ?? ''))
+    return Math.round(v * q * pct) / 100
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const midias: MidiaView[] = ((docsRaw ?? []) as any[]).filter(d => !lancadas.has(d.id)).map(d => ({
@@ -105,6 +123,10 @@ export default async function FaturamentoPage({
     contatos: [contatoCard(d.workspaces, 'Cliente', true), contatoCard(d.veiculos, 'Veículo')].filter(Boolean) as ContatoCard[],
     valorDoc: Number(d.valor ?? 0),
     comissao: Math.round(Number(d.valor ?? 0) * Number(d.desconto_pct ?? 0)) / 100,
+    comissaoProducao: comissaoProducaoDe(d.detalhe),
+    pagadorProducao: d.detalhe?.producao_tipo === 'de_terceiros'
+      ? (fornMap.get(d.detalhe?.producao_fornecedor_id)?.name ?? `${d.veiculos?.name ?? '—'} (sem fornecedor definido)`)
+      : (d.veiculos?.name ?? '—'),
     pagador: FATURAMENTO_PAGADOR[d.faturamento] === 'veiculo'
       ? `${d.veiculos?.name ?? '—'} (veículo)` : `${d.workspaces?.name ?? '—'} (cliente)`,
     competencia: (d.data_base as string) ?? '',
@@ -116,7 +138,8 @@ export default async function FaturamentoPage({
     diasAgencia: Number(d.dias_agencia ?? 0),
     anexos: (Array.isArray(d.anexos) ? d.anexos : []) as Anexo[],
   }))
-  const totalComissao = midias.reduce((s, d) => s + d.comissao, 0)
+  // Soma as duas partes: é o total que vai virar lançamento a receber.
+  const totalComissao = midias.reduce((s, d) => s + d.comissao + d.comissaoProducao, 0)
   const totalDocs = midias.reduce((s, d) => s + d.valorDoc, 0)
 
   // Produção liberada pro Financeiro (estado unificado 'faturar' = A Faturar): Fee e Pedido.
@@ -127,12 +150,6 @@ export default async function FaturamentoPage({
     .eq('org_id', orgId).eq('archived', false)
     .eq('situacao', 'faturar').in('tipo', ['fee', 'pedido'])
     .order('numero', { ascending: false })
-  // Fornecedores da org (pra montar o contato do pedido a partir de detalhe.fornecedor_id).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: fornRaw } = await (supabase as any)
-    .from('fornecedores').select(`id, name, tax_id, notes, ${CONTATO_JSON}`).eq('org_id', orgId)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fornMap = new Map<string, any>((fornRaw ?? []).map((f: any) => [f.id, f]))
   // Parcelas que viram lançamento a receber (o que a agência realmente fatura).
   const RECEBER_TIPOS = ['receber_bv', 'receber_honorarios', 'receber_cliente']
   const COMISSAO_TIPOS = ['receber_bv', 'receber_honorarios']

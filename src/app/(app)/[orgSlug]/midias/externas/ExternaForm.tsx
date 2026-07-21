@@ -10,6 +10,7 @@ import {
   MIDIA_SITUACAO_OPTIONS, FATURAMENTO_PAGADOR, formatBRL, parseMoney,
 } from '@/lib/midia'
 import type { ClienteOpt, VeiculoOpt, MemberOpt } from '../simplificada/MidiaForm'
+import type { FornecedorOpt } from '@/lib/midia-selectors'
 
 export interface Localizacao { endereco: string; cidade: string }
 export interface ExternaValues {
@@ -18,6 +19,8 @@ export interface ExternaValues {
   mes: string; ano: string; bisemana: string; periodo: string; praca: string; abrangencia: string; especie: string
   negociacao: string; producao_tipo: string; pedido_producao: string
   producao_valor: string; producao_comissao_pct: string; producao_quantidade: string
+  /** Quem paga a comissão da produção quando ela é "De Terceiros" (migration 132). */
+  producao_fornecedor_id: string
   custo: string; desconto_exibicao: string
   desconto_pct: string; faturamento: string; prazo: string; data_base: string; dias_agencia: string
   primeira_veiculacao: string; ultima_veiculacao: string; contato: string; responsavel_id: string; situacao: string
@@ -48,7 +51,7 @@ function emptyValues(today: string, responsavelId: string): ExternaValues {
     emissao: today, job: '', aut_veiculo: '', codigo_identificador: '', nota_fiscal: '',
     mes: String(Number(m)), ano: y, bisemana: 'outro', periodo: '', praca: '', abrangencia: 'estadual', especie: 'Outdoor',
     negociacao: 'custos_normais', producao_tipo: 'no_veiculo', pedido_producao: '',
-    producao_valor: '', producao_comissao_pct: '', producao_quantidade: '',
+    producao_valor: '', producao_comissao_pct: '', producao_quantidade: '', producao_fornecedor_id: '',
     custo: '', desconto_exibicao: '0',
     desconto_pct: '20', faturamento: 'valor_bruto', prazo: '15_dfm', data_base: today, dias_agencia: '7',
     primeira_veiculacao: '', ultima_veiculacao: '', contato: '', responsavel_id: responsavelId, situacao: 'em_aberto',
@@ -57,9 +60,9 @@ function emptyValues(today: string, responsavelId: string): ExternaValues {
 }
 
 export function ExternaForm({
-  clientes, veiculos, members, defaultResponsavelId, today, redirectTo, initial, submitLabel = 'Gravar', defaultTextoLegal = '', onSubmit,
+  clientes, veiculos, fornecedores, members, defaultResponsavelId, today, redirectTo, initial, submitLabel = 'Gravar', defaultTextoLegal = '', onSubmit,
 }: {
-  clientes: ClienteOpt[]; veiculos: VeiculoOpt[]; members: MemberOpt[]
+  clientes: ClienteOpt[]; veiculos: VeiculoOpt[]; fornecedores: FornecedorOpt[]; members: MemberOpt[]
   defaultResponsavelId: string; today: string; redirectTo: string
   initial?: Partial<ExternaValues>; submitLabel?: string; defaultTextoLegal?: string
   onSubmit: (fd: FormData) => Promise<{ error?: string } | void>
@@ -71,8 +74,17 @@ export function ExternaForm({
   })
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
+  // A Data Base manda no vencimento (prazo DFM). Ela nasce com "hoje", mas o prazo
+  // real é contado da PRIMEIRA VEICULAÇÃO — emitir a MX em agosto pra um outdoor
+  // que veicula em setembro jogava o vencimento um mês pra trás sem ninguém notar.
+  // Então ela acompanha a 1ª veiculação, até alguém editá-la de propósito.
+  const [dataBaseManual, setDataBaseManual] = useState(!!initial?.data_base)
 
   function set<K extends keyof ExternaValues>(k: K, v: ExternaValues[K]) { setForm(f => ({ ...f, [k]: v })) }
+  function setPrimeiraVeiculacao(v: string) {
+    setForm(f => ({ ...f, primeira_veiculacao: v, data_base: dataBaseManual || !v ? f.data_base : v }))
+  }
+  function setDataBase(v: string) { setDataBaseManual(true); set('data_base', v) }
   const setLoc = (i: number, k: keyof Localizacao, v: string) => setForm(f => ({ ...f, localizacoes: f.localizacoes.map((l, idx) => idx === i ? { ...l, [k]: v } : l) }))
   const addLoc = () => setForm(f => ({ ...f, localizacoes: [...f.localizacoes, newLoc()] }))
   const delLoc = (i: number) => setForm(f => ({ ...f, localizacoes: f.localizacoes.filter((_, idx) => idx !== i) }))
@@ -80,6 +92,10 @@ export function ExternaForm({
   const valor = parseMoney(form.custo) * (1 - parseMoney(form.desconto_exibicao) / 100)
   const comissao = valor * (parseMoney(form.desconto_pct) / 100)
   const pagador = FATURAMENTO_PAGADOR[form.faturamento] ?? 'cliente'
+  const fornecedorOptions = useMemo(() => fornecedores.map(f => ({ value: f.id, label: f.name })), [fornecedores])
+  const pagadorProducao = form.producao_tipo === 'de_terceiros'
+    ? (fornecedores.find(f => f.id === form.producao_fornecedor_id)?.name ?? 'fornecedor a definir')
+    : (veiculos.find(v => v.id === form.veiculo_id)?.name ?? 'veículo')
   const producaoQtd = parseInt(form.producao_quantidade || '1', 10) || 1
   const producaoTotal = parseMoney(form.producao_valor) * producaoQtd
   const producaoComissao = producaoTotal * (parseMoney(form.producao_comissao_pct) / 100)
@@ -121,7 +137,13 @@ export function ExternaForm({
     fd.set('detalhe', JSON.stringify({
       mes: form.mes, ano: form.ano, bisemana: form.bisemana, periodo: form.periodo, especie: form.especie,
       negociacao: form.negociacao, producao_tipo: form.producao_tipo, pedido_producao: form.pedido_producao,
-      producao_valor: form.producao_valor, producao_comissao_pct: form.producao_comissao_pct, producao_quantidade: form.producao_quantidade,
+      // Gravado EXATAMENTE como digitado, igual aos outros campos de dinheiro daqui.
+      // Normalizar pra "350.5" quebraria: o parseMoney do app tira os pontos
+      // ("350.5" → 3505), então a PI e a reedição leriam 10× o valor.
+      // Quem espelha essa leitura no banco é _br_num (migration 132).
+      producao_valor: form.producao_valor, producao_comissao_pct: form.producao_comissao_pct,
+      producao_quantidade: form.producao_quantidade,
+      producao_fornecedor_id: form.producao_tipo === 'de_terceiros' ? form.producao_fornecedor_id : '',
       custo: form.custo, desconto_exibicao: form.desconto_exibicao, localizacoes: form.localizacoes,
     }))
 
@@ -206,10 +228,31 @@ export function ExternaForm({
             <div><label className={labelCls}>Produção — Comissão (%)</label><input inputMode="decimal" value={form.producao_comissao_pct} onChange={e => set('producao_comissao_pct', e.target.value)} placeholder="0" className={inputCls} /></div>
             <div><label className={labelCls}>Produção — Quantidade</label><input inputMode="numeric" value={form.producao_quantidade} onChange={e => set('producao_quantidade', e.target.value)} placeholder="1" className={inputCls} /></div>
           </div>
+
+          {/* Quem produziu é quem paga a comissão. "No Veículo" já se sabe (é o
+              próprio veículo); "De Terceiros" precisa dizer qual fornecedor —
+              sem isso o lançamento nasceria cobrando de quem não deve. */}
+          {form.producao_tipo === 'de_terceiros' && (
+            <div className="mt-4 max-w-md">
+              <label className={labelCls}>Produção — Fornecedor (quem paga a comissão)</label>
+              <Select value={form.producao_fornecedor_id} onChange={v => set('producao_fornecedor_id', v)}
+                options={fornecedorOptions} placeholder="Selecionar fornecedor" />
+            </div>
+          )}
+
           {producaoTotal > 0 && (
             <div className="mt-3 rounded-xl bg-amber-50 border border-amber-100 px-4 py-2.5 text-sm text-amber-900">
               Produção: <strong>{formatBRL(producaoTotal)}</strong>
-              {producaoComissao > 0 && <> · Comissão da produção: <strong>{formatBRL(producaoComissao)}</strong></>}
+              {producaoComissao > 0 && (
+                <> · Comissão da produção: <strong>{formatBRL(producaoComissao)}</strong>
+                  <span className="text-amber-700"> (paga por {pagadorProducao})</span>
+                </>
+              )}
+              {producaoComissao > 0 && (
+                <p className="text-[11px] text-amber-700 mt-1">
+                  Vira um lançamento a receber separado ao faturar.
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -230,7 +273,15 @@ export function ExternaForm({
             <div><label className={labelCls}>Faturamento</label><Select value={form.faturamento} onChange={v => set('faturamento', v)} options={MIDIA_FATURAMENTO_OPTIONS} /></div>
             <div><label className={labelCls}>Prazo</label><Select value={form.prazo} onChange={v => set('prazo', v)} options={MIDIA_PRAZO_OPTIONS} /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className={labelCls}>Data Base</label><input type="date" value={form.data_base} onChange={e => set('data_base', e.target.value)} className={inputCls} /></div>
+              <div>
+                <label className={labelCls}>Data Base</label>
+                <input type="date" value={form.data_base} onChange={e => setDataBase(e.target.value)}
+                  title={dataBaseManual ? 'Definida à mão' : 'Acompanha a 1ª veiculação — edite para fixar outra data'}
+                  className={inputCls} />
+                {!dataBaseManual && form.primeira_veiculacao && (
+                  <p className="text-[11px] text-gray-400 mt-1">segue a 1ª veiculação</p>
+                )}
+              </div>
               <div><label className={labelCls}>Dias Agência</label><input type="number" value={form.dias_agencia} onChange={e => set('dias_agencia', e.target.value)} className={inputCls} /></div>
             </div>
           </div>
@@ -239,7 +290,7 @@ export function ExternaForm({
         {/* Veiculação & status */}
         <div className={cardCls}>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div><label className={labelCls}>Primeira Veiculação</label><input type="date" value={form.primeira_veiculacao} onChange={e => set('primeira_veiculacao', e.target.value)} className={inputCls} /></div>
+            <div><label className={labelCls}>Primeira Veiculação</label><input type="date" value={form.primeira_veiculacao} onChange={e => setPrimeiraVeiculacao(e.target.value)} className={inputCls} /></div>
             <div><label className={labelCls}>Última Veiculação</label><input type="date" value={form.ultima_veiculacao} onChange={e => set('ultima_veiculacao', e.target.value)} className={inputCls} /></div>
             <div><label className={labelCls}>Contato</label><input value={form.contato} onChange={e => set('contato', e.target.value)} className={inputCls} /></div>
             <div><label className={labelCls}>Responsável</label><Select value={form.responsavel_id} onChange={v => set('responsavel_id', v)} options={memberOptions} placeholder="Selecionar" /></div>
