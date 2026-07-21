@@ -181,18 +181,29 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
   }
 
   // Resumo do período (estilo Conta Azul): receita/despesa × em aberto/realizada.
+  // Baixa PARCIAL entra aqui: o que já caiu conta como realizado e sai do "em
+  // aberto". Antes o valor cheio ficava em "em aberto" e a parte recebida não
+  // aparecia em lugar nenhum — os dois cards mentiam ao mesmo tempo.
   const resumo = useMemo(() => {
     const noMes = filtered.filter(inPeriodo)
-    const s = (arr: Lancamento[], real = false) => arr.reduce((t, l) => t + (real ? realVal(l) : val(l)), 0)
-    const recAberto = noMes.filter(l => l.tipo === 'entrada' && !isPago(l.situacao))
-    const recReal = noMes.filter(l => l.tipo === 'entrada' && isPago(l.situacao))
-    const despAberto = noMes.filter(l => l.tipo === 'saida' && !isPago(l.situacao))
-    const despReal = noMes.filter(l => l.tipo === 'saida' && isPago(l.situacao))
-    const receitaAberto = s(recAberto), receitaReal = s(recReal, true)
-    const despesaAberto = s(despAberto), despesaReal = s(despReal, true)
+    const sum = (arr: Lancamento[], fn: (l: Lancamento) => number) => arr.reduce((t, l) => t + fn(l), 0)
+    const baixado = (l: Lancamento) => Math.min(val(l), Number(l.valor_realizado ?? 0))
+    const falta   = (l: Lancamento) => Math.max(0, val(l) - Number(l.valor_realizado ?? 0))
+
+    const split = (arr: Lancamento[]) => {
+      const pagos   = arr.filter(l => isPago(l.situacao))
+      const abertos = arr.filter(l => !isPago(l.situacao))
+      return {
+        real:   sum(pagos, realVal) + sum(abertos, baixado),
+        aberto: sum(abertos, falta),
+      }
+    }
+    const r = split(noMes.filter(l => l.tipo === 'entrada'))
+    const d = split(noMes.filter(l => l.tipo === 'saida'))
     return {
-      receitaAberto, receitaReal, despesaAberto, despesaReal,
-      total: receitaReal + receitaAberto - despesaReal - despesaAberto,
+      receitaAberto: r.aberto, receitaReal: r.real,
+      despesaAberto: d.aberto, despesaReal: d.real,
+      total: r.real + r.aberto - d.real - d.aberto,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, perStart, perEnd])
@@ -381,11 +392,19 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
   const temAnexoBoleto = !!l.anexos?.some(a => a.tipo === 'Boleto')
   // A coluna mostra o VENCIMENTO; quando baixado, a data da baixa vai como linha secundária.
   const pagoEm = paid ? (l.data_liquidacao ?? null) : null
+  // Baixa parcial: ainda está em aberto, mas parte já caiu. Sem este selo a linha
+  // dizia "Em aberto" com o valor cheio, como se nada tivesse entrado.
+  const jaBaixado = Math.min(val(l), Number(l.valor_realizado ?? 0))
+  const parcial = !paid && jaBaixado > 0
+  const falta = val(l) - jaBaixado
   const status = paid
     ? { label: isSaida ? 'Pago' : 'Recebido', cls: 'bg-emerald-50 text-emerald-700' }
-    : overdue
-      ? { label: 'Atrasado', cls: 'bg-red-50 text-red-700' }
-      : { label: 'Em aberto', cls: 'bg-amber-50 text-amber-700' }
+    : parcial
+      // Continua vermelho se além de parcial estiver vencido — o atraso não some.
+      ? { label: 'Parcial', cls: overdue ? 'bg-red-50 text-red-700' : 'bg-sky-50 text-sky-700' }
+      : overdue
+        ? { label: 'Atrasado', cls: 'bg-red-50 text-red-700' }
+        : { label: 'Em aberto', cls: 'bg-amber-50 text-amber-700' }
 
   function toggleNf() { startTransition(async () => { await setLancamentoFlags(orgSlug, l.id, !l.nf_emitida, l.boleto_gerado); router.refresh() }) }
   function toggleBoleto() { startTransition(async () => { await setLancamentoFlags(orgSlug, l.id, l.nf_emitida, !l.boleto_gerado); router.refresh() }) }
@@ -483,6 +502,13 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
       </td>
       <td className={cn('px-4 py-2.5 text-sm font-medium text-right whitespace-nowrap', isSaida ? 'text-red-600' : 'text-gray-900')}>
         {isSaida ? '− ' : ''}{formatBRL(val(l))}
+        {/* O valor cheio é o do documento; o que importa pra cobrança é o que falta. */}
+        {parcial && (
+          <span className="block text-[11px] font-normal text-gray-500 tabular-nums"
+            title={`Já ${isSaida ? 'pago' : 'recebido'}: ${formatBRL(jaBaixado)}`}>
+            falta {formatBRL(falta)}
+          </span>
+        )}
       </td>
       <td className="px-3 py-2.5 text-center">
         {imported
