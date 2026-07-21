@@ -72,6 +72,16 @@ export async function gerarPedidosDoOrcamento(orgSlug: string, orcamentoId: stri
   const { data: orc } = await (supabase as any).from('producao').select('*').eq('id', orcamentoId).single()
   if (!orc || orc.tipo !== 'orcamento') return { error: 'Orçamento não encontrado' }
 
+  // Idempotência: um orçamento gera PPs uma vez só. Antes nada impedia clicar duas
+  // vezes — cada clique criava um conjunto novo de PPs duplicados, em silêncio.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { count: jaGerados } = await (supabase as any)
+    .from('producao').select('id', { count: 'exact', head: true })
+    .eq('origem_orcamento_id', orcamentoId)
+  if ((jaGerados ?? 0) > 0) {
+    return { error: `Este orçamento já gerou ${jaGerados} Pedido(s) de Produção. Exclua os PPs gerados antes de gerar de novo.` }
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const itens: any[] = Array.isArray(orc.detalhe?.itens) ? orc.detalhe.itens : []
   let count = 0
@@ -96,6 +106,9 @@ export async function gerarPedidosDoOrcamento(orgSlug: string, orcamentoId: stri
       honorarios_pct: String(orc.honorarios_pct ?? 0),
       valor: String(valor),
       situacao: 'em_aberto',
+      // Coluna de verdade (migration 137). O detalhe.orcamento_id continua por
+      // compatibilidade, mas é ele que o PedidoForm apaga ao salvar — quem manda é a coluna.
+      origem_orcamento_id: orcamentoId,
       detalhe: {
         fornecedor_id: sel.fornecedor_id,
         entrega: '',
@@ -113,6 +126,12 @@ export async function gerarPedidosDoOrcamento(orgSlug: string, orcamentoId: stri
 
   if (count === 0) return { error: 'Nenhum item com opção/fornecedor escolhido neste orçamento.' }
 
+  // Fim do ciclo: o orçamento virou produção. Sai da aba Ativos e fica consultável em
+  // Arquivados, com o histórico intacto.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any).rpc('concluir_orcamento', { p_user_id: user.id, p_orcamento_id: orcamentoId })
+
+  revalidatePath(`/${orgSlug}/producao/orcamento`)
   revalidatePath(`/${orgSlug}/producao/pedido`)
   redirect(`/${orgSlug}/producao/pedido`)
 }

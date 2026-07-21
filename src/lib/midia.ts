@@ -68,11 +68,23 @@ export const MIDIA_SITUACAO_OPTIONS = [
 export const PRODUCAO_SITUACAO_OPTIONS = MIDIA_SITUACAO_OPTIONS.map(o =>
   o.value === 'aprovado' ? { ...o, label: 'Em produção' } : o)
 
+/**
+ * Orçamento tem um estado terminal próprio: gerou as PPs, o trabalho virou produção e
+ * o ciclo DELE acabou. Sem isso o orçamento ficava eternamente "Em produção" e o botão
+ * "Gerar PPs" seguia disponível, duplicando pedidos a cada clique.
+ */
+export const ORCAMENTO_SITUACAO_OPTIONS = [
+  ...PRODUCAO_SITUACAO_OPTIONS,
+  { value: 'concluido', label: 'Concluído' },
+]
+
 // Situações que TIRAM o documento da aba "Ativos" (viram "como se fosse arquivado").
 // PP/Fee/Mídia: liberado pro faturamento (faturar/faturado) ou cancelado.
 export const SITUACOES_FORA = ['faturar', 'faturado', 'cancelado']
 // Orçamento/Proposta: só saem quando faturado ou cancelado (o 'a faturar' segue visível).
 export const SITUACOES_FORA_PROPOSTA = ['faturado', 'cancelado']
+// Orçamento: concluído também é fim de linha — sai dos Ativos, fica em Arquivados.
+export const SITUACOES_FORA_ORCAMENTO = ['faturado', 'cancelado', 'concluido']
 
 /**
  * Aplica na query de listagem o filtro da aba:
@@ -103,6 +115,7 @@ export const MIDIA_SITUACAO_COLORS: Record<string, { bg: string; text: string }>
   cancelado: { bg: '#fee2e2', text: '#b91c1c' },
   faturar:   { bg: '#dbeafe', text: '#1d4ed8' },
   faturado:  { bg: '#ccfbf1', text: '#0f766e' },   // teal — nada de indigo/roxo no app
+  concluido: { bg: '#e2e8f0', text: '#475569' },   // cinza: encerrado, sem pendência
 }
 
 export function labelOf(options: { value: string; label: string }[], value: string | null | undefined) {

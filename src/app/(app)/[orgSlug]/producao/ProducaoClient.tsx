@@ -14,6 +14,8 @@ import { docNumero } from '@/lib/doc-series'
 export interface ProducaoRow {
   id: string; numero: number | null; serie?: string | null; titulo: string; valor: number
   situacao: string; archived: boolean; cliente: string
+  /** PPs geradas por este orçamento (migration 137) — vazio = ainda não gerou. */
+  gerados?: { id: string; serie: string | null; numero: number | null }[]
 }
 
 export function ProducaoClient({
@@ -137,7 +139,21 @@ export function ProducaoClient({
                         </td>
                         <td className="px-3 py-1.5">
                           <div className="flex items-center justify-end gap-1">
-                            {gerarPedidos && r.situacao === 'aprovado' && (
+                            {/* Já gerou: o botão dá lugar aos PPs criados, com link.
+                                É o que impede gerar duas vezes sem perceber — antes o
+                                botão ficava lá pra sempre e cada clique duplicava. */}
+                            {gerarPedidos && (r.gerados?.length ?? 0) > 0 && (
+                              <span className="inline-flex items-center gap-1 mr-1">
+                                {r.gerados!.map(pp => (
+                                  <Link key={pp.id} href={`/${orgSlug}/producao/pedido/${pp.id}`}
+                                    title="Abrir o Pedido de Produção gerado por este orçamento"
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums rounded-md border border-orange-100 bg-orange-50 text-orange-700 hover:bg-orange-100 transition-colors">
+                                    {docNumero(pp.serie, pp.numero)}
+                                  </Link>
+                                ))}
+                              </span>
+                            )}
+                            {gerarPedidos && r.situacao === 'aprovado' && (r.gerados?.length ?? 0) === 0 && (
                               <button onClick={() => gerarPPs(r)} disabled={isPending} title="Gerar Pedidos de Produção das opções escolhidas"
                                 className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg border border-orange-200 text-orange-700 hover:bg-orange-50 transition-colors disabled:opacity-50 whitespace-nowrap">
                                 <Factory className="w-3.5 h-3.5 shrink-0" /> Gerar PPs
