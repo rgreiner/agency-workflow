@@ -187,12 +187,26 @@ export async function gerarDocsDaProposta(orgSlug: string, propostaId: string) {
   return { count, skipped }
 }
 
-export async function setProducaoSituacao(orgSlug: string, producaoId: string, situacao: string, basePath: string) {
+/** Classificação escolhida na conferência do Faturamento (grava nos lançamentos). */
+export interface FaturarClassificacao {
+  conta_id?: string | null
+  categoria?: string | null
+  centro_custo?: string | null
+  forma_pagamento?: string | null
+}
+
+export async function setProducaoSituacao(
+  orgSlug: string, producaoId: string, situacao: string, basePath: string, cls?: FaturarClassificacao,
+) {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any).rpc('set_producao_situacao', { p_user_id: user.id, p_producao_id: producaoId, p_situacao: situacao })
+  const { error } = await (supabase as any).rpc('set_producao_situacao', {
+    p_user_id: user.id, p_producao_id: producaoId, p_situacao: situacao,
+    p_conta_id: cls?.conta_id || null, p_categoria: cls?.categoria || null,
+    p_centro_custo: cls?.centro_custo || null, p_forma: cls?.forma_pagamento || null,
+  })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/${basePath}`)
 }

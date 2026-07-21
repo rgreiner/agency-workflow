@@ -3,7 +3,8 @@ import { formatBRL, parseMoney, FATURAMENTO_PAGADOR } from '@/lib/midia'
 import { FaturamentoFeesTable } from './FaturamentoFeesTable'
 import { FaturamentoMidiaTable, type MidiaView } from './FaturamentoMidiaTable'
 import type { ContatoCard } from './ContatosButton'
-import type { Anexo } from '@/app/actions/financeiro'
+import type { ContaRef } from './ClassificacaoFields'
+import type { Anexo, FinanceCentro, FinanceCategoriaGrupo } from '@/app/actions/financeiro'
 import { Receipt } from 'lucide-react'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -101,6 +102,21 @@ export default async function FaturamentoPage({
     .from('fornecedores').select(`id, name, tax_id, notes, ${CONTATO_JSON}`).eq('org_id', orgId)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fornMap = new Map<string, any>((fornRaw ?? []).map((f: any) => [f.id, f]))
+
+  // Catálogos p/ os 4 campos de classificação da conferência (centro/categoria/conta/forma).
+  const [{ data: contasRaw }, { data: settings }] = await Promise.all([
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any).from('contas_financeiras').select('id, nome, ativo').eq('org_id', orgId).order('ordem', { ascending: true }),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any).from('org_settings').select('finance_categorias, finance_centros_custo').eq('org_id', orgId).maybeSingle(),
+  ])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const contas: ContaRef[] = ((contasRaw ?? []) as any[]).filter(c => c.ativo).map(c => ({ id: c.id, nome: c.nome }))
+  const categorias = (settings?.finance_categorias ?? []) as FinanceCategoriaGrupo[]
+  const centros = (settings?.finance_centros_custo ?? []) as FinanceCentro[]
+  // Conta a receber padrão = BTG (decisão do Rafael); fallback: 1ª conta ativa.
+  const defaultConta = (contas.find(c => /btg/i.test(c.nome)) ?? contas[0])?.id ?? ''
+  const cat = { contas, categorias, centros, defaultConta }
 
   /** Mesma conta da RPC gerar_lancamento_midia — o valor conferido tem que ser o lançado.
    *  Os campos são TEXTO do form ("1.234,56"), então lê com parseMoney, igual ao _br_num. */
@@ -212,7 +228,7 @@ export default async function FaturamentoPage({
             <span className="text-sm text-gray-500">A faturar: <strong className="text-emerald-600">{formatBRL(totalFees)}</strong></span>
           </div>
           <p className="text-xs text-gray-400 mb-2">Confira datas, anexe <strong className="font-medium text-gray-500">NF · Boleto · comprovantes</strong> e Fature — cada parcela vira 1 lançamento a receber.</p>
-          <FaturamentoFeesTable orgSlug={orgSlug} fees={fees} />
+          <FaturamentoFeesTable orgSlug={orgSlug} fees={fees} {...cat} />
         </section>
       )}
 
@@ -233,7 +249,7 @@ export default async function FaturamentoPage({
             <p className="text-lg font-semibold text-gray-900 mt-1">{formatBRL(totalDocs)}</p>
           </div>
         </div>
-        <FaturamentoMidiaTable orgSlug={orgSlug} midias={midias} />
+        <FaturamentoMidiaTable orgSlug={orgSlug} midias={midias} {...cat} />
       </section>
       )}
 

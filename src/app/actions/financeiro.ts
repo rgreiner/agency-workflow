@@ -24,7 +24,15 @@ export async function regerarLancamentos(orgSlug: string) {
 }
 
 /** Faturamento → "Lançar": cria o lançamento de uma mídia conferida. */
-export async function lancarMidia(orgSlug: string, midiaId: string) {
+/** Classificação escolhida na conferência do Faturamento (grava no lançamento). */
+export interface FaturarClassificacao {
+  conta_id?: string | null
+  categoria?: string | null
+  centro_custo?: string | null
+  forma_pagamento?: string | null
+}
+
+export async function lancarMidia(orgSlug: string, midiaId: string, cls?: FaturarClassificacao) {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
@@ -32,6 +40,8 @@ export async function lancarMidia(orgSlug: string, midiaId: string) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any).rpc('lancar_midia', {
     p_user_id: user.id, p_midia_id: midiaId,
+    p_conta_id: cls?.conta_id || null, p_categoria: cls?.categoria || null,
+    p_centro_custo: cls?.centro_custo || null, p_forma: cls?.forma_pagamento || null,
   })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/financeiro/faturamento`)

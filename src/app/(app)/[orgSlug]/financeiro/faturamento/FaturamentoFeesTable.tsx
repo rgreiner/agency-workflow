@@ -10,6 +10,8 @@ import { setProducaoSituacao } from '@/app/actions/producao'
 import { setProducaoAnexos, type Anexo } from '@/app/actions/financeiro'
 import { DocsBox, faltando } from './DocsBox'
 import { FaturarButton } from './FaturarButton'
+import { ClassificacaoFields, type Classificacao } from './ClassificacaoFields'
+import { type CatalogosProps } from './FaturamentoMidiaTable'
 import { ContatosButton, type ContatoCard } from './ContatosButton'
 
 export interface ParcelaView { vencimento: string; previstoAgencia: string; comissao: boolean; valor: number }
@@ -27,7 +29,7 @@ export interface FeeView {
   anexos: Anexo[]
 }
 
-export function FaturamentoFeesTable({ orgSlug, fees }: { orgSlug: string; fees: FeeView[] }) {
+export function FaturamentoFeesTable({ orgSlug, fees, ...cat }: { orgSlug: string; fees: FeeView[] } & CatalogosProps) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
       <table className="w-full min-w-[860px]">
@@ -43,18 +45,22 @@ export function FaturamentoFeesTable({ orgSlug, fees }: { orgSlug: string; fees:
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
-          {fees.map(f => <FeeRow key={f.id} orgSlug={orgSlug} fee={f} />)}
+          {fees.map(f => <FeeRow key={f.id} orgSlug={orgSlug} fee={f} cat={cat} />)}
         </tbody>
       </table>
     </div>
   )
 }
 
-function FeeRow({ orgSlug, fee }: { orgSlug: string; fee: FeeView }) {
+function FeeRow({ orgSlug, fee, cat }: { orgSlug: string; fee: FeeView; cat: CatalogosProps }) {
   // Já nasce expandido — a conferência (datas + documentos) fica clara de cara.
   const [open, setOpen] = useState(true)
   const [anexos, setAnexos] = useState<Anexo[]>(fee.anexos)
   const [, startTransition] = useTransition()
+  // Pré-preenchido: centro = cliente, categoria pelo tipo (Fee/Job), conta = padrão.
+  const [cls, setCls] = useState<Classificacao>({
+    conta: cat.defaultConta, categoria: fee.tipo === 'fee' ? 'Fee' : 'Job', centro: fee.cliente, forma: '',
+  })
   const n = fee.parcelas.length
   const temComissao = fee.parcelas.some(p => p.comissao)
   // Cobrança = data da parcela; agência = recebimento no caixa (+dias na comissão).
@@ -113,7 +119,9 @@ function FeeRow({ orgSlug, fee }: { orgSlug: string; fee: FeeView }) {
             <FaturarButton
               missing={faltando(anexos)}
               okToast={n > 0 ? `${n} parcela(s) lançada(s) no financeiro.` : 'Fee lançado no financeiro.'}
-              action={() => setProducaoSituacao(orgSlug, fee.id, 'faturado', 'financeiro/faturamento')}
+              action={() => setProducaoSituacao(orgSlug, fee.id, 'faturado', 'financeiro/faturamento', {
+                conta_id: cls.conta, categoria: cls.categoria, centro_custo: cls.centro, forma_pagamento: cls.forma,
+              })}
             />
           </div>
         </td>
@@ -149,6 +157,8 @@ function FeeRow({ orgSlug, fee }: { orgSlug: string; fee: FeeView }) {
                 </div>
               )}
               <DocsBox anexos={anexos} onChange={persist} />
+              <ClassificacaoFields contas={cat.contas} categorias={cat.categorias} centros={cat.centros}
+                value={cls} onChange={p => setCls(c => ({ ...c, ...p }))} />
             </div>
           </td>
         </tr>

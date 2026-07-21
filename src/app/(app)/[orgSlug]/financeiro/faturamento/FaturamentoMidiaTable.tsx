@@ -6,10 +6,18 @@ import { ChevronRight, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
 import { docNumero } from '@/lib/doc-series'
-import { lancarMidia, setMidiaAnexos, type Anexo } from '@/app/actions/financeiro'
+import { lancarMidia, setMidiaAnexos, type Anexo, type FinanceCentro, type FinanceCategoriaGrupo } from '@/app/actions/financeiro'
 import { DocsBox, faltando } from './DocsBox'
 import { FaturarButton } from './FaturarButton'
+import { ClassificacaoFields, type ContaRef, type Classificacao } from './ClassificacaoFields'
 import { ContatosButton, type ContatoCard } from './ContatosButton'
+
+export interface CatalogosProps {
+  contas: ContaRef[]
+  categorias: FinanceCategoriaGrupo[]
+  centros: FinanceCentro[]
+  defaultConta: string
+}
 
 export interface MidiaView {
   id: string
@@ -32,7 +40,7 @@ export interface MidiaView {
   anexos: Anexo[]
 }
 
-export function FaturamentoMidiaTable({ orgSlug, midias }: { orgSlug: string; midias: MidiaView[] }) {
+export function FaturamentoMidiaTable({ orgSlug, midias, ...cat }: { orgSlug: string; midias: MidiaView[] } & CatalogosProps) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
       <table className="w-full min-w-[820px]">
@@ -48,17 +56,21 @@ export function FaturamentoMidiaTable({ orgSlug, midias }: { orgSlug: string; mi
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
-          {midias.map(m => <MidiaRow key={m.id} orgSlug={orgSlug} midia={m} />)}
+          {midias.map(m => <MidiaRow key={m.id} orgSlug={orgSlug} midia={m} cat={cat} />)}
         </tbody>
       </table>
     </div>
   )
 }
 
-function MidiaRow({ orgSlug, midia }: { orgSlug: string; midia: MidiaView }) {
+function MidiaRow({ orgSlug, midia, cat }: { orgSlug: string; midia: MidiaView; cat: CatalogosProps }) {
   const [open, setOpen] = useState(true)
   const [anexos, setAnexos] = useState<Anexo[]>(midia.anexos)
   const [, startTransition] = useTransition()
+  // Pré-preenchido: centro = cliente, categoria = Comissão, conta = padrão da org.
+  const [cls, setCls] = useState<Classificacao>({
+    conta: cat.defaultConta, categoria: 'Comissão', centro: midia.cliente, forma: '',
+  })
 
   function persist(next: Anexo[]) {
     setAnexos(next)
@@ -103,7 +115,9 @@ function MidiaRow({ orgSlug, midia }: { orgSlug: string; midia: MidiaView }) {
             <FaturarButton
               missing={faltando(anexos)}
               okToast="Comissão lançada no financeiro."
-              action={() => lancarMidia(orgSlug, midia.id)}
+              action={() => lancarMidia(orgSlug, midia.id, {
+                conta_id: cls.conta, categoria: cls.categoria, centro_custo: cls.centro, forma_pagamento: cls.forma,
+              })}
             />
           </div>
         </td>
@@ -120,6 +134,8 @@ function MidiaRow({ orgSlug, midia }: { orgSlug: string; midia: MidiaView }) {
                 <div><dt className="text-xs text-gray-400">Comissão</dt><dd className="text-emerald-600 font-medium tabular-nums">{formatBRL(midia.comissao)}</dd></div>
               </dl>
               <DocsBox anexos={anexos} onChange={persist} />
+              <ClassificacaoFields contas={cat.contas} categorias={cat.categorias} centros={cat.centros}
+                value={cls} onChange={p => setCls(c => ({ ...c, ...p }))} />
             </div>
           </td>
         </tr>
