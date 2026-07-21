@@ -105,6 +105,9 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
   const { start: perStart, end: perEnd } = useMemo(() => periodoRange(periodo), [periodo])
   const [contaFilter, setContaFilter] = useState('')
   const [tipoFilter, setTipoFilter] = useState<'todos' | 'entrada' | 'saida'>('todos')
+  // Lançamento gerado pelo Faturamento nasce sem classificação (medido: 24 de 27).
+  // Este filtro é o caminho pra achar e corrigir em lote, em vez de garimpar.
+  const [faltando, setFaltando] = useState<null | 'categoria' | 'centro' | 'conta'>(null)
   const [query, setQuery] = useState('')
   // Recorte pelos cards de resumo (tipo + situação). null = tudo (card "Resultado").
   const [cardFilter, setCardFilter] = useState<null | 'rec_aberto' | 'rec_real' | 'desp_aberto' | 'desp_real'>(null)
@@ -128,12 +131,15 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
     return merged.filter(l => {
       if (tipoFilter !== 'todos' && l.tipo !== tipoFilter) return false
       if (contaFilter && l.conta_id !== contaFilter) return false
+      if (faltando === 'categoria' && (l.categoria ?? '').trim()) return false
+      if (faltando === 'centro' && (l.centro_custo ?? '').trim()) return false
+      if (faltando === 'conta' && l.conta_id) return false
       // A busca inclui os documentos: procurar por "2163" tem que achar a NF, e
       // até o nome do arquivo ficava de fora antes disso.
       if (q && !`${l.contato_nome ?? ''} ${l.descricao ?? ''} ${l.categoria ?? ''} ${l.doc_serie ?? ''} ${l.doc_numero ?? ''} ${textoBuscavel(l.anexos)}`.toLowerCase().includes(q)) return false
       return true
     })
-  }, [merged, tipoFilter, contaFilter, query])
+  }, [merged, tipoFilter, contaFilter, query, faltando])
 
   // Data efetiva: liquidação (se pago) ou vencimento (se em aberto).
   const effDate = (l: Lancamento) => (isPago(l.situacao) ? (l.data_liquidacao ?? l.vencimento) : l.vencimento)
@@ -214,9 +220,23 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
 
   const revisarCount = lancamentos.filter(l => l.revisar).length
   const contaMap = useMemo(() => Object.fromEntries(contas.map(c => [c.id, c])), [contas])
+  const pendencias = useMemo(() => {
+    const base = merged.filter(l => {
+      if (tipoFilter !== 'todos' && l.tipo !== tipoFilter) return false
+      if (contaFilter && l.conta_id !== contaFilter) return false
+      return inPeriodo(l)
+    })
+    return {
+      categoria: base.filter(l => !(l.categoria ?? '').trim()).length,
+      centro: base.filter(l => !(l.centro_custo ?? '').trim()).length,
+      conta: base.filter(l => !l.conta_id).length,
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [merged, tipoFilter, contaFilter, perStart, perEnd])
+
   const contaFilterOptions = useMemo(() => [{ value: '', label: 'Todas as contas' }, ...contas.map(c => ({ value: c.id, label: c.nome }))], [contas])
-  const hasFilters = tipoFilter !== 'todos' || !!contaFilter || !!query.trim() || !!cardFilter
-  function limparFiltros() { setTipoFilter('todos'); setContaFilter(''); setQuery(''); setCardFilter(null) }
+  const hasFilters = tipoFilter !== 'todos' || !!contaFilter || !!query.trim() || !!cardFilter || !!faltando
+  function limparFiltros() { setTipoFilter('todos'); setContaFilter(''); setQuery(''); setCardFilter(null); setFaltando(null) }
   // Card clicado vira o recorte; zera o segmento tipo p/ não conflitar (toggle no mesmo card = tudo).
   function toggleCard(key: 'rec_aberto' | 'rec_real' | 'desp_aberto' | 'desp_real') {
     setTipoFilter('todos')
@@ -256,6 +276,23 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar por contato, descrição ou categoria"
             className="w-full pl-9 pr-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent" />
         </div>
+        {/* Pendências de classificação: contam sobre o período/tipo já filtrados,
+            e o botão some quando não há nenhuma — não vale ocupar a barra à toa. */}
+        {(['categoria', 'centro', 'conta'] as const).map(k => {
+          const n = pendencias[k]
+          if (!n && faltando !== k) return null
+          const rotulo = k === 'categoria' ? 'Sem categoria' : k === 'centro' ? 'Sem centro de custo' : 'Sem conta'
+          return (
+            <button key={k} onClick={() => setFaltando(f => (f === k ? null : k))} aria-pressed={faltando === k}
+              className={cn('inline-flex items-center gap-1.5 px-2.5 py-2 text-sm rounded-xl border transition-colors',
+                faltando === k
+                  ? 'border-amber-300 bg-amber-50 text-amber-800'
+                  : 'border-gray-200 text-gray-500 hover:bg-gray-50')}>
+              <AlertTriangle className="w-3.5 h-3.5" /> {rotulo}
+              <span className="tabular-nums font-medium">{n}</span>
+            </button>
+          )
+        })}
         {hasFilters && (
           <button onClick={limparFiltros} className="inline-flex items-center gap-1.5 px-2.5 py-2 text-sm text-gray-500 hover:text-gray-700 transition">
             <X className="w-3.5 h-3.5" /> Limpar filtros
