@@ -10,6 +10,7 @@ import {
   MIDIA_SITUACAO_OPTIONS, FATURAMENTO_PAGADOR, formatBRL, parseMoney,
 } from '@/lib/midia'
 import type { ClienteOpt, VeiculoOpt, MemberOpt } from '../simplificada/MidiaForm'
+import { periodoDaBisemana, periodoLabel, numeroDaBisemana } from '@/lib/bisemana'
 import type { FornecedorOpt } from '@/lib/midia-selectors'
 
 export interface Localizacao { endereco: string; cidade: string }
@@ -83,6 +84,29 @@ export function ExternaForm({
   function set<K extends keyof ExternaValues>(k: K, v: ExternaValues[K]) { setForm(f => ({ ...f, [k]: v })) }
   function setPrimeiraVeiculacao(v: string) {
     setForm(f => ({ ...f, primeira_veiculacao: v, data_base: dataBaseManual || !v ? f.data_base : v }))
+  }
+
+  /**
+   * Escolher a bisemana preenche o resto: o período é sempre o mesmo intervalo de
+   * 14 dias (segunda da semana N-1 até domingo da semana N), então digitar isso à
+   * mão só cria chance de erro. As veiculações e a data base acompanham — a data
+   * base segue a 1ª veiculação, salvo se alguém já a editou de propósito.
+   */
+  function setBisemana(v: string) {
+    const n = numeroDaBisemana(v)
+    const ano = Number(form.ano) || new Date().getFullYear()
+    if (!n) { set('bisemana', v); return }        // "Outro" = preenchimento livre
+    const { inicio, fim } = periodoDaBisemana(n, ano)
+    setForm(f => ({
+      ...f,
+      bisemana: v,
+      periodo: periodoLabel(n, ano),
+      primeira_veiculacao: inicio,
+      ultima_veiculacao: fim,
+      data_base: dataBaseManual ? f.data_base : inicio,
+      // O mês do documento é o do início da veiculação.
+      mes: String(Number(inicio.slice(5, 7))),
+    }))
   }
   function setDataBase(v: string) { setDataBaseManual(true); set('data_base', v) }
   const setLoc = (i: number, k: keyof Localizacao, v: string) => setForm(f => ({ ...f, localizacoes: f.localizacoes.map((l, idx) => idx === i ? { ...l, [k]: v } : l) }))
@@ -191,8 +215,14 @@ export function ExternaForm({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div><label className={labelCls}>Mês</label><Select value={form.mes} onChange={v => set('mes', v)} options={MESES} /></div>
             <div><label className={labelCls}>Ano</label><Select value={form.ano} onChange={v => set('ano', v)} options={ANOS} /></div>
-            <div><label className={labelCls}>Bisemana</label><Select value={form.bisemana} onChange={v => set('bisemana', v)} options={bisemanaOptions} /></div>
-            <div><label className={labelCls}>Período</label><input value={form.periodo} onChange={e => set('periodo', e.target.value)} placeholder="13/07/2026 até 26/07/2026" className={inputCls} /></div>
+            <div><label className={labelCls}>Bisemana</label><Select value={form.bisemana} onChange={setBisemana} options={bisemanaOptions} /></div>
+            <div>
+              <label className={labelCls}>Período</label>
+              <input value={form.periodo} onChange={e => set('periodo', e.target.value)} placeholder="13/07/2026 até 26/07/2026" className={inputCls} />
+              {numeroDaBisemana(form.bisemana) && (
+                <p className="text-[11px] text-gray-400 mt-1">Preenchido pela bisemana — dá para editar.</p>
+              )}
+            </div>
             <div><label className={labelCls}>Praça</label><input value={form.praca} onChange={e => set('praca', e.target.value)} className={inputCls} /></div>
             <div><label className={labelCls}>Abrangência</label><Select value={form.abrangencia} onChange={v => set('abrangencia', v)} options={MIDIA_ABRANGENCIA_OPTIONS} /></div>
             <div><label className={labelCls}>Espécie</label><Select value={form.especie} onChange={v => set('especie', v)} options={ESPECIE} /></div>

@@ -3,10 +3,11 @@
 import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Archive, ArchiveRestore, Megaphone, Pencil, Printer } from 'lucide-react'
+import { Plus, Archive, ArchiveRestore, Megaphone, Pencil, Printer, Copy } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
-import { setMidiaSituacao, setMidiaArchived } from '@/app/actions/midia'
+import { setMidiaSituacao, setMidiaArchived, duplicarMidia } from '@/app/actions/midia'
 import {
   MIDIA_TIPO_OPTIONS, MIDIA_SITUACAO_OPTIONS, MIDIA_SITUACAO_COLORS, labelOf, formatBRL,
 } from '@/lib/midia'
@@ -44,6 +45,15 @@ export function MidiasClient({
   }
   function archive(m: MidiaRow) {
     startTransition(async () => { await setMidiaArchived(orgSlug, m.id, !m.archived); router.refresh() })
+  }
+  /** Duplicar abre a cópia já em edição: quase sempre muda a bisemana em seguida. */
+  function duplicar(m: MidiaRow) {
+    startTransition(async () => {
+      const r = await duplicarMidia(orgSlug, m.id)
+      if (r?.error || !r?.id) { toast.error(r?.error || 'Não foi possível duplicar.'); return }
+      toast.success('Cópia criada em aberto.')
+      router.push(editHrefFor ? editHrefFor({ ...m, id: r.id }) : `${base}/${r.id}`)
+    })
   }
 
   return (
@@ -129,6 +139,13 @@ export function MidiasClient({
                           className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar">
                           <Pencil className="w-3.5 h-3.5" />
                         </Link>
+                        {!m.archived && (
+                          <button onClick={() => duplicar(m)} disabled={isPending}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition disabled:opacity-50"
+                            title="Duplicar (a cópia nasce em aberto)">
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button onClick={() => archive(m)} disabled={isPending}
                           className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition disabled:opacity-50"
                           title={m.archived ? 'Desarquivar' : 'Arquivar'}>
