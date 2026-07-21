@@ -18,14 +18,13 @@ export interface DocRef {
  * conferir o que gerou a cobrança, e o documento já está liberado pro
  * faturamento: nesse ponto editar é o caminho errado por padrão.
  *
- * Mídia cai sempre na rota `simplificada`, que atende todos os tipos — as rotas
- * por tipo (externas, digitais, impressa…) não têm mapa 1:1 com `midias.tipo`,
- * e o MidiaPrint monta o documento certo a partir do registro.
+ * Mídia abre direto o PDF gerado (/api/docs/midia): uma rota só pra todos os
+ * tipos, e o arquivo é exatamente o que se envia ao veículo.
  */
 export function docHref(orgSlug: string, doc: DocRef): string | null {
   if (!doc.id) return null
   if (doc.origem === 'producao') return doc.producaoTipo ? `/${orgSlug}/producao/${doc.producaoTipo}/${doc.id}/print` : null
-  if (doc.origem === 'midia') return `/${orgSlug}/midias/simplificada/${doc.id}/print`
+  if (doc.origem === 'midia') return `/api/docs/midia/${doc.id}?inline=1`
   return null
 }
 

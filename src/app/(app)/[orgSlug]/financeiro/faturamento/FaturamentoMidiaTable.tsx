@@ -68,12 +68,10 @@ function MidiaRow({ orgSlug, midia }: { orgSlug: string; midia: MidiaView }) {
   return (
     <Fragment>
       <tr className={cn('transition', open ? 'bg-orange-50/40' : 'hover:bg-gray-50/50')}>
-        {/* Mesmo padrão do PP: abre o documento em aba nova. Vai pra rota de
-            IMPRESSÃO (a PI), não pro formulário — quem confere aqui quer ver o
-            documento, e ele já está liberado pro faturamento. A rota
-            `simplificada` atende todos os tipos: o MidiaPrint monta o certo. */}
+        {/* Abre o PDF da autorização em aba nova — o mesmo arquivo que vai pro
+            veículo, não uma tela parecida com ele. */}
         <td className="px-4 py-3 whitespace-nowrap">
-          <Link href={`/${orgSlug}/midias/simplificada/${midia.id}/print`} target="_blank"
+          <Link href={`/api/docs/midia/${midia.id}?inline=1`} target="_blank"
             title="Abrir a autorização em nova aba (somente leitura; não altera o status)"
             className="group/lnk inline-flex items-center gap-1 text-sm text-gray-500 hover:text-orange-600 tabular-nums transition-colors">
             {docNumero(midia.serie, midia.numero)}

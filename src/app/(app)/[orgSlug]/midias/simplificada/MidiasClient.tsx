@@ -131,12 +131,12 @@ export function MidiasClient({
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex items-center justify-end gap-1.5">
-                        {/* ?download=1 abre a caixa de salvar assim que a página
-                            carrega — um clique daqui já leva ao PDF. */}
-                        <Link href={`${base}/${m.id}/print?download=1`} target="_blank"
+                        {/* Baixa direto: a rota devolve o PDF com
+                            Content-Disposition attachment. Sem aba, sem caixa. */}
+                        <a href={`/api/docs/midia/${m.id}`} download
                           className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Baixar PDF">
                           <Download className="w-3.5 h-3.5" />
-                        </Link>
+                        </a>
                         <Link href={editHref(m)}
                           className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar">
                           <Pencil className="w-3.5 h-3.5" />
