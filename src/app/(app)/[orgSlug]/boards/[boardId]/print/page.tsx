@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { notFound } from 'next/navigation'
 import { PrintToolbar } from '@/components/ui/PrintToolbar'
-import { layoutMap, edgePath, NODE_H, emptyMap, type MindMapData } from '@/types/mindmap'
+import { layoutMap, edgePath, nodeBox, emptyMap, LINE_H, PAD_X, PAD_Y, type MindMapData } from '@/types/mindmap'
 
 /**
  * Versão de impressão do mapa mental → "Salvar como PDF" do navegador.
@@ -61,20 +61,28 @@ export default async function MapaPrintPage({
             {L.nodes.map(n => {
               const isRoot = n.node.id === rootId
               const badgeX = n.side === 'left' ? n.x : n.x + n.w
+              const { lines } = nodeBox(n.node)
+              // Bloco de texto centralizado na vertical: mesma conta do canvas.
+              const top = n.y + (n.h - lines.length * LINE_H) / 2
               return (
                 <g key={n.node.id}>
-                  <rect x={n.x} y={n.y} width={n.w} height={NODE_H} rx={10}
+                  <rect x={n.x} y={n.y} width={n.w} height={n.h} rx={10}
                     fill={isRoot ? n.color : `${n.color}14`}
                     stroke={isRoot ? n.color : `${n.color}66`} strokeWidth={2} />
-                  <text x={n.x + 12} y={n.y + NODE_H / 2 + 4} fontSize={13}
-                    fontWeight={isRoot ? 600 : 400}
-                    fill={isRoot ? '#ffffff' : '#1f2937'}>
-                    {n.node.text || 'Novo tópico'}
+                  <text x={n.x + PAD_X} fontSize={13}
+                    fontWeight={n.node.bold || isRoot ? 600 : 400}
+                    fontStyle={n.node.italic ? 'italic' : undefined}
+                    fill={n.node.textColor ?? (isRoot ? '#ffffff' : '#1f2937')}>
+                    {lines.map((l, i) => (
+                      <tspan key={i} x={n.x + PAD_X} y={top + i * LINE_H + LINE_H - PAD_Y / 2}>
+                        {l || ' '}
+                      </tspan>
+                    ))}
                   </text>
                   {n.node.collapsed && n.node.children.length > 0 && (
                     <>
-                      <circle cx={badgeX} cy={n.y + NODE_H / 2} r={9} fill={n.color} />
-                      <text x={badgeX} y={n.y + NODE_H / 2 + 3.5} fontSize={10} fontWeight={700}
+                      <circle cx={badgeX} cy={n.y + n.h / 2} r={9} fill={n.color} />
+                      <text x={badgeX} y={n.y + n.h / 2 + 3.5} fontSize={10} fontWeight={700}
                         fill="#ffffff" textAnchor="middle">{n.node.children.length}</text>
                     </>
                   )}

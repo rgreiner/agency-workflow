@@ -6,6 +6,9 @@ export interface MindNode {
   id: string
   text: string
   color?: string            // hex; herdado visualmente pelos filhos quando ausente
+  textColor?: string        // hex; sobrescreve a cor do texto (senão: branco na raiz, cinza-900)
+  bold?: boolean
+  italic?: boolean
   collapsed?: boolean
   side?: 'left' | 'right'   // só no nível 1: de que lado da raiz o ramo abre
   dx?: number               // deslocamento manual (arrastar). A subárvore acompanha —
@@ -15,11 +18,17 @@ export interface MindNode {
 export interface MindMapData { root: MindNode }
 
 export const MIND_COLORS = ['#f97316', '#0ea5e9', '#10b981', '#a855f7', '#ef4444', '#eab308', '#64748b'] as const
+export const TEXT_COLORS = ['#1f2937', '#ffffff', '#f97316', '#0284c7', '#059669', '#dc2626', '#7c3aed'] as const
 
-export const NODE_H = 40
-export const H_GAP  = 56          // distância horizontal entre níveis
-export const V_GAP  = 12          // respiro vertical entre irmãos
-export const PAD    = 32          // margem do canvas
+export const NODE_MIN_H = 40
+export const NODE_MAX_W = 260     // largura máxima: passou disso, o texto quebra em linhas
+export const LINE_H     = 19      // altura da linha (texto 13px)
+export const PAD_X      = 12      // padding horizontal do nó
+export const PAD_Y      = 10      // padding vertical do nó
+export const AFFORD_W   = 24      // espaço reservado pro botão "+" dentro da caixa
+export const H_GAP      = 56      // distância horizontal entre níveis
+export const V_GAP      = 12      // respiro vertical entre irmãos
+export const PAD        = 32      // margem do canvas
 
 export function newNode(text = ''): MindNode {
   return { id: crypto.randomUUID(), text, children: [] }
@@ -28,11 +37,48 @@ export function emptyMap(title: string): MindMapData {
   return { root: { ...newNode(title || 'Tema central'), color: MIND_COLORS[0] } }
 }
 
-/** Largura do nó estimada pelo texto (o layout roda no server e no client — sem medir DOM).
- *  A folga cobre o padding + o botão "+" que mora no fim da caixa. */
-export function nodeW(text: string): number {
-  const t = text || 'Novo tópico'
-  return Math.min(280, Math.max(128, Math.round(t.length * 7.1) + 52))
+// ── Medida do nó ────────────────────────────────────────────────────────────
+// O layout roda no server (impressão) e no client — não pode medir DOM. Então a
+// quebra de linha é calculada aqui e o render usa EXATAMENTE estas linhas
+// (`whitespace-pre`), o que garante que caixa e texto nunca discordem.
+
+const charW = (bold?: boolean) => (bold ? 7.5 : 7.1)
+const estW = (s: string, bold?: boolean) => s.length * charW(bold)
+
+/** Largura útil de texto: a caixa cheia menos padding e o espaço do botão "+". */
+const TEXT_MAX_W = NODE_MAX_W - PAD_X * 2 - AFFORD_W
+
+/** Quebra o texto em linhas que cabem na largura máxima (palavra gigante quebra na força). */
+export function wrapLines(text: string, bold?: boolean): string[] {
+  const out: string[] = []
+  for (const para of (text || '').split('\n')) {
+    const words = para.split(/\s+/).filter(Boolean)
+    if (!words.length) { out.push(''); continue }
+    let line = ''
+    for (const word of words) {
+      let w = word
+      while (estW(w, bold) > TEXT_MAX_W) {
+        const n = Math.max(1, Math.floor(TEXT_MAX_W / charW(bold)))
+        if (line) { out.push(line); line = '' }
+        out.push(w.slice(0, n))
+        w = w.slice(n)
+      }
+      const cand = line ? `${line} ${w}` : w
+      if (line && estW(cand, bold) > TEXT_MAX_W) { out.push(line); line = w }
+      else line = cand
+    }
+    out.push(line)
+  }
+  return out.length ? out : ['']
+}
+
+/** Caixa do nó: largura, altura e as linhas já quebradas. Nada é truncado. */
+export function nodeBox(n: Pick<MindNode, 'text' | 'bold'>): { w: number; h: number; lines: string[] } {
+  const lines = wrapLines(n.text || 'Novo tópico', n.bold)
+  const widest = Math.max(...lines.map(l => estW(l, n.bold)))
+  const w = Math.round(Math.min(NODE_MAX_W, Math.max(128, widest + PAD_X * 2 + AFFORD_W)))
+  const h = Math.max(NODE_MIN_H, lines.length * LINE_H + PAD_Y * 2)
+  return { w, h, lines }
 }
 
 export type Side = 'root' | 'left' | 'right'
@@ -52,15 +98,16 @@ export interface Layout {
   height: number
 }
 
-/** Altura que a subárvore ocupa (recolhida = só o próprio nó). */
+/** Altura que a subárvore ocupa (recolhida = só o próprio nó, que pode ter várias linhas). */
 function subtreeH(n: MindNode, memo: Map<string, number>): number {
   const hit = memo.get(n.id)
   if (hit != null) return hit
+  const own = nodeBox(n).h
   let h: number
-  if (n.collapsed || n.children.length === 0) h = NODE_H
+  if (n.collapsed || n.children.length === 0) h = own
   else {
     h = n.children.reduce((a, c) => a + subtreeH(c, memo) + V_GAP, 0) - V_GAP
-    h = Math.max(NODE_H, h)
+    h = Math.max(own, h)
   }
   memo.set(n.id, h)
   return h
@@ -98,24 +145,24 @@ export function layoutMap(root: MindNode): Layout {
   ) {
     const ox = offX + (n.dx ?? 0)
     const oy = offY + (n.dy ?? 0)
-    const w = nodeW(n.text)
+    const { w, h } = nodeBox(n)
     const color = n.color ?? inherited
-    nodes.push({ node: n, parentId, x: x + ox, y: centerY - NODE_H / 2 + oy, w, h: NODE_H, depth, color, side })
+    nodes.push({ node: n, parentId, x: x + ox, y: centerY - h / 2 + oy, w, h, depth, color, side })
     if (n.collapsed || !n.children.length) return
     const total = n.children.reduce((a, c) => a + subtreeH(c, memo) + V_GAP, 0) - V_GAP
     let cursor = centerY - total / 2
     for (const c of n.children) {
       const ch = subtreeH(c, memo)
-      const cx = side === 'left' ? x - H_GAP - nodeW(c.text) : x + w + H_GAP
+      const cx = side === 'left' ? x - H_GAP - nodeBox(c).w : x + w + H_GAP
       edges.push({ fromId: n.id, toId: c.id })
       place(c, cx, cursor + ch / 2, side, depth + 1, n.id, color, ox, oy)
       cursor += ch + V_GAP
     }
   }
 
-  const rootW = nodeW(root.text)
+  const { w: rootW, h: rootH } = nodeBox(root)
   const rOx = root.dx ?? 0, rOy = root.dy ?? 0
-  nodes.push({ node: root, parentId: null, x: rOx, y: -NODE_H / 2 + rOy, w: rootW, h: NODE_H, depth: 0, color: rootColor, side: 'root' })
+  nodes.push({ node: root, parentId: null, x: rOx, y: -rootH / 2 + rOy, w: rootW, h: rootH, depth: 0, color: rootColor, side: 'root' })
 
   if (!root.collapsed && root.children.length) {
     const sides = assignSides(root, memo)
@@ -126,7 +173,7 @@ export function layoutMap(root: MindNode): Layout {
       let cursor = -total / 2
       for (const c of branch) {
         const ch = subtreeH(c, memo)
-        const cx = dir === 'left' ? -H_GAP - nodeW(c.text) : rootW + H_GAP
+        const cx = dir === 'left' ? -H_GAP - nodeBox(c).w : rootW + H_GAP
         edges.push({ fromId: root.id, toId: c.id })
         place(c, cx, cursor + ch / 2, dir, 1, root.id, rootColor, rOx, rOy)
         cursor += ch + V_GAP
@@ -149,7 +196,7 @@ export function edgePath(from: LaidNode, to: LaidNode): string {
   const rightward = to.side !== 'left'
   const x1 = rightward ? from.x + from.w : from.x
   const x2 = rightward ? to.x : to.x + to.w
-  const y1 = from.y + NODE_H / 2, y2 = to.y + NODE_H / 2
+  const y1 = from.y + from.h / 2, y2 = to.y + to.h / 2
   const mx = x1 + (x2 - x1) / 2
   return `M${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`
 }
