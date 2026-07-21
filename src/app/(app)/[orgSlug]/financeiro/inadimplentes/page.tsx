@@ -37,7 +37,21 @@ export default async function InadimplentesPage({ params }: { params: Promise<{ 
     situacao: string; origem_tipo: string | null; origem_ref: string | null
   }
   const lanc = unwrap<LancRaw>(resLanc, 'lançamentos')
-  const promoted = new Set(lanc.filter(l => l.origem_tipo === 'conta_azul' && l.origem_ref).map(l => l.origem_ref as string))
+
+  // A dedup precisa olhar TODOS os lançamentos vindos do extrato, não só os em
+  // aberto. Montar o set a partir de `lanc` (que já vem filtrado por
+  // situacao='em_aberto') fazia o título voltar a aparecer como atrasado assim
+  // que era PAGO: o lançamento saía da lista, a linha do extrato deixava de ser
+  // reconhecida como promovida e ressuscitava. Eram 3 títulos, R$ 3.906,82
+  // inflando o total de "a pagar atrasado" — entre eles o FGTS já conciliado.
+  const resPromo = await sb.from('lancamentos')
+    .select('origem_ref')
+    .eq('org_id', orgId).eq('origem_tipo', 'conta_azul').not('origem_ref', 'is', null)
+  const promoted = new Set(
+    unwrap<{ origem_ref: string | null }>(resPromo, 'lançamentos promovidos')
+      .map(l => l.origem_ref)
+      .filter((r): r is string => !!r),
+  )
 
   const itens: AbertoItem[] = []
   for (const l of lanc) {
