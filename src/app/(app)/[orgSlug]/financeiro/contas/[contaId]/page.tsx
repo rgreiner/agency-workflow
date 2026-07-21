@@ -41,7 +41,7 @@ export default async function ContaPage({
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await sb
       .from('extrato_importado')
-      .select('data_mov, contato, descricao, categoria, valor, situacao')
+      .select('data_mov, contato, descricao, categoria, valor, situacao, import_ref')
       .eq('org_id', orgId).eq('conta', conta.nome)
       .in('situacao', REALIZADO_EXTRATO)
       .order('data_mov', { ascending: false })
@@ -65,16 +65,23 @@ export default async function ContaPage({
 
   // Baixas do Flow (lançamentos já pagos/recebidos) entram no MESMO timeline do
   // extrato — sem isso o "saldo do dia" das linhas não chega no "Saldo atual" do topo
-  // (que vem da view contas_saldo e já soma essas baixas). origem_ref is null exclui
-  // os promovidos do extrato, senão o mesmo dinheiro apareceria duas vezes.
+  // (que vem da view contas_saldo e já soma essas baixas).
+  //
+  // Dupla contagem: o lançamento PROMOVIDO do extrato (origem_ref = import_ref) só é
+  // descartado quando a linha do extrato dele já está realizada — aí o dinheiro já
+  // entrou pela Fonte A. Promovido de PREVISTO ('Em aberto') e depois baixado no Flow
+  // tem que aparecer, senão a baixa some da conta (era o buraco de R$ 2.626,82).
+  // Mesmo critério da view contas_saldo (migration 134).
+  const refsRealizados = new Set(movRaw.map(e => e.import_ref as string | null).filter(Boolean))
   const { data: lancRaw } = await sb
     .from('lancamentos')
-    .select('tipo, valor, valor_realizado, vencimento, data_liquidacao, descricao, contato_nome, categoria')
-    .eq('org_id', orgId).eq('conta_id', contaId).is('origem_ref', null)
+    .select('tipo, valor, valor_realizado, vencimento, data_liquidacao, descricao, contato_nome, categoria, origem_ref')
+    .eq('org_id', orgId).eq('conta_id', contaId)
     .in('situacao', ['pago', 'recebido'])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const l of (lancRaw ?? []) as any[]) {
+    if (l.origem_ref && refsRealizados.has(l.origem_ref)) continue
     const bruto = Number(l.valor_realizado ?? l.valor ?? 0)
     movimentos.push({
       data: (l.data_liquidacao as string) ?? (l.vencimento as string) ?? null,
