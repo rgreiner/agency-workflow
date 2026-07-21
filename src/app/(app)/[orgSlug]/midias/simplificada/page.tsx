@@ -22,7 +22,9 @@ export default async function MidiasSimplificadaPage({
   const baseQ = (supabase as any)
     .from('midias')
     .select('id, numero, serie, titulo, tipo, valor, desconto_pct, faturamento, situacao, archived, workspaces(name), veiculos(name)')
-    .eq('org_id', org.id)
+    // Era a ÚNICA lista sem filtro de tipo — mostrava toda mídia da org, inclusive
+    // as externas. Agora é categoria própria como as outras abas.
+    .eq('org_id', org.id).eq('tipo', 'simplificada')
 
   const { data: raw } = await filtrarPorAba(baseQ, archivedView)
     .order('numero', { ascending: false })
@@ -42,5 +44,12 @@ export default async function MidiasSimplificadaPage({
     veiculo: m.veiculos?.name ?? '—',
   }))
 
-  return <MidiasClient orgSlug={orgSlug} midias={midias} archivedView={archivedView} />
+  return (
+    <MidiasClient
+      orgSlug={orgSlug} midias={midias} archivedView={archivedView}
+      title="Liberação de mídias — Simplificada"
+      subtitle="Google, Meta, carro de som e afins (série MS)"
+      addLabel="Adicionar Mídia Simplificada"
+    />
+  )
 }

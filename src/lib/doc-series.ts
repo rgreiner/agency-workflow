@@ -22,7 +22,8 @@ export const SERIE_LABELS: Record<string, string> = {
 }
 
 // Séries de mídia oferecidas quando o tipo é "digital" (as demais saem do tipo).
-export const MIDIA_SERIE_DIGITAL_OPTIONS = [
-  { value: 'MS', label: 'MS — Digital/Social (Google, Meta...)' },
-  { value: 'MD', label: 'MD — CGN / Portais' },
-]
+// Escolher a série na mão saiu em 21/07/2026: a série vem do TIPO da mídia
+// (migration 136). Simplificada = MS (Google, Meta, carro de som);
+// Digital = MD (CGN e portais). Antes as duas moravam na aba Digitais e o
+// padrão era MS, então uma mídia de portal queimava número da sequência do
+// Google/Meta sem ninguém perceber.

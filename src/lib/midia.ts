@@ -5,6 +5,9 @@ export const MIDIA_TIPO_OPTIONS = [
   { value: 'impressa_revista', label: 'Mídia Impressa - Revista' },
   { value: 'eletronica', label: 'Mídia Eletrônica' },
   { value: 'externa', label: 'Mídia Externa' },
+  // Simplificada (MS) = Google, Meta, carro de som. Digital (MD) = CGN e portais.
+  // Eram a mesma coisa até 21/07/2026 e a série saía trocada — ver migration 136.
+  { value: 'simplificada', label: 'Mídia Simplificada' },
   { value: 'digital', label: 'Mídia Digital' },
   { value: 'outros', label: 'Outros' },
 ]

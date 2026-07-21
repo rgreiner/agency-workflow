@@ -10,7 +10,6 @@ import {
   MIDIA_FATURAMENTO_OPTIONS, MIDIA_PRAZO_OPTIONS, MIDIA_ABRANGENCIA_OPTIONS,
   MIDIA_SITUACAO_OPTIONS, FATURAMENTO_PAGADOR, formatBRL, parseMoney,
 } from '@/lib/midia'
-import { MIDIA_SERIE_DIGITAL_OPTIONS } from '@/lib/doc-series'
 import type { ClienteOpt, VeiculoOpt, MemberOpt } from '../simplificada/MidiaForm'
 
 export interface PecaDig { peca: string; tipo: string; titulo: string; formato: string }
@@ -35,7 +34,7 @@ const newInsercao = (): InsercaoDig => ({ peca: 'A', local: '', tipo: 'CPC', des
 
 function emptyValues(today: string, responsavelId: string): DigitalValues {
   return {
-    workspace_id: '', campaign_id: '', veiculo_id: '', serie: 'MS', titulo: '',
+    workspace_id: '', campaign_id: '', veiculo_id: '', serie: '', titulo: '',
     emissao: today, job: '', aut_veiculo: '', codigo_identificador: '', nota_fiscal: '',
     praca: '', abrangencia: 'estadual',
     desconto_pct: '20', faturamento: 'liquido_contra_cliente', prazo: '15_dfm', data_base: today, dias_agencia: '7',
@@ -102,7 +101,9 @@ export function DigitalForm({
     const scalars: (keyof DigitalValues)[] = ['workspace_id', 'campaign_id', 'veiculo_id', 'titulo', 'emissao', 'job', 'aut_veiculo', 'codigo_identificador', 'nota_fiscal', 'praca', 'abrangencia', 'faturamento', 'prazo', 'data_base', 'dias_agencia', 'primeira_veiculacao', 'ultima_veiculacao', 'contato', 'responsavel_id', 'situacao', 'observacao', 'texto_legal']
     scalars.forEach(k => fd.set(k, String(form[k] ?? '')))
     fd.set('tipo', 'digital')
-    fd.set('serie', form.serie || 'MS')
+    // Série vem do tipo na RPC (migration 136): digital = MD (portais).
+    // MS ficou para a Mídia Simplificada (Google/Meta), que tem aba própria.
+    fd.set('serie', '')
     fd.set('valor', String(valor))
     fd.set('desconto_pct', String(parseMoney(form.desconto_pct)))
     fd.set('redirect_to', redirectTo)
@@ -142,8 +143,6 @@ export function DigitalForm({
             <div><label className={labelCls}>Aut. no Veículo</label><input value={form.aut_veiculo} onChange={e => set('aut_veiculo', e.target.value)} className={inputCls} /></div>
             <div><label className={labelCls}>Código Identificador</label><input value={form.codigo_identificador} onChange={e => set('codigo_identificador', e.target.value)} className={inputCls} /></div>
             <div><label className={labelCls}>Nota Fiscal</label><input value={form.nota_fiscal} onChange={e => set('nota_fiscal', e.target.value)} className={inputCls} /></div>
-            <div><label className={labelCls}>Série do documento</label>
-              <Select value={form.serie || 'MS'} onChange={v => set('serie', v)} options={MIDIA_SERIE_DIGITAL_OPTIONS} /></div>
           </div>
           <div className="mt-4"><label className={labelCls}>Título <span className="text-red-500">*</span></label>
             <input value={form.titulo} onChange={e => set('titulo', e.target.value)} className={inputCls} required /></div>
