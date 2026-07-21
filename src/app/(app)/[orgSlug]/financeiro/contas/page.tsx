@@ -20,7 +20,7 @@ export default async function ContasPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const resContas = await (supabase as any)
     .from('contas_saldo')
-    .select('id, nome, tipo, saldo_inicial, saldo_atual, cor, ativo, ordem')
+    .select('id, nome, tipo, saldo_inicial, saldo_atual, cor, ativo, ordem, favorita')
     .eq('org_id', org.id)
     .order('ordem', { ascending: true })
     .order('nome', { ascending: true })

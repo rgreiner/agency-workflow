@@ -370,6 +370,21 @@ export async function updateConta(orgSlug: string, contaId: string, data: Partia
   revalidatePath(`/${orgSlug}/financeiro/contas`)
 }
 
+/** Marca/desmarca a conta favorita (a favorita é a conta a receber padrão do Faturamento). */
+export async function setContaFavorita(orgSlug: string, contaId: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('set_conta_favorita', {
+    p_user_id: user.id, p_conta_id: contaId,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/contas`)
+  revalidatePath(`/${orgSlug}/financeiro/faturamento`)
+}
+
 // ── Import do extrato (Conta Azul) ───────────────────────────
 import type { ExtratoRow } from '@/lib/extrato'
 

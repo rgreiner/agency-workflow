@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, X, Check, Loader2, Pencil, Landmark, Power, Layers, Eye, EyeOff } from 'lucide-react'
+import { Plus, X, Check, Loader2, Pencil, Landmark, Power, Layers, Eye, EyeOff, Star } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { formatBRL } from '@/lib/midia'
 import { Select } from '@/components/ui/Select'
-import { createConta, updateConta } from '@/app/actions/financeiro'
+import { createConta, updateConta, setContaFavorita } from '@/app/actions/financeiro'
 
 export interface Conta {
   id: string
@@ -18,6 +19,7 @@ export interface Conta {
   cor: string | null
   ativo: boolean
   ordem: number
+  favorita?: boolean
 }
 
 const TIPO_OPTIONS = [
@@ -103,6 +105,15 @@ export function ContasClient({ orgSlug, contas }: { orgSlug: string; contas: Con
     })
   }
 
+  function toggleFavorita(c: Conta) {
+    startTransition(async () => {
+      const res = await setContaFavorita(orgSlug, c.id)
+      if (res?.error) { toast.error(res.error); return }
+      toast.success(c.favorita ? 'Conta favorita removida' : `${c.nome} é a conta padrão do faturamento`)
+      router.refresh()
+    })
+  }
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between gap-3 mb-5">
@@ -151,7 +162,8 @@ export function ContasClient({ orgSlug, contas }: { orgSlug: string; contas: Con
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                   {g.itens.map(c => (
                     <ContaCard key={c.id} conta={c} orgSlug={orgSlug} isPending={isPending}
-                      onEditar={() => setEditing(c)} onToggleAtivo={() => toggleAtivo(c)} />
+                      onEditar={() => setEditing(c)} onToggleAtivo={() => toggleAtivo(c)}
+                      onToggleFavorita={() => toggleFavorita(c)} />
                   ))}
                 </div>
               </section>
@@ -161,7 +173,8 @@ export function ContasClient({ orgSlug, contas }: { orgSlug: string; contas: Con
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {visiveis.map(c => (
               <ContaCard key={c.id} conta={c} orgSlug={orgSlug} isPending={isPending}
-                onEditar={() => setEditing(c)} onToggleAtivo={() => toggleAtivo(c)} />
+                onEditar={() => setEditing(c)} onToggleAtivo={() => toggleAtivo(c)}
+                onToggleFavorita={() => toggleFavorita(c)} />
             ))}
           </div>
         )
@@ -180,13 +193,14 @@ export function ContasClient({ orgSlug, contas }: { orgSlug: string; contas: Con
   )
 }
 
-function ContaCard({ conta: c, orgSlug, isPending, onEditar, onToggleAtivo }: {
+function ContaCard({ conta: c, orgSlug, isPending, onEditar, onToggleAtivo, onToggleFavorita }: {
   conta: Conta; orgSlug: string; isPending: boolean
-  onEditar: () => void; onToggleAtivo: () => void
+  onEditar: () => void; onToggleAtivo: () => void; onToggleFavorita: () => void
 }) {
   const saldo = Number(c.saldo_atual ?? 0)
   return (
-    <div className={cn('group/conta bg-white rounded-2xl border border-gray-200 p-4 flex flex-col gap-3 transition hover:border-gray-300 hover:shadow-sm',
+    <div className={cn('group/conta bg-white rounded-2xl border p-4 flex flex-col gap-3 transition hover:shadow-sm',
+      c.favorita ? 'border-orange-200 ring-1 ring-orange-100' : 'border-gray-200 hover:border-gray-300',
       !c.ativo && 'opacity-60')}>
       {/* identidade + tipo */}
       <div className="flex items-start justify-between gap-2">
@@ -200,9 +214,19 @@ function ContaCard({ conta: c, orgSlug, isPending, onEditar, onToggleAtivo }: {
             </span>
           </span>
         </Link>
-        {!c.ativo && (
-          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 shrink-0">Inativa</span>
-        )}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {!c.ativo && (
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Inativa</span>
+          )}
+          {/* Estrela: a favorita é a conta a receber padrão do Faturamento. */}
+          <button onClick={onToggleFavorita} disabled={isPending}
+            title={c.favorita ? 'Conta padrão do faturamento — clique para remover' : 'Definir como conta padrão do faturamento'}
+            aria-pressed={c.favorita}
+            className={cn('p-1 rounded-lg transition-colors active:scale-[0.9] disabled:opacity-50',
+              c.favorita ? 'text-orange-500 hover:text-orange-600' : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100')}>
+            <Star className={cn('w-4 h-4', c.favorita && 'fill-current')} />
+          </button>
+        </div>
       </div>
 
       {/* saldo — o dado principal do bloco */}

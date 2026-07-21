@@ -106,16 +106,18 @@ export default async function FaturamentoPage({
   // Catálogos p/ os 4 campos de classificação da conferência (centro/categoria/conta/forma).
   const [{ data: contasRaw }, { data: settings }] = await Promise.all([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (supabase as any).from('contas_financeiras').select('id, nome, ativo').eq('org_id', orgId).order('ordem', { ascending: true }),
+    (supabase as any).from('contas_financeiras').select('id, nome, ativo, favorita').eq('org_id', orgId).order('ordem', { ascending: true }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any).from('org_settings').select('finance_categorias, finance_centros_custo').eq('org_id', orgId).maybeSingle(),
   ])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const contas: ContaRef[] = ((contasRaw ?? []) as any[]).filter(c => c.ativo).map(c => ({ id: c.id, nome: c.nome }))
+  const contasAtivas = ((contasRaw ?? []) as any[]).filter(c => c.ativo)
+  const contas: ContaRef[] = contasAtivas.map(c => ({ id: c.id, nome: c.nome }))
   const categorias = (settings?.finance_categorias ?? []) as FinanceCategoriaGrupo[]
   const centros = (settings?.finance_centros_custo ?? []) as FinanceCentro[]
-  // Conta a receber padrão = BTG (decisão do Rafael); fallback: 1ª conta ativa.
-  const defaultConta = (contas.find(c => /btg/i.test(c.nome)) ?? contas[0])?.id ?? ''
+  // Conta a receber padrão = a FAVORITA da org (estrela em Contas); fallback: 1ª ativa.
+  // Nada de nome de banco hard-coded — a org define a favorita.
+  const defaultConta = (contasAtivas.find(c => c.favorita) ?? contasAtivas[0])?.id ?? ''
   const cat = { contas, categorias, centros, defaultConta }
 
   /** Mesma conta da RPC gerar_lancamento_midia — o valor conferido tem que ser o lançado.
