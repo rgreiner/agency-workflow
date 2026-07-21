@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState, useTransition } from 'react'
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, ChevronRight, FileText, Receipt, Check, RotateCcw, AlertTriangle, RefreshCw, Plus, X, Loader2, Pencil, Trash2, ArrowDownCircle, ArrowUpCircle, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -8,15 +8,17 @@ import { formatBRL, formatDateBR } from '@/lib/midia'
 import { Select } from '@/components/ui/Select'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { DocChip } from '@/components/ui/DocChip'
+import { docNumero } from '@/lib/doc-series'
 import { toast } from 'sonner'
 import {
   setLancamentoFlags, ressincronizarLancamento, marcarLancamentoRevisado,
   createLancamento, createLancamentosSerie, updateLancamento, deleteLancamento, liquidarLancamento, reabrirLancamento,
   setLancamentoAnexos, promoverExtrato, updateLancamentosLote, descartarExtrato,
-  type FinanceCategoriaGrupo, type FinanceCentro, type Anexo,
+  impactoExcluirLancamento,
+  type FinanceCategoriaGrupo, type FinanceCentro, type Anexo, type ImpactoExclusao,
 } from '@/app/actions/financeiro'
 import { uploadFile } from '@/lib/storage/upload-client'
-import { Paperclip, ExternalLink } from 'lucide-react'
+import { Paperclip, ExternalLink, CalendarClock } from 'lucide-react'
 
 export interface Lancamento {
   id: string
@@ -106,6 +108,8 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
   const [cardFilter, setCardFilter] = useState<null | 'rec_aberto' | 'rec_real' | 'desp_aberto' | 'desp_real'>(null)
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Lancamento | null>(null)
+  // 'vencimento' = veio do botão Renegociar: o modal abre com a data em foco.
+  const [editFoco, setEditFoco] = useState<'vencimento' | null>(null)
   const [baixa, setBaixa] = useState<Lancamento | null>(null)
 
   // Une lançamentos do Flow + linhas do extrato importado, escondendo as já promovidas
@@ -287,7 +291,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
             <tbody className="divide-y divide-gray-50">
               {rows.map((l) => (
                 <Row key={l.id} l={l} orgSlug={orgSlug} today={today}
-                  conta={l.conta_id ? contaMap[l.conta_id] : undefined} onEdit={setEditing} onBaixa={setBaixa}
+                  conta={l.conta_id ? contaMap[l.conta_id] : undefined} onEdit={(l, foco) => { setEditFoco(foco ?? null); setEditing(l) }} onBaixa={setBaixa}
                   selecionado={selecionados.has(l.id)} onToggleSel={toggleUm} />
               ))}
             </tbody>
@@ -300,7 +304,8 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
 
       {(creating || editing) && (
         <LancamentoModal orgSlug={orgSlug} lancamento={editing} contas={contas} categorias={categorias} centros={centros}
-          onClose={() => { setCreating(false); setEditing(null) }} />
+          foco={editFoco}
+          onClose={() => { setCreating(false); setEditing(null); setEditFoco(null) }} />
       )}
       {baixa && (
         <BaixaModal orgSlug={orgSlug} lancamento={baixa} contas={contas} onClose={() => setBaixa(null)} />
@@ -335,6 +340,19 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
 
 /** Pode entrar numa edição em lote? Linha do Conta Azul ainda não é lançamento, e
  *  conciliado (baixa total OU parcial) não se mexe — precisa desconciliar antes. */
+/** Texto do modal de exclusão — diz o estrago antes, não depois. */
+function descreveImpacto(i: ImpactoExclusao | null): string {
+  if (!i) return 'Confirma a exclusão?'
+  if (i.escopo === 'documento') {
+    const doc = docNumero(i.doc_serie, i.doc_numero)
+    const n = i.parcelas ?? 1
+    const total = formatBRL(Number(i.valor_total ?? 0))
+    return `${doc} volta para o Faturamento e ${n === 1 ? 'a parcela some' : `as ${n} parcelas somem`} do fluxo de caixa (${total} no total). `
+      + 'O documento em si não é apagado — dá pra faturar de novo. Não dá pra desfazer a exclusão das parcelas.'
+  }
+  return 'Este lançamento será excluído do fluxo de caixa. Não dá pra desfazer.'
+}
+
 export function podeEditarEmLote(l: Lancamento): { ok: boolean; motivo?: string } {
   if (l.source === 'importado') return { ok: false, motivo: 'Linha do Conta Azul — edite para virar lançamento do Flow primeiro' }
   if (isPago(l.situacao)) return { ok: false, motivo: 'Já conciliado — desconcilie antes de alterar' }
@@ -344,18 +362,18 @@ export function podeEditarEmLote(l: Lancamento): { ok: boolean; motivo?: string 
 
 function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleSel }: {
   l: Lancamento; orgSlug: string; today: string; conta?: ContaRef
-  onEdit: (l: Lancamento) => void; onBaixa: (l: Lancamento) => void
+  onEdit: (l: Lancamento, foco?: 'vencimento') => void; onBaixa: (l: Lancamento) => void
   selecionado: boolean; onToggleSel: (id: string) => void
 }) {
   const sel = podeEditarEmLote(l)
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [confirmDel, setConfirmDel] = useState(false)
+  const [impacto, setImpacto] = useState<ImpactoExclusao | null>(null)
   const [confirmDescarte, setConfirmDescarte] = useState(false)
   const paid = isPago(l.situacao)
   const overdue = !paid && !!l.vencimento && l.vencimento < today
   const isSaida = l.tipo === 'saida'
-  const isManual = l.origem_tipo === 'manual'
   const imported = l.source === 'importado'
   // Documento anexado vale como "tem NF"/"tem boleto" — é prova, não promessa.
   // O tipo é o que a pessoa escolhe no seletor ao anexar ('NF' | 'Boleto' | 'Outro').
@@ -380,6 +398,14 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
       const r = await descartarExtrato(orgSlug, l.import_ref ?? '')
       if (r?.error) toast.error(r.error)
       else { toast.success('Linha descartada.'); router.refresh() }
+    })
+  }
+  function pedirExclusao() {
+    startTransition(async () => {
+      const imp = await impactoExcluirLancamento(l.id)
+      if (!imp.pode) { toast.error(imp.motivo ?? 'Não é possível excluir este lançamento.'); return }
+      setImpacto(imp)
+      setConfirmDel(true)
     })
   }
   function remover() {
@@ -501,14 +527,26 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
                     className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition disabled:opacity-50"><Check className="w-3.5 h-3.5" /></button>
                 </>
               )}
-              <button onClick={() => onEdit(l)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar"><Pencil className="w-3.5 h-3.5" /></button>
-              {isManual && (
-                <button onClick={() => setConfirmDel(true)} disabled={isPending} className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-50" title="Excluir"><Trash2 className="w-3.5 h-3.5" /></button>
+              {/* Renegociar prazo: o vencimento sempre foi editável no modal, mas
+                  ficava escondido atrás do lápis e ninguém achava. Item vencido
+                  ganha a ação explícita, com o campo de data já em foco. */}
+              {overdue && (
+                <button onClick={() => onEdit(l, 'vencimento')} disabled={isPending}
+                  title="Renegociar o prazo de pagamento"
+                  className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition disabled:opacity-50">
+                  <CalendarClock className="w-3.5 h-3.5" /> Renegociar
+                </button>
               )}
+              <button onClick={() => onEdit(l)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar"><Pencil className="w-3.5 h-3.5" /></button>
+              {/* A trava real está na RPC (136): pago/recebido, baixa parcial ou
+                  conciliado recusam com motivo. Aqui o botão aparece sempre e o
+                  servidor é quem diz não — evita ter duas regras divergentes. */}
+              <button onClick={pedirExclusao} disabled={isPending} className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-50" title="Excluir"><Trash2 className="w-3.5 h-3.5" /></button>
               <ConfirmDialog
                 open={confirmDel} loading={isPending}
-                title="Excluir lançamento"
-                description="Este lançamento manual será excluído. Não dá pra desfazer."
+                title={impacto?.escopo === 'documento' ? 'Estornar o faturamento' : 'Excluir lançamento'}
+                description={descreveImpacto(impacto)}
+                confirmLabel={impacto?.escopo === 'documento' ? 'Estornar faturamento' : 'Excluir'}
                 onConfirm={remover} onCancel={() => setConfirmDel(false)}
               />
               {paid ? (
@@ -617,16 +655,27 @@ const FORMA_OPTIONS = [
   { value: 'dinheiro', label: 'Dinheiro' },
 ]
 
-function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onClose }: {
+function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, foco, onClose }: {
   orgSlug: string; lancamento: Lancamento | null; contas: ContaRef[]
-  categorias: FinanceCategoriaGrupo[]; centros: FinanceCentro[]; onClose: () => void
+  categorias: FinanceCategoriaGrupo[]; centros: FinanceCentro[]
+  foco?: 'vencimento' | null; onClose: () => void
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
   // Importado (Conta Azul): editável — ao salvar, é PROMOVIDO a lançamento do Flow.
   const imported = lancamento?.source === 'importado'
-  const readonly = !!lancamento && !imported && lancamento.origem_tipo !== 'manual'
+  // Texto/valor travados só quando existe DOCUMENTO vivo por trás (produção/mídia):
+  // lá o documento é a fonte e a próxima regeração sobrescreveria o que fosse
+  // editado aqui. Conta Azul/OFX/manual são livres — não há de onde ressincronizar.
+  const readonly = !!lancamento && !imported
+    && lancamento.origem_tipo !== 'manual' && lancamento.origem_tipo !== 'conta_azul' && lancamento.origem_tipo !== 'ofx'
+  const vencRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (foco !== 'vencimento') return
+    const t = setTimeout(() => { vencRef.current?.focus(); vencRef.current?.showPicker?.() }, 80)
+    return () => clearTimeout(t)
+  }, [foco])
   const [form, setForm] = useState({
     tipo: lancamento?.tipo ?? 'saida',
     descricao: lancamento?.descricao ?? '',
@@ -705,7 +754,15 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
       categoria: form.categoria || null,
       centro_custo: form.centro_custo || null,
       forma_pagamento: form.forma_pagamento || null,
-      observacao: form.observacao.trim() || null,
+      // Renegociação deixa rastro: sem isso ninguém lembra qual era o prazo original
+      // nem quando mudou — e é essa a pergunta que aparece na cobrança.
+      observacao: (() => {
+        const obs = form.observacao.trim()
+        const antes = lancamento?.vencimento ?? null
+        if (foco !== 'vencimento' || !antes || !form.vencimento || form.vencimento === antes) return obs || null
+        const nota = `Prazo renegociado em ${formatDateBR(new Date().toISOString().slice(0, 10))}: ${formatDateBR(antes)} → ${formatDateBR(form.vencimento)}`
+        return obs ? `${nota}\n${obs}` : nota
+      })(),
     }
     // Promoção: importado vira lançamento do Flow, carregando a liquidação do snapshot.
     if (imported && lancamento) {
@@ -794,8 +851,9 @@ function LancamentoModal({ orgSlug, lancamento, contas, categorias, centros, onC
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelCls}>Vencimento</label>
-              <input type="date" value={form.vencimento} onChange={e => setForm(f => ({ ...f, vencimento: e.target.value }))} className={inputCls} />
+              <label className={labelCls}>Vencimento{foco === 'vencimento' && <span className="ml-1 text-orange-600 font-normal">— renegociando</span>}</label>
+              <input ref={vencRef} type="date" value={form.vencimento} onChange={e => setForm(f => ({ ...f, vencimento: e.target.value }))}
+                className={cn(inputCls, foco === 'vencimento' && 'ring-2 ring-orange-400 border-transparent')} />
             </div>
             <div>
               <label className={labelCls}>Competência</label>

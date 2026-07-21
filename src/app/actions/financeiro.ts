@@ -186,17 +186,50 @@ export async function updateLancamento(orgSlug: string, lancamentoId: string, da
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
 }
 
+export interface ImpactoExclusao {
+  pode: boolean
+  motivo?: string
+  /** 'documento' = estorna o faturamento inteiro; 'lancamento' = só esta linha. */
+  escopo?: 'documento' | 'lancamento'
+  origem?: string | null
+  doc_serie?: string | null
+  doc_numero?: number | null
+  parcelas?: number
+  valor_total?: number | string
+}
+
+/**
+ * Prévia do que a exclusão vai causar — o modal de confirmação precisa dizer o
+ * impacto real (quantas parcelas somem, qual documento volta pro Faturamento) e não
+ * um texto genérico. Calculado no servidor porque a trava também mora lá.
+ */
+export async function impactoExcluirLancamento(lancamentoId: string): Promise<ImpactoExclusao> {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { pode: false, motivo: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('impacto_excluir_lancamento', {
+    p_user_id: user.id, p_lancamento_id: lancamentoId,
+  })
+  if (error) return { pode: false, motivo: error.message }
+  return data as ImpactoExclusao
+}
+
 export async function deleteLancamento(orgSlug: string, lancamentoId: string) {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any).rpc('delete_lancamento', {
+  const { data, error } = await (supabase as any).rpc('delete_lancamento', {
     p_user_id: user.id, p_lancamento_id: lancamentoId,
   })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+  // Estorno devolve o documento pro Faturamento — aquela tela também muda.
+  revalidatePath(`/${orgSlug}/financeiro/faturamento`)
+  return { ok: true, escopo: (data as { escopo?: string })?.escopo ?? 'lancamento' }
 }
 
 export interface BaixaInput {
