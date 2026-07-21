@@ -115,17 +115,32 @@ export async function salvarConfigContabil(
   orgSlug: string, cfg: { emails: string[]; dia: number; ativo: boolean },
 ) {
   const { supabase, orgId } = await assertFinanceAccess(orgSlug)
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
   const emails = cfg.emails.map(e => e.trim()).filter(Boolean)
   const invalido = emails.find(e => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e))
   if (invalido) return { error: `E-mail inválido: ${invalido}` }
   if (cfg.ativo && emails.length === 0) return { error: 'Defina ao menos um e-mail antes de ativar.' }
   if (cfg.dia < 1 || cfg.dia > 28) return { error: 'O dia precisa estar entre 1 e 28.' }
 
+  // Via RPC (migration 130): org_settings só tem policy de SELECT, então o UPDATE
+  // direto era barrado pela RLS e voltava "sucesso" com 0 linhas — salvava nada.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any).from('org_settings')
-    .update({ contabil_emails: emails, contabil_dia: cfg.dia, contabil_ativo: cfg.ativo })
-    .eq('org_id', orgId)
+  const { error } = await (supabase as any).rpc('salvar_config_contabil', {
+    p_org_id: orgId, p_user_id: user.id,
+    p_emails: emails, p_dia: cfg.dia, p_ativo: cfg.ativo,
+  })
   if (error) return { error: error.message }
+
+  // Confere o que ficou gravado: se um dia a escrita voltar a falhar em silêncio,
+  // a tela avisa em vez de mentir "salvo".
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: check } = await (supabase as any).from('org_settings')
+    .select('contabil_emails').eq('org_id', orgId).maybeSingle()
+  if ((check?.contabil_emails ?? []).length !== emails.length) {
+    return { error: 'A configuração não foi gravada. Recarregue e tente de novo.' }
+  }
+
   revalidatePath(`/${orgSlug}/financeiro/fechamento`)
   return { ok: true }
 }
