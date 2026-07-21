@@ -20,17 +20,22 @@ export interface LancOption {
   valor: number; saldo: number; vencimento: string | null
 }
 export interface ContaOpt { id: string; nome: string }
+export interface ConcItem {
+  nome: string; descricao: string | null; vencimento: string | null; valor: number
+}
 export interface MovementView {
   id: string; tipo: string; valor: number; dataMov: string
   descricao: string | null; categoria: string | null
   sugestao: { lancId: string; auto: boolean } | null
-  itens: { nome: string; valor: number }[] | null
+  itens: ConcItem[] | null
   status?: string
+  /** Como o casamento foi feito. null = antes da migration 131 (desconhecido). */
+  modo?: 'auto' | 'manual' | null
+  conciliadoEm?: string | null
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100
 const moneyStr = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const STATUS_LABEL: Record<string, string> = { conciliado: 'Conciliado', ignorado: 'Ignorado' }
 
 export function ConciliacaoClient({
   orgSlug, pendentes, historico, abertos, contas, categoriasEntrada, categoriasSaida,
@@ -56,6 +61,14 @@ export function ConciliacaoClient({
 
   const autoMovs = useMemo(() => pendentes.filter(m => m.sugestao?.auto), [pendentes])
 
+  // Quanto do banco ainda não virou lançamento — o número que responde
+  // "falta muito pra fechar?" antes de abrir movimento por movimento.
+  const pend = useMemo(() => {
+    let entrou = 0, saiu = 0
+    for (const m of pendentes) { if (m.tipo === 'credit') entrou += m.valor; else saiu += m.valor }
+    return { entrou, saiu, liquido: round2(entrou - saiu) }
+  }, [pendentes])
+
   function runSync() {
     setSyncing(true)
     startTransition(async () => {
@@ -72,7 +85,9 @@ export function ConciliacaoClient({
     let ok = 0
     for (const m of autoMovs) {
       if (!m.sugestao) continue
-      const r = await conciliarMovimentoMulti(orgSlug, m.id, [{ lancamentoId: m.sugestao.lancId, valor: m.valor }])
+      // 'auto': foi a sugestão da máquina aceita em lote — fica marcado assim no
+      // histórico, porque é o casamento que merece um segundo olhar na conferência.
+      const r = await conciliarMovimentoMulti(orgSlug, m.id, [{ lancamentoId: m.sugestao.lancId, valor: m.valor }], 'auto')
       if (!r?.error) ok++
     }
     setBulking(false)
@@ -85,13 +100,13 @@ export function ConciliacaoClient({
   // mais), por isso sem padding próprio e com h2 — o h1 da página é o nome da conta.
   return (
     <div>
-      <div className="flex items-center justify-between gap-3 mb-4">
+      <div className="flex items-center justify-between gap-3 mb-3">
         <div>
           <h2 className="text-base font-semibold text-gray-900 inline-flex items-center gap-2">
-            <Landmark className="w-4 h-4 text-gray-400" /> A conciliar
+            <Landmark className="w-4 h-4 text-gray-400" /> Banco × Flow
           </h2>
           <p className="text-gray-500 text-sm mt-0.5">
-            Movimentos que vieram do banco e ainda não têm lançamento — a soma tem que bater 100% com o movimento.
+            O que veio do banco, de um lado; o lançamento do Flow, do outro. A soma tem que bater 100% com o movimento.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -110,6 +125,39 @@ export function ConciliacaoClient({
           )}
         </div>
       </div>
+
+      {/* Pendente de conciliação: o total antes de abrir movimento por movimento. */}
+      {pendentes.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 mb-3 flex items-center gap-6 flex-wrap">
+          <div>
+            <p className="text-[11px] font-medium text-gray-400">Pendente de conciliação</p>
+            <p className="text-xl font-semibold text-gray-900 tabular-nums">
+              {pendentes.length} movimento{pendentes.length > 1 ? 's' : ''}
+            </p>
+          </div>
+          <div className="flex items-center gap-5 text-sm">
+            <div>
+              <p className="text-[11px] font-medium text-gray-400">Entradas</p>
+              <p className="font-semibold text-emerald-600 tabular-nums">{formatBRL(pend.entrou)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-medium text-gray-400">Saídas</p>
+              <p className="font-semibold text-red-600 tabular-nums">{formatBRL(pend.saiu)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-medium text-gray-400">Líquido</p>
+              <p className={cn('font-semibold tabular-nums', pend.liquido < 0 ? 'text-red-600' : 'text-gray-900')}>
+                {formatBRL(pend.liquido)}
+              </p>
+            </div>
+          </div>
+          {autoMovs.length > 0 && (
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 ml-auto">
+              <Sparkles className="w-3 h-3" /> {autoMovs.length} com correspondência provável
+            </span>
+          )}
+        </div>
+      )}
 
       {pendentes.length === 0 ? (
         <div className="flex items-center gap-2.5 bg-white rounded-xl border border-gray-200 px-4 py-3">
@@ -134,11 +182,20 @@ export function ConciliacaoClient({
         <div className="mt-6">
           <button onClick={() => setShowHistorico(s => !s)} className="text-sm text-gray-500 hover:text-gray-700 transition inline-flex items-center gap-1">
             <ChevronDown className={cn('w-4 h-4 transition-transform', showHistorico && 'rotate-180')} />
-            {showHistorico ? 'Ocultar' : 'Ver'} histórico ({historico.length})
+            {showHistorico ? 'Ocultar' : 'Ver'} já conciliados ({historico.length})
           </button>
           {showHistorico && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mt-3 divide-y divide-gray-50">
-              {historico.map(m => <HistoryRow key={m.id} orgSlug={orgSlug} movement={m} />)}
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mt-3">
+              {/* Cabeçalho das duas colunas: deixa explícito o que é banco e o que é Flow. */}
+              <div className="hidden sm:grid grid-cols-[1fr_auto_1fr_auto] items-center gap-3 px-4 py-2 bg-gray-50/70 border-b border-gray-100">
+                <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Banco</span>
+                <span className="w-5" />
+                <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Flow</span>
+                <span className="w-[132px]" />
+              </div>
+              <div className="divide-y divide-gray-50">
+                {historico.map(m => <PairRow key={m.id} orgSlug={orgSlug} movement={m} />)}
+              </div>
             </div>
           )}
         </div>
@@ -417,10 +474,32 @@ function CreateForm({ orgSlug, tipo, contas, categorias, defaultValor, defaultVe
   )
 }
 
-function HistoryRow({ orgSlug, movement }: { orgSlug: string; movement: MovementView }) {
+/** Selo de como o casamento foi feito. `null` = conciliado antes da migration 131. */
+function SeloModo({ status, modo }: { status?: string; modo?: 'auto' | 'manual' | null }) {
+  if (status === 'ignorado') {
+    return <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500"><X className="w-3 h-3" /> Ignorado</span>
+  }
+  if (modo === 'auto') {
+    return <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-sky-50 text-sky-700" title="Casada pela sugestão do sistema — vale conferir"><Sparkles className="w-3 h-3" /> Automática</span>
+  }
+  if (modo === 'manual') {
+    return <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700" title="Escolhida à mão"><Check className="w-3 h-3" /> Manual</span>
+  }
+  // Sem modo gravado: não inventa "manual", só afirma o que se sabe.
+  return <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700"><Check className="w-3 h-3" /> Conciliado</span>
+}
+
+/** Linha par-a-par: o movimento do banco à esquerda, o que ele virou no Flow à direita. */
+function PairRow({ orgSlug, movement }: { orgSlug: string; movement: MovementView }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const credito = movement.tipo === 'credit'
+  const itens = movement.itens ?? []
+  const somaItens = round2(itens.reduce((a, i) => a + i.valor, 0))
+  // Se a soma dos lançamentos não bate com o movimento, isso é um problema de
+  // conciliação — mostrar em vez de esconder atrás do "Conciliado".
+  const descasado = itens.length > 0 && Math.abs(somaItens - movement.valor) > 0.01
+
   function desfazer() {
     startTransition(async () => {
       const r = await desfazerConciliacaoBtg(orgSlug, movement.id)
@@ -429,28 +508,64 @@ function HistoryRow({ orgSlug, movement }: { orgSlug: string; movement: Movement
       router.refresh()
     })
   }
+
   return (
-    <div className="flex items-center gap-3 px-4 py-3">
-      <span className="text-xs text-gray-400 tabular-nums w-20 shrink-0">{formatDateBR(movement.dataMov)}</span>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-gray-700 truncate">{movement.descricao || '—'}</p>
-        {movement.itens && movement.itens.length > 0 && (
-          <p className="text-xs text-gray-400 truncate inline-flex items-center gap-1">
-            <Link2 className="w-3 h-3" /> {movement.itens.map(i => i.nome).join(', ')}
+    <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr_auto] items-center gap-3 px-4 py-3 hover:bg-gray-50/60 transition-colors">
+      {/* Lado do BANCO */}
+      <div className="min-w-0 flex items-center gap-2.5">
+        <span className={cn('w-7 h-7 rounded-lg flex items-center justify-center shrink-0',
+          credito ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600')}>
+          {credito ? <ArrowDownCircle className="w-4 h-4" /> : <ArrowUpCircle className="w-4 h-4" />}
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm text-gray-800 truncate">{movement.descricao || '—'}</p>
+          <p className="text-[11px] text-gray-400 tabular-nums">
+            {formatDateBR(movement.dataMov)} · <span className={credito ? 'text-emerald-600' : 'text-red-600'}>
+              {credito ? '+' : '−'}{formatBRL(movement.valor)}
+            </span>
+          </p>
+        </div>
+      </div>
+
+      <Link2 className="w-4 h-4 text-gray-300 shrink-0 hidden sm:block" />
+
+      {/* Lado do FLOW */}
+      <div className="min-w-0 sm:pl-0 pl-9">
+        {itens.length === 0 ? (
+          <p className="text-xs text-gray-400 italic">
+            {movement.status === 'ignorado' ? 'Ignorado — sem lançamento' : 'Sem lançamento vinculado'}
+          </p>
+        ) : (
+          <ul className="space-y-0.5">
+            {itens.map((i, k) => (
+              <li key={k} className="flex items-baseline justify-between gap-2 min-w-0">
+                <span className="text-sm text-gray-800 truncate">
+                  {i.nome}
+                  {i.descricao && <span className="text-gray-400"> · {i.descricao}</span>}
+                </span>
+                <span className="text-xs text-gray-500 tabular-nums shrink-0">{formatBRL(i.valor)}</span>
+              </li>
+            ))}
+            {itens.length > 1 && (
+              <li className="text-[11px] text-gray-400 tabular-nums">{itens.length} lançamentos · soma {formatBRL(somaItens)}</li>
+            )}
+          </ul>
+        )}
+        {descasado && (
+          <p className="text-[11px] text-amber-700 mt-0.5">
+            Soma dos lançamentos difere do movimento em {formatBRL(Math.abs(round2(movement.valor - somaItens)))}
           </p>
         )}
       </div>
-      <span className={cn('text-sm tabular-nums shrink-0', credito ? 'text-emerald-600' : 'text-red-600')}>
-        {credito ? '+' : '−'}{formatBRL(movement.valor)}
-      </span>
-      <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full shrink-0',
-        movement.status === 'conciliado' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500')}>
-        {STATUS_LABEL[movement.status ?? ''] ?? movement.status}
-      </span>
-      <button onClick={desfazer} disabled={isPending}
-        className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-400 hover:text-orange-600 transition disabled:opacity-40 shrink-0">
-        <RotateCcw className="w-3.5 h-3.5" /> Desfazer
-      </button>
+
+      <div className="flex items-center justify-end gap-1.5 shrink-0 sm:w-[132px] pl-9 sm:pl-0">
+        <SeloModo status={movement.status} modo={movement.modo} />
+        <button onClick={desfazer} disabled={isPending} title="Desfazer conciliação"
+          aria-label="Desfazer conciliação"
+          className="p-1 rounded-md text-gray-300 hover:text-orange-600 hover:bg-orange-50 transition-colors disabled:opacity-40">
+          {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+        </button>
+      </div>
     </div>
   )
 }

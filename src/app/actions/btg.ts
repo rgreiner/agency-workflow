@@ -66,12 +66,17 @@ export interface ConciliacaoItem { lancamentoId: string; valor: number }
  * Concilia um movimento com N lançamentos (1 Pix = 2 notas, 5 compras = 1 débito,
  * baixa parcial). O servidor valida que a soma dos itens bate 100% com o movimento.
  */
-export async function conciliarMovimentoMulti(orgSlug: string, movementId: string, itens: ConciliacaoItem[]) {
+export async function conciliarMovimentoMulti(
+  orgSlug: string, movementId: string, itens: ConciliacaoItem[],
+  /** 'auto' = sugestão do sistema aceita em lote; 'manual' = alguém escolheu (migration 131). */
+  modo: 'auto' | 'manual' = 'manual',
+) {
   const { supabase, userId } = await assertFinanceAccess(orgSlug)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any).rpc('conciliar_btg_multi', {
     p_user_id: userId, p_movement_id: movementId,
     p_itens: itens.map(i => ({ lancamento_id: i.lancamentoId, valor: i.valor })),
+    p_modo: modo,
   })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/financeiro/conciliacao`)

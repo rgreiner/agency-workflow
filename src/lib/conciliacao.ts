@@ -48,7 +48,7 @@ export interface ConciliacaoData {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function loadConciliacao(sb: any, orgId: string, contaId?: string): Promise<ConciliacaoData> {
   let movQ = sb.from('btg_movements')
-    .select('id, tipo, valor, data_mov, descricao, categoria, status')
+    .select('id, tipo, valor, data_mov, descricao, categoria, status, conciliado_modo, conciliado_em')
     .eq('org_id', orgId).order('data_mov', { ascending: false })
   if (contaId) movQ = movQ.eq('conta_id', contaId)
 
@@ -59,7 +59,8 @@ export async function loadConciliacao(sb: any, orgId: string, contaId?: string):
         .select('id, tipo, contato_nome, descricao, valor, valor_realizado, vencimento')
         .eq('org_id', orgId).eq('situacao', 'em_aberto').order('vencimento', { ascending: true }),
       sb.from('btg_conciliacao_itens')
-        .select('movement_id, valor, lancamentos(contato_nome, descricao)')
+        // doc_serie/doc_numero NÃO existem aqui — são da view lancamentos_doc, não da tabela.
+        .select('movement_id, valor, lancamentos(id, contato_nome, descricao, vencimento)')
         .eq('org_id', orgId),
       sb.from('contas_financeiras')
         .select('id, nome').eq('org_id', orgId).eq('ativo', true).order('ordem', { ascending: true }),
@@ -80,13 +81,20 @@ export async function loadConciliacao(sb: any, orgId: string, contaId?: string):
     }
   }).filter(l => l.saldo > 0.005)
 
-  const itensPorMov = new Map<string, { nome: string; valor: number }[]>()
+  const itensPorMov = new Map<string, { nome: string; descricao: string | null; vencimento: string | null; valor: number }[]>()
   for (const it of (itensRaw ?? []) as Record<string, unknown>[]) {
     const mid = it.movement_id as string
-    const lanc = it.lancamentos as { contato_nome?: string | null; descricao?: string | null } | null
+    const lanc = it.lancamentos as
+      { contato_nome?: string | null; descricao?: string | null; vencimento?: string | null } | null
     const nome = lanc?.contato_nome || lanc?.descricao || 'Lançamento'
     const arr = itensPorMov.get(mid) ?? []
-    arr.push({ nome, valor: Number(it.valor ?? 0) })
+    arr.push({
+      nome,
+      // Só repete a descrição quando ela não É o nome (senão a coluna Flow fica duplicada).
+      descricao: lanc?.contato_nome ? (lanc?.descricao ?? null) : null,
+      vencimento: lanc?.vencimento ?? null,
+      valor: Number(it.valor ?? 0),
+    })
     itensPorMov.set(mid, arr)
   }
 
@@ -104,6 +112,9 @@ export async function loadConciliacao(sb: any, orgId: string, contaId?: string):
     id: m.id as string, tipo: m.tipo as string, valor: Number(m.valor ?? 0),
     dataMov: m.data_mov as string, descricao: (m.descricao as string | null) ?? null,
     categoria: (m.categoria as string | null) ?? null, sugestao: null, status: m.status as string,
+    // null = conciliação anterior à migration 131; a tela mostra só "Conciliado".
+    modo: (m.conciliado_modo as 'auto' | 'manual' | null) ?? null,
+    conciliadoEm: (m.conciliado_em as string | null) ?? null,
     itens: itensPorMov.get(m.id as string) ?? null,
   }))
 
