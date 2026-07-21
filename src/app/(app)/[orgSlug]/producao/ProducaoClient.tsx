@@ -3,7 +3,7 @@
 import { Fragment, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Archive, ArchiveRestore, Pencil, ClipboardList, Printer, Factory, Files } from 'lucide-react'
+import { Plus, Archive, ArchiveRestore, Pencil, ClipboardList, FileText, Factory, Files } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Select, type SelectOption } from '@/components/ui/Select'
@@ -165,7 +165,7 @@ export function ProducaoClient({
                                 <Files className="w-3.5 h-3.5 shrink-0" /> Gerar docs
                               </button>
                             )}
-                            {showPrint && <Link href={`${base}/${r.id}/print`} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title="Imprimir / PDF"><Printer className="w-3.5 h-3.5" /></Link>}
+                            {showPrint && <Link href={`${base}/${r.id}/print`} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title="Ver / Baixar PDF"><FileText className="w-3.5 h-3.5" /></Link>}
                             <Link href={`${base}/${r.id}`} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title="Editar"><Pencil className="w-3.5 h-3.5" /></Link>
                             <button onClick={() => archive(r)} disabled={isPending} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50" title={r.archived ? 'Desarquivar' : 'Arquivar'}>
                               {r.archived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
