@@ -70,7 +70,7 @@ export default async function LancamentosPage({
       .eq('org_id', orgId)
       .order('vencimento', { ascending: true, nullsFirst: false }),
     sb.from('contas_financeiras')
-      .select('id, nome, cor, ativo')
+      .select('id, nome, cor, ativo, favorita')
       .eq('org_id', orgId)
       .order('ordem', { ascending: true }),
     sb.from('org_settings')
@@ -88,6 +88,8 @@ export default async function LancamentosPage({
 
   const lancamentos = (raw ?? []) as Lancamento[]
   const contas = ((contasRaw ?? []) as ContaRef[]).filter(c => c.ativo)
+  // Conta padrão = a favorita (estrela em Contas); pré-preenche o novo lançamento.
+  const contaPadrao = contas.find(c => c.favorita)?.id ?? ''
   const categorias = (settings?.finance_categorias ?? []) as FinanceCategoriaGrupo[]
   const centros = (settings?.finance_centros_custo ?? []) as FinanceCentro[]
   const today = new Date().toISOString().slice(0, 10)
@@ -142,6 +144,7 @@ export default async function LancamentosPage({
       lancamentos={lancamentos}
       importadas={importadas}
       contas={contas}
+      contaPadrao={contaPadrao}
       categorias={categorias}
       centros={centros}
       today={today}
