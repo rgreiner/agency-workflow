@@ -54,7 +54,9 @@ export function ConfirmDialog({
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
-            <p className="text-sm text-gray-500 mt-1 leading-relaxed">{description}</p>
+            {/* pre-line: descrição com mais de um parágrafo (ex.: destravar um
+                documento já faturado) precisa respirar pra ser lida de verdade. */}
+            <p className="text-sm text-gray-500 mt-1 leading-relaxed whitespace-pre-line">{description}</p>
           </div>
         </div>
 

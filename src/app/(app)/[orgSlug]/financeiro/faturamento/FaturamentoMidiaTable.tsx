@@ -1,7 +1,8 @@
 'use client'
 
 import { Fragment, useState, useTransition } from 'react'
-import { ChevronRight } from 'lucide-react'
+import Link from 'next/link'
+import { ChevronRight, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
 import { docNumero } from '@/lib/doc-series'
@@ -67,7 +68,18 @@ function MidiaRow({ orgSlug, midia }: { orgSlug: string; midia: MidiaView }) {
   return (
     <Fragment>
       <tr className={cn('transition', open ? 'bg-orange-50/40' : 'hover:bg-gray-50/50')}>
-        <td className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap tabular-nums">{docNumero(midia.serie, midia.numero)}</td>
+        {/* Mesmo padrão do PP: abre o documento em aba nova. Vai pra rota de
+            IMPRESSÃO (a PI), não pro formulário — quem confere aqui quer ver o
+            documento, e ele já está liberado pro faturamento. A rota
+            `simplificada` atende todos os tipos: o MidiaPrint monta o certo. */}
+        <td className="px-4 py-3 whitespace-nowrap">
+          <Link href={`/${orgSlug}/midias/simplificada/${midia.id}/print`} target="_blank"
+            title="Abrir a autorização em nova aba (somente leitura; não altera o status)"
+            className="group/lnk inline-flex items-center gap-1 text-sm text-gray-500 hover:text-orange-600 tabular-nums transition-colors">
+            {docNumero(midia.serie, midia.numero)}
+            <ExternalLink className="w-3 h-3 opacity-0 group-hover/lnk:opacity-100 transition-opacity" />
+          </Link>
+        </td>
         <td className="px-4 py-3 text-sm font-medium text-gray-900">
           <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} className="inline-flex items-center gap-1 hover:text-orange-600 transition">
             <ChevronRight className={cn('w-3.5 h-3.5 text-gray-400 transition-transform duration-200', open && 'rotate-90')} />

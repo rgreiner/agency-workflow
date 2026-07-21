@@ -13,14 +13,19 @@ export interface DocRef {
 }
 
 /**
- * Rota do documento que originou a cobrança. Mídia cai sempre na rota
- * `simplificada`, que atende todos os tipos — as rotas por tipo (externas,
- * digitais, impressa…) não têm mapa 1:1 com `midias.tipo`.
+ * Rota do documento que originou a cobrança — a VISUALIZAÇÃO (a PI/documento
+ * impresso), não o formulário de edição. Quem chega aqui vem do financeiro pra
+ * conferir o que gerou a cobrança, e o documento já está liberado pro
+ * faturamento: nesse ponto editar é o caminho errado por padrão.
+ *
+ * Mídia cai sempre na rota `simplificada`, que atende todos os tipos — as rotas
+ * por tipo (externas, digitais, impressa…) não têm mapa 1:1 com `midias.tipo`,
+ * e o MidiaPrint monta o documento certo a partir do registro.
  */
 export function docHref(orgSlug: string, doc: DocRef): string | null {
   if (!doc.id) return null
-  if (doc.origem === 'producao') return doc.producaoTipo ? `/${orgSlug}/producao/${doc.producaoTipo}/${doc.id}` : null
-  if (doc.origem === 'midia') return `/${orgSlug}/midias/simplificada/${doc.id}`
+  if (doc.origem === 'producao') return doc.producaoTipo ? `/${orgSlug}/producao/${doc.producaoTipo}/${doc.id}/print` : null
+  if (doc.origem === 'midia') return `/${orgSlug}/midias/simplificada/${doc.id}/print`
   return null
 }
 
