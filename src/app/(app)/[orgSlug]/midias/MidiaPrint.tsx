@@ -49,7 +49,8 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: ws } = await (supabase as any).from('workspaces')
-    .select('name, legal_name, tax_id, finance_email, phone, address_street, address_number, address_complement, address_district, address_city, address_state, address_zip')
+    // Sem finance_email/phone de propósito: contato do cliente não vai no documento.
+    .select('name, legal_name, tax_id, address_street, address_number, address_complement, address_district, address_city, address_state, address_zip')
     .eq('id', m.workspace_id).single()
   // enderecos/telefones são jsonb no cadastro do veículo e não vinham pra PI —
   // o documento saía sem o endereço de quem vai receber a autorização.
@@ -104,6 +105,15 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
   const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
   const mesAno = det.mes ? `${MESES[Number(det.mes) - 1] ?? det.mes}/${det.ano ?? ''}` : ''
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+  const infoPares = [
+    m.praca ? { label: 'Praça', valor: String(m.praca) } : null,
+    det.especie ? { label: 'Espécie', valor: String(det.especie) } : null,
+    mesAno ? { label: 'Mês', valor: mesAno } : null,
+    det.bisemana && det.bisemana !== 'outro' ? { label: 'Bisemana', valor: String(det.bisemana) } : null,
+    det.periodo ? { label: 'Período', valor: String(det.periodo) } : null,
+    m.abrangencia ? { label: 'Abrangência', valor: cap(String(m.abrangencia)) } : null,
+  ].filter((p): p is { label: string; valor: string } => p !== null)
   const custoExibicao = parseMoney(String(det.custo ?? '')) || valor
   const geradoEm = new Date().toLocaleString('pt-BR', {
     timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric',
@@ -112,7 +122,8 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
 
   return (
     <div className="min-h-screen bg-gray-200">
-      <PrintToolbar />
+      {/* "MX 1626 | É o Amor - Bons tempos são agora - …" vira o nome do PDF. */}
+      <PrintToolbar fileName={`${[m.serie, m.numero].filter(Boolean).join(' ')} | ${m.titulo ?? ''}`} />
       <div className="py-6 flex justify-center">
         <div id="print-doc" className="bg-white shadow-sm w-[210mm] max-w-full p-[16mm] text-[12px] text-gray-800">
           {/* Cabeçalho */}
@@ -129,9 +140,9 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
             </div>
           </div>
 
-          <h1 className="text-2xl font-light text-gray-900 mt-5 mb-5">Autorização de Mídia {tipoLabel} nº {m.numero ?? ''}</h1>
+          <h1 className="text-2xl font-light text-gray-900 mt-4 mb-4">Autorização de Mídia {tipoLabel} nº {m.numero ?? ''}</h1>
 
-          <div className="space-y-3 mb-6">
+          <div className="space-y-2 mb-4">
             <Row label="Veículo">
               <p className="font-bold text-gray-900">{veic?.name ?? '—'}</p>
               {enderecoVeiculo && <p className="text-gray-600">{enderecoVeiculo}</p>}
@@ -143,28 +154,26 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
               )}
               {veic?.notes && <p className="text-gray-600">{veic.notes}</p>}
             </Row>
+            {/* Sem telefone e e-mail do cliente: quem fala com o veículo é o nosso
+                financeiro (é o que o texto legal determina). Aqui fica só o que
+                serve pra faturar — razão social, endereço e CNPJ. */}
             <Row label="Cliente">
               <p className="font-bold text-gray-900">{ws?.name ?? '—'}</p>
               {ws?.legal_name && <p className="text-gray-600">{ws.legal_name}</p>}
               {enderecoCliente && <p className="text-gray-600">{enderecoCliente}</p>}
               {ws?.tax_id && <p className="text-gray-600">CNPJ: {ws.tax_id}</p>}
-              {(ws?.finance_email || ws?.phone) && <p className="text-gray-600">{[ws?.phone, ws?.finance_email].filter(Boolean).join('  ')}</p>}
             </Row>
             <Row label="Produto"><span>{m.titulo}</span></Row>
             {campanha && <Row label="Campanha"><span>{campanha}</span></Row>}
             {m.pecas && <Row label="Peças"><span className="whitespace-pre-line">{m.pecas}</span></Row>}
           </div>
 
-          {/* Praça/Espécie e Mês/Bisemana lado a lado — o documento é lido em
-              pares, não em lista corrida. */}
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-6">
-            {m.praca && <Row label="Praça"><span>{m.praca}</span></Row>}
-            {det.especie ? <Row label="Espécie"><span>{String(det.especie)}</span></Row> : <div />}
-            {mesAno ? <Row label="Mês"><span>{mesAno}</span></Row> : <div />}
-            {det.bisemana && det.bisemana !== 'outro'
-              ? <Row label="Bisemana"><span>{String(det.bisemana)}</span></Row> : <div />}
-            {det.periodo ? <Row label="Período"><span>{String(det.periodo)}</span></Row> : <div />}
-            {m.abrangencia ? <Row label="Abrangência"><span>{m.abrangencia}</span></Row> : <div />}
+          {/* Pares lado a lado. Só o que EXISTE entra na lista: antes cada campo
+              vazio virava uma célula fantasma e empurrava o documento pra baixo. */}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 mb-5">
+            {infoPares.map(p => (
+              <Row key={p.label} label={p.label}><span>{p.valor}</span></Row>
+            ))}
           </div>
 
           {/* Corpo em duas colunas: o que descreve a veiculação de um lado, o que
@@ -183,25 +192,6 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
                 </>
               )}
 
-              {/* Texto legal: documento não editado (vazio ou = padrão) imprime as
-                  notas da config com o destaque; editado imprime o texto próprio. */}
-              <Secao titulo="Texto Legal" />
-              {(() => {
-                const padrao = DOC_MIDIA_NOTES.map(n => n.text).join('\n').trim()
-                const tl = (m.texto_legal ?? '').trim()
-                return !tl || tl === padrao ? (
-                  <>
-                    <p className="font-bold text-gray-900 mb-2">Observações sobre faturamento:</p>
-                    <ul className="list-disc pl-5 space-y-1 mb-2 text-gray-700">
-                      {DOC_MIDIA_NOTES.map((n, i) => (
-                        <li key={i}><span className={n.highlight ? 'bg-yellow-200 px-0.5 font-medium' : ''}>{n.text}</span></li>
-                      ))}
-                    </ul>
-                  </>
-                ) : (
-                  <p className="text-gray-600 whitespace-pre-line mb-2">{m.texto_legal}</p>
-                )
-              })()}
             </div>
 
             {/* ── Coluna direita ── */}
@@ -243,15 +233,39 @@ export async function MidiaPrint({ orgSlug, midiaId }: { orgSlug: string; midiaI
             </div>
           </div>
 
+          {/* Texto legal em largura inteira, logo acima das datas e assinaturas —
+              é a condição que as duas partes assinam, não um detalhe de coluna.
+              Documento não editado (vazio ou = padrão) imprime as notas da config
+              com o destaque; editado imprime o texto próprio. */}
+          <div className="mt-2">
+            <Secao titulo="Texto Legal" />
+            {(() => {
+              const padrao = DOC_MIDIA_NOTES.map(n => n.text).join('\n').trim()
+              const tl = (m.texto_legal ?? '').trim()
+              return !tl || tl === padrao ? (
+                <>
+                  <p className="font-bold text-gray-900 mb-1.5">Observações sobre faturamento:</p>
+                  <ul className="list-disc pl-5 space-y-0.5 text-gray-700">
+                    {DOC_MIDIA_NOTES.map((n, i) => (
+                      <li key={i}><span className={n.highlight ? 'bg-yellow-200 px-0.5 font-medium' : ''}>{n.text}</span></li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <p className="text-gray-600 whitespace-pre-line">{m.texto_legal}</p>
+              )
+            })()}
+          </div>
+
           {/* Datas */}
-          <div className="grid grid-cols-2 gap-6 mt-6">
+          <div className="grid grid-cols-2 gap-6 mt-5">
             <div><Row label="Local"><span>{AGENCY.cidade}</span></Row></div>
             <div><Row label="Emissão"><span>{formatDateBR(m.emissao)}</span></Row></div>
             <div><Row label="1ª Veiculação"><span>{formatDateBR(m.primeira_veiculacao)}</span></Row></div>
             <div><Row label="Última Veiculação"><span>{formatDateBR(m.ultima_veiculacao)}</span></Row></div>
           </div>
 
-          <div className="grid grid-cols-2 gap-10 mt-16">
+          <div className="grid grid-cols-2 gap-10 mt-12">
             <div className="text-center"><div className="border-t border-gray-400 pt-1 text-gray-700">{AGENCY.razao}</div></div>
             <div className="text-center"><div className="border-t border-gray-400 pt-1 text-gray-700">{ws?.legal_name || ws?.name || ''}</div></div>
           </div>
