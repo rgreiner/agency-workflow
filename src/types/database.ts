@@ -529,6 +529,7 @@ export type Database = {
           phone: string | null
           drive_mac_user: string | null
           drive_google_email: string | null
+          drive_lang: string | null
           updated_at: string
         }
         Insert: {
@@ -541,6 +542,7 @@ export type Database = {
           phone?: string | null
           drive_mac_user?: string | null
           drive_google_email?: string | null
+          drive_lang?: string | null
           updated_at?: string
         }
         Update: {
@@ -553,6 +555,7 @@ export type Database = {
           phone?: string | null
           drive_mac_user?: string | null
           drive_google_email?: string | null
+          drive_lang?: string | null
           updated_at?: string
         }
         Relationships: []

@@ -9,6 +9,7 @@ export async function updateProfile(
   avatarUrl: string,
   driveMacUser?: string | null,
   driveGoogleEmail?: string | null,
+  driveLang?: string | null,
 ) {
   const supabase = await createClient()
   const user = await getUsuario()
@@ -20,6 +21,7 @@ export async function updateProfile(
     p_avatar_url: avatarUrl || null,
     p_drive_mac_user:     driveMacUser?.trim() || null,
     p_drive_google_email: driveGoogleEmail?.trim() || null,
+    p_drive_lang: driveLang === 'en' ? 'en' : 'pt',
   })
 
   if (error) return { error: error.message }

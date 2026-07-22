@@ -21,11 +21,26 @@ function isMac(): boolean {
   return /Mac/i.test(navigator.platform) || /Mac/i.test(navigator.userAgent)
 }
 
-/** Converte o caminho Windows (X:\Drives compartilhados\...) para o caminho do Mac. */
-export function toMacPath(winPath: string, macUser: string, googleEmail: string): string {
+// O Google Drive Desktop LOCALIZA a raiz das pastas pelo idioma do sistema. O caminho
+// é guardado em pt (é o que os Windows da equipe geram); pra quem usa o Mac/Drive em
+// inglês, traduzimos a 1ª pasta. Reconhece as duas grafias (robusto se um dia guardarem en).
+const DRIVE_ROOTS: { pt: string; en: string }[] = [
+  { pt: 'Drives compartilhados', en: 'Shared drives' },
+  { pt: 'Meu Drive', en: 'My Drive' },
+]
+function traduzRaiz(seg: string, lang: 'pt' | 'en'): string {
+  const r = DRIVE_ROOTS.find(x => x.pt === seg || x.en === seg)
+  return r ? r[lang] : seg
+}
+
+/** Converte o caminho Windows (X:\Drives compartilhados\...) para o caminho do Mac,
+ *  traduzindo a raiz do Drive pro idioma do Mac da pessoa (lang). */
+export function toMacPath(winPath: string, macUser: string, googleEmail: string, lang: 'pt' | 'en' = 'pt'): string {
   const afterDrive = winPath.replace(/^[A-Za-z]:[\\/]+/, '')        // remove "G:\"
   const rest = afterDrive.replace(/\\/g, '/').replace(/\/+$/, '')   // \ → / e sem barra final
-  return `/Users/${macUser}/Library/CloudStorage/GoogleDrive-${googleEmail}/${rest}`
+  const segs = rest.split('/')
+  if (segs.length) segs[0] = traduzRaiz(segs[0], lang)              // raiz localizada
+  return `/Users/${macUser}/Library/CloudStorage/GoogleDrive-${googleEmail}/${segs.join('/')}`
 }
 
 const cleanWin = (p: string) => p.replace(/\\+$/, '')
@@ -58,7 +73,7 @@ export function MachinePath({ winPath, compact = false, editable = false, activi
   // SSR/pré-mount e Windows: caminho Windows (evita divergência de hidratação).
   const useMac = mounted && mac && configured && has
   const needsSetup = mounted && mac && !configured && has
-  const display = has ? (useMac ? toMacPath(winPath, prefs.driveMacUser!, prefs.driveGoogleEmail!) : cleanWin(winPath)) : ''
+  const display = has ? (useMac ? toMacPath(winPath, prefs.driveMacUser!, prefs.driveGoogleEmail!, prefs.driveLang === 'en' ? 'en' : 'pt') : cleanWin(winPath)) : ''
 
   function copy(e: React.MouseEvent) {
     e.preventDefault(); e.stopPropagation()

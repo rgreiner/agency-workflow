@@ -7,6 +7,7 @@ import { alterarMinhaSenha } from '@/app/actions/auth'
 import { cn } from '@/lib/utils'
 import { useOrgSettings } from '@/components/providers/OrgSettingsProvider'
 import { AvatarCropper } from '@/components/ui/AvatarCropper'
+import { Select } from '@/components/ui/Select'
 import { toast } from 'sonner'
 import { Upload, Loader2, Check, RefreshCw } from 'lucide-react'
 
@@ -19,6 +20,7 @@ export interface ProfileUser {
   googleAvatar: string | null
   driveMacUser: string | null
   driveGoogleEmail: string | null
+  driveLang: string | null
 }
 
 export function ProfileForm({ user, digestEnabled = true }: { user: ProfileUser; digestEnabled?: boolean }) {
@@ -40,6 +42,7 @@ export function ProfileForm({ user, digestEnabled = true }: { user: ProfileUser;
   const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl ?? '')
   const [driveMacUser,     setDriveMacUser]     = useState(user.driveMacUser ?? '')
   const [driveGoogleEmail, setDriveGoogleEmail] = useState(user.driveGoogleEmail ?? '')
+  const [driveLang,        setDriveLang]        = useState(user.driveLang === 'en' ? 'en' : 'pt')
   const [uploading, setUploading] = useState(false)
   const [cropFile, setCropFile] = useState<File | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -80,7 +83,7 @@ export function ProfileForm({ user, digestEnabled = true }: { user: ProfileUser;
       const url = await uploadFile('avatars', `${user.id}/avatar.webp`, result)
       const newUrl = `${url}?t=${Date.now()}`
       const nome = fullName.trim() || user.fullName || user.email
-      const r = await updateProfile(nome, newUrl, driveMacUser, driveGoogleEmail)
+      const r = await updateProfile(nome, newUrl, driveMacUser, driveGoogleEmail, driveLang)
       if (r?.error) { toast.error(r.error); return }
       setAvatarUrl(newUrl)
       toast.success('Foto atualizada!')
@@ -94,7 +97,7 @@ export function ProfileForm({ user, digestEnabled = true }: { user: ProfileUser;
   function handleSave() {
     if (!fullName.trim()) { toast.error('Nome obrigatório'); return }
     startTransition(async () => {
-      const result = await updateProfile(fullName, avatarUrl, driveMacUser, driveGoogleEmail)
+      const result = await updateProfile(fullName, avatarUrl, driveMacUser, driveGoogleEmail, driveLang)
       if (result?.error) toast.error(result.error)
       else toast.success('Perfil atualizado!')
     })
@@ -288,6 +291,18 @@ export function ProfileForm({ user, digestEnabled = true }: { user: ProfileUser;
                 style={{ '--tw-ring-color': accent } as React.CSSProperties}
               />
               <p className="text-[11px] text-gray-400 mt-1">O nome da sua pasta em /Users (no Finder, sua pasta pessoal).</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Idioma do Mac / Google Drive</label>
+              <Select
+                value={driveLang}
+                onChange={setDriveLang}
+                options={[
+                  { value: 'pt', label: 'Português (Drives compartilhados)' },
+                  { value: 'en', label: 'English (Shared drives)' },
+                ]}
+              />
+              <p className="text-[11px] text-gray-400 mt-1">O Drive Desktop nomeia a pasta raiz no idioma do sistema. Se seu Mac está em inglês, escolha English para o caminho abrir certo.</p>
             </div>
           </div>
         </div>

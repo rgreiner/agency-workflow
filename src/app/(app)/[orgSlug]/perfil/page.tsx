@@ -16,7 +16,7 @@ export default async function PerfilPage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, avatar_url, drive_mac_user, drive_google_email')
+    .select('full_name, avatar_url, drive_mac_user, drive_google_email, drive_lang')
     .eq('id', authUser.id)
     .single()
 
@@ -37,6 +37,7 @@ export default async function PerfilPage({
         googleAvatar:     null,
         driveMacUser:     (profile as { drive_mac_user?: string | null } | null)?.drive_mac_user ?? null,
         driveGoogleEmail: (profile as { drive_google_email?: string | null } | null)?.drive_google_email ?? null,
+        driveLang:        (profile as { drive_lang?: string | null } | null)?.drive_lang ?? 'pt',
       }}
       digestEnabled={digestEnabled}
     />
