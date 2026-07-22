@@ -124,7 +124,7 @@ export async function importarOfx(
   orgSlug: string, contaId: string, txns: OfxTxn[],
   saldoBanco?: number | null, saldoBancoData?: string | null,
 ) {
-  const { supabase, orgId } = await assertFinanceAccess(orgSlug)
+  const { supabase, orgId, userId } = await assertFinanceAccess(orgSlug)
   const rows = txns.map(t => ({ fitid: t.fitid, data_mov: t.data, valor: t.valor, tipo: t.tipo, descricao: t.descricao }))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any).rpc('importar_ofx', {
@@ -140,10 +140,13 @@ export async function importarOfx(
       .select('saldo_banco_data').eq('id', contaId).eq('org_id', orgId).maybeSingle()
     const anterior = (atual?.saldo_banco_data as string | null) ?? null
     if (!anterior || !saldoBancoData || saldoBancoData >= anterior) {
+      // Grava por RPC (a policy da tabela é manager+; a tela é can_finance — o update
+      // direto sumia em silêncio pra esse perfil).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from('contas_financeiras')
-        .update({ saldo_banco: saldoBanco, saldo_banco_data: saldoBancoData ?? null })
-        .eq('id', contaId).eq('org_id', orgId)
+      const { error: saldoErr } = await (supabase as any).rpc('set_conta_saldo_banco', {
+        p_user_id: userId, p_conta_id: contaId, p_saldo: saldoBanco, p_data: saldoBancoData ?? null,
+      })
+      if (saldoErr) return { error: saldoErr.message }
     }
   }
   revalidatePath(`/${orgSlug}/financeiro/contas/${contaId}`)

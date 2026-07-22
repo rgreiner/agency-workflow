@@ -159,6 +159,21 @@ export async function criarTransferencia(orgSlug: string, data: TransferenciaInp
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
 }
 
+/** Exclui os DOIS lados de uma transferência de uma vez. Bloqueia se algum lado estiver
+ *  conciliado com o extrato (a RPC devolve o erro pedindo desfazer a conciliação antes). */
+export async function excluirTransferencia(orgSlug: string, transferenciaId: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('excluir_transferencia', {
+    p_user_id: user.id, p_transferencia_id: transferenciaId,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+}
+
 /** Cria uma série: modo 'parcelado' (divide o valor) ou 'recorrente' (repete) em N meses. */
 export async function createLancamentosSerie(orgSlug: string, data: LancamentoInput, modo: string, n: number) {
   const supabase = await createClient()

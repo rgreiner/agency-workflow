@@ -64,16 +64,15 @@ export async function createWorkspace(orgSlug: string, formData: FormData) {
 
   if (error) return { error: error.message }
 
-  // Salva os demais dados cadastrais (fiscais/contato/endereço).
+  // Salva os demais dados cadastrais (fiscais/contato/endereço) + cobranca_auto pela
+  // MESMA RPC (o update direto de cobranca_auto sumia em silêncio pra can_vendas: a
+  // policy da tabela é manager+, a RPC aceita can_vendas/can_finance).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: e2 } = await (supabase as any).rpc('update_workspace_cadastro', {
-    p_user_id: user.id, p_workspace_id: workspaceId, p_data: { ...data, ...readContato(formData) },
+    p_user_id: user.id, p_workspace_id: workspaceId,
+    p_data: { ...data, ...readContato(formData), cobranca_auto: formData.get('cobranca_auto') === 'true' },
   })
   if (e2) return { error: e2.message }
-  if (formData.get('cobranca_auto') === 'true') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from('workspaces').update({ cobranca_auto: true }).eq('id', workspaceId)
-  }
 
   redirect(`/${orgSlug}/workspaces`)
 }
@@ -156,14 +155,14 @@ export async function updateWorkspace(
   const data = readClientData(formData)
   if (!data.name) return { error: 'Nome obrigatório' }
 
+  // cobranca_auto (opt-in por cliente) vai na MESMA RPC — o update direto sumia em
+  // silêncio pra can_vendas (policy da tabela = manager+, RPC aceita can_vendas).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any).rpc('update_workspace_cadastro', {
-    p_user_id: user.id, p_workspace_id: workspaceId, p_data: { ...data, ...readContato(formData) },
+    p_user_id: user.id, p_workspace_id: workspaceId,
+    p_data: { ...data, ...readContato(formData), cobranca_auto: formData.get('cobranca_auto') === 'true' },
   })
   if (error) return { error: error.message }
-  // Cobrança automática (opt-in por cliente) — direto na tabela (RLS: manager+).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from('workspaces').update({ cobranca_auto: formData.get('cobranca_auto') === 'true' }).eq('id', workspaceId)
   revalidatePath(`/${orgSlug}/workspaces/${workspaceId}`)
   revalidatePath(`/${orgSlug}/workspaces`)
 }

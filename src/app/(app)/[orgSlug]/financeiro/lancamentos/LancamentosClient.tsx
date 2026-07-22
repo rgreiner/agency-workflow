@@ -13,7 +13,7 @@ import { toast } from 'sonner'
 import {
   setLancamentoFlags, ressincronizarLancamento, marcarLancamentoRevisado,
   createLancamento, createLancamentosSerie, updateLancamento, deleteLancamento, liquidarLancamento, reabrirLancamento,
-  criarTransferencia,
+  criarTransferencia, excluirTransferencia,
   setLancamentoAnexos, promoverExtrato, updateLancamentosLote, descartarExtrato,
   impactoExcluirLancamento,
   type FinanceCategoriaGrupo, type FinanceCentro, type Anexo, type ImpactoExclusao,
@@ -26,7 +26,8 @@ import { Paperclip, ExternalLink, CalendarClock } from 'lucide-react'
 export interface Lancamento {
   id: string
   tipo: string                      // entrada | saida
-  origem_tipo: string | null        // midia | producao | fee | manual
+  origem_tipo: string | null        // midia | producao | fee | manual | transferencia
+  transferencia_id?: string | null  // preenchido nos 2 lados de uma transferência
   parcela_num: number | null
   parcela_total: number | null
   contato_nome: string | null
@@ -476,6 +477,9 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
     })
   }
   function pedirExclusao() {
+    // Transferência: excluir apaga os 2 lados de uma vez (não passa pelo impacto de
+    // lançamento avulso — que barraria por ser 'pago'/'recebido').
+    if (l.transferencia_id) { setImpacto(null); setConfirmDel(true); return }
     startTransition(async () => {
       const imp = await impactoExcluirLancamento(l.id)
       if (!imp.pode) { toast.error(imp.motivo ?? 'Não é possível excluir este lançamento.'); return }
@@ -485,7 +489,13 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
   }
   function remover() {
     setConfirmDel(false)
-    startTransition(async () => { const r = await deleteLancamento(orgSlug, l.id); if (r?.error) toast.error(r.error); else { toast.success('Lançamento excluído.'); router.refresh() } })
+    startTransition(async () => {
+      const r = l.transferencia_id
+        ? await excluirTransferencia(orgSlug, l.transferencia_id)
+        : await deleteLancamento(orgSlug, l.id)
+      if (r?.error) toast.error(r.error)
+      else { toast.success(l.transferencia_id ? 'Transferência excluída.' : 'Lançamento excluído.'); router.refresh() }
+    })
   }
 
   return (
@@ -646,12 +656,13 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
               <button onClick={pedirExclusao} disabled={isPending} className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-50" title="Excluir"><Trash2 className="w-3.5 h-3.5" /></button>
               <ConfirmDialog
                 open={confirmDel} loading={isPending}
-                title={impacto?.escopo === 'documento' ? 'Estornar o faturamento' : 'Excluir lançamento'}
-                description={descreveImpacto(impacto)}
-                confirmLabel={impacto?.escopo === 'documento' ? 'Estornar faturamento' : 'Excluir'}
+                title={l.transferencia_id ? 'Excluir transferência' : impacto?.escopo === 'documento' ? 'Estornar o faturamento' : 'Excluir lançamento'}
+                description={l.transferencia_id ? 'Remove os DOIS lados (saída e entrada) desta transferência entre contas. Se um lado estiver conciliado com o extrato, desfaça a conciliação antes.' : descreveImpacto(impacto)}
+                confirmLabel={l.transferencia_id ? 'Excluir transferência' : impacto?.escopo === 'documento' ? 'Estornar faturamento' : 'Excluir'}
                 onConfirm={remover} onCancel={() => setConfirmDel(false)}
               />
-              {paid ? (
+              {/* Transferência não tem baixa (nasce liquidada nos 2 lados); só se exclui. */}
+              {l.transferencia_id ? null : paid ? (
                 <button onClick={reabrir} disabled={isPending} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-gray-500 hover:bg-gray-100 transition disabled:opacity-50">
                   <RotateCcw className="w-3.5 h-3.5" /> Reabrir
                 </button>
@@ -772,6 +783,9 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
   // editado aqui. Conta Azul/OFX/manual são livres — não há de onde ressincronizar.
   const readonly = !!lancamento && !imported
     && lancamento.origem_tipo !== 'manual' && lancamento.origem_tipo !== 'conta_azul' && lancamento.origem_tipo !== 'ofx'
+  // Transferência entre contas: totalmente read-only (editar um lado desalinharia o
+  // saldo). Só se exclui e refaz — a RPC update_lancamento recusa a edição.
+  const isTransferencia = !!lancamento?.transferencia_id
   const vencRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
     if (foco !== 'vencimento') return
@@ -926,6 +940,7 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
 
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+          {isTransferencia && <p className="text-xs text-gray-600 bg-gray-100 rounded-lg px-3 py-2">Transferência entre contas (os dois lados são ligados). Não é editável — para corrigir, <strong>exclua e refaça</strong>.</p>}
           {imported && <p className="text-xs text-sky-800 bg-sky-50 rounded-lg px-3 py-2">Linha importada da <strong>Conta Azul</strong>. Ao salvar, ela vira um lançamento do Flow (editável) e passa a ser a versão oficial — a linha importada some, mesmo após reimportar o extrato.</p>}
           {readonly && (
             <div className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2 space-y-1.5">
@@ -1037,8 +1052,10 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
             <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3.5">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-semibold text-emerald-700">{lancamento.tipo === 'saida' ? 'Pago' : 'Recebido'}</span>
-                <button type="button" onClick={reabrir} disabled={isPending}
-                  className="text-xs text-gray-500 hover:text-gray-700 inline-flex items-center gap-1 disabled:opacity-50"><RotateCcw className="w-3 h-3" /> Reabrir</button>
+                {!isTransferencia && (
+                  <button type="button" onClick={reabrir} disabled={isPending}
+                    className="text-xs text-gray-500 hover:text-gray-700 inline-flex items-center gap-1 disabled:opacity-50"><RotateCcw className="w-3 h-3" /> Reabrir</button>
+                )}
               </div>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
                 <Info label="Data" value={formatDateBR(lancamento.data_liquidacao)} />
@@ -1116,12 +1133,18 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
           )}
 
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
-            <button type="submit" disabled={isPending}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
-              {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              Salvar
-            </button>
+            {isTransferencia ? (
+              <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition">Fechar</button>
+            ) : (
+              <>
+                <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
+                <button type="submit" disabled={isPending}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
+                  {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  Salvar
+                </button>
+              </>
+            )}
           </div>
         </form>
       </div>
