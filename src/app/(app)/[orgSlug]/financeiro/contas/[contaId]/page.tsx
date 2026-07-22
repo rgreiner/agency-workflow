@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft, Landmark, Plug } from 'lucide-react'
 import { assertFinanceAccess } from '@/lib/finance'
+import { unwrap } from '@/lib/supabase/unwrap'
 import { loadConciliacao } from '@/lib/conciliacao'
 import { ConciliacaoClient } from '../../conciliacao/ConciliacaoClient'
 import { BtgCard } from '../BtgCard'
@@ -73,14 +74,15 @@ export default async function ContaPage({
   // tem que aparecer, senão a baixa some da conta (era o buraco de R$ 2.626,82).
   // Mesmo critério da view contas_saldo (migration 134).
   const refsRealizados = new Set(movRaw.map(e => e.import_ref as string | null).filter(Boolean))
-  const { data: lancRaw } = await sb
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lancRaw = unwrap<any>(await sb
     .from('lancamentos_doc')
     .select('tipo, valor, valor_realizado, vencimento, data_liquidacao, descricao, contato_nome, categoria, origem_ref, origem_id, doc_serie, doc_numero, doc_origem, doc_producao_tipo')
     .eq('org_id', orgId).eq('conta_id', contaId)
-    .in('situacao', ['pago', 'recebido'])
+    .in('situacao', ['pago', 'recebido']), 'lançamentos da conta')
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const l of (lancRaw ?? []) as any[]) {
+  for (const l of lancRaw as any[]) {
     if (l.origem_ref && refsRealizados.has(l.origem_ref)) continue
     const bruto = Number(l.valor_realizado ?? l.valor ?? 0)
     movimentos.push({

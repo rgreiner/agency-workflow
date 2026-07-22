@@ -183,41 +183,6 @@ export async function updateActivityStatus(
   revalidatePath(path)
 }
 
-export async function setActivityAssignees(
-  path: string,
-  activityId: string,
-  status: string,
-  userIds: string[]
-) {
-  const supabase = await createClient()
-  const user = await getUsuario()
-  if (!user) return { error: 'Não autenticado' }
-
-  // Remove assignees for this activity+status then re-insert
-  const { error: delError } = await supabase
-    .from('activity_status_assignees')
-    .delete()
-    .eq('activity_id', activityId)
-    .eq('status', status as never)
-
-  if (delError) return { error: delError.message }
-
-  if (userIds.length > 0) {
-    const { error: insError } = await supabase
-      .from('activity_status_assignees')
-      .insert(userIds.map(userId => ({
-        activity_id: activityId,
-        status: status as never,
-        user_id: userId,
-      })))
-
-    if (insError) return { error: insError.message }
-  }
-
-  revalidatePath(path)
-  return {}
-}
-
 export async function updateActivityField(
   path: string,
   activityId: string,

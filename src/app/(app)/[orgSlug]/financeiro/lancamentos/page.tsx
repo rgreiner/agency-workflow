@@ -109,7 +109,10 @@ export default async function LancamentosPage({
       .order('data_mov', { ascending: true, nullsFirst: false })
       .order('import_ref', { ascending: true })
       .range(from, from + PAGE - 1)
-    if (error || !data || data.length === 0) break
+    // Erro NÃO é fim-de-dados: truncar em silêncio aqui corromperia os cards e o
+    // dedup do extrato (~6.9k linhas). Falha alto.
+    if (error) throw new Error(`Falha ao carregar o extrato importado: ${error.message}`)
+    if (!data || data.length === 0) break
     importadasRaw.push(...data)
     if (data.length < PAGE) break
   }

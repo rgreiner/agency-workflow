@@ -33,16 +33,6 @@ export async function toggleTodo(orgSlug: string, id: string, done: boolean) {
   revalidatePath(`/${orgSlug}/inbox`)
 }
 
-export async function updateTodo(orgSlug: string, id: string, texto: string, dueDate: string | null) {
-  const supabase = await createClient()
-  const user = await getUsuario()
-  if (!user) return { error: 'Não autenticado' }
-  if (!texto.trim()) return { error: 'Texto obrigatório' }
-  const { error } = await (supabase as SB).from('todos').update({ texto: texto.trim(), due_date: dueDate || null }).eq('id', id)
-  if (error) return { error: error.message }
-  revalidatePath(`/${orgSlug}/inbox`)
-}
-
 export async function deleteTodo(orgSlug: string, id: string) {
   const supabase = await createClient()
   const user = await getUsuario()

@@ -48,18 +48,6 @@ export async function sincronizarBtg(orgSlug: string) {
   }
 }
 
-/** Liga o movimento do banco a um lançamento e dá baixa nele (recebido/pago). */
-export async function conciliarMovimento(orgSlug: string, movementId: string, lancamentoId: string) {
-  const { supabase, userId } = await assertFinanceAccess(orgSlug)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any).rpc('conciliar_btg_movimento', {
-    p_user_id: userId, p_movement_id: movementId, p_lancamento_id: lancamentoId,
-  })
-  if (error) return { error: error.message }
-  revalidatePath(`/${orgSlug}/financeiro/conciliacao`)
-  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
-}
-
 export interface ConciliacaoItem { lancamentoId: string; valor: number }
 
 /**

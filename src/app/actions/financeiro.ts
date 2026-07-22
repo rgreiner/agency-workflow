@@ -4,25 +4,6 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { revalidatePath } from 'next/cache'
 
-/** Regera os lançamentos de comissão das mídias faturadas (botão "Gerar Lançamentos"). */
-export async function regerarLancamentos(orgSlug: string) {
-  const supabase = await createClient()
-  const user = await getUsuario()
-  if (!user) return { error: 'Não autenticado' }
-
-  const { data: org } = await supabase
-    .from('organizations').select('id').eq('slug', orgSlug).single()
-  if (!org) return { error: 'Organização não encontrada' }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any).rpc('regerar_lancamentos_midias', {
-    p_user_id: user.id, p_org_id: org.id,
-  })
-  if (error) return { error: error.message }
-  revalidatePath(`/${orgSlug}/financeiro/faturamento`)
-  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
-}
-
 /** Faturamento → "Lançar": cria o lançamento de uma mídia conferida. */
 /** Classificação escolhida na conferência do Faturamento (grava no lançamento). */
 export interface FaturarClassificacao {
@@ -45,19 +26,6 @@ export async function lancarMidia(orgSlug: string, midiaId: string, cls?: Fatura
   })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/financeiro/faturamento`)
-  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
-}
-
-export async function setLancamentoSituacao(orgSlug: string, lancamentoId: string, situacao: string) {
-  const supabase = await createClient()
-  const user = await getUsuario()
-  if (!user) return { error: 'Não autenticado' }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any).rpc('set_lancamento_situacao', {
-    p_user_id: user.id, p_lancamento_id: lancamentoId, p_situacao: situacao,
-  })
-  if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
 }
 

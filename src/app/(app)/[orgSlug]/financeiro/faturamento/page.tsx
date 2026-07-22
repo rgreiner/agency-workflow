@@ -1,4 +1,5 @@
 import { assertFinanceAccess } from '@/lib/finance'
+import { unwrap, unwrapOne } from '@/lib/supabase/unwrap'
 import { formatBRL, parseMoney, FATURAMENTO_PAGADOR } from '@/lib/midia'
 import { FaturamentoFeesTable } from './FaturamentoFeesTable'
 import { FaturamentoMidiaTable, type MidiaView } from './FaturamentoMidiaTable'
@@ -82,36 +83,40 @@ export default async function FaturamentoPage({
   // Mídias liberadas pro Financeiro (estado unificado 'faturar' = A Faturar).
   // Aceita 'faturado' legado ainda não lançado (a checagem de lançadas remove os já lançados).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: docsRaw } = await (supabase as any)
+  const docsRaw = unwrap<any>(await (supabase as any)
     .from('midias')
     .select(`id, numero, serie, titulo, valor, desconto_pct, faturamento, prazo, data_base, dias_agencia, detalhe, anexos, workspaces(${WS_CONTATO}), veiculos(name, tax_id, notes, ${CONTATO_JSON})`)
     .eq('org_id', orgId).in('situacao', ['faturar', 'faturado']).eq('archived', false)
-    .order('numero', { ascending: false })
+    .order('numero', { ascending: false }), 'mídias a faturar')
 
-  // Quais já foram lançadas (têm lançamento)
+  // Quais já foram lançadas (têm lançamento). CRÍTICO: se esta query falhasse com
+  // `?? []`, `lancadas` ficaria vazio e mídias já faturadas voltariam como "a faturar"
+  // → risco de faturar em dobro. Por isso unwrap (falha alto).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: lancRaw } = await (supabase as any)
-    .from('lancamentos').select('origem_id').eq('org_id', orgId).eq('origem_tipo', 'midia')
+  const lancRaw = unwrap<any>(await (supabase as any)
+    .from('lancamentos').select('origem_id').eq('org_id', orgId).eq('origem_tipo', 'midia'), 'lançamentos já lançados')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const lancadas = new Set<string>((lancRaw ?? []).map((l: any) => l.origem_id))
+  const lancadas = new Set<string>(lancRaw.map((l: any) => l.origem_id))
 
   // Fornecedores: usados no contato do Pedido (detalhe.fornecedor_id) E como pagador
   // da comissão de produção da Mídia Externa quando ela é "De Terceiros" (migration 132).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: fornRaw } = await (supabase as any)
-    .from('fornecedores').select(`id, name, tax_id, notes, ${CONTATO_JSON}`).eq('org_id', orgId)
+  const fornRaw = unwrap<any>(await (supabase as any)
+    .from('fornecedores').select(`id, name, tax_id, notes, ${CONTATO_JSON}`).eq('org_id', orgId), 'fornecedores')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fornMap = new Map<string, any>((fornRaw ?? []).map((f: any) => [f.id, f]))
+  const fornMap = new Map<string, any>(fornRaw.map((f: any) => [f.id, f]))
 
   // Catálogos p/ os 4 campos de classificação da conferência (centro/categoria/conta/forma).
-  const [{ data: contasRaw }, { data: settings }] = await Promise.all([
+  const [contasRes, settingsRes] = await Promise.all([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any).from('contas_financeiras').select('id, nome, ativo, favorita').eq('org_id', orgId).order('ordem', { ascending: true }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any).from('org_settings').select('finance_categorias, finance_centros_custo').eq('org_id', orgId).maybeSingle(),
   ])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const contasAtivas = ((contasRaw ?? []) as any[]).filter(c => c.ativo)
+  const settings = unwrapOne<any>(settingsRes, 'configurações financeiras')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const contasAtivas = (unwrap<any>(contasRes, 'contas financeiras')).filter(c => c.ativo)
   const contas: ContaRef[] = contasAtivas.map(c => ({ id: c.id, nome: c.nome }))
   const categorias = (settings?.finance_categorias ?? []) as FinanceCategoriaGrupo[]
   const centros = (settings?.finance_centros_custo ?? []) as FinanceCentro[]
@@ -131,7 +136,7 @@ export default async function FaturamentoPage({
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const midias: MidiaView[] = ((docsRaw ?? []) as any[]).filter(d => !lancadas.has(d.id)).map(d => ({
+  const midias: MidiaView[] = (docsRaw as any[]).filter(d => !lancadas.has(d.id)).map(d => ({
     id: d.id as string,
     numero: d.numero as number | null,
     serie: d.serie as string | null,
@@ -162,17 +167,17 @@ export default async function FaturamentoPage({
 
   // Produção liberada pro Financeiro (estado unificado 'faturar' = A Faturar): Fee e Pedido.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: feesRaw } = await (supabase as any)
+  const feesRaw = unwrap<any>(await (supabase as any)
     .from('producao')
     .select(`id, numero, serie, titulo, tipo, valor, bv_pct, honorarios_pct, detalhe, anexos, workspaces(${WS_CONTATO})`)
     .eq('org_id', orgId).eq('archived', false)
     .eq('situacao', 'faturar').in('tipo', ['fee', 'pedido'])
-    .order('numero', { ascending: false })
+    .order('numero', { ascending: false }), 'produção a faturar')
   // Parcelas que viram lançamento a receber (o que a agência realmente fatura).
   const RECEBER_TIPOS = ['receber_bv', 'receber_honorarios', 'receber_cliente']
   const COMISSAO_TIPOS = ['receber_bv', 'receber_honorarios']
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fees = ((feesRaw ?? []) as any[]).map(f => {
+  const fees = (feesRaw as any[]).map(f => {
     const valorCheio = Number(f.valor ?? 0)
     const diasAg = Number(f.detalhe?.dias_agencia ?? 7)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

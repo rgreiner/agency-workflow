@@ -66,15 +66,3 @@ export async function listarInventario(veiculoId: string): Promise<InventarioPon
     .order('codigo', { ascending: true })
   return (data ?? []) as InventarioPontoRef[]
 }
-
-/** Remove um ponto do inventário. */
-export async function removerInventarioPonto(orgSlug: string, pontoId: string) {
-  const supabase = await createClient()
-  const user = await getUsuario()
-  if (!user) return { error: 'Não autenticado' }
-  // RLS (manager+) cobre o delete direto.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any).from('veiculo_inventario').delete().eq('id', pontoId)
-  if (error) return { error: error.message }
-  revalidatePath(`/${orgSlug}/cadastros/veiculos`)
-}
