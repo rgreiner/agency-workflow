@@ -44,6 +44,29 @@ export async function salvarInventario(orgSlug: string, veiculoId: string, forma
   return { result: data as { ok: boolean; processados: number } }
 }
 
+export interface InventarioPontoRef {
+  codigo: string
+  tipo_midia: string | null
+  cidade: string | null
+  endereco_full: string | null
+  lat: number | null
+  lng: number | null
+  foto_url: string | null
+}
+
+/** Lista os pontos do inventário de um veículo (pro autofill da MX). RLS garante a org. */
+export async function listarInventario(veiculoId: string): Promise<InventarioPontoRef[]> {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user || !veiculoId) return []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (supabase as any).from('veiculo_inventario')
+    .select('codigo, tipo_midia, cidade, endereco_full, lat, lng, foto_url')
+    .eq('veiculo_id', veiculoId).eq('ativo', true)
+    .order('codigo', { ascending: true })
+  return (data ?? []) as InventarioPontoRef[]
+}
+
 /** Remove um ponto do inventário. */
 export async function removerInventarioPonto(orgSlug: string, pontoId: string) {
   const supabase = await createClient()

@@ -1,9 +1,10 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Check, Loader2, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Check, Loader2, Plus, Trash2, MapPinned } from 'lucide-react'
 import { Select } from '@/components/ui/Select'
+import { listarInventario, type InventarioPontoRef } from '@/app/actions/inventario'
 import { TextoPadraoField } from '@/components/ui/TextoPadraoField'
 import {
   MIDIA_FATURAMENTO_OPTIONS, MIDIA_PRAZO_OPTIONS, MIDIA_ABRANGENCIA_OPTIONS,
@@ -13,7 +14,11 @@ import type { ClienteOpt, VeiculoOpt, MemberOpt } from '../simplificada/MidiaFor
 import { periodoDaBisemana, periodoLabel, numeroDaBisemana } from '@/lib/bisemana'
 import type { FornecedorOpt } from '@/lib/midia-selectors'
 
-export interface Localizacao { endereco: string; cidade: string }
+export interface Localizacao {
+  endereco: string; cidade: string
+  // Preenchidos quando o ponto veio do inventário do veículo (autofill pelo código).
+  codigo?: string | null; foto_url?: string | null; lat?: number | null; lng?: number | null
+}
 export interface ExternaValues {
   workspace_id: string; campaign_id: string; veiculo_id: string; titulo: string
   emissao: string
@@ -119,6 +124,35 @@ export function ExternaForm({
   const addLoc = () => setForm(f => ({ ...f, localizacoes: [...f.localizacoes, newLoc()] }))
   const delLoc = (i: number) => setForm(f => ({ ...f, localizacoes: f.localizacoes.filter((_, idx) => idx !== i) }))
 
+  // Inventário do veículo (autofill do ponto pelo código). Carrega ao trocar de veículo.
+  const [inventario, setInventario] = useState<InventarioPontoRef[]>([])
+  const [, loadInv] = useTransition()
+  const carregarInventario = (vid: string) => {
+    if (!vid) { setInventario([]); return }
+    loadInv(async () => { setInventario(await listarInventario(vid)) })
+  }
+  // Carga única na montagem (modo edição): não é setState síncrono, é load async.
+  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
+  useEffect(() => { if (initial?.veiculo_id) carregarInventario(initial.veiculo_id) }, [])
+
+  /** Escolher um código do inventário adiciona a localização já preenchida. Substitui
+   *  a primeira localização se ela ainda estiver vazia (não deixa a linha em branco). */
+  function addPontoInventario(codigo: string) {
+    const p = inventario.find(x => x.codigo === codigo)
+    if (!p) return
+    const loc: Localizacao = {
+      endereco: [p.codigo, p.endereco_full].filter(Boolean).join(' — '),
+      cidade: p.cidade ?? '', codigo: p.codigo, foto_url: p.foto_url, lat: p.lat, lng: p.lng,
+    }
+    setForm(f => {
+      const vazias = f.localizacoes.every(l => !l.endereco.trim() && !l.cidade.trim())
+      return { ...f, localizacoes: vazias ? [loc] : [...f.localizacoes, loc] }
+    })
+  }
+  const inventarioOptions = useMemo(
+    () => inventario.map(p => ({ value: p.codigo, label: `${p.codigo} — ${p.endereco_full ?? p.cidade ?? ''}` })),
+    [inventario])
+
   const valor = parseMoney(form.custo) * (1 - parseMoney(form.desconto_exibicao) / 100)
   const comissao = valor * (parseMoney(form.desconto_pct) / 100)
   const pagador = FATURAMENTO_PAGADOR[form.faturamento] ?? 'cliente'
@@ -143,6 +177,7 @@ export function ExternaForm({
   function onVeiculoChange(v: string) {
     const veic = veiculos.find(x => x.id === v)
     setForm(f => ({ ...f, veiculo_id: v, desconto_pct: veic?.commission_pct != null ? String(veic.commission_pct).replace('.', ',') : f.desconto_pct }))
+    carregarInventario(v)
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -239,9 +274,23 @@ export function ExternaForm({
             <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Localizações</h3>
             <button type="button" onClick={addLoc} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition"><Plus className="w-3.5 h-3.5" /> Adicionar</button>
           </div>
+          {/* Autofill pelo inventário do veículo: escolher o código preenche o ponto. */}
+          {inventarioOptions.length > 0 && (
+            <div className="mb-3 flex items-center gap-2">
+              <MapPinned className="w-4 h-4 text-orange-500 shrink-0" />
+              <div className="flex-1">
+                <Select value="" onChange={addPontoInventario} options={inventarioOptions}
+                  placeholder={`Adicionar ponto do inventário (${inventarioOptions.length})`} />
+              </div>
+            </div>
+          )}
           <div className="space-y-2">
             {form.localizacoes.map((l, i) => (
               <div key={i} className="flex gap-2 items-center">
+                {l.foto_url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={l.foto_url} alt="" className="w-12 h-9 object-cover rounded border border-gray-200 shrink-0" />
+                )}
                 <input value={l.endereco} onChange={e => setLoc(i, 'endereco', e.target.value)} placeholder="Endereço / código do ponto" className={inputCls} />
                 <input value={l.cidade} onChange={e => setLoc(i, 'cidade', e.target.value)} placeholder="Cidade" className={inputCls} />
                 {form.localizacoes.length > 1 && <button aria-label="Remover" type="button" onClick={() => delLoc(i)} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>}
