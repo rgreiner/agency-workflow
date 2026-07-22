@@ -114,6 +114,7 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
   ] },
   { id: 'rh', label: 'RH', icon: UserCog, rh: true, items: [
     { label: 'Pessoas', href: 'rh' },
+    { label: 'Folha',   href: 'rh/folha' },
   ] },
 ]
 

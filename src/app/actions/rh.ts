@@ -74,3 +74,21 @@ export async function excluirDocumento(orgSlug: string, colaboradorId: string, d
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/rh/${colaboradorId}`)
 }
+
+/** Importa uma competência de folha (linhas já extraídas e conferidas na tela).
+ *  competencia = 'AAAA-MM'. Casa por CPF e cria quem falta (autoCriar). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function importarFolha(orgSlug: string, competencia: string, linhas: any[], autoCriar = true) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  const comp = /^\d{4}-\d{2}$/.test(competencia) ? `${competencia}-01` : null
+  if (!comp) return { error: 'Competência inválida (use AAAA-MM)' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (c.supabase as any).rpc('rh_importar_folha', {
+    p_org_id: c.orgId, p_competencia: comp, p_linhas: linhas, p_auto_criar: autoCriar,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/rh/folha`)
+  revalidatePath(`/${orgSlug}/rh`)
+  return { resultado: data as { linhas: number; criados: number; casados: number } }
+}
