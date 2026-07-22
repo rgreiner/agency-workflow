@@ -1,0 +1,5 @@
+# Coolify builda via Nixpacks. Adiciona o poppler (pdftotext/pdfimages) usado pelo
+# import de inventário de mídia (src/lib/inventario/logycware.ts). aptPkgs é ADITIVO
+# — não substitui a detecção do Node pelo Nixpacks.
+[phases.setup]
+aptPkgs = ["poppler-utils"]
