@@ -19,6 +19,7 @@ interface Props {
   role: string
   canFinance: boolean
   canVendas: boolean
+  canRh: boolean
   positions: { id: string; name: string; color: string }[]
   isAdmin: boolean
   isMe: boolean
@@ -29,13 +30,14 @@ interface Props {
 const ROLES = ['owner', 'admin', 'manager', 'member', 'viewer']
 
 export function MemberRow({
-  memberId, orgSlug, orgId, profile, position, role, canFinance, canVendas,
+  memberId, orgSlug, orgId, profile, position, role, canFinance, canVendas, canRh,
   positions, isAdmin, isMe, isOwner, roleLabels,
 }: Props) {
   const [selectedPosition, setSelectedPosition] = useState(position?.id ?? '')
   const [selectedRole, setSelectedRole] = useState(role)
   const [selectedFinance, setSelectedFinance] = useState(canFinance)
   const [selectedVendas, setSelectedVendas] = useState(canVendas)
+  const [selectedRh, setSelectedRh] = useState(canRh)
   const [isDirty, setIsDirty] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [confirmRemove, setConfirmRemove] = useState(false)
@@ -61,35 +63,40 @@ export function MemberRow({
     }
   }
 
-  function recomputeDirty(pos: string, r: string, fin: boolean, ven: boolean) {
-    setIsDirty(pos !== (position?.id ?? '') || r !== role || fin !== canFinance || ven !== canVendas)
+  function recomputeDirty(pos: string, r: string, fin: boolean, ven: boolean, rh: boolean) {
+    setIsDirty(pos !== (position?.id ?? '') || r !== role || fin !== canFinance || ven !== canVendas || rh !== canRh)
   }
 
   function handlePositionChange(val: string) {
     setSelectedPosition(val)
-    recomputeDirty(val, selectedRole, selectedFinance, selectedVendas)
+    recomputeDirty(val, selectedRole, selectedFinance, selectedVendas, selectedRh)
   }
 
   function handleRoleChange(val: string) {
     setSelectedRole(val)
-    recomputeDirty(selectedPosition, val, selectedFinance, selectedVendas)
+    recomputeDirty(selectedPosition, val, selectedFinance, selectedVendas, selectedRh)
   }
 
   function handleFinanceChange(val: boolean) {
     setSelectedFinance(val)
-    recomputeDirty(selectedPosition, selectedRole, val, selectedVendas)
+    recomputeDirty(selectedPosition, selectedRole, val, selectedVendas, selectedRh)
   }
 
   function handleVendasChange(val: boolean) {
     setSelectedVendas(val)
-    recomputeDirty(selectedPosition, selectedRole, selectedFinance, val)
+    recomputeDirty(selectedPosition, selectedRole, selectedFinance, val, selectedRh)
+  }
+
+  function handleRhChange(val: boolean) {
+    setSelectedRh(val)
+    recomputeDirty(selectedPosition, selectedRole, selectedFinance, selectedVendas, val)
   }
 
   function handleSave() {
     startTransition(async () => {
       const result = await updateMember(
         orgSlug, orgId, memberId, selectedPosition || null,
-        selectedRole as import('@/types').MemberRole, selectedFinance, selectedVendas,
+        selectedRole as import('@/types').MemberRole, selectedFinance, selectedVendas, selectedRh,
       )
       if (result?.error) {
         toast.error(result.error)
@@ -264,6 +271,38 @@ export function MemberRow({
             )} />
           </button>
         ) : canVendas ? (
+          <span className="inline-flex items-center gap-1 text-xs text-orange-600">
+            <Check className="w-3.5 h-3.5" /> Sim
+          </span>
+        ) : (
+          <span className="text-xs text-gray-400">—</span>
+        )}
+      </td>
+
+      {/* RH (dado sensível — só quem tem o toggle explícito, além de owner/admin) */}
+      <td className="px-4 py-3">
+        {vendasImplicit ? (
+          <span className="inline-flex items-center gap-1 text-xs text-gray-400" title="Admins têm acesso ao RH">
+            <Check className="w-3.5 h-3.5" /> Sempre
+          </span>
+        ) : canEdit ? (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={selectedRh}
+            onClick={() => handleRhChange(!selectedRh)}
+            className={cn(
+              'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
+              selectedRh ? 'bg-orange-600' : 'bg-gray-300'
+            )}
+            title="Ver/operar RH (ficha, documentos, folha)"
+          >
+            <span className={cn(
+              'inline-block h-4 w-4 transform rounded-full bg-[#fff] transition-transform',
+              selectedRh ? 'translate-x-4' : 'translate-x-0.5'
+            )} />
+          </button>
+        ) : canRh ? (
           <span className="inline-flex items-center gap-1 text-xs text-orange-600">
             <Check className="w-3.5 h-3.5" /> Sim
           </span>

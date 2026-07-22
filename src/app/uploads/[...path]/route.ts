@@ -28,6 +28,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pat
   if (rel.includes('..') || !/^[\w./-]+$/.test(rel)) {
     return new Response('Not found', { status: 404 })
   }
+  // Documentos de RH são sensíveis: NUNCA servir por esta rota pública. Ficam em
+  // rh-privado/ e só saem pela rota autenticada /api/rh/documento/[id].
+  if (parts[0] === 'rh-privado') {
+    return new Response('Not found', { status: 404 })
+  }
 
   const file = path.join(uploadRoot(), rel)
   try {

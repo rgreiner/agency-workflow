@@ -25,6 +25,7 @@ import {
   Search,
   Megaphone,
   ClipboardList,
+  UserCog,
   Wallet,
   Users,
   SquareKanban,
@@ -68,6 +69,8 @@ interface SidebarProps {
   canFinance?: boolean
   /** Permissão para ver Cadastros. */
   canCadastros?: boolean
+  /** Permissão para ver o grupo RH (owner/admin ou can_rh). */
+  canRh?: boolean
   /** Permissão de gestão (owner) — mostra o item "Gestão". */
   canManage?: boolean
   collapsed: boolean
@@ -76,7 +79,7 @@ interface SidebarProps {
 }
 
 interface NavItem { label: string; href: string }
-interface NavGroupDef { id: string; label: string; icon: LucideIcon; items: NavItem[]; finance?: boolean }
+interface NavGroupDef { id: string; label: string; icon: LucideIcon; items: NavItem[]; finance?: boolean; rh?: boolean }
 
 // Grupos do módulo comercial/financeiro (SigaSW → One a One).
 const COMERCIAL_GROUPS: NavGroupDef[] = [
@@ -108,6 +111,9 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Veículos',     href: 'cadastros/veiculos' },
     { label: 'Fornecedores', href: 'cadastros/fornecedores' },
     { label: 'Histórico de docs', href: 'documentos' },
+  ] },
+  { id: 'rh', label: 'RH', icon: UserCog, rh: true, items: [
+    { label: 'Pessoas', href: 'rh' },
   ] },
 ]
 
@@ -165,7 +171,7 @@ const VIEWS = [
 type SidebarMode = 'trabalho' | 'operacional'
 // Em que modo cada rota se encaixa (null = neutra, não troca o modo).
 function modeForPath(path: string, base: string): SidebarMode | null {
-  if (['financeiro', 'midias', 'producao', 'cadastros'].some(p => path.startsWith(`${base}/${p}`))) return 'operacional'
+  if (['financeiro', 'midias', 'producao', 'cadastros', 'rh'].some(p => path.startsWith(`${base}/${p}`))) return 'operacional'
   if (['dashboard', 'views', 'docs', 'boards', 'workspaces'].some(p => path.startsWith(`${base}/${p}`))) return 'trabalho'
   return null
 }
@@ -177,7 +183,7 @@ const MODE_TABS: { m: SidebarMode; Icon: LucideIcon; label: string }[] = [
 
 export function Sidebar({
   orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#f97316', canManage,
-  positionName, canMidias = false, canProducao = false, canFinance = false, canCadastros = false, collapsed, onCollapse, onExpand,
+  positionName, canMidias = false, canProducao = false, canFinance = false, canCadastros = false, canRh = false, collapsed, onCollapse, onExpand,
 }: SidebarProps) {
   const pathname = usePathname()
   const base = `/${orgSlug}`
@@ -188,7 +194,7 @@ export function Sidebar({
   // Grupos do Operacional: cada seção aparece conforme cargo × toggles (ver
   // computeAccess). Mídias/Produção dependem do cargo; Financeiro do can_finance;
   // Cadastros de can_vendas OU can_finance.
-  const groupVisible: Record<string, boolean> = { midias: canMidias, producao: canProducao, financeiro: canFinance, cadastros: canCadastros }
+  const groupVisible: Record<string, boolean> = { midias: canMidias, producao: canProducao, financeiro: canFinance, cadastros: canCadastros, rh: canRh }
   const comercialGroups = COMERCIAL_GROUPS.filter(g => groupVisible[g.id])
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   useEffect(() => {
@@ -215,7 +221,7 @@ export function Sidebar({
   // Modo da sidebar: "Trabalho" (visões + espaços) × "Operacional" (mídia/produção/
   // financeiro/cadastros) — um contexto por vez p/ reduzir a poluição. O switcher só
   // aparece com permissão; ao navegar, o modo acompanha a página atual.
-  const canOperacional = canMidias || canProducao || canFinance || canCadastros
+  const canOperacional = canMidias || canProducao || canFinance || canCadastros || canRh
   const [mode, setMode] = useState<SidebarMode>(
     () => (canOperacional ? modeForPath(pathname, base) : null) ?? 'trabalho'
   )

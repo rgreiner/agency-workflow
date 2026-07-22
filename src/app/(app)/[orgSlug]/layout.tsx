@@ -118,6 +118,7 @@ export default async function OrgLayout({
         canProducao={access.producao}
         canFinance={access.financeiro}
         canCadastros={access.cadastros}
+        canRh={access.rh}
         canManage={access.isOwner}
       >
         {children}

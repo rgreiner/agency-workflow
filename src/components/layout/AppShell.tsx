@@ -29,6 +29,8 @@ interface Props {
   canFinance?: boolean
   /** Permissão para ver Cadastros. */
   canCadastros?: boolean
+  /** Permissão para ver o grupo RH (owner/admin ou can_rh). */
+  canRh?: boolean
   /** Permissão de gestão (owner) — mostra o item "Gestão". */
   canManage?: boolean
   children: React.ReactNode
@@ -40,7 +42,7 @@ interface Props {
  * a própria Sidebar mostra um botão flutuante para reabrir.
  */
 export function AppShell({
-  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, canMidias, canProducao, canFinance, canCadastros, canManage, children,
+  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, canMidias, canProducao, canFinance, canCadastros, canRh, canManage, children,
 }: Props) {
   const [collapsed, setCollapsedState] = useState(false)
 
@@ -69,6 +71,7 @@ export function AppShell({
         canProducao={canProducao}
         canFinance={canFinance}
         canCadastros={canCadastros}
+        canRh={canRh}
         canManage={canManage}
         collapsed={collapsed}
         onCollapse={() => setCollapsed(true)}

@@ -15,6 +15,7 @@ export interface OperacionalAccess {
   producao: boolean
   financeiro: boolean
   cadastros: boolean
+  rh: boolean
   operacional: boolean
   isOwner: boolean
   positionName: string | null
@@ -25,11 +26,12 @@ export interface MembershipRow {
   role: string
   can_finance?: boolean | null
   can_vendas?: boolean | null
+  can_rh?: boolean | null
   org_positions?: PosRow | PosRow[] | null
 }
 
 /** Colunas a selecionar em organization_members para computar o acesso. */
-export const ACCESS_SELECT = 'role, can_finance, can_vendas, org_positions(name, op_ver_tudo, op_midias, op_producao)'
+export const ACCESS_SELECT = 'role, can_finance, can_vendas, can_rh, org_positions(name, op_ver_tudo, op_midias, op_producao)'
 
 export function computeAccess(m: MembershipRow): OperacionalAccess {
   const isAdmin = m.role === 'owner' || m.role === 'admin'
@@ -41,9 +43,11 @@ export function computeAccess(m: MembershipRow): OperacionalAccess {
   const producao = verTudo || (canVendas && !!pos?.op_producao)
   const financeiro = verTudo || canFinance
   const cadastros = verTudo || canVendas || canFinance
+  // RH é sensível: só owner/admin OU can_rh explícito (não herda de vendas/finance).
+  const rh = verTudo || !!m.can_rh
   return {
-    verTudo, midias, producao, financeiro, cadastros,
-    operacional: midias || producao || financeiro || cadastros,
+    verTudo, midias, producao, financeiro, cadastros, rh,
+    operacional: midias || producao || financeiro || cadastros || rh,
     isOwner: m.role === 'owner',
     positionName: pos?.name ?? null,
   }
