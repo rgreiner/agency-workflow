@@ -590,16 +590,19 @@ export function Sidebar({
 
       {/* ── Bottom ───────────────────────────────────── */}
       <div className="border-t border-gray-800">
-        <Link
-          href={`${base}/settings/membros`}
-          className={cn(
-            'flex items-center gap-2.5 px-5 py-2.5 text-sm transition-colors',
-            pathname.startsWith(`${base}/settings`) ? 'text-white' : 'text-gray-500 hover:text-gray-200'
-          )}
-        >
-          <Settings className="w-4 h-4 shrink-0" />
-          Configurações
-        </Link>
+        {/* Configurações: só o PROPRIETÁRIO (canManage = isOwner). */}
+        {canManage && (
+          <Link
+            href={`${base}/settings/membros`}
+            className={cn(
+              'flex items-center gap-2.5 px-5 py-2.5 text-sm transition-colors',
+              pathname.startsWith(`${base}/settings`) ? 'text-white' : 'text-gray-500 hover:text-gray-200'
+            )}
+          >
+            <Settings className="w-4 h-4 shrink-0" />
+            Configurações
+          </Link>
+        )}
 
         <div className="flex items-center gap-2.5 px-4 py-3 border-t border-gray-800">
           <Link
@@ -678,6 +681,7 @@ export function Sidebar({
         workspaces={workspaces}
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
+        canManage={canManage}
       />
     </>
   )

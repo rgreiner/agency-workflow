@@ -37,6 +37,10 @@ export default async function MembrosPage({
     .eq('user_id', user.id)
     .single()
 
+  // Configurações é área do proprietário — o layout já barra, mas gate aqui também
+  // (no App Router o data-fetch da página roda em paralelo ao notFound do layout).
+  if (myMembership?.role !== 'owner') notFound()
+
   const isAdmin = ['owner', 'admin'].includes(myMembership?.role ?? '')
 
   type MemberRowData = {

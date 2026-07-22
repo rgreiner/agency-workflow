@@ -22,6 +22,8 @@ interface Props {
   workspaces: Workspace[]
   open: boolean
   onClose: () => void
+  /** Proprietário: só ele vê os atalhos de Configurações (membros/cargos/aparência). */
+  canManage?: boolean
 }
 
 interface Item {
@@ -51,7 +53,7 @@ export function CommandPalette({ open, ...rest }: Props) {
   return <PalettePanel {...rest} />
 }
 
-function PalettePanel({ orgSlug, workspaces, onClose }: Omit<Props, 'open'>) {
+function PalettePanel({ orgSlug, workspaces, onClose, canManage }: Omit<Props, 'open'>) {
   const router = useRouter()
   const [query, setQuery] = useState('')
   const [activeIdx, setActiveIdx] = useState(0)
@@ -135,14 +137,16 @@ function PalettePanel({ orgSlug, workspaces, onClose }: Omit<Props, 'open'>) {
       // Ações
       { id: 'a-ws',    label: 'Novo cliente',   group: 'Criar', href: `${base}/workspaces/new`, icon: Plus },
       { id: 'a-board', label: 'Novo quadro',    group: 'Criar', href: `${base}/boards/new`,     icon: Plus },
-      // Configurações
-      { id: 's-membros',   label: 'Membros da equipe',  group: 'Configurações', href: `${base}/settings/membros`,   icon: Settings },
-      { id: 's-cargos',    label: 'Cargos',             group: 'Configurações', href: `${base}/settings/cargos`,    icon: Settings },
-      { id: 's-aparencia', label: 'Aparência',          group: 'Configurações', href: `${base}/settings/aparencia`, icon: Palette },
+      // Configurações — só o proprietário (área de owner); Meu perfil é de todos.
+      ...(canManage ? [
+        { id: 's-membros',   label: 'Membros da equipe',  group: 'Configurações', href: `${base}/settings/membros`,   icon: Settings },
+        { id: 's-cargos',    label: 'Cargos',             group: 'Configurações', href: `${base}/settings/cargos`,    icon: Settings },
+        { id: 's-aparencia', label: 'Aparência',          group: 'Configurações', href: `${base}/settings/aparencia`, icon: Palette },
+      ] : []),
       { id: 's-perfil',    label: 'Meu perfil',         group: 'Configurações', href: `${base}/perfil`,             icon: User },
     ]
     return items
-  }, [base, workspaces])
+  }, [base, workspaces, canManage])
 
   const filtered = useMemo(() => {
     if (!query.trim()) return allItems

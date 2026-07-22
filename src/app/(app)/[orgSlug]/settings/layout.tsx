@@ -24,6 +24,9 @@ export default async function SettingsLayout({
     .single()
 
   if (!membership) notFound()
+  // Configurações é área do PROPRIETÁRIO (decisão do Rafael 22/07/2026). Qualquer outro
+  // cargo — inclusive gerente/admin — recebe notFound em TODA rota /settings/*.
+  if (membership.role !== 'owner') notFound()
 
   const isAdmin = ['owner', 'admin'].includes(membership.role)
   const orgName = (membership.organizations as { name: string } | null)?.name
