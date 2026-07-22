@@ -75,7 +75,7 @@ export async function montarPacoteContabil(sb: any, orgId: string, competencia: 
   // aberto. É a leitura fiscal — receita realizada no período.
   const { data: receb } = await sb
     .from('lancamentos')
-    .select('data_liquidacao, vencimento, contato_nome, descricao, categoria, valor, valor_realizado, conta_id')
+    .select('data_liquidacao, vencimento, contato_nome, descricao, categoria, valor, valor_realizado, conta_id, origem_tipo')
     .eq('org_id', orgId).eq('tipo', 'entrada')
     .in('situacao', ['recebido', 'pago'])
     .gte('data_liquidacao', ini).lte('data_liquidacao', fim)
@@ -83,7 +83,13 @@ export async function montarPacoteContabil(sb: any, orgId: string, competencia: 
 
   const nomeConta = new Map((contas ?? []).map((c: { id: string; nome: string }) => [c.id, c.nome]))
   let totalRecebido = 0
-  const linhasReceb = ((receb ?? []) as Record<string, unknown>[]).map(l => {
+  // Transferência entre contas NÃO é receita — é dinheiro mudando de conta (nasce
+  // 'recebido' com data_liquidacao). Sem excluir, o fechamento reportava a
+  // transferência como receita realizada pra contabilidade. Filtro no JS (o `neq`
+  // do PostgREST descartaria também as linhas com origem_tipo NULL).
+  const linhasReceb = ((receb ?? []) as Record<string, unknown>[])
+    .filter(l => l.origem_tipo !== 'transferencia')
+    .map(l => {
     const v = Number(l.valor_realizado ?? l.valor ?? 0)
     totalRecebido += v
     return {
