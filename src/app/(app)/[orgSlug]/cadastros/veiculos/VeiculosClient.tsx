@@ -3,12 +3,13 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, X, Check, Loader2, Archive, ArchiveRestore, Pencil, Tv, FileText, ExternalLink } from 'lucide-react'
+import { Plus, X, Check, Loader2, Archive, ArchiveRestore, Pencil, Tv, FileText, ExternalLink, MapPinned } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { createVeiculo, updateVeiculo, setVeiculoArchived } from '@/app/actions/veiculo'
 import { ContatoBlocks, type ContatoData } from '@/components/ui/ContatoBlocks'
 import { PdfField } from '@/components/ui/PdfField'
+import { ImportInventarioModal } from './ImportInventarioModal'
 
 export interface Veiculo {
   id: string
@@ -45,6 +46,7 @@ export function VeiculosClient({ orgSlug, veiculos, archivedView }: {
   const router = useRouter()
   const [editing, setEditing] = useState<Veiculo | null>(null)
   const [creating, setCreating] = useState(false)
+  const [importando, setImportando] = useState<Veiculo | null>(null)
   const [isPending, startTransition] = useTransition()
 
   function archive(v: Veiculo) {
@@ -115,6 +117,12 @@ export function VeiculosClient({ orgSlug, veiculos, archivedView }: {
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex items-center justify-end gap-1.5">
+                      {v.type === 'externa' && !v.archived && (
+                        <button onClick={() => setImportando(v)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-50 transition" title="Importar/atualizar inventário de pontos">
+                          <MapPinned className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <button onClick={() => setEditing(v)}
                         className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar">
                         <Pencil className="w-3.5 h-3.5" />
@@ -148,6 +156,14 @@ export function VeiculosClient({ orgSlug, veiculos, archivedView }: {
           orgSlug={orgSlug}
           veiculo={editing}
           onClose={() => { setCreating(false); setEditing(null) }}
+        />
+      )}
+      {importando && (
+        <ImportInventarioModal
+          orgSlug={orgSlug}
+          veiculoId={importando.id}
+          veiculoNome={importando.name}
+          onClose={() => setImportando(null)}
         />
       )}
     </div>

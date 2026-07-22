@@ -116,38 +116,39 @@ export async function parseLogycwareTexto(pdfPath: string): Promise<{ tipoGlobal
 }
 
 /** Extrai a foto de cada ponto (poppler → JPEG → sharp WebP) e grava em outDir.
- *  Devolve mapa codigo → caminho relativo do arquivo escrito. */
+ *  Devolve mapa codigo → caminho relativo do arquivo escrito.
+ *
+ *  UMA chamada de pdfimages pro PDF inteiro (não uma por página) — no arquivo de
+ *  98 páginas isso é a diferença entre segundos e minutos/timeout. As imagens
+ *  saem em ordem global de página, então a k-ésima FOTO grande casa com o k-ésimo
+ *  ponto (que também está em ordem global de página+idx). */
 export async function extrairFotos(
   pdfPath: string, pontos: PontoParsed[], outDir: string,
 ): Promise<Map<string, string>> {
   await mkdir(outDir, { recursive: true })
   const out = new Map<string, string>()
-  const porPagina = new Map<number, PontoParsed[]>()
-  for (const p of pontos) (porPagina.get(p.page) ?? porPagina.set(p.page, []).get(p.page)!).push(p)
-
-  for (const [page, ps] of porPagina) {
-    const tmp = await mkdtemp(path.join(tmpdir(), 'inv-'))
-    try {
-      await exec('pdfimages', ['-j', '-f', String(page), '-l', String(page), pdfPath, path.join(tmp, 'img')], { maxBuffer: 64 * 1024 * 1024 })
-      // arquivos em ordem de extração (= ordem visual). Filtra as fotos grandes.
-      const files = (await readdir(tmp)).filter(f => f.startsWith('img')).sort()
-      const grandes: string[] = []
-      for (const f of files) {
-        try {
-          const meta = await sharp(path.join(tmp, f)).metadata()
-          if ((meta.width ?? 0) > 1000) grandes.push(path.join(tmp, f))
-        } catch { /* .ppm/ícone que o sharp não lê: ignora */ }
-      }
-      for (const p of ps.sort((a, b) => a.idx - b.idx)) {
-        const src = grandes[p.idx]
-        if (!src) continue
-        const nome = `${p.codigo.replace(/[^\w()-]/g, '_')}.webp`
-        await sharp(src).resize({ width: 1200, withoutEnlargement: true }).webp({ quality: 80 }).toFile(path.join(outDir, nome))
-        out.set(p.codigo, nome)
-      }
-    } finally {
-      await rm(tmp, { recursive: true, force: true })
+  const tmp = await mkdtemp(path.join(tmpdir(), 'inv-'))
+  try {
+    await exec('pdfimages', ['-j', pdfPath, path.join(tmp, 'img')], { maxBuffer: 128 * 1024 * 1024 })
+    const files = (await readdir(tmp)).filter(f => f.startsWith('img')).sort()  // ordem de extração = ordem global
+    const grandes: string[] = []
+    for (const f of files) {
+      try {
+        const meta = await sharp(path.join(tmp, f)).metadata()
+        if ((meta.width ?? 0) > 1000) grandes.push(path.join(tmp, f))
+      } catch { /* .ppm/ícone que o sharp não lê: ignora */ }
     }
+    // pontos já vêm em ordem global (página, depois idx); zip 1:1 com as fotos grandes.
+    const ordenados = [...pontos].sort((a, b) => a.page - b.page || a.idx - b.idx)
+    await Promise.all(ordenados.map(async (p, k) => {
+      const src = grandes[k]
+      if (!src) return
+      const nome = `${p.codigo.replace(/[^\w()-]/g, '_')}.webp`
+      await sharp(src).resize({ width: 1200, withoutEnlargement: true }).webp({ quality: 80 }).toFile(path.join(outDir, nome))
+      out.set(p.codigo, nome)
+    }))
+  } finally {
+    await rm(tmp, { recursive: true, force: true })
   }
   return out
 }
