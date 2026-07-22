@@ -9,6 +9,7 @@ import Mention from '@tiptap/extension-mention'
 import { Pencil, Trash2, Check, X, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { editComment, deleteComment } from '@/app/actions/activity'
+import { sanitizeHtml } from '@/lib/sanitize'
 
 const isHtml = (s: string) => /<[a-z][\s\S]*>/i.test(s)
 
@@ -68,7 +69,7 @@ export function CommentContent({ path, commentId, content, edited, canEdit, canD
   return (
     <div className="group/comment relative">
       {isHtml(content)
-        ? <div className="rich-text comment-body text-sm text-gray-700 leading-relaxed" onClick={onBodyClick} dangerouslySetInnerHTML={{ __html: content }} />
+        ? <div className="rich-text comment-body text-sm text-gray-700 leading-relaxed" onClick={onBodyClick} dangerouslySetInnerHTML={{ __html: sanitizeHtml(content) }} />
         : <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{content}</p>}
       {edited && <span className="text-[10px] text-gray-400 italic">(editado)</span>}
 

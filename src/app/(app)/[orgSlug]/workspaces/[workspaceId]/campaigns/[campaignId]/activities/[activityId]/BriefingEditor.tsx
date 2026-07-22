@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { updateActivityField } from '@/app/actions/activity'
 import { downscaleImage } from '@/lib/image-resize'
+import { sanitizeHtml } from '@/lib/sanitize'
 import { uploadFile } from '@/lib/storage/upload-client'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -150,7 +151,7 @@ export function BriefingEditor({ activityId, path, description, canEdit }: {
       <div className="flex-1 min-w-0">
         {description ? (
           isHtml(description)
-            ? <div className="rich-text" dangerouslySetInnerHTML={{ __html: description }} />
+            ? <div className="rich-text" dangerouslySetInnerHTML={{ __html: sanitizeHtml(description) }} />
             : <p className="rich-text whitespace-pre-wrap">{description}</p>
         ) : canEdit ? (
           <button onClick={start} className="text-sm text-gray-500 hover:text-gray-700 transition-colors italic">Adicionar briefing…</button>
