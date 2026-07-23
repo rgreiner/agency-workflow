@@ -29,7 +29,11 @@ function getS3(): S3Client {
   if (!endpoint || !accessKeyId || !secretAccessKey) {
     throw new Error('Storage S3 não configurado (R2_ENDPOINT / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY).')
   }
-  _s3 = new S3Client({ region: 'auto', endpoint, credentials: { accessKeyId, secretAccessKey } })
+  // O painel do R2 mostra o endpoint SEM esquema; o SDK exige URL completa
+  // (endpoint cru = `TypeError: Invalid URL` no primeiro uso). Normaliza aqui
+  // pra env colada do painel funcionar dos dois jeitos.
+  const url = /^https?:\/\//i.test(endpoint) ? endpoint : `https://${endpoint}`
+  _s3 = new S3Client({ region: 'auto', endpoint: url, credentials: { accessKeyId, secretAccessKey } })
   return _s3
 }
 
