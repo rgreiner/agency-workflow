@@ -15,7 +15,10 @@ export async function updateSession(request: NextRequest) {
   // /api/cron tem auth própria (header x-cron-secret) e é chamada sem cookie pelo
   // crontab — não pode ser redirecionada pro /login (viraria HTML no lugar do JSON).
   const isCron = path.startsWith('/api/cron')
-  const isPublic = isAuthPage || isConvite || isCron
+  // /portal é do CLIENTE (cookie flow-portal-jwt próprio, validado nas páginas) —
+  // nunca exigir o flow-jwt de membro aqui.
+  const isPortal = path === '/portal' || path.startsWith('/portal/')
+  const isPublic = isAuthPage || isConvite || isCron || isPortal
 
   if (!claims && !isPublic) {
     const url = request.nextUrl.clone()

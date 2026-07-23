@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react'
 import { loadActivityList } from '@/lib/activity-list'
 import { ListaClient } from '../../views/lista/ListaClient'
 import { WorkspaceEditButton } from './WorkspaceEditButton'
+import { PortalAccessButton, type PortalUserRow } from './PortalAccessButton'
 import { UnarchiveButton } from '@/components/ui/UnarchiveButton'
 import { ImportSpecsButton } from './campaigns/[campaignId]/ImportSpecsButton'
 
@@ -30,6 +31,13 @@ export default async function WorkspacePage({
     .from('campaigns').select('id, name').eq('workspace_id', workspaceId).eq('archived', true)
     .order('name', { ascending: true })
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: portalUsers } = await (supabase as any)
+    .from('portal_users')
+    .select('id, nome, email, ativo, last_login_at')
+    .eq('workspace_id', workspaceId)
+    .order('created_at', { ascending: true })
+
   const data = await loadActivityList(orgSlug, { scopeWorkspaceId: workspaceId, archived: archivedView })
   if (!data) return null
 
@@ -47,6 +55,12 @@ export default async function WorkspacePage({
         routeBase={`workspaces/${workspaceId}`}
         breadcrumb={<Link href={`/${orgSlug}/workspaces`} className="hover:text-gray-600 transition">Clientes</Link>}
         titleActions={
+          <>
+          <PortalAccessButton
+            orgSlug={orgSlug}
+            workspaceId={workspaceId}
+            contatos={(portalUsers ?? []) as PortalUserRow[]}
+          />
           <WorkspaceEditButton
             orgSlug={orgSlug}
             workspaceId={workspaceId}
@@ -82,6 +96,7 @@ export default async function WorkspacePage({
               contas_bancarias: workspace.contas_bancarias ?? [],
             }}
           />
+          </>
         }
         secondaryActions={
           <>

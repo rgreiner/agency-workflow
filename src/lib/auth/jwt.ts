@@ -64,6 +64,55 @@ export async function mintToken({ sub, email }: Claims): Promise<string> {
   return `${data}.${await assinar(data)}`;
 }
 
+// ── Portal do cliente ─────────────────────────────────────────────────────────
+// Cookie SEPARADO do flow-jwt: o cliente não é membro. O claim role='portal'
+// faz o PostgREST trocar pra role `portal`, que só executa as RPCs portal_*
+// (migration 152). Identidade vai em `portal_sub` (de propósito NÃO em `sub`,
+// pra auth.uid() ficar null se este token encostar numa RPC interna).
+
+export const COOKIE_PORTAL = "flow-portal-jwt";
+const PORTAL_VALIDADE_DIAS = 30;
+export const PORTAL_MAX_AGE_SEG = PORTAL_VALIDADE_DIAS * 24 * 60 * 60;
+
+export type PortalClaims = { portalSub: string; email: string };
+
+export async function mintPortalToken({ portalSub, email }: PortalClaims): Promise<string> {
+  const agora = Math.floor(Date.now() / 1000);
+  const header = b64urlJson({ alg: "HS256", typ: "JWT" });
+  const payload = b64urlJson({
+    role: "portal",
+    portal_sub: portalSub,
+    email,
+    iat: agora,
+    exp: agora + PORTAL_MAX_AGE_SEG,
+  });
+  const data = `${header}.${payload}`;
+  return `${data}.${await assinar(data)}`;
+}
+
+/** Valida assinatura + expiração + role='portal' e devolve os claims, ou null. */
+export async function verifyPortalToken(token: string | undefined): Promise<PortalClaims | null> {
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const [h, p, sig] = parts;
+
+  const esperado = await assinar(`${h}.${p}`);
+  if (sig.length !== esperado.length) return null;
+  let diff = 0;
+  for (let i = 0; i < sig.length; i++) diff |= sig.charCodeAt(i) ^ esperado.charCodeAt(i);
+  if (diff !== 0) return null;
+
+  try {
+    const payload = JSON.parse(new TextDecoder().decode(b64urlDecode(p)));
+    if (payload?.role !== "portal" || !payload?.portal_sub) return null;
+    if (typeof payload.exp === "number" && Math.floor(Date.now() / 1000) > payload.exp) return null;
+    return { portalSub: String(payload.portal_sub), email: String(payload.email ?? "") };
+  } catch {
+    return null;
+  }
+}
+
 /** Valida assinatura + expiração e devolve os claims, ou null. */
 export async function verifyToken(token: string | undefined): Promise<Claims | null> {
   if (!token) return null;
