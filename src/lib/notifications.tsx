@@ -1,4 +1,4 @@
-import { MessageSquare, ArrowRightLeft, UserPlus, LogIn, AtSign, FolderSync, AlarmClock } from 'lucide-react'
+import { MessageSquare, ArrowRightLeft, UserPlus, LogIn, AtSign, FolderSync, AlarmClock, MessageSquareReply, Inbox } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { STATUS_CONFIG } from '@/types'
 import type { NotificationItem } from '@/app/actions/notifications'
@@ -18,6 +18,14 @@ export function messageOf(n: NotificationItem): string {
     case 'assigned':       return 'Você foi associado a esta tarefa'
     case 'drive_sync':     return 'Pasta do Drive vinculada — revise o que criar/vincular'
     case 'due_soon':       return '⏰ Vence amanhã — não esqueça'
+    case 'portal_resposta': {
+      const cli = n.data?.cliente ?? 'O cliente'
+      return `${cli} respondeu a pendência${n.data?.preview ? `: ${n.data.preview}` : ''}`
+    }
+    case 'portal_solicitacao': {
+      const cli = n.data?.cliente ?? 'Um cliente'
+      return `${cli} abriu uma solicitação${n.data?.titulo ? `: ${n.data.titulo}` : ''}`
+    }
     default:               return 'Atualização'
   }
 }
@@ -29,6 +37,8 @@ export function NotifIcon({ type, className = 'w-3.5 h-3.5' }: { type: string; c
   if (type === 'entered_status') return <LogIn className={cn(className, 'text-emerald-500')} />
   if (type === 'drive_sync')     return <FolderSync className={cn(className, 'text-amber-500')} />
   if (type === 'due_soon')       return <AlarmClock className={cn(className, 'text-red-500')} />
+  if (type === 'portal_resposta')    return <MessageSquareReply className={cn(className, 'text-orange-500')} />
+  if (type === 'portal_solicitacao') return <Inbox className={cn(className, 'text-orange-500')} />
   return <ArrowRightLeft className={cn(className, 'text-orange-500')} />
 }
 

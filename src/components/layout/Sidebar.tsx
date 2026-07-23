@@ -109,6 +109,7 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
   ] },
   { id: 'cadastros', label: 'Cadastros', icon: Users, items: [
     { label: 'Clientes',     href: 'workspaces' },
+    { label: 'Solicitações', href: 'solicitacoes' },
     { label: 'Veículos',     href: 'cadastros/veiculos' },
     { label: 'Fornecedores', href: 'cadastros/fornecedores' },
     { label: 'Histórico de docs', href: 'documentos' },

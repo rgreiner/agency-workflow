@@ -8,6 +8,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { createPortalClient } from '@/lib/supabase/portal'
 import { getUsuario } from '@/lib/auth/server'
 import {
   buscarPortalUserPorEmail, criarTokenPortal, consumirTokenPortal,
@@ -67,6 +68,38 @@ export async function entrarPortal(token: string): Promise<void> {
 export async function sairPortal(): Promise<void> {
   await encerrarSessaoPortal()
   redirect('/portal')
+}
+
+export interface PortalAnexo { chave: string; nome: string }
+
+/** Responder uma pendência (tarefa em pendente_cliente do cliente). */
+export async function responderPendencia(
+  activityId: string, mensagem: string, anexos: PortalAnexo[],
+): Promise<{ error?: string }> {
+  const supabase = await createPortalClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('portal_responder_pendencia', {
+    p_activity_id: activityId,
+    p_mensagem: mensagem,
+    p_anexos: anexos,
+  })
+  if (error) return { error: 'Não foi possível enviar sua resposta. Tente de novo.' }
+  return {}
+}
+
+/** Abrir uma solicitação nova (vira briefing pro atendimento). */
+export async function criarSolicitacao(
+  titulo: string, mensagem: string, anexos: PortalAnexo[],
+): Promise<{ error?: string }> {
+  const supabase = await createPortalClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('portal_criar_solicitacao', {
+    p_titulo: titulo,
+    p_mensagem: mensagem,
+    p_anexos: anexos,
+  })
+  if (error) return { error: 'Não foi possível enviar sua solicitação. Tente de novo.' }
+  return {}
 }
 
 // ── Lado admin (membro owner/admin da org) ────────────────────────────────────
@@ -130,6 +163,78 @@ export async function setAcessoPortalAtivo(
   if (error) return { error: 'Não foi possível atualizar o acesso.' }
 
   revalidatePath(`/${orgSlug}/workspaces/${workspaceId}`)
+  return {}
+}
+
+export interface EntradaCliente {
+  id: string
+  kind: 'resposta' | 'solicitacao'
+  activityId: string | null
+  titulo: string | null
+  mensagem: string
+  anexos: PortalAnexo[]
+  status: 'novo' | 'lido' | 'arquivado'
+  createdAt: string
+  clienteNome: string
+  workspaceId: string
+  workspaceNome: string
+  campaignId: string | null
+  atividadeTitulo: string | null
+}
+
+/** Lista as entradas do cliente (respostas + solicitações) da org, pro atendimento. */
+export async function listarEntradasCliente(
+  orgSlug: string, status: 'novo' | 'lido' | 'arquivado' | 'todos' = 'novo',
+): Promise<{ items: EntradaCliente[]; podeGerir: boolean }> {
+  const supabase = await createClient()
+  const { data: org } = await supabase.from('organizations').select('id').eq('slug', orgSlug).single()
+  if (!org) return { items: [], podeGerir: false }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: pode } = await (supabase as any).rpc('portal_pode_gerir', { p_org: org.id })
+  if (!pode) return { items: [], podeGerir: false }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let q = (supabase as any)
+    .from('portal_entries')
+    .select('id, kind, activity_id, titulo, mensagem, anexos, status, created_at, ' +
+            'workspace:workspaces!workspace_id(id, name), portal_user:portal_users!portal_user_id(nome), ' +
+            'activity:activities!activity_id(title, campaign_id)')
+    .eq('org_id', org.id)
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (status !== 'todos') q = q.eq('status', status)
+
+  const { data } = await q
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const items: EntradaCliente[] = (data ?? []).map((r: any) => ({
+    id: r.id,
+    kind: r.kind,
+    activityId: r.activity_id,
+    titulo: r.titulo,
+    mensagem: r.mensagem,
+    anexos: Array.isArray(r.anexos) ? r.anexos : [],
+    status: r.status,
+    createdAt: r.created_at,
+    clienteNome: r.portal_user?.nome ?? 'Cliente',
+    workspaceId: r.workspace?.id ?? '',
+    workspaceNome: r.workspace?.name ?? '',
+    campaignId: r.activity?.campaign_id ?? null,
+    atividadeTitulo: r.activity?.title ?? null,
+  }))
+  return { items, podeGerir: true }
+}
+
+/** Marca uma entrada como lida/arquivada/novo (atendimento). */
+export async function setEntradaStatus(
+  orgSlug: string, entryId: string, status: 'novo' | 'lido' | 'arquivado',
+): Promise<{ error?: string }> {
+  const supabase = await createClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
+    .from('portal_entries').update({ status }).eq('id', entryId)
+  if (error) return { error: 'Não foi possível atualizar (sem permissão?).' }
+  revalidatePath(`/${orgSlug}/solicitacoes`)
   return {}
 }
 

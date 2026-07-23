@@ -1,9 +1,10 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { sessaoPortal } from '@/lib/auth/portal'
 import { createPortalClient } from '@/lib/supabase/portal'
 import { sairPortal } from '@/app/actions/portal'
 import { AutoRefresh } from '@/components/ui/AutoRefresh'
-import { LogOut, Clock, Building2, BadgeCheck } from 'lucide-react'
+import { LogOut, Clock, Building2, BadgeCheck, Plus, ArrowRight } from 'lucide-react'
 import { PortalThemeToggle } from '../PortalThemeToggle'
 
 export const dynamic = 'force-dynamic'
@@ -100,6 +101,12 @@ export default async function PortalPainelPage() {
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <Link
+            href="/portal/solicitar"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-[#fff] bg-orange-600 hover:bg-orange-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Nova solicitação</span>
+          </Link>
           <PortalThemeToggle />
           <form action={sairPortal}>
             <button
@@ -135,15 +142,29 @@ export default async function PortalPainelPage() {
                 {itens.length === 0 && (
                   <p className="text-sm text-gray-400 text-center py-6">Nada por aqui agora</p>
                 )}
-                {itens.map((t) => (
-                  <div
-                    key={t.id}
-                    className="rounded-xl border border-gray-100 bg-gray-50 px-3.5 py-3"
-                  >
-                    <p className="text-sm font-medium text-gray-900 leading-snug">{t.titulo}</p>
-                    <p className="text-xs text-gray-500 mt-1 truncate">{t.campanha}</p>
-                  </div>
-                ))}
+                {itens.map((t) =>
+                  col.key === 'pendente' ? (
+                    <Link
+                      key={t.id}
+                      href={`/portal/pendencia/${t.id}`}
+                      className="group block rounded-xl border border-orange-200 bg-orange-50/50 px-3.5 py-3 hover:border-orange-300 hover:bg-orange-50 transition-colors"
+                    >
+                      <p className="text-sm font-medium text-gray-900 leading-snug">{t.titulo}</p>
+                      <p className="text-xs text-gray-500 mt-1 truncate">{t.campanha}</p>
+                      <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-orange-700">
+                        Responder <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
+                      </span>
+                    </Link>
+                  ) : (
+                    <div
+                      key={t.id}
+                      className="rounded-xl border border-gray-100 bg-gray-50 px-3.5 py-3"
+                    >
+                      <p className="text-sm font-medium text-gray-900 leading-snug">{t.titulo}</p>
+                      <p className="text-xs text-gray-500 mt-1 truncate">{t.campanha}</p>
+                    </div>
+                  ),
+                )}
               </div>
             </section>
           )

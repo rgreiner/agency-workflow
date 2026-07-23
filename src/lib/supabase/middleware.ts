@@ -16,8 +16,9 @@ export async function updateSession(request: NextRequest) {
   // crontab — não pode ser redirecionada pro /login (viraria HTML no lugar do JSON).
   const isCron = path.startsWith('/api/cron')
   // /portal é do CLIENTE (cookie flow-portal-jwt próprio, validado nas páginas) —
-  // nunca exigir o flow-jwt de membro aqui.
-  const isPortal = path === '/portal' || path.startsWith('/portal/')
+  // nunca exigir o flow-jwt de membro aqui. /api/portal/* faz a própria auth
+  // (sessão do portal no upload; sessão de membro na leitura de anexo).
+  const isPortal = path === '/portal' || path.startsWith('/portal/') || path.startsWith('/api/portal/')
   const isPublic = isAuthPage || isConvite || isCron || isPortal
 
   if (!claims && !isPublic) {
