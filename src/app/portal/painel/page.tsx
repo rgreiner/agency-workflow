@@ -4,6 +4,7 @@ import { createPortalClient } from '@/lib/supabase/portal'
 import { sairPortal } from '@/app/actions/portal'
 import { AutoRefresh } from '@/components/ui/AutoRefresh'
 import { LogOut, Clock, Building2, BadgeCheck } from 'lucide-react'
+import { PortalThemeToggle } from '../PortalThemeToggle'
 
 export const dynamic = 'force-dynamic'
 
@@ -98,14 +99,17 @@ export default async function PortalPainelPage() {
             <p className="text-sm text-gray-500 truncate">Olá, {dash.usuario.nome}</p>
           </div>
         </div>
-        <form action={sairPortal}>
-          <button
-            type="submit"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
-          >
-            <LogOut className="w-4 h-4" /> Sair
-          </button>
-        </form>
+        <div className="flex items-center gap-1">
+          <PortalThemeToggle />
+          <form action={sairPortal}>
+            <button
+              type="submit"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+            >
+              <LogOut className="w-4 h-4" /> Sair
+            </button>
+          </form>
+        </div>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

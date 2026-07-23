@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { tokenPortalValido } from '@/lib/auth/portal'
 import { entrarPortal } from '@/app/actions/portal'
+import { PortalThemeToggle } from '../../PortalThemeToggle'
 
 /**
  * Aterrissagem do magic link. O token só é CONSUMIDO no clique (POST) — se
@@ -20,6 +21,7 @@ export default async function PortalEntrarPage({
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
+      <PortalThemeToggle className="fixed top-4 right-4" />
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 sm:p-10 w-full max-w-md text-center">
         <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-orange-600 mb-4">
           <span className="text-[#fff] font-bold text-2xl">F</span>

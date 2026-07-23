@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { sessaoPortal } from '@/lib/auth/portal'
 import { solicitarAcessoPortal } from '@/app/actions/portal'
+import { PortalThemeToggle } from './PortalThemeToggle'
 
 /** Entrada do portal do cliente: pede o e-mail e manda o magic link. */
 export default async function PortalLoginPage({
@@ -13,6 +14,7 @@ export default async function PortalLoginPage({
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
+      <PortalThemeToggle className="fixed top-4 right-4" />
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 sm:p-10 w-full max-w-md">
         <div className="mb-6 text-center">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-orange-600 mb-4">
