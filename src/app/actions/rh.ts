@@ -17,6 +17,7 @@ export interface ColaboradorInput {
   gestor_id?: string | null
   salario_atual?: string | null
   observacao?: string | null
+  membro_user_id?: string | null
 }
 
 async function ctx(orgSlug: string) {

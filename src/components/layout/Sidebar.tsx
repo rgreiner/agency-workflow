@@ -25,6 +25,7 @@ import {
   Search,
   Megaphone,
   ClipboardList,
+  Clock,
   UserCog,
   Wallet,
   Users,
@@ -115,6 +116,7 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
   { id: 'rh', label: 'RH', icon: UserCog, rh: true, items: [
     { label: 'Pessoas', href: 'rh' },
     { label: 'Folha',   href: 'rh/folha' },
+    { label: 'Ponto',   href: 'rh/ponto' },
   ] },
 ]
 
@@ -597,6 +599,17 @@ export function Sidebar({
 
       {/* ── Bottom ───────────────────────────────────── */}
       <div className="border-t border-gray-800">
+        {/* Meu ponto: pessoal, todos batem o próprio ponto. */}
+        <Link
+          href={`${base}/ponto`}
+          className={cn(
+            'flex items-center gap-2.5 px-5 py-2.5 text-sm transition-colors',
+            pathname.startsWith(`${base}/ponto`) ? 'text-white' : 'text-gray-500 hover:text-gray-200'
+          )}
+        >
+          <Clock className="w-4 h-4 shrink-0" />
+          Meu ponto
+        </Link>
         {/* Configurações: só o PROPRIETÁRIO (canManage = isOwner). */}
         {canManage && (
           <Link

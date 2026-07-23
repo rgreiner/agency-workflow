@@ -12,9 +12,11 @@ export interface Colaborador {
   id: string; nome: string; cpf: string | null; email: string | null; telefone: string | null
   cargo: string | null; tipo_vinculo: string | null; data_admissao: string | null; data_demissao: string | null
   status: string; gestor_id: string | null; salario_atual: number | string | null; observacao: string | null; arquivado: boolean
+  membro_user_id: string | null
 }
 export interface Documento { id: string; tipo: string; nome: string | null; competencia: string | null; created_at: string }
 export interface GestorRef { id: string; nome: string }
+export interface MembroRef { user_id: string; profiles: { full_name: string | null; email: string } | null }
 
 const VINCULOS = [{ value: 'clt', label: 'CLT' }, { value: 'pj', label: 'PJ' }, { value: 'estagio', label: 'Estágio' }, { value: 'outro', label: 'Outro' }]
 const STATUS = [{ value: 'ativo', label: 'Ativo' }, { value: 'afastado', label: 'Afastado' }, { value: 'desligado', label: 'Desligado' }]
@@ -26,8 +28,8 @@ const TIPOS_DOC = [
 const inputCls = 'w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 const labelCls = 'block text-sm font-medium text-gray-700 mb-1.5'
 
-export function ColaboradorClient({ orgSlug, colab, documentos, gestores }: {
-  orgSlug: string; colab: Colaborador; documentos: Documento[]; gestores: GestorRef[]
+export function ColaboradorClient({ orgSlug, colab, documentos, gestores, membros }: {
+  orgSlug: string; colab: Colaborador; documentos: Documento[]; gestores: GestorRef[]; membros: MembroRef[]
 }) {
   const router = useRouter()
   const [f, setF] = useState({
@@ -35,7 +37,7 @@ export function ColaboradorClient({ orgSlug, colab, documentos, gestores }: {
     cargo: colab.cargo ?? '', tipo_vinculo: colab.tipo_vinculo ?? '', status: colab.status ?? 'ativo',
     data_admissao: colab.data_admissao ?? '', data_demissao: colab.data_demissao ?? '',
     gestor_id: colab.gestor_id ?? '', salario_atual: colab.salario_atual != null ? formatBRL(Number(colab.salario_atual)).replace('R$', '').trim() : '',
-    observacao: colab.observacao ?? '',
+    observacao: colab.observacao ?? '', membro_user_id: colab.membro_user_id ?? '',
   })
   const set = (k: keyof typeof f, v: string) => setF(p => ({ ...p, [k]: v }))
   const [saving, startSave] = useTransition()
@@ -92,7 +94,9 @@ export function ColaboradorClient({ orgSlug, colab, documentos, gestores }: {
           <div><label className={labelCls}>Demissão</label><input type="date" value={f.data_demissao} onChange={e => set('data_demissao', e.target.value)} className={inputCls} /></div>
           <div><label className={labelCls}>Situação</label><Select value={f.status} onChange={v => set('status', v)} options={STATUS} /></div>
           <div><label className={labelCls}>Salário atual</label><input inputMode="decimal" value={f.salario_atual} onChange={e => set('salario_atual', e.target.value)} className={inputCls} placeholder="0,00" /></div>
-          <div className="col-span-2"><label className={labelCls}>Gestor</label><Select value={f.gestor_id} onChange={v => set('gestor_id', v)} options={[{ value: '', label: '— nenhum —' }, ...gestores.map(g => ({ value: g.id, label: g.nome }))]} /></div>
+          <div><label className={labelCls}>Gestor</label><Select value={f.gestor_id} onChange={v => set('gestor_id', v)} options={[{ value: '', label: '— nenhum —' }, ...gestores.map(g => ({ value: g.id, label: g.nome }))]} /></div>
+          <div><label className={labelCls}>Vincular ao login <span className="font-normal text-gray-400">(habilita o ponto)</span></label>
+            <Select value={f.membro_user_id} onChange={v => set('membro_user_id', v)} options={[{ value: '', label: '— não vinculado —' }, ...membros.map(m => ({ value: m.user_id, label: m.profiles?.full_name || m.profiles?.email || m.user_id }))]} /></div>
           <div className="col-span-2"><label className={labelCls}>Observação</label><textarea value={f.observacao} onChange={e => set('observacao', e.target.value)} rows={2} className={inputCls} /></div>
         </div>
         <div className="flex justify-end">
