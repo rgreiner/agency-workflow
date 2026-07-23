@@ -11,7 +11,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createPortalClient } from '@/lib/supabase/portal'
 import { getUsuario } from '@/lib/auth/server'
 import {
-  buscarPortalUserPorEmail, criarTokenPortal, consumirTokenPortal,
+  buscarPortalUsersPorEmail, criarTokenPortal, consumirTokenPortal,
   iniciarSessaoPortal, encerrarSessaoPortal,
 } from '@/lib/auth/portal'
 import { sendMail } from '@/lib/email/send'
@@ -29,18 +29,24 @@ export async function solicitarAcessoPortal(formData: FormData): Promise<void> {
   const email = String(formData.get('email') || '').trim()
   if (!email) redirect('/portal?erro=campos')
 
-  const contato = await buscarPortalUserPorEmail(email)
-  if (contato) {
+  // Um link POR cliente em que a pessoa é contato (normalmente só um).
+  const contatos = await buscarPortalUsersPorEmail(email)
+  for (const contato of contatos) {
     try {
+      const supabase = await createClient()
+      const { data: ws } = await supabase
+        .from('workspaces').select('name').eq('id', contato.workspace_id).single()
+      const cliente = ws?.name ?? null
+
       const token = await criarTokenPortal(contato.id)
       const url = `${SITE_URL}/portal/entrar/${token}`
       const { error } = await sendMail({
         to: contato.email,
-        subject: 'Seu acesso ao painel — Flow',
+        subject: cliente ? `Seu acesso ao painel — ${cliente}` : 'Seu acesso ao painel — Flow',
         html: emailLayout({
           heading: 'Acesse o seu painel',
           bodyHtml: `<p>Olá, ${contato.nome}!</p>
-<p>Toque no botão abaixo pra entrar no painel de acompanhamento dos seus trabalhos. O link vale por 30 minutos e só funciona uma vez.</p>`,
+<p>Toque no botão abaixo pra entrar no painel de acompanhamento${cliente ? ` de <b>${cliente}</b>` : ''}. O link vale por 30 minutos e só funciona uma vez.</p>`,
           cta: { label: 'Entrar no painel', url },
           footerNote: 'Se você não pediu este acesso, ignore este e-mail.',
         }),

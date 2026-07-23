@@ -28,15 +28,19 @@ function hashToken(raw: string): string {
   return createHash('sha256').update(raw).digest('hex')
 }
 
-/** Contato ATIVO do portal por e-mail (case-insensitive), ou null. */
-export async function buscarPortalUserPorEmail(email: string): Promise<PortalUser | null> {
-  const rows = await sql<PortalUser[]>`
+/**
+ * Contatos ATIVOS com este e-mail. Devolve LISTA de propósito: a mesma pessoa
+ * pode ser contato de mais de um cliente (ex.: um grupo com duas marcas). Cada
+ * acesso é um portal_user próprio, com seu painel — por isso o login manda um
+ * link por cliente, em vez de escolher um deles em silêncio.
+ */
+export async function buscarPortalUsersPorEmail(email: string): Promise<PortalUser[]> {
+  return sql<PortalUser[]>`
     select id, org_id, workspace_id, nome, email, ativo
     from public.portal_users
     where lower(email) = lower(${email.trim()}) and ativo
-    limit 1
+    order by created_at
   `
-  return rows[0] ?? null
 }
 
 /** Cria um token de acesso e devolve o token CRU (vai só no e-mail). */
