@@ -23,7 +23,14 @@ export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, des
   const [open, setOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [form, setForm] = useState({ name, description, start_date: startDate, end_date: endDate })
-  const [drive, setDrive] = useState(driveFolderId ? `https://drive.google.com/drive/folders/${driveFolderId}` : '')
+  // Vínculo antigo do Drive vira link clicável; caminho do disco novo (S3) fica como está.
+  const [drive, setDrive] = useState(
+    driveFolderId
+      ? (/^[a-zA-Z0-9_-]{20,}$/.test(driveFolderId) && !driveFolderId.includes('/')
+          ? `https://drive.google.com/drive/folders/${driveFolderId}`
+          : driveFolderId)
+      : '',
+  )
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
   const router = useRouter()
@@ -116,11 +123,11 @@ export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, des
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Pasta do Drive</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Pasta da campanha</label>
                 <input
-                  type="url" value={drive}
+                  type="text" value={drive}
                   onChange={e => setDrive(e.target.value)}
-                  placeholder="https://drive.google.com/drive/folders/…"
+                  placeholder={'F:\\Cliente\\2026\\Projeto ou link do Drive'}
                   className="w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
                 <p className="text-xs text-gray-400 mt-1">Novas tarefas criam pastas dentro dela automaticamente.</p>

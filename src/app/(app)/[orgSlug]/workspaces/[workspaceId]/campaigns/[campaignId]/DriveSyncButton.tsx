@@ -119,7 +119,7 @@ export function DriveSyncButton({ orgSlug, campaignId, autoOpen = false }: { org
                             <div className="flex items-center gap-1.5 shrink-0">
                               {m.alreadyLinked && <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">já vinculado</span>}
                               <span className={cn('text-[10px] px-1.5 py-0.5 rounded', m.confidence === 'exato' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600')}>{m.confidence}</span>
-                              <a href={m.folderLink} target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-gray-600 transition"><ExternalLink className="w-3.5 h-3.5" /></a>
+                              {m.folderLink && <a href={m.folderLink} target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-gray-600 transition"><ExternalLink className="w-3.5 h-3.5" /></a>}
                             </div>
                           </div>
                         ))}
@@ -131,7 +131,7 @@ export function DriveSyncButton({ orgSlug, campaignId, autoOpen = false }: { org
                   <section>
                     <div className="flex items-center gap-2 mb-2 text-gray-700">
                       <FolderPlus className="w-4 h-4" />
-                      <h3 className="text-sm font-semibold">Jobs sem pasta — criar no Drive ({data.jobsSemPasta.length})</h3>
+                      <h3 className="text-sm font-semibold">Jobs sem pasta — criar ({data.jobsSemPasta.length})</h3>
                     </div>
                     {data.jobsSemPasta.length === 0 ? (
                       <p className="text-sm text-gray-400">Todos os jobs já têm pasta.</p>
@@ -163,7 +163,7 @@ export function DriveSyncButton({ orgSlug, campaignId, autoOpen = false }: { org
                             <div key={f.folderId} className={cn('flex items-start gap-2.5 px-3 py-2 rounded-lg border', jobSel.has(f.folderId) ? 'border-gray-200' : 'border-gray-100 opacity-60')}>
                               <Checkbox on={jobSel.has(f.folderId)} onClick={() => toggle(jobSel, f.folderId, setJobSel)} />
                               <p className="flex-1 min-w-0 text-sm text-gray-700 truncate">{f.name}</p>
-                              <a href={f.link} target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-gray-600 transition shrink-0"><ExternalLink className="w-3.5 h-3.5" /></a>
+                              {f.link && <a href={f.link} target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-gray-600 transition shrink-0"><ExternalLink className="w-3.5 h-3.5" /></a>}
                             </div>
                           ))}
                         </div>

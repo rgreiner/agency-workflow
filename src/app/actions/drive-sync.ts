@@ -2,10 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
-import { driveConfigured, listSubfolders, inspectTaskFolder, createTaskFolders, type TaskFoldersResult } from '@/lib/google-drive'
+import { folderConfigured, listSubfolders, inspectTaskFolder, createTaskFolders, resolvePathPrefix, type TaskFoldersResult } from '@/lib/task-folders'
 import { logSystemError } from '@/lib/system-error'
-
-const DEFAULT_PREFIX = 'G:\\Drives compartilhados\\'
 
 /** Normaliza nome p/ casamento: sem acento, minúsculas, sem numeração "01 - ", separadores unificados. */
 function norm(s: string): string {
@@ -30,14 +28,14 @@ export interface DriveReconcile {
 }
 
 export async function reconcileCampaignDrive(orgSlug: string, campaignId: string): Promise<{ error: string } | DriveReconcile> {
-  if (!driveConfigured()) return { error: 'Integração com o Drive não configurada (GOOGLE_SERVICE_ACCOUNT_KEY).' }
+  if (!folderConfigured()) return { error: 'Integração de pastas não configurada (R2_* ou GOOGLE_SERVICE_ACCOUNT_KEY).' }
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const { data: camp } = await supabase.from('campaigns').select('drive_folder_id').eq('id', campaignId).single()
   const folderId = (camp as { drive_folder_id: string | null } | null)?.drive_folder_id
-  if (!folderId) return { error: 'Esta campanha ainda não tem pasta do Drive vinculada. Edite a campanha e cole o link do Drive.' }
+  if (!folderId) return { error: 'Esta campanha ainda não tem pasta vinculada. Edite a campanha e cole o link/caminho da pasta.' }
 
   const { data: acts } = await supabase
     .from('activities').select('id, title, drive_folder_id')
@@ -46,7 +44,7 @@ export async function reconcileCampaignDrive(orgSlug: string, campaignId: string
 
   let folders: { id: string; name: string; link: string }[]
   try { folders = await listSubfolders(folderId) }
-  catch (e) { return { error: e instanceof Error ? e.message : 'Falha ao ler a pasta do Drive.' } }
+  catch (e) { return { error: e instanceof Error ? e.message : 'Falha ao ler a pasta vinculada.' } }
 
   const usedFolder = new Set<string>()
   const matched: DriveMatch[] = []
@@ -85,7 +83,7 @@ export interface ApplyDecisions {
 export async function applyCampaignDriveReconcile(
   orgSlug: string, campaignId: string, decisions: ApplyDecisions,
 ): Promise<{ error: string } | { linked: number; created: number; jobs: number }> {
-  if (!driveConfigured()) return { error: 'Integração com o Drive não configurada.' }
+  if (!folderConfigured()) return { error: 'Integração de pastas não configurada.' }
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
@@ -93,16 +91,17 @@ export async function applyCampaignDriveReconcile(
   const { data: camp } = await supabase
     .from('campaigns').select('drive_folder_id, workspaces(org_id)').eq('id', campaignId).single()
   const folderId = (camp as { drive_folder_id: string | null } | null)?.drive_folder_id
-  if (!folderId) return { error: 'Campanha sem pasta do Drive.' }
+  if (!folderId) return { error: 'Campanha sem pasta vinculada.' }
 
   // Prefixo do caminho local (org_settings, igual ao provisioning).
-  let prefix = DEFAULT_PREFIX
+  let orgPrefix: string | null = null
   const orgId = (camp as unknown as { workspaces: { org_id: string } | null } | null)?.workspaces?.org_id
   if (orgId) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: s } = await (supabase as any).from('org_settings').select('drive_path_prefix').eq('org_id', orgId).single()
-    if (s?.drive_path_prefix) prefix = s.drive_path_prefix
+    orgPrefix = s?.drive_path_prefix ?? null
   }
+  const prefix = resolvePathPrefix(orgPrefix)
   const joinLocal = (drivePath: string) => `${prefix.replace(/[\\/]+$/, '')}\\${drivePath}\\`
 
   const persist = (activityId: string, r: TaskFoldersResult) => supabase.rpc('set_activity_drive', {

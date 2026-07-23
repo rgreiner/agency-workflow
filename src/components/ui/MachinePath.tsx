@@ -70,9 +70,13 @@ export function MachinePath({ winPath, compact = false, editable = false, activi
 
   const has = !!winPath.trim()
   const configured = !!(prefs.driveMacUser && prefs.driveGoogleEmail)
+  // Caminho do disco novo (F: = bucket via Mountain Duck): a conversão abaixo é do
+  // Google Drive Desktop e geraria um caminho de Mac ERRADO — mostra o Windows até
+  // existir o prefixo de montagem do Mountain Duck no perfil.
+  const isFlowDisk = /^F:/i.test(winPath.trim())
   // SSR/pré-mount e Windows: caminho Windows (evita divergência de hidratação).
-  const useMac = mounted && mac && configured && has
-  const needsSetup = mounted && mac && !configured && has
+  const useMac = mounted && mac && configured && has && !isFlowDisk
+  const needsSetup = mounted && mac && !configured && has && !isFlowDisk
   const display = has ? (useMac ? toMacPath(winPath, prefs.driveMacUser!, prefs.driveGoogleEmail!, prefs.driveLang === 'en' ? 'en' : 'pt') : cleanWin(winPath)) : ''
 
   function copy(e: React.MouseEvent) {

@@ -2,10 +2,8 @@ import 'server-only'
 import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
-import { createTaskFolders, moveTaskFolder, inspectTaskFolder, completarSubpastas, driveConfigured } from '@/lib/google-drive'
+import { createTaskFolders, moveTaskFolder, inspectTaskFolder, completarSubpastas, folderConfigured, resolvePathPrefix } from '@/lib/task-folders'
 import { logSystemError } from '@/lib/system-error'
-
-const DEFAULT_PREFIX = 'G:\\Drives compartilhados\\'
 
 function joinLocalPath(prefix: string, drivePath: string): string {
   const p = prefix.replace(/[\\/]+$/, '')   // remove barra final
@@ -27,7 +25,7 @@ export function taskFolderName(title: string, isoDate?: string | null): string {
 
 /** Resolve a pasta da campanha + o prefixo de caminho local (ou null se não dá p/ provisionar). */
 async function resolve(supabase: SupabaseClient<Database>, campaignId: string): Promise<{ folderId: string; prefix: string } | null> {
-  if (!driveConfigured()) return null
+  if (!folderConfigured()) return null
 
   const { data: camp } = await supabase
     .from('campaigns')
@@ -38,16 +36,16 @@ async function resolve(supabase: SupabaseClient<Database>, campaignId: string): 
   const folderId = (camp as { drive_folder_id: string | null } | null)?.drive_folder_id
   if (!folderId) return null
 
-  let prefix = DEFAULT_PREFIX
   const orgId = (camp as unknown as { workspaces: { org_id: string } | null } | null)?.workspaces?.org_id
+  let orgPrefix: string | null = null
   if (orgId) {
     // org_settings não é tipado (acesso por cast, igual ao resto do app)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: s } = await (supabase as any)
       .from('org_settings').select('drive_path_prefix').eq('org_id', orgId).single()
-    if (s?.drive_path_prefix) prefix = s.drive_path_prefix
+    orgPrefix = s?.drive_path_prefix ?? null
   }
-  return { folderId, prefix }
+  return { folderId, prefix: resolvePathPrefix(orgPrefix) }
 }
 
 /**
@@ -91,9 +89,9 @@ export async function regenerateActivityDrive(
   supabase: SupabaseClient<Database>,
   params: { campaignId: string; userId: string; activityId: string; title: string; date?: string | null },
 ): Promise<{ ok: boolean; error?: string; url?: string }> {
-  if (!driveConfigured()) return { ok: false, error: 'Integração com o Drive não está configurada.' }
+  if (!folderConfigured()) return { ok: false, error: 'Integração de pastas não está configurada.' }
   const cfg = await resolve(supabase, params.campaignId)
-  if (!cfg) return { ok: false, error: 'A campanha desta tarefa não tem pasta do Drive vinculada.' }
+  if (!cfg) return { ok: false, error: 'A campanha desta tarefa não tem pasta vinculada.' }
   try {
     const r = await createTaskFolders(cfg.folderId, taskFolderName(params.title, params.date), { forceNew: true })
     await supabase.rpc('set_activity_drive', {
@@ -122,9 +120,9 @@ export async function relinkActivityDrive(
   supabase: SupabaseClient<Database>,
   params: { campaignId: string; userId: string; activityId: string; folderId: string },
 ): Promise<{ ok: boolean; error?: string; faltando?: string[]; criadas?: string[] }> {
-  if (!driveConfigured()) return { ok: false, error: 'Integração com o Drive não está configurada.' }
+  if (!folderConfigured()) return { ok: false, error: 'Integração de pastas não está configurada.' }
   const cfg = await resolve(supabase, params.campaignId)
-  const prefix = cfg?.prefix ?? DEFAULT_PREFIX
+  const prefix = cfg?.prefix ?? resolvePathPrefix(null)
   try {
     // Completa o que faltar ANTES de reler: pasta antiga foi criada à mão quando
     // "Final" era opcional, e sem isso a re-vinculação regravava null pra sempre.
@@ -167,17 +165,20 @@ export async function moveActivityDrive(
   after(async () => {
     try {
       if (params.oldFolderId) {
-        // reparenta a pasta existente — só o caminho local muda (sublinks seguem válidos)
+        // Drive: reparenta e o ID sobrevive (sublinks seguem válidos; só o caminho muda).
+        // S3: o caminho É a identidade — o move devolve newRef e a gente relê a pasta
+        // nova pra regravar vínculo + sub-referências atualizados.
         const r = await moveTaskFolder(params.oldFolderId, cfg.folderId)
+        const novo = r.newRef ? await inspectTaskFolder(r.newRef) : null
         await supabase.rpc('set_activity_drive', {
           p_user_id: params.userId,
           p_activity_id: params.activityId,
-          p_drive_folder_id: null,
+          p_drive_folder_id: novo?.taskFolderId ?? null,
           p_drive_path: joinLocalPath(cfg.prefix, r.drivePath),
-          p_drive_folder_url: null,
-          p_redacao_url: null,
-          p_finalizacao_url: null,
-          p_preview_url: null,
+          p_drive_folder_url: novo ? novo.taskFolderLink : null,
+          p_redacao_url: novo ? (novo.sub['Redação']?.link ?? '') : null,
+          p_finalizacao_url: novo ? (novo.sub['Final']?.link ?? '') : null,
+          p_preview_url: novo ? (novo.sub['Preview']?.link ?? '') : null,
         })
       } else {
         // tarefa sem pasta ainda → provisiona no destino
