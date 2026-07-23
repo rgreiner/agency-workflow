@@ -1,8 +1,9 @@
 import 'server-only'
 import {
   S3Client, PutObjectCommand, ListObjectsV2Command, CopyObjectCommand, DeleteObjectsCommand,
+  GetObjectCommand,
 } from '@aws-sdk/client-s3'
-import type { TaskFoldersResult } from '@/lib/google-drive'
+import type { TaskFoldersResult, FolderFile } from '@/lib/google-drive'
 
 /**
  * Pastas de tarefa no bucket S3 (Cloudflare R2) — o disco que o time monta como F:.
@@ -118,6 +119,45 @@ export async function listSubfoldersS3(parentPath: string): Promise<{ id: string
     token = r.IsTruncated ? r.NextContinuationToken : undefined
   } while (token)
   return out.sort((a, b) => a.name.localeCompare(b.name, 'pt'))
+}
+
+/** Extensão → mime, pro que o portal do cliente precisa exibir. */
+const MIME_BY_EXT: Record<string, string> = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+  webp: 'image/webp', avif: 'image/avif', svg: 'image/svg+xml',
+  pdf: 'application/pdf',
+  mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', m4v: 'video/x-m4v',
+  mp3: 'audio/mpeg', wav: 'audio/wav',
+}
+export const mimeFromKey = (key: string) =>
+  MIME_BY_EXT[key.split('.').pop()?.toLowerCase() ?? ''] ?? 'application/octet-stream'
+
+/** Lista os ARQUIVOS (1 nível, sem marcadores de pasta) de um prefixo. */
+export async function listFolderFilesS3(folderPath: string): Promise<FolderFile[]> {
+  const prefix = `${folderPath}/`
+  const out: FolderFile[] = []
+  let token: string | undefined
+  do {
+    const r = await getS3().send(new ListObjectsV2Command({
+      Bucket: bucket(), Prefix: prefix, Delimiter: '/', ContinuationToken: token,
+    }))
+    for (const o of r.Contents ?? []) {
+      if (!o.Key || o.Key.endsWith('/')) continue // marcador de pasta
+      const name = o.Key.slice(prefix.length)
+      if (!name) continue
+      out.push({ ref: o.Key, name, mime: mimeFromKey(name), size: Number(o.Size ?? 0) })
+    }
+    token = r.IsTruncated ? r.NextContinuationToken : undefined
+  } while (token)
+  return out.sort((a, b) => a.name.localeCompare(b.name, 'pt', { numeric: true }))
+}
+
+/** Baixa um objeto do bucket pela chave. */
+export async function readFolderFileS3(key: string): Promise<{ buffer: Buffer; mime: string; name: string }> {
+  const r = await getS3().send(new GetObjectCommand({ Bucket: bucket(), Key: key }))
+  const bytes = await r.Body!.transformToByteArray()
+  const name = key.split('/').pop() || 'arquivo'
+  return { buffer: Buffer.from(bytes), mime: r.ContentType && r.ContentType !== 'application/octet-stream' ? r.ContentType : mimeFromKey(name), name }
 }
 
 /** Cria as subpastas padrão que faltarem numa pasta de tarefa existente. */

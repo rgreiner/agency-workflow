@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
   MessageSquareReply, Inbox, Paperclip, Check, Archive, ArchiveRestore,
-  ExternalLink, Clock,
+  ExternalLink, Clock, BadgeCheck, PenLine,
 } from 'lucide-react'
 import { setEntradaStatus, type EntradaCliente } from '@/app/actions/portal'
 
@@ -96,10 +96,18 @@ function EntradaCard({
   busy: boolean
   onStatus: (id: string, status: 'novo' | 'lido' | 'arquivado') => void
 }) {
-  const isResposta = e.kind === 'resposta'
   const quando = new Date(e.createdAt).toLocaleString('pt-BR', {
     day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
   })
+
+  const TIPO = {
+    resposta:    { icon: MessageSquareReply, cls: 'bg-orange-100 text-orange-600', verbo: 'Respondeu a pendência' },
+    solicitacao: { icon: Inbox,              cls: 'bg-blue-100 text-blue-600',     verbo: 'Nova solicitação' },
+    aprovacao:   { icon: BadgeCheck,         cls: 'bg-green-100 text-green-600',   verbo: '✅ Aprovou o trabalho' },
+    ajuste:      { icon: PenLine,            cls: 'bg-amber-100 text-amber-700',   verbo: '✏️ Pediu ajustes' },
+  }[e.kind] ?? { icon: Inbox, cls: 'bg-gray-100 text-gray-600', verbo: 'Entrada' }
+  const TipoIcon = TIPO.icon
+  const temTarefa = e.kind !== 'solicitacao'
 
   const taskUrl = e.activityId && e.campaignId
     ? `/${orgSlug}/workspaces/${e.workspaceId}/campaigns/${e.campaignId}/activities/${e.activityId}`
@@ -110,10 +118,8 @@ function EntradaCard({
       e.status === 'novo' ? 'border-orange-200' : 'border-gray-200'
     }`}>
       <div className="flex items-start gap-3">
-        <div className={`mt-0.5 shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${
-          isResposta ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'
-        }`}>
-          {isResposta ? <MessageSquareReply className="w-4 h-4" /> : <Inbox className="w-4 h-4" />}
+        <div className={`mt-0.5 shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${TIPO.cls}`}>
+          <TipoIcon className="w-4 h-4" />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -132,12 +138,25 @@ function EntradaCard({
           </div>
 
           <p className="text-sm font-medium text-gray-800 mt-1.5">
-            {isResposta
-              ? <>Respondeu: <span className="text-gray-600 font-normal">{e.atividadeTitulo ?? 'pendência'}</span></>
-              : (e.titulo ?? 'Nova solicitação')}
+            {e.kind === 'solicitacao'
+              ? (e.titulo ?? 'Nova solicitação')
+              : <>{TIPO.verbo}: <span className="text-gray-600 font-normal">{e.atividadeTitulo ?? '—'}</span></>}
           </p>
 
-          <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap leading-relaxed">{e.mensagem}</p>
+          {e.mensagem && (
+            <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap leading-relaxed">{e.mensagem}</p>
+          )}
+
+          {e.pecas.length > 0 && (
+            <ul className="mt-3 space-y-1.5">
+              {e.pecas.map((p, i) => (
+                <li key={i} className="text-sm bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                  <span className="font-medium text-gray-800">{p.nome}</span>
+                  <span className="text-gray-600"> — {p.comentario}</span>
+                </li>
+              ))}
+            </ul>
+          )}
 
           {e.anexos.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-3">
@@ -164,7 +183,7 @@ function EntradaCard({
                 <ExternalLink className="w-3.5 h-3.5" /> Ver tarefa
               </Link>
             )}
-            {!isResposta && (
+            {!temTarefa && (
               <Link
                 href={`/${orgSlug}/workspaces/${e.workspaceId}`}
                 className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-700 border border-gray-200 rounded-lg px-2.5 py-1.5 hover:bg-gray-50 transition-colors"

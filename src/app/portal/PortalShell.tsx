@@ -2,10 +2,13 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { PortalThemeToggle } from './PortalThemeToggle'
 
-/** Casca das telas internas do portal (fora do painel): topo com voltar + tema. */
-export function PortalShell({ children }: { children: React.ReactNode }) {
+/**
+ * Casca das telas internas do portal (fora do painel): topo com voltar + tema.
+ * `wide` para a tela de aprovação, que exibe peças grandes.
+ */
+export function PortalShell({ children, wide = false }: { children: React.ReactNode; wide?: boolean }) {
   return (
-    <div className="max-w-xl mx-auto px-4 py-6 sm:py-10">
+    <div className={`${wide ? 'max-w-3xl' : 'max-w-xl'} mx-auto px-4 py-6 sm:py-10`}>
       <div className="flex items-center justify-between mb-6">
         <Link
           href="/portal/painel"

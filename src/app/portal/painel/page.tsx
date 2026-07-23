@@ -14,6 +14,10 @@ interface PortalTarefa {
   titulo: string
   campanha: string
   coluna: 'pendente' | 'agencia' | 'aprovacao'
+  /** 'aprovacao' | 'ajuste' | null — o que o cliente já respondeu neste ciclo. */
+  decidido?: string | null
+  /** Já respondeu esta pendência? */
+  respondido?: boolean
 }
 
 interface PortalDashboard {
@@ -142,20 +146,49 @@ export default async function PortalPainelPage() {
                 {itens.length === 0 && (
                   <p className="text-sm text-gray-400 text-center py-6">Nada por aqui agora</p>
                 )}
-                {itens.map((t) =>
-                  col.key === 'pendente' ? (
-                    <Link
-                      key={t.id}
-                      href={`/portal/pendencia/${t.id}`}
-                      className="group block rounded-xl border border-orange-200 bg-orange-50/50 px-3.5 py-3 hover:border-orange-300 hover:bg-orange-50 transition-colors"
-                    >
-                      <p className="text-sm font-medium text-gray-900 leading-snug">{t.titulo}</p>
-                      <p className="text-xs text-gray-500 mt-1 truncate">{t.campanha}</p>
-                      <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-orange-700">
-                        Responder <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
-                      </span>
-                    </Link>
-                  ) : (
+                {itens.map((t) => {
+                  if (col.key === 'pendente') {
+                    return (
+                      <Link
+                        key={t.id}
+                        href={`/portal/pendencia/${t.id}`}
+                        className="group block rounded-xl border border-orange-200 bg-orange-50/50 px-3.5 py-3 hover:border-orange-300 hover:bg-orange-50 transition-colors"
+                      >
+                        <p className="text-sm font-medium text-gray-900 leading-snug">{t.titulo}</p>
+                        <p className="text-xs text-gray-500 mt-1 truncate">{t.campanha}</p>
+                        <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-orange-700">
+                          {t.respondido ? 'Responder de novo' : 'Responder'}
+                          <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
+                        </span>
+                      </Link>
+                    )
+                  }
+                  if (col.key === 'aprovacao') {
+                    const decidido = t.decidido ?? null
+                    return (
+                      <Link
+                        key={t.id}
+                        href={`/portal/aprovacao/${t.id}`}
+                        className={`group block rounded-xl border px-3.5 py-3 transition-colors ${
+                          decidido
+                            ? 'border-gray-200 bg-gray-50 hover:bg-gray-100'
+                            : 'border-green-200 bg-green-50/50 hover:border-green-300 hover:bg-green-50'
+                        }`}
+                      >
+                        <p className="text-sm font-medium text-gray-900 leading-snug">{t.titulo}</p>
+                        <p className="text-xs text-gray-500 mt-1 truncate">{t.campanha}</p>
+                        <span className={`mt-2 inline-flex items-center gap-1 text-xs font-medium ${
+                          decidido === 'aprovacao' ? 'text-green-700'
+                            : decidido === 'ajuste' ? 'text-orange-700' : 'text-green-700'
+                        }`}>
+                          {decidido === 'aprovacao' ? '✓ Aprovado por você'
+                            : decidido === 'ajuste' ? 'Ajustes enviados'
+                            : <>Ver e aprovar <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5" /></>}
+                        </span>
+                      </Link>
+                    )
+                  }
+                  return (
                     <div
                       key={t.id}
                       className="rounded-xl border border-gray-100 bg-gray-50 px-3.5 py-3"
@@ -163,8 +196,8 @@ export default async function PortalPainelPage() {
                       <p className="text-sm font-medium text-gray-900 leading-snug">{t.titulo}</p>
                       <p className="text-xs text-gray-500 mt-1 truncate">{t.campanha}</p>
                     </div>
-                  ),
-                )}
+                  )
+                })}
               </div>
             </section>
           )

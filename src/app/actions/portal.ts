@@ -166,9 +166,40 @@ export async function setAcessoPortalAtivo(
   return {}
 }
 
+export interface ComentarioPeca { nome: string; comentario: string }
+
+/**
+ * Registra a decisão do cliente sobre as peças: aceite formal ou pedido de
+ * ajuste. Nenhum dos dois muda o status da tarefa — o atendimento é notificado
+ * e decide o próximo passo.
+ */
+export async function registrarDecisao(
+  activityId: string,
+  decisao: 'aprovado' | 'ajuste',
+  mensagem: string,
+  pecas: ComentarioPeca[],
+): Promise<{ error?: string }> {
+  const supabase = await createPortalClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('portal_registrar_decisao', {
+    p_activity_id: activityId,
+    p_decisao: decisao,
+    p_mensagem: mensagem || null,
+    p_pecas: pecas,
+  })
+  if (error) {
+    const msg = String(error.message ?? '')
+    if (msg.includes('já foi respondido')) return { error: 'Este trabalho já foi respondido.' }
+    if (msg.includes('Descreva o ajuste')) return { error: 'Conte o que precisa ser ajustado.' }
+    return { error: 'Não foi possível registrar. Tente de novo.' }
+  }
+  return {}
+}
+
 export interface EntradaCliente {
   id: string
-  kind: 'resposta' | 'solicitacao'
+  kind: 'resposta' | 'solicitacao' | 'aprovacao' | 'ajuste'
+  pecas: ComentarioPeca[]
   activityId: string | null
   titulo: string | null
   mensagem: string
@@ -197,7 +228,7 @@ export async function listarEntradasCliente(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let q = (supabase as any)
     .from('portal_entries')
-    .select('id, kind, activity_id, titulo, mensagem, anexos, status, created_at, ' +
+    .select('id, kind, activity_id, titulo, mensagem, anexos, pecas, status, created_at, ' +
             'workspace:workspaces!workspace_id(id, name), portal_user:portal_users!portal_user_id(nome), ' +
             'activity:activities!activity_id(title, campaign_id)')
     .eq('org_id', org.id)
@@ -214,6 +245,7 @@ export async function listarEntradasCliente(
     titulo: r.titulo,
     mensagem: r.mensagem,
     anexos: Array.isArray(r.anexos) ? r.anexos : [],
+    pecas: Array.isArray(r.pecas) ? r.pecas : [],
     status: r.status,
     createdAt: r.created_at,
     clienteNome: r.portal_user?.nome ?? 'Cliente',

@@ -91,6 +91,28 @@ export async function inspectTaskFolder(taskRef: string): Promise<drive.TaskFold
   return folderProvider() === 's3' ? s3.inspectTaskFolderS3(taskRef) : drive.inspectTaskFolder(taskRef)
 }
 
+/**
+ * Peças da pasta **Preview** de uma tarefa — a base do ambiente de aprovação do
+ * portal. A pasta **Final** (arquivo de impressão) NUNCA é exposta ao cliente.
+ * Devolve [] se a tarefa não tem pasta ou não tem Preview.
+ */
+export async function listPreviewFiles(taskRef: string): Promise<drive.FolderFile[]> {
+  assertRefForProvider(taskRef)
+  const info = await inspectTaskFolder(taskRef)
+  const preview = info.sub['Preview']
+  if (!preview?.id) return []
+  return folderProvider() === 's3'
+    ? s3.listFolderFilesS3(preview.id)
+    : drive.listFolderFiles(preview.id)
+}
+
+/** Baixa uma peça pela ref devolvida por `listPreviewFiles`. */
+export async function readFolderFile(fileRef: string): Promise<{ buffer: Buffer; mime: string; name: string }> {
+  return folderProvider() === 's3'
+    ? s3.readFolderFileS3(fileRef)
+    : drive.readFolderFile(fileRef)
+}
+
 export async function completarSubpastas(taskRef: string): Promise<{ criadas: string[] }> {
   assertRefForProvider(taskRef)
   return folderProvider() === 's3' ? s3.completarSubpastasS3(taskRef) : drive.completarSubpastas(taskRef)

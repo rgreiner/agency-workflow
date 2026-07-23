@@ -299,6 +299,54 @@ export async function readReviewAssets(link: string): Promise<{ assets: DriveAss
 // ── Reconciliação campanha ↔ Drive ──────────────────────────────────────────
 
 /** Lista as subpastas (1 nível) de uma pasta. Pagina tudo. */
+/** Um arquivo dentro de uma pasta de tarefa (usado pelo portal do cliente). */
+export interface FolderFile { ref: string; name: string; mime: string; size: number }
+
+/** Lista os ARQUIVOS (não pastas) de uma pasta do Drive. */
+export async function listFolderFiles(folderId: string): Promise<FolderFile[]> {
+  const drive = getDrive()
+  const out: FolderFile[] = []
+  let pageToken: string | undefined
+  do {
+    const r: drive_v3.Schema$FileList = (await drive.files.list({
+      q: `'${folderId}' in parents and trashed = false and mimeType != '${FOLDER_MIME}'`,
+      fields: 'nextPageToken, files(id, name, mimeType, size)',
+      pageSize: 200, orderBy: 'name',
+      supportsAllDrives: true, includeItemsFromAllDrives: true, pageToken,
+    })).data
+    for (const f of r.files ?? []) {
+      if (!f.id) continue
+      out.push({
+        ref: f.id,
+        name: f.name ?? 'arquivo',
+        mime: f.mimeType ?? 'application/octet-stream',
+        size: Number(f.size ?? 0),
+      })
+    }
+    pageToken = r.nextPageToken ?? undefined
+  } while (pageToken)
+  return out
+}
+
+/** Baixa um arquivo do Drive (Slides vira PDF). */
+export async function readFolderFile(fileId: string): Promise<{ buffer: Buffer; mime: string; name: string }> {
+  const drive = getDrive()
+  const meta = (await drive.files.get({
+    fileId, fields: 'id, name, mimeType', supportsAllDrives: true,
+  })).data
+  const mime = meta.mimeType ?? 'application/octet-stream'
+  const name = meta.name ?? 'arquivo'
+  if (mime === SLIDES_MIME) {
+    const r = await drive.files.export({ fileId, mimeType: PDF_MIME }, { responseType: 'arraybuffer' })
+    return { buffer: Buffer.from(r.data as ArrayBuffer), mime: PDF_MIME, name: `${name}.pdf` }
+  }
+  const r = await drive.files.get(
+    { fileId, alt: 'media', supportsAllDrives: true },
+    { responseType: 'arraybuffer' },
+  )
+  return { buffer: Buffer.from(r.data as ArrayBuffer), mime, name }
+}
+
 export async function listSubfolders(parentId: string): Promise<{ id: string; name: string; link: string }[]> {
   const drive = getDrive()
   const out: { id: string; name: string; link: string }[] = []
