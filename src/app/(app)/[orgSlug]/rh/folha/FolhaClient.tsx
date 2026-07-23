@@ -2,10 +2,10 @@
 
 import { useState, useMemo, useRef, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Wallet, Upload, Loader2, Check, X, Users } from 'lucide-react'
+import { Wallet, Upload, Loader2, Check, X, Users, Landmark } from 'lucide-react'
 import { toast } from 'sonner'
-import { formatBRL } from '@/lib/midia'
-import { importarFolha } from '@/app/actions/rh'
+import { formatBRL, parseMoney } from '@/lib/midia'
+import { importarFolha, gerarLancamentosFolha } from '@/app/actions/rh'
 
 export interface FolhaRow {
   competencia: string; nome: string | null; liquido: number | string | null
@@ -21,8 +21,11 @@ interface LinhaExtraida {
 const n = (v: number | string | null | undefined) => Number(v ?? 0)
 const compLabel = (c: string) => { const [y, m] = c.split('-'); return `${m}/${y}` }
 
+interface CompAgg { competencia: string; liquido: number; vencimentos: number; fgts: number; pessoas: number }
+
 export function FolhaClient({ orgSlug, linhas }: { orgSlug: string; linhas: FolhaRow[] }) {
   const [preview, setPreview] = useState<{ competencia: string; linhas: LinhaExtraida[] } | null>(null)
+  const [reconc, setReconc] = useState<CompAgg | null>(null)
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -77,7 +80,8 @@ export function FolhaClient({ orgSlug, linhas }: { orgSlug: string; linhas: Folh
               <th className="text-left px-4 py-3 font-medium">Pessoas</th>
               <th className="text-right px-4 py-3 font-medium">Líquido</th>
               <th className="text-right px-4 py-3 font-medium">FGTS</th>
-              <th className="text-left px-4 py-3 font-medium w-1/3">Evolução</th>
+              <th className="text-left px-4 py-3 font-medium w-1/4">Evolução</th>
+              <th className="px-4 py-3" />
             </tr></thead>
             <tbody>
               {competencias.map(c => (
@@ -89,6 +93,12 @@ export function FolhaClient({ orgSlug, linhas }: { orgSlug: string; linhas: Folh
                   <td className="px-4 py-3">
                     <div className="h-2 rounded-full bg-orange-100 overflow-hidden"><div className="h-full bg-orange-500 rounded-full" style={{ width: `${Math.round((c.liquido / maxLiq) * 100)}%` }} /></div>
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    <button onClick={() => setReconc(c)} title="Gerar lançamentos no Financeiro"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-gray-600 hover:bg-gray-100 transition">
+                      <Landmark className="w-3.5 h-3.5" /> Financeiro
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -97,6 +107,86 @@ export function FolhaClient({ orgSlug, linhas }: { orgSlug: string; linhas: Folh
       )}
 
       {preview && <PreviewModal orgSlug={orgSlug} data={preview} onClose={() => setPreview(null)} />}
+      {reconc && <ReconcModal orgSlug={orgSlug} comp={reconc} onClose={() => setReconc(null)} />}
+    </div>
+  )
+}
+
+// venc padrão: salários = dia 30 da competência; INSS/FGTS = dia 20 do mês seguinte.
+function vencSalarios(comp: string): string { return `${comp}-30` }
+function vencEncargos(comp: string): string {
+  const [y, m] = comp.split('-').map(Number)
+  const ny = m === 12 ? y + 1 : y
+  const nm = m === 12 ? 1 : m + 1
+  return `${ny}-${String(nm).padStart(2, '0')}-20`
+}
+
+function ReconcModal({ orgSlug, comp, onClose }: { orgSlug: string; comp: CompAgg; onClose: () => void }) {
+  const router = useRouter()
+  const [salarios, setSalarios] = useState(formatBRL(comp.liquido).replace('R$', '').trim())
+  const [vSal, setVSal] = useState(vencSalarios(comp.competencia))
+  const [inss, setInss] = useState('')
+  const [vInss, setVInss] = useState(vencEncargos(comp.competencia))
+  const [fgts, setFgts] = useState(comp.fgts > 0 ? formatBRL(comp.fgts).replace('R$', '').trim() : '')
+  const [vFgts, setVFgts] = useState(vencEncargos(comp.competencia))
+  const [saving, start] = useTransition()
+
+  function gerar() {
+    start(async () => {
+      const r = await gerarLancamentosFolha(orgSlug, {
+        competencia: comp.competencia,
+        salarios: parseMoney(salarios), vencSalarios: vSal,
+        inss: parseMoney(inss), vencInss: vInss,
+        fgts: parseMoney(fgts), vencFgts: vFgts,
+      })
+      if (r?.error) { toast.error(r.error); return }
+      toast.success(`${r.gerados} lançamento(s) gerado(s) no Financeiro.`)
+      onClose(); router.refresh()
+    })
+  }
+
+  const money = 'w-32 px-3 py-1.5 text-sm text-right bg-gray-100 border border-transparent rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500'
+  const dateI = 'px-3 py-1.5 text-sm bg-gray-100 border border-transparent rounded-lg text-gray-800'
+
+  return (
+    <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+      <div className="modal-card w-full max-w-lg bg-white rounded-2xl shadow-xl border border-gray-200">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h2 className="text-base font-semibold text-gray-900">Gerar no Financeiro — {compLabel(comp.competencia)}</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Cria as saídas "a pagar". Valores das guias vêm da contabilidade (INSS/FGTS incluem a parte patronal).</p>
+        </div>
+        <div className="px-6 py-5 space-y-3">
+          <Linha label="Salários (líquido)" hint="paga dia 30">
+            <input inputMode="decimal" value={salarios} onChange={e => setSalarios(e.target.value)} className={money} />
+            <input type="date" value={vSal} onChange={e => setVSal(e.target.value)} className={dateI} />
+          </Linha>
+          <Linha label="INSS (guia)" hint="paga dia 20">
+            <input inputMode="decimal" value={inss} onChange={e => setInss(e.target.value)} placeholder="da guia" className={money} />
+            <input type="date" value={vInss} onChange={e => setVInss(e.target.value)} className={dateI} />
+          </Linha>
+          <Linha label="FGTS (guia)" hint="paga dia 20">
+            <input inputMode="decimal" value={fgts} onChange={e => setFgts(e.target.value)} className={money} />
+            <input type="date" value={vFgts} onChange={e => setVFgts(e.target.value)} className={dateI} />
+          </Linha>
+          <p className="text-[11px] text-gray-400 pt-1">Deixe zerado o que não quiser gerar. Reprocessar a mesma competência atualiza o que ainda está em aberto (não duplica nem mexe no que já foi pago).</p>
+        </div>
+        <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-100">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
+          <button onClick={gerar} disabled={saving}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Landmark className="w-4 h-4" />} Gerar lançamentos
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Linha({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div><span className="text-sm text-gray-700">{label}</span> <span className="text-[11px] text-gray-400">{hint}</span></div>
+      <div className="flex items-center gap-2">{children}</div>
     </div>
   )
 }
