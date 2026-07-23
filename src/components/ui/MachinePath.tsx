@@ -33,6 +33,16 @@ function traduzRaiz(seg: string, lang: 'pt' | 'en'): string {
   return r ? r[lang] : seg
 }
 
+// Nome do bookmark do Mountain Duck distribuído pro time (.duck) — o mount no Mac
+// nasce como <Bookmark>.localized dentro do Volumes.noindex.
+const FLOW_BOOKMARK = 'Clientes'
+
+/** Converte o caminho do disco novo (F:\...) pro mount do Mountain Duck no Mac. */
+export function toMacFlowPath(winPath: string, macUser: string): string {
+  const rest = winPath.replace(/^[A-Za-z]:[\\/]+/, '').replace(/\\/g, '/').replace(/\/+$/, '')
+  return `/Users/${macUser}/Library/Application Support/Mountain Duck/Volumes.noindex/${FLOW_BOOKMARK}.localized/${rest}`
+}
+
 /** Converte o caminho Windows (X:\Drives compartilhados\...) para o caminho do Mac,
  *  traduzindo a raiz do Drive pro idioma do Mac da pessoa (lang). */
 export function toMacPath(winPath: string, macUser: string, googleEmail: string, lang: 'pt' | 'en' = 'pt'): string {
@@ -69,15 +79,20 @@ export function MachinePath({ winPath, compact = false, editable = false, activi
   }, [])
 
   const has = !!winPath.trim()
-  const configured = !!(prefs.driveMacUser && prefs.driveGoogleEmail)
-  // Caminho do disco novo (F: = bucket via Mountain Duck): a conversão abaixo é do
-  // Google Drive Desktop e geraria um caminho de Mac ERRADO — mostra o Windows até
-  // existir o prefixo de montagem do Mountain Duck no perfil.
+  // Disco novo (F: = bucket via Mountain Duck): conversão própria, só precisa do
+  // usuário do Mac. Caminho antigo (G:\Drives compartilhados) segue a do Google.
   const isFlowDisk = /^F:/i.test(winPath.trim())
+  const configured = isFlowDisk ? !!prefs.driveMacUser : !!(prefs.driveMacUser && prefs.driveGoogleEmail)
   // SSR/pré-mount e Windows: caminho Windows (evita divergência de hidratação).
-  const useMac = mounted && mac && configured && has && !isFlowDisk
-  const needsSetup = mounted && mac && !configured && has && !isFlowDisk
-  const display = has ? (useMac ? toMacPath(winPath, prefs.driveMacUser!, prefs.driveGoogleEmail!, prefs.driveLang === 'en' ? 'en' : 'pt') : cleanWin(winPath)) : ''
+  const useMac = mounted && mac && configured && has
+  const needsSetup = mounted && mac && !configured && has
+  const display = has
+    ? (useMac
+        ? (isFlowDisk
+            ? toMacFlowPath(winPath, prefs.driveMacUser!)
+            : toMacPath(winPath, prefs.driveMacUser!, prefs.driveGoogleEmail!, prefs.driveLang === 'en' ? 'en' : 'pt'))
+        : cleanWin(winPath))
+    : ''
 
   function copy(e: React.MouseEvent) {
     e.preventDefault(); e.stopPropagation()
