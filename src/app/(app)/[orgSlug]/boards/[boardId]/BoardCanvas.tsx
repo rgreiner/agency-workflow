@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import type { BoardElement, BoardData, Arrow, BoardElementType, ImageElement } from '@/types/board'
-import { createElement } from '@/types/board'
+import { createElement, effectiveFontSize, FONT_MIN, FONT_MAX, FONT_STEP } from '@/types/board'
 import { updateBoardTitle, deleteBoard } from '@/app/actions/boards'
 import { createClient } from '@/lib/supabase/client'
 import { uploadFile } from '@/lib/storage/upload-client'
@@ -638,8 +638,22 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
   // ── Keyboard shortcuts ────────────────────────────────────────────────────────
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      const tag = (e.target as HTMLElement).tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      const target = e.target as HTMLElement
+      const typing = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+
+      // Tamanho da fonte: ⌘⇧. aumenta / ⌘⇧, diminui — vale até editando texto.
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === '.' || e.key === '>' || e.key === ',' || e.key === '<') && selectedId) {
+        const cur = elementsRef.current.find(x => x.id === selectedId)
+        if (cur && (cur.type === 'note' || cur.type === 'text')) {
+          e.preventDefault()
+          const bigger = e.key === '.' || e.key === '>'
+          const next = Math.min(FONT_MAX, Math.max(FONT_MIN, effectiveFontSize(cur) + (bigger ? FONT_STEP : -FONT_STEP)))
+          updateEl(selectedId, { fontSize: next })
+          return
+        }
+      }
+
+      if (typing) return
       if ((e.key === 'Delete' || e.key === 'Backspace') && !editingId) {
         if (selectedId) { deleteEl(selectedId); return }
         if (selectedArrowId) { deleteArrow(selectedArrowId); return }
@@ -666,7 +680,7 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
   useEffect(() => {
     function onPaste(e: ClipboardEvent) {
       const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
       const item = Array.from(e.clipboardData?.items ?? []).find(i => i.type.startsWith('image/'))
       const file = item?.getAsFile()
       if (!file) return
@@ -1040,6 +1054,8 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
         @keyframes board-dot-in { from { opacity: 0; } to { opacity: 1; } }
         @keyframes board-dash-march { to { stroke-dashoffset: -22; } }
         @keyframes board-arrow-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+        .board-richtext:empty:before { content: attr(data-placeholder); color: #94a3b8; font-style: italic; pointer-events: none; }
+        .board-richtext { caret-color: #f97316; }
       `}</style>
     </div>
   )

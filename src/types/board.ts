@@ -10,17 +10,25 @@ export interface BaseElement {
   h: number
 }
 
-export interface NoteElement extends BaseElement {
+// Formatação de texto compartilhada por nota e texto (todos opcionais p/
+// compatibilidade com blocos antigos).
+export interface TextFormat {
+  bold?: boolean
+  italic?: boolean
+  underline?: boolean
+  strike?: boolean
+  align?: 'left' | 'center' | 'right'
+  fontSize?: number       // px — sobrepõe o tamanho-base quando presente
+  textColor?: string      // hex — sobrepõe a cor padrão do texto
+}
+
+export interface NoteElement extends BaseElement, TextFormat {
   type: 'note'
   content: string
   color: string
-  // Formato do texto (opcionais p/ compatibilidade com notas antigas)
-  bold?: boolean
-  italic?: boolean
-  align?: 'left' | 'center' | 'right'
 }
 
-export interface TextElement extends BaseElement {
+export interface TextElement extends BaseElement, TextFormat {
   type: 'text'
   content: string
   size: 'h1' | 'h2' | 'body'
@@ -90,6 +98,33 @@ export const NOTE_COLORS = [
   { bg: '#ffedd5', border: '#fdba74', label: 'Laranja'  },
   { bg: '#f1f5f9', border: '#cbd5e1', label: 'Cinza'    },
 ]
+
+// ── Text color palette ────────────────────────────────────────────────────────
+
+export const TEXT_COLORS = [
+  { hex: '#0f172a', label: 'Padrão'   },
+  { hex: '#64748b', label: 'Cinza'    },
+  { hex: '#ef4444', label: 'Vermelho' },
+  { hex: '#f97316', label: 'Laranja'  },
+  { hex: '#16a34a', label: 'Verde'    },
+  { hex: '#2563eb', label: 'Azul'     },
+]
+
+// ── Tamanho de fonte ──────────────────────────────────────────────────────────
+
+export const FONT_MIN  = 8
+export const FONT_MAX  = 96
+export const FONT_STEP = 2
+
+// Presets do bloco de texto → px base de cada tamanho.
+export const TEXT_SIZE_PX: Record<TextElement['size'], number> = { h1: 28, h2: 20, body: 14 }
+export const NOTE_BASE_PX = 13
+
+// Tamanho efetivo (px) considerando o override numérico.
+export function effectiveFontSize(el: NoteElement | TextElement): number {
+  if (el.fontSize != null) return el.fontSize
+  return el.type === 'text' ? TEXT_SIZE_PX[el.size] : NOTE_BASE_PX
+}
 
 // ── Factory ───────────────────────────────────────────────────────────────────
 
