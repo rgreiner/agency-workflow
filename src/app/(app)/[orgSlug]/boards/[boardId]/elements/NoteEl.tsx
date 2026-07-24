@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import type { NoteElement } from '@/types/board'
-import { NOTE_COLORS } from '@/types/board'
 
 interface Props {
   el: NoteElement
@@ -12,7 +11,7 @@ interface Props {
   onStopEdit: (content: string) => void
 }
 
-export function NoteEl({ el, editing, selected, onUpdate, onStopEdit }: Props) {
+export function NoteEl({ el, editing, onStopEdit }: Props) {
   const [draft, setDraft] = useState(el.content)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -42,12 +41,17 @@ export function NoteEl({ el, editing, selected, onUpdate, onStopEdit }: Props) {
     wasEditingRef.current = editing
   }, [editing]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const fontWeight = el.bold ? 700 : 400
+  const fontStyle  = el.italic ? 'italic' : 'normal'
+  const textAlign  = (el.align ?? 'left') as 'left' | 'center' | 'right'
+
   return (
     <div
       style={{
         width: '100%',
         height: '100%',
         backgroundColor: el.color,
+        border: '1px solid rgba(15,23,42,0.06)',
         borderRadius: 10,
         boxShadow: '0 2px 8px rgba(0,0,0,0.10), 0 1px 2px rgba(0,0,0,0.06)',
         display: 'flex',
@@ -56,45 +60,6 @@ export function NoteEl({ el, editing, selected, onUpdate, onStopEdit }: Props) {
         position: 'relative',
       }}
     >
-      {/* ── Color picker (floats above) ── */}
-      {selected && !editing && (
-        <div
-          style={{
-            position: 'absolute',
-            top: -40,
-            left: 0,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            padding: '5px 8px',
-            backgroundColor: '#1f2937',
-            borderRadius: 8,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-            zIndex: 200,
-            whiteSpace: 'nowrap',
-          }}
-          onPointerDown={e => e.stopPropagation()}
-        >
-          {NOTE_COLORS.map(({ bg, label }) => (
-            <button
-              key={bg}
-              title={label}
-              onClick={() => onUpdate({ color: bg })}
-              style={{
-                width: 16,
-                height: 16,
-                backgroundColor: bg,
-                border: el.color === bg ? '2.5px solid #818cf8' : '1.5px solid rgba(255,255,255,0.25)',
-                borderRadius: 4,
-                cursor: 'pointer',
-                flexShrink: 0,
-                transition: 'transform 0.1s',
-              }}
-            />
-          ))}
-        </div>
-      )}
-
       {/* ── Content ── */}
       {editing ? (
         <textarea
@@ -119,6 +84,9 @@ export function NoteEl({ el, editing, selected, onUpdate, onStopEdit }: Props) {
             outline: 'none',
             fontFamily: 'inherit',
             borderRadius: 10,
+            fontWeight,
+            fontStyle,
+            textAlign,
           }}
         />
       ) : (
@@ -132,7 +100,9 @@ export function NoteEl({ el, editing, selected, onUpdate, onStopEdit }: Props) {
             overflow: 'hidden',
             wordBreak: 'break-word',
             whiteSpace: 'pre-wrap',
-            fontStyle: el.content ? 'normal' : 'italic',
+            fontWeight,
+            fontStyle: el.content ? fontStyle : 'italic',
+            textAlign,
           }}
         >
           {el.content || 'Duplo clique para editar…'}

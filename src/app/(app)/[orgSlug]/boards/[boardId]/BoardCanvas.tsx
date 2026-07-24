@@ -15,6 +15,7 @@ import { ColorEl } from './elements/ColorEl'
 import { LinkEl } from './elements/LinkEl'
 import { FrameEl } from './elements/FrameEl'
 import { ChecklistEl } from './elements/ChecklistEl'
+import { InspectorPanel } from './InspectorPanel'
 import {
   ChevronLeft, Check, Loader2,
   MousePointer2, StickyNote, Type, ImageIcon, ArrowRight,
@@ -1002,6 +1003,14 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
               </svg>
             )}
           </div>
+
+          {/* ── Painel lateral de customização (bloco selecionado) ── */}
+          {(() => {
+            const sel = elements.find(e => e.id === selectedId)
+            return sel && tool === 'select'
+              ? <InspectorPanel el={sel} onUpdate={u => updateEl(sel.id, u)} />
+              : null
+          })()}
 
           {/* Empty state */}
           {elements.length === 0 && (
