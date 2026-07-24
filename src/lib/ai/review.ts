@@ -9,7 +9,13 @@ import type { DriveAsset } from '@/lib/google-drive'
  *   - Claude:  ANTHROPIC_API_KEY.
  *   - Forçar:  REVIEW_PROVIDER (ou REDACAO_REVIEW_PROVIDER) = 'gemini' | 'claude' (default 'auto').
  *
- * Os modelos default (Gemini 2.5 Flash / Claude Haiku 4.5) já aceitam imagem e PDF.
+ * Os modelos default (ver runClaude/runGemini) aceitam imagem e PDF; a saída é
+ * estruturada por tool de schema fixo, não por texto livre.
+ *
+ * ⚠️ O default do Gemini (`gemini-2.5-flash`) foi APOSENTADO pelo Google
+ * ("no longer available") — quem for usar Gemini precisa apontar
+ * REVIEW_MODEL_GEMINI pra um modelo vivo. O caminho suportado é o Claude:
+ * basta ANTHROPIC_API_KEY no ambiente que o 'auto' já prefere ele.
  */
 
 export type ReviewProvider = 'gemini' | 'claude'
@@ -199,7 +205,7 @@ const ERROS_TOOL_SCHEMA = {
 async function runClaude(system: string, parts: ReviewPart[]): Promise<{ model: string; list: ReviewError[] }> {
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  const model = process.env.REVIEW_MODEL_CLAUDE || process.env.REDACAO_REVIEW_MODEL_CLAUDE || 'claude-sonnet-4-6'
+  const model = process.env.REVIEW_MODEL_CLAUDE || process.env.REDACAO_REVIEW_MODEL_CLAUDE || 'claude-opus-4-8'
 
   const content = parts.map(p => {
     if (p.kind === 'text') return { type: 'text', text: p.text }
