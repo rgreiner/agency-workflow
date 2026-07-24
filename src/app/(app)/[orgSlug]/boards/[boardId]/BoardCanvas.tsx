@@ -16,6 +16,7 @@ import { LinkEl } from './elements/LinkEl'
 import { FrameEl } from './elements/FrameEl'
 import { ChecklistEl } from './elements/ChecklistEl'
 import { InspectorPanel } from './InspectorPanel'
+import { applyInlineFontSize, currentSelectionFontSize } from './RichTextArea'
 import {
   ChevronLeft, Check, Loader2,
   MousePointer2, StickyNote, Type, ImageIcon, ArrowRight,
@@ -647,8 +648,9 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
         if (cur && (cur.type === 'note' || cur.type === 'text')) {
           e.preventDefault()
           const bigger = e.key === '.' || e.key === '>'
-          const next = Math.min(FONT_MAX, Math.max(FONT_MIN, effectiveFontSize(cur) + (bigger ? FONT_STEP : -FONT_STEP)))
-          updateEl(selectedId, { fontSize: next })
+          const base = currentSelectionFontSize() ?? effectiveFontSize(cur)
+          const next = Math.min(FONT_MAX, Math.max(FONT_MIN, base + (bigger ? FONT_STEP : -FONT_STEP)))
+          if (!applyInlineFontSize(next)) updateEl(selectedId, { fontSize: next })
           return
         }
       }

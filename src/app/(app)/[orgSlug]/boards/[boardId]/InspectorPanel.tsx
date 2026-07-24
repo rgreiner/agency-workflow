@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import type { BoardElement, NoteElement, TextElement } from '@/types/board'
 import { NOTE_COLORS, TEXT_COLORS, FONT_MIN, FONT_MAX, FONT_STEP, TEXT_SIZE_PX, effectiveFontSize } from '@/types/board'
+import { applyInlineFontSize, currentSelectionFontSize } from './RichTextArea'
 import {
   Bold, Italic, Underline, Strikethrough,
   AlignLeft, AlignCenter, AlignRight, Minus, Plus,
@@ -41,6 +42,8 @@ function exec(cmd: string, value?: string) {
 export function InspectorPanel({ el, onUpdate }: Props) {
   // Estado ativo dos botões inline reflete a seleção atual do editor.
   const [fmt, setFmt] = useState({ bold: false, italic: false, underline: false, strike: false })
+  // Tamanho do trecho selecionado (null = nada selecionado em um editor).
+  const [selPx, setSelPx] = useState<number | null>(null)
 
   useEffect(() => {
     function sync() {
@@ -52,6 +55,7 @@ export function InspectorPanel({ el, onUpdate }: Props) {
           strike:    document.queryCommandState('strikeThrough'),
         })
       } catch { /* queryCommandState indisponível */ }
+      setSelPx(currentSelectionFontSize())
     }
     document.addEventListener('selectionchange', sync)
     sync()
@@ -60,8 +64,14 @@ export function InspectorPanel({ el, onUpdate }: Props) {
 
   if (el.type !== 'note' && el.type !== 'text') return null
 
-  const size = effectiveFontSize(el as NoteElement | TextElement)
-  const setSize = (n: number) => onUpdate({ fontSize: clamp(n) } as Partial<BoardElement>)
+  const size = selPx ?? effectiveFontSize(el as NoteElement | TextElement)
+
+  // + / − : com trecho selecionado, redimensiona só ele (span inline);
+  // sem seleção, redimensiona o bloco inteiro.
+  function stepFont(delta: number) {
+    const target = clamp(size + delta)
+    if (!applyInlineFontSize(target)) onUpdate({ fontSize: target } as Partial<BoardElement>)
+  }
 
   return (
     <div
@@ -104,7 +114,7 @@ export function InspectorPanel({ el, onUpdate }: Props) {
       {/* ── Tamanho da fonte ── */}
       <Field label="Tamanho">
         <div style={{ display: 'flex', gap: 6 }}>
-          <Btn onClick={() => setSize(size - FONT_STEP)} title="Diminuir (⌘⇧,)"><Minus size={14} /></Btn>
+          <Btn onClick={() => stepFont(-FONT_STEP)} title="Diminuir (⌘⇧,)"><Minus size={14} /></Btn>
           <div style={{
             flex: 1, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
             borderRadius: 9, backgroundColor: '#f3f4f6', color: '#111827',
@@ -112,7 +122,7 @@ export function InspectorPanel({ el, onUpdate }: Props) {
           }}>
             {size}px
           </div>
-          <Btn onClick={() => setSize(size + FONT_STEP)} title="Aumentar (⌘⇧.)"><Plus size={14} /></Btn>
+          <Btn onClick={() => stepFont(FONT_STEP)} title="Aumentar (⌘⇧.)"><Plus size={14} /></Btn>
         </div>
         {el.type === 'text' && (
           <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>

@@ -2,6 +2,40 @@
 
 import { useRef, useEffect } from 'react'
 
+/**
+ * Aplica um tamanho de fonte (px) só ao trecho selecionado do editor em foco,
+ * via um span inline. Retorna false se não há seleção — aí quem chamou deve
+ * redimensionar o bloco inteiro. Usa o truque font[size=7]→span (execCommand
+ * só aceita os buckets 1–7, então trocamos pela medida real em px).
+ */
+export function applyInlineFontSize(px: number): boolean {
+  const sel = window.getSelection()
+  const editable = document.activeElement as HTMLElement | null
+  if (!sel || sel.isCollapsed || !editable?.isContentEditable) return false
+  document.execCommand('styleWithCSS', false, 'false')
+  document.execCommand('fontSize', false, '7')
+  editable.querySelectorAll('font[size="7"]').forEach(f => {
+    const span = document.createElement('span')
+    span.style.fontSize = `${px}px`
+    while (f.firstChild) span.appendChild(f.firstChild)
+    f.replaceWith(span)
+  })
+  editable.dispatchEvent(new Event('input', { bubbles: true }))
+  return true
+}
+
+/** Tamanho (px) renderizado no ponto da seleção, ou null se não há seleção
+ *  dentro de um editor. Considera spans inline. */
+export function currentSelectionFontSize(): number | null {
+  const sel = window.getSelection()
+  if (!sel || !sel.rangeCount) return null
+  const n = sel.getRangeAt(0).startContainer
+  const host = n.nodeType === 3 ? n.parentElement : (n as HTMLElement | null)
+  if (!host?.closest('.board-richtext')) return null
+  const v = parseFloat(getComputedStyle(host).fontSize)
+  return Number.isFinite(v) ? Math.round(v) : null
+}
+
 interface Props {
   html: string
   editing: boolean
