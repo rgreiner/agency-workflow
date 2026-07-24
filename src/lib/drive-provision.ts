@@ -2,7 +2,7 @@ import 'server-only'
 import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
-import { createTaskFolders, moveTaskFolder, inspectTaskFolder, completarSubpastas, folderConfigured, resolvePathPrefix } from '@/lib/task-folders'
+import { createTaskFolders, moveTaskFolder, inspectTaskFolder, completarSubpastas, folderConfigured, resolvePathPrefix, backendForRef } from '@/lib/task-folders'
 import { logSystemError } from '@/lib/system-error'
 
 function joinLocalPath(prefix: string, drivePath: string): string {
@@ -45,7 +45,8 @@ async function resolve(supabase: SupabaseClient<Database>, campaignId: string): 
       .from('org_settings').select('drive_path_prefix').eq('org_id', orgId).single()
     orgPrefix = s?.drive_path_prefix ?? null
   }
-  return { folderId, prefix: resolvePathPrefix(orgPrefix) }
+  // Prefixo pelo backend DESTA campanha (Drive → G:\, S3 → F:\) — na transição as duas coexistem.
+  return { folderId, prefix: resolvePathPrefix(orgPrefix, backendForRef(folderId)) }
 }
 
 /**
@@ -122,7 +123,7 @@ export async function relinkActivityDrive(
 ): Promise<{ ok: boolean; error?: string; faltando?: string[]; criadas?: string[] }> {
   if (!folderConfigured()) return { ok: false, error: 'Integração de pastas não está configurada.' }
   const cfg = await resolve(supabase, params.campaignId)
-  const prefix = cfg?.prefix ?? resolvePathPrefix(null)
+  const prefix = cfg?.prefix ?? resolvePathPrefix(null, backendForRef(params.folderId))
   try {
     // Completa o que faltar ANTES de reler: pasta antiga foi criada à mão quando
     // "Final" era opcional, e sem isso a re-vinculação regravava null pra sempre.

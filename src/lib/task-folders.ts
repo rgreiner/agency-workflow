@@ -25,70 +25,73 @@ export function folderConfigured(): boolean {
   return folderProvider() !== null
 }
 
-/** Prefixo padrão do caminho local por provider (org_settings.drive_path_prefix sobrepõe). */
-export function defaultPathPrefix(): string {
-  return folderProvider() === 's3' ? 'F:\\' : 'G:\\Drives compartilhados\\'
+/** Prefixo padrão do caminho local por backend (org_settings.drive_path_prefix sobrepõe). */
+export function defaultPathPrefix(backend: FolderProvider = folderProvider() ?? 'drive'): string {
+  return backend === 's3' ? 'F:\\' : 'G:\\Drives compartilhados\\'
 }
 
 /**
- * Com o S3 ativo, um prefixo da era Drive salvo na org ("G:\Drives compartilhados\")
- * não vale mais — cai no padrão do disco novo sem precisar reconfigurar a org.
+ * Prefixo do caminho local pra este backend. Um prefixo salvo pra Drive
+ * ("G:\Drives compartilhados\") não vale numa referência S3 e vice-versa —
+ * durante a transição as duas coexistem, então o backend manda.
  */
-export function resolvePathPrefix(orgPrefix: string | null | undefined): string {
-  if (!orgPrefix) return defaultPathPrefix()
-  if (folderProvider() === 's3' && /compartilhad|google/i.test(orgPrefix)) return defaultPathPrefix()
-  return orgPrefix
+export function resolvePathPrefix(orgPrefix: string | null | undefined, backend: FolderProvider = folderProvider() ?? 'drive'): string {
+  if (backend === 's3') {
+    // Prefixo da era Drive não serve pro disco novo → cai no F:\ padrão.
+    if (!orgPrefix || /compartilhad|google/i.test(orgPrefix)) return defaultPathPrefix('s3')
+    return orgPrefix
+  }
+  return orgPrefix || defaultPathPrefix('drive')
 }
 
 /** Parece um ID de pasta do Drive (e não um caminho de bucket)? */
 const looksLikeDriveId = (ref: string) => /^[a-zA-Z0-9_-]{20,}$/.test(ref) && !ref.includes('/') && !ref.includes(' ')
 
 /**
- * Vínculo antigo do Drive numa campanha com o S3 ativo: erro claro em vez de
- * criar uma pasta-lixo com o nome do ID na raiz do bucket.
+ * Backend de UMA referência existente pelo formato dela — NÃO pelo modo global.
+ * É o coração da transição: uma campanha com ID do Drive continua no Drive
+ * mesmo com o S3 ativo; um caminho "IMDM/2026/…" vai pro S3. Assim a virada é
+ * gradual (re-vincula campanha por campanha) em vez de um flip que quebra todas.
  */
-function assertRefForProvider(ref: string): void {
-  if (folderProvider() === 's3' && looksLikeDriveId(ref)) {
-    throw new Error('Esta campanha ainda aponta pra pasta antiga do Drive — edite a campanha e cole o caminho novo (F:\\…).')
-  }
+export function backendForRef(ref: string): FolderProvider {
+  return looksLikeDriveId(ref) ? 'drive' : 's3'
 }
 
 /**
- * Normaliza o que a pessoa colou no campo "pasta" da campanha:
- * - Drive: link ou ID puro → ID.
- * - S3: caminho "F:\Cliente\2026\Projeto" (ou com /) → "Cliente/2026/Projeto".
+ * Normaliza o que a pessoa colou no campo "pasta" da campanha — por CONTEÚDO,
+ * aceitando os dois formatos ao mesmo tempo (durante a transição o time pode
+ * colar link do Drive OU caminho F:\ do disco novo):
+ * - Link/ID do Drive → ID.
+ * - Caminho "F:\Cliente\2026\Projeto" (ou com /) → "Cliente/2026/Projeto".
  */
 export function extractCampaignFolderRef(input: string | null): string | null {
   const s = (input ?? '').trim()
   if (!s) return null
-  if (folderProvider() === 's3') {
-    // Se colaram um link do Drive por costume, não vira caminho válido.
-    if (/drive\.google\.com/.test(s)) return null
-    return s3.normalizeFolderPath(s) || null
-  }
+  // Link do Drive (com /folders/<id> ou ?id=<id>)
   const m = s.match(/\/folders\/([a-zA-Z0-9-_]+)/) || s.match(/[?&]id=([a-zA-Z0-9-_]+)/)
   if (m) return m[1]
-  if (/^[a-zA-Z0-9-_]{20,}$/.test(s)) return s
-  return null
+  // Um link do Drive que não deu pra extrair o id → inválido (não vira caminho).
+  if (/drive\.google\.com/i.test(s)) return null
+  // ID puro do Drive.
+  if (looksLikeDriveId(s)) return s
+  // Senão, caminho do bucket (disco novo).
+  return s3.normalizeFolderPath(s) || null
 }
 
 export async function createTaskFolders(
   campaignRef: string, taskName: string, opts?: { forceNew?: boolean },
 ): Promise<drive.TaskFoldersResult> {
-  assertRefForProvider(campaignRef)
-  return folderProvider() === 's3'
+  return backendForRef(campaignRef) === 's3'
     ? s3.createTaskFoldersS3(campaignRef, taskName, opts)
     : drive.createTaskFolders(campaignRef, taskName, opts)
 }
 
 export async function listSubfolders(parentRef: string): Promise<{ id: string; name: string; link: string }[]> {
-  assertRefForProvider(parentRef)
-  return folderProvider() === 's3' ? s3.listSubfoldersS3(parentRef) : drive.listSubfolders(parentRef)
+  return backendForRef(parentRef) === 's3' ? s3.listSubfoldersS3(parentRef) : drive.listSubfolders(parentRef)
 }
 
 export async function inspectTaskFolder(taskRef: string): Promise<drive.TaskFoldersResult> {
-  assertRefForProvider(taskRef)
-  return folderProvider() === 's3' ? s3.inspectTaskFolderS3(taskRef) : drive.inspectTaskFolder(taskRef)
+  return backendForRef(taskRef) === 's3' ? s3.inspectTaskFolderS3(taskRef) : drive.inspectTaskFolder(taskRef)
 }
 
 /**
@@ -97,36 +100,32 @@ export async function inspectTaskFolder(taskRef: string): Promise<drive.TaskFold
  * Devolve [] se a tarefa não tem pasta ou não tem Preview.
  */
 export async function listPreviewFiles(taskRef: string): Promise<drive.FolderFile[]> {
-  assertRefForProvider(taskRef)
   const info = await inspectTaskFolder(taskRef)
   const preview = info.sub['Preview']
   if (!preview?.id) return []
-  return folderProvider() === 's3'
+  return backendForRef(preview.id) === 's3'
     ? s3.listFolderFilesS3(preview.id)
     : drive.listFolderFiles(preview.id)
 }
 
 /** Baixa uma peça pela ref devolvida por `listPreviewFiles`. */
 export async function readFolderFile(fileRef: string): Promise<{ buffer: Buffer; mime: string; name: string }> {
-  return folderProvider() === 's3'
+  return backendForRef(fileRef) === 's3'
     ? s3.readFolderFileS3(fileRef)
     : drive.readFolderFile(fileRef)
 }
 
 export async function completarSubpastas(taskRef: string): Promise<{ criadas: string[] }> {
-  assertRefForProvider(taskRef)
-  return folderProvider() === 's3' ? s3.completarSubpastasS3(taskRef) : drive.completarSubpastas(taskRef)
+  return backendForRef(taskRef) === 's3' ? s3.completarSubpastasS3(taskRef) : drive.completarSubpastas(taskRef)
 }
 
 /**
- * Move a pasta da tarefa pra outra campanha. No S3 o caminho MUDA (é a
- * identidade) — devolve `newRef` pra regravar o vínculo; no Drive o ID sobrevive
- * e `newRef` vem null (mantém o que está salvo).
+ * Move a pasta da tarefa pra outra campanha. Roteia pelo backend do DESTINO. No
+ * S3 o caminho MUDA (é a identidade) — devolve `newRef` pra regravar o vínculo;
+ * no Drive o ID sobrevive e `newRef` vem null (mantém o que está salvo).
  */
 export async function moveTaskFolder(taskRef: string, newParentRef: string): Promise<{ drivePath: string; newRef: string | null }> {
-  assertRefForProvider(taskRef)
-  assertRefForProvider(newParentRef)
-  if (folderProvider() === 's3') {
+  if (backendForRef(newParentRef) === 's3') {
     const r = await s3.moveTaskFolderS3(taskRef, newParentRef)
     return { drivePath: r.drivePath, newRef: r.newPath }
   }

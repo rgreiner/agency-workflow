@@ -21,7 +21,7 @@ Gestão de pauta/atividades da One a One (pode virar SaaS). Produção: **https:
 
 ## Banco / migrations
 - `supabase/migrations/NNN_nome.sql`, **idempotentes** (`if not exists` / `create or replace`).
-- **Aplicar em produção ANTES do push do código.** Claude gera o comando pronto (one-liner ssh, caminho absoluto); Rafael aplica. Container do Postgres: achar **pelo schema** (tem a tabela `activities`), nunca pelo nome. Finalizar com `notify pgrst, 'reload schema'`.
+- **Aplicar em produção ANTES do push do código.** Claude pode aplicar o comando (one-liner ssh, caminho absoluto); Container do Postgres: achar **pelo schema** (tem a tabela `activities`), nunca pelo nome. Finalizar com `notify pgrst, 'reload schema'`.
 - PostgREST self-hosted é estrito com overloads: **1 assinatura por RPC**.
 - Setup do PostgREST no VPS documentado em `supabase/vps/README.md`.
 
