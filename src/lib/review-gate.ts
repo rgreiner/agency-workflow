@@ -4,6 +4,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, Json } from '@/types/database'
 import { STATUS_CONFIG } from '@/types'
 import { driveConfigured, readRedacaoText, readReviewAssets } from '@/lib/google-drive'
+import { backendForRef } from '@/lib/task-folders'
+import { readReviewAssetsS3 } from '@/lib/s3-folders'
 import { reviewConfigured, reviewText, reviewArtwork, crossCheckRedacao, type ReviewError } from '@/lib/ai/review'
 import { logSystemError } from '@/lib/system-error'
 
@@ -128,10 +130,17 @@ async function runKind(
   userId: string,
 ): Promise<KindOutcome | null> {
   const { data: act } = await supabase
-    .from('activities').select('redacao_url, preview_url, finalizacao_url').eq('id', activityId).single()
+    .from('activities').select('drive_folder_id, redacao_url, preview_url, finalizacao_url').eq('id', activityId).single()
 
-  // Redação — texto de um Google Doc.
+  // Backend da pasta pelo formato da ref. No S3 as peças vêm da subpasta derivada
+  // (a ref é o caminho no bucket); no Drive, dos links salvos (fluxo antigo).
+  const folderRef = (act?.drive_folder_id ?? '').trim()
+  const isS3 = !!folderRef && backendForRef(folderRef) === 's3'
+
+  // Redação — texto. No Drive é um Google Doc; no S3 a redação é um arquivo (.docx)
+  // e a revisão de texto entra com o módulo de Redação (não há leitor de Word aqui).
   if (kind === 'redacao') {
+    if (isS3) return { clean: true, errors: [], provider: '—', note: 'redação no S3 — revisão de texto virá com o módulo de Redação' }
     const link = act?.redacao_url ?? ''
     if (!link || !driveConfigured()) return { clean: true, errors: [], provider: '—', note: 'sem link de Redação' }
     let text = ''
@@ -147,27 +156,38 @@ async function runKind(
 
   // Finalização — ortografia do arquivo pronto (imagem/PDF).
   if (kind === 'finalizacao') {
-    const link = act?.finalizacao_url ?? ''
-    if (!link || !driveConfigured()) return { clean: true, errors: [], provider: '—', note: 'sem arquivo de Finalização' }
-    const { assets } = await readReviewAssets(link)
-    if (!assets.length) return { clean: true, errors: [], provider: '—', note: 'sem peças no arquivo de Finalização' }
+    let assets
+    if (isS3) {
+      assets = (await readReviewAssetsS3(`${folderRef}/Final`)).assets
+    } else {
+      const link = act?.finalizacao_url ?? ''
+      if (!link || !driveConfigured()) return { clean: true, errors: [], provider: '—', note: 'sem arquivo de Finalização' }
+      assets = (await readReviewAssets(link)).assets
+    }
+    if (!assets.length) return { clean: true, errors: [], provider: '—', note: 'sem peças no Final' }
     const r = await reviewArtwork(assets)
     if (!r) return null
     return { clean: r.clean, errors: r.errors, provider: r.provider }
   }
 
   // Design — duas frentes: (1) ortografia nas peças do Preview, (2) cruzar com a Redação.
-  const previewLink = act?.preview_url ?? ''
-  if (!previewLink || !driveConfigured()) return { clean: true, errors: [], provider: '—', note: 'sem pasta de Preview' }
-  const { assets } = await readReviewAssets(previewLink)
+  let assets
+  if (isS3) {
+    assets = (await readReviewAssetsS3(`${folderRef}/Preview`)).assets
+  } else {
+    const previewLink = act?.preview_url ?? ''
+    if (!previewLink || !driveConfigured()) return { clean: true, errors: [], provider: '—', note: 'sem pasta de Preview' }
+    assets = (await readReviewAssets(previewLink)).assets
+  }
   if (!assets.length) return { clean: true, errors: [], provider: '—', note: 'sem peças no Preview' }
 
   const spell = await reviewArtwork(assets)
   if (!spell) return null
 
+  // Cross-check com a Redação só no fluxo Drive (no S3 a redação é .docx; entra com o módulo).
   let crossErrors: ReviewError[] = []
   const redLink = act?.redacao_url ?? ''
-  if (redLink) {
+  if (!isS3 && redLink) {
     let text = ''
     try { text = (await readRedacaoText(redLink)).text } catch (e) {
       console.error('[review:design] leitura da Redação falhou', e)
