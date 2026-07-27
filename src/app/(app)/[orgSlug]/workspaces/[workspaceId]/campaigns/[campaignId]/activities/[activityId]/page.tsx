@@ -335,7 +335,8 @@ export default async function ActivityPage({
   // partir da pasta da tarefa (drive_path, formato Windows) + nome da subpasta.
   const folderRef  = (activity.drive_folder_id ?? '').trim()
   const isS3Folder = !!folderRef && !(/^[A-Za-z0-9_-]{20,}$/.test(folderRef) && !folderRef.includes('/') && !folderRef.includes(' '))
-  const subBaseWin = driveWinPath || (folderRef ? folderRef.replace(/\//g, '\\') : '')
+  // sem barra no fim: drive_path às vezes vem com "\" final e o join duplicava a barra (…Salsa\\Redação).
+  const subBaseWin = (driveWinPath || (folderRef ? folderRef.replace(/\//g, '\\') : '')).replace(/[\\/]+$/, '')
 
   return (
     <div className="flex flex-col bg-white min-h-0 flex-1 lg:h-full lg:overflow-hidden">
