@@ -14,13 +14,14 @@ import {
 } from '@/lib/fluxo-caixa'
 
 const MESES_NOME = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+const MESES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 const compactBRL = (v: number) => {
   const a = Math.abs(v)
   if (a >= 1000) return `${v < 0 ? '-' : ''}${(a / 1000).toFixed(0)}k`
   return String(Math.round(v))
 }
 
-const C = { receb: '#22c55e', pag: '#ef4444', recebL: '#a7f3d0', pagL: '#fecaca', saldoR: '#1e3a5f', saldoP: '#94a3b8' }
+const C = { receb: '#22c55e', pag: '#ef4444', recebL: '#a7f3d0', pagL: '#fecaca', atraso: '#f59e0b', saldoR: '#1e3a5f', saldoP: '#94a3b8' }
 
 export function FluxoCaixaClient({ orgSlug, rows }: { orgSlug: string; rows: FluxoRow[] }) {
   const [modo, setModo] = useState<'diario' | 'mensal'>('diario')
@@ -58,8 +59,15 @@ export function FluxoCaixaClient({ orgSlug, rows }: { orgSlug: string; rows: Flu
     .sort((a, b) => a - b)
     .map(a => ({ value: String(a), label: String(a) }))
 
-  const dadosDia = useMemo(() => fluxoDiario(rows, ym, contaSel.diario), [rows, ym, contaSel.diario])
-  const dadosMes = useMemo(() => fluxoMensal(rows, ano, contaSel.mensal), [rows, ano, contaSel.mensal])
+  // Corte do "hoje" para marcar previsto vencido (projetado que não aconteceu).
+  const hojeYmd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const dadosDia = useMemo(() => fluxoDiario(rows, ym, contaSel.diario, hojeYmd), [rows, ym, contaSel.diario, hojeYmd])
+  const dadosMes = useMemo(() => fluxoMensal(rows, ano, contaSel.mensal, { ano: now.getFullYear(), mes: now.getMonth() }), [rows, ano, contaSel.mensal, hojeYmd]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Marcador do dia/mês atual no gráfico (só quando o período visível é o corrente).
+  const ymAtual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const hojeDiaMarker = ym === ymAtual ? String(now.getDate()).padStart(2, '0') : null
+  const hojeMesMarker = ano === now.getFullYear() ? MESES_ABBR[now.getMonth()] : null
 
   function shiftMes(delta: number) {
     const [y, m] = ym.split('-').map(Number)
@@ -130,11 +138,17 @@ export function FluxoCaixaClient({ orgSlug, rows }: { orgSlug: string; rows: Flu
                 <Tooltip content={<FluxoTooltip modo="diario" />} />
                 <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
                 <ReferenceLine y={0} stroke="#cbd5e1" />
-                {/* realizado (sólido) na base, previsto (claro) empilhado por cima */}
+                {hojeDiaMarker && (
+                  <ReferenceLine x={hojeDiaMarker} stroke="#f59e0b" strokeDasharray="3 3"
+                    label={{ value: 'Hoje', position: 'top', fontSize: 10, fill: '#f59e0b' }} />
+                )}
+                {/* realizado (sólido) na base, previsto (claro) e atrasado (âmbar) empilhados por cima */}
                 <Bar dataKey="recebimentos" name="Recebimentos" stackId="rec" fill={C.receb} radius={[3, 3, 0, 0]} maxBarSize={20} />
                 <Bar dataKey="recebPrevisto" name="A receber" stackId="rec" fill={C.recebL} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                <Bar dataKey="recebAtrasado" name="Atrasado" stackId="rec" fill={C.atraso} radius={[3, 3, 0, 0]} maxBarSize={20} />
                 <Bar dataKey="pagamentos" name="Pagamentos" stackId="pag" fill={C.pag} radius={[0, 0, 3, 3]} maxBarSize={20} />
                 <Bar dataKey="pagPrevisto" name="A pagar" stackId="pag" fill={C.pagL} radius={[0, 0, 3, 3]} maxBarSize={20} />
+                <Bar dataKey="pagAtrasado" name="Atrasado" stackId="pag" fill={C.atraso} legendType="none" radius={[0, 0, 3, 3]} maxBarSize={20} />
                 <Line dataKey="saldoProjetado" name="Saldo projetado" type="monotone" stroke={C.saldoP} strokeWidth={2} strokeDasharray="4 3" dot={false} />
                 <Line dataKey="saldo" name="Saldo" type="monotone" stroke={C.saldoR} strokeWidth={2} dot={{ r: 2 }} />
               </ComposedChart>
@@ -146,10 +160,17 @@ export function FluxoCaixaClient({ orgSlug, rows }: { orgSlug: string; rows: Flu
                 <Tooltip content={<FluxoTooltip modo="mensal" />} />
                 <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
                 <ReferenceLine y={0} stroke="#cbd5e1" />
-                <Bar dataKey="recPrevisto" name="Receb. previsto" fill={C.recebL} radius={[3, 3, 0, 0]} maxBarSize={16} />
-                <Bar dataKey="recRealizado" name="Receb. realizado" fill={C.receb} radius={[3, 3, 0, 0]} maxBarSize={16} />
-                <Bar dataKey="pagPrevisto" name="Pagto previsto" fill={C.pagL} radius={[0, 0, 3, 3]} maxBarSize={16} />
-                <Bar dataKey="pagRealizado" name="Pagto realizado" fill={C.pag} radius={[0, 0, 3, 3]} maxBarSize={16} />
+                {hojeMesMarker && (
+                  <ReferenceLine x={hojeMesMarker} stroke="#f59e0b" strokeDasharray="3 3"
+                    label={{ value: 'Hoje', position: 'top', fontSize: 10, fill: '#f59e0b' }} />
+                )}
+                {/* realizado na base, previsto e atrasado empilhados por cima (coluna única por mês) */}
+                <Bar dataKey="recRealizado" name="Receb. realizado" stackId="rec" fill={C.receb} radius={[3, 3, 0, 0]} maxBarSize={26} />
+                <Bar dataKey="recPrevisto" name="Receb. previsto" stackId="rec" fill={C.recebL} radius={[3, 3, 0, 0]} maxBarSize={26} />
+                <Bar dataKey="recAtrasado" name="Atrasado" stackId="rec" fill={C.atraso} radius={[3, 3, 0, 0]} maxBarSize={26} />
+                <Bar dataKey="pagRealizado" name="Pagto realizado" stackId="pag" fill={C.pag} radius={[0, 0, 3, 3]} maxBarSize={26} />
+                <Bar dataKey="pagPrevisto" name="Pagto previsto" stackId="pag" fill={C.pagL} radius={[0, 0, 3, 3]} maxBarSize={26} />
+                <Bar dataKey="pagAtrasado" name="Atrasado" stackId="pag" fill={C.atraso} legendType="none" radius={[0, 0, 3, 3]} maxBarSize={26} />
                 <Line dataKey="saldoPrevisto" name="Saldo previsto" type="monotone" stroke={C.saldoP} strokeWidth={2} strokeDasharray="4 3" dot={false} />
                 <Line dataKey="saldoRealizado" name="Saldo realizado" type="monotone" stroke={C.saldoR} strokeWidth={2} dot={{ r: 2 }} />
               </ComposedChart>
@@ -182,9 +203,9 @@ function FluxoTooltip({ active, payload, label, modo }: any) {
 }
 
 function TabelaDiaria({ dados }: { dados: ReturnType<typeof fluxoDiario> }) {
-  const linhas = dados.filter(d => d.recebimentos !== 0 || d.pagamentos !== 0 || d.recebPrevisto !== 0 || d.pagPrevisto !== 0)
+  const linhas = dados.filter(d => d.recebimentos !== 0 || d.pagamentos !== 0 || d.recebPrevisto !== 0 || d.pagPrevisto !== 0 || d.recebAtrasado !== 0 || d.pagAtrasado !== 0)
   if (linhas.length === 0) return <p className="text-sm text-gray-400">Sem movimento neste mês.</p>
-  const temPrevisto = dados.some(d => d.recebPrevisto !== 0 || d.pagPrevisto !== 0)
+  const temPrevisto = dados.some(d => d.recebPrevisto !== 0 || d.pagPrevisto !== 0 || d.recebAtrasado !== 0 || d.pagAtrasado !== 0)
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden overflow-x-auto">
       <table className="w-full min-w-[480px] text-sm">
@@ -204,8 +225,8 @@ function TabelaDiaria({ dados }: { dados: ReturnType<typeof fluxoDiario> }) {
               <td className="px-4 py-2 text-gray-600">{d.dia}</td>
               <td className="px-4 py-2 text-right text-emerald-600">{d.recebimentos ? formatBRL(d.recebimentos) : '—'}</td>
               <td className="px-4 py-2 text-right text-red-600">{d.pagamentos ? formatBRL(Math.abs(d.pagamentos)) : '—'}</td>
-              {temPrevisto && <td className="px-4 py-2 text-right text-emerald-500/70">{d.recebPrevisto ? formatBRL(d.recebPrevisto) : '—'}</td>}
-              {temPrevisto && <td className="px-4 py-2 text-right text-red-500/70">{d.pagPrevisto ? formatBRL(Math.abs(d.pagPrevisto)) : '—'}</td>}
+              {temPrevisto && <td className={`px-4 py-2 text-right ${d.recebAtrasado ? 'text-amber-600' : 'text-emerald-500/70'}`}>{d.recebPrevisto + d.recebAtrasado ? formatBRL(d.recebPrevisto + d.recebAtrasado) : '—'}</td>}
+              {temPrevisto && <td className={`px-4 py-2 text-right ${d.pagAtrasado ? 'text-amber-600' : 'text-red-500/70'}`}>{d.pagPrevisto + d.pagAtrasado ? formatBRL(Math.abs(d.pagPrevisto + d.pagAtrasado)) : '—'}</td>}
               <td className={`px-4 py-2 text-right font-medium ${d.saldoProjetado >= 0 ? 'text-gray-900' : 'text-red-600'}`}>{formatBRL(d.saldoProjetado)}</td>
             </tr>
           ))}
@@ -234,9 +255,9 @@ function TabelaMensal({ dados }: { dados: ReturnType<typeof fluxoMensal> }) {
             <tr key={m.mes} className="hover:bg-gray-50/50">
               <td className="px-4 py-2 text-gray-600 capitalize">{m.mes}</td>
               <td className="px-4 py-2 text-right text-emerald-600">{m.recRealizado ? formatBRL(m.recRealizado) : '—'}</td>
-              <td className="px-4 py-2 text-right text-emerald-500/70">{m.recPrevisto ? formatBRL(m.recPrevisto) : '—'}</td>
+              <td className={`px-4 py-2 text-right ${m.recAtrasado ? 'text-amber-600' : 'text-emerald-500/70'}`}>{m.recPrevisto + m.recAtrasado ? formatBRL(m.recPrevisto + m.recAtrasado) : '—'}</td>
               <td className="px-4 py-2 text-right text-red-600">{m.pagRealizado ? formatBRL(Math.abs(m.pagRealizado)) : '—'}</td>
-              <td className="px-4 py-2 text-right text-red-500/70">{m.pagPrevisto ? formatBRL(Math.abs(m.pagPrevisto)) : '—'}</td>
+              <td className={`px-4 py-2 text-right ${m.pagAtrasado ? 'text-amber-600' : 'text-red-500/70'}`}>{m.pagPrevisto + m.pagAtrasado ? formatBRL(Math.abs(m.pagPrevisto + m.pagAtrasado)) : '—'}</td>
               <td className={`px-4 py-2 text-right font-medium ${m.saldoRealizado >= 0 ? 'text-gray-900' : 'text-red-600'}`}>{formatBRL(m.saldoRealizado)}</td>
             </tr>
           ))}

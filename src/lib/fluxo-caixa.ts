@@ -44,8 +44,10 @@ export interface DiaPonto {
   dia: string            // 'DD'
   recebimentos: number   // realizado, acima do eixo (verde)
   pagamentos: number     // realizado, abaixo do eixo (vermelho)
-  recebPrevisto: number  // a receber em aberto (verde claro)
-  pagPrevisto: number    // a pagar em aberto (vermelho claro)
+  recebPrevisto: number  // a receber em aberto, ainda no prazo (verde claro)
+  pagPrevisto: number    // a pagar em aberto, ainda no prazo (vermelho claro)
+  recebAtrasado: number  // a receber vencido (âmbar) — projetado que não entrou
+  pagAtrasado: number    // a pagar vencido (âmbar) — projetado que não saiu
   saldo: number          // linha sólida (saldo realizado acumulado)
   saldoProjetado: number // linha tracejada (realizado + previsto acumulado)
 }
@@ -57,8 +59,12 @@ function filtraContas(rows: FluxoRow[], contas: string[] | null): FluxoRow[] {
   return rows.filter(r => r.conta != null && set.has(r.conta))
 }
 
-/** Diário: dia a dia de um mês (ym = 'YYYY-MM'), filtrado por contas (ou todas). */
-export function fluxoDiario(rows: FluxoRow[], ym: string, contas: string[] | null): DiaPonto[] {
+/**
+ * Diário: dia a dia de um mês (ym = 'YYYY-MM'), filtrado por contas (ou todas).
+ * `hojeYmd` ('YYYY-MM-DD') marca o corte do "hoje": previsto com data anterior a
+ * ele é tratado como atrasado (projetado que não aconteceu). Ausente = nada atrasado.
+ */
+export function fluxoDiario(rows: FluxoRow[], ym: string, contas: string[] | null, hojeYmd?: string | null): DiaPonto[] {
   const sel = filtraContas(rows, contas)
   const [y, m] = ym.split('-').map(Number)
   const diasNoMes = new Date(y, m, 0).getDate()
@@ -74,6 +80,8 @@ export function fluxoDiario(rows: FluxoRow[], ym: string, contas: string[] | nul
   const pag = new Array(diasNoMes + 1).fill(0)
   const recebP = new Array(diasNoMes + 1).fill(0)
   const pagP = new Array(diasNoMes + 1).fill(0)
+  const recebA = new Array(diasNoMes + 1).fill(0) // a receber vencido
+  const pagA = new Array(diasNoMes + 1).fill(0)   // a pagar vencido
   const mov = new Array(diasNoMes + 1).fill(0)  // movimento realizado do dia (com transferências)
   const movP = new Array(diasNoMes + 1).fill(0) // movimento previsto do dia
   for (const r of sel) {
@@ -91,8 +99,9 @@ export function fluxoDiario(rows: FluxoRow[], ym: string, contas: string[] | nul
       if (d < 1 || d > diasNoMes) continue
       movP[d] += signed(r)
       if (isTransferencia(r.origem, r.categoria)) continue
-      if (r.tipo === 'receita') recebP[d] += abs(r.valor)
-      else if (r.tipo === 'despesa') pagP[d] += abs(r.valor)
+      const atrasado = hojeYmd != null && dp < hojeYmd
+      if (r.tipo === 'receita') { if (atrasado) recebA[d] += abs(r.valor); else recebP[d] += abs(r.valor) }
+      else if (r.tipo === 'despesa') { if (atrasado) pagA[d] += abs(r.valor); else pagP[d] += abs(r.valor) }
     }
   }
 
@@ -106,6 +115,7 @@ export function fluxoDiario(rows: FluxoRow[], ym: string, contas: string[] | nul
       dia: String(d).padStart(2, '0'),
       recebimentos: receb[d], pagamentos: -pag[d],
       recebPrevisto: recebP[d], pagPrevisto: -pagP[d],
+      recebAtrasado: recebA[d], pagAtrasado: -pagA[d],
       saldo, saldoProjetado: saldoProj,
     })
   }
@@ -118,15 +128,23 @@ export interface MesPonto {
   pagRealizado: number    // negativo (p/ barra abaixo do eixo)
   recPrevisto: number
   pagPrevisto: number     // negativo
+  recAtrasado: number     // a receber de mês já vencido (âmbar)
+  pagAtrasado: number     // a pagar de mês já vencido (âmbar, negativo)
   saldoRealizado: number
   saldoPrevisto: number
 }
 
-/** Mensal previsto × realizado de um ano, filtrado por contas (ou todas). */
-export function fluxoMensal(rows: FluxoRow[], ano: number, contas: string[] | null): MesPonto[] {
+/**
+ * Mensal previsto × realizado de um ano, filtrado por contas (ou todas).
+ * `hoje` ({ ano, mes } com mes 0-based) marca o corte: previsto de mês já encerrado
+ * vira atrasado (projetado que não aconteceu). Ausente = nada atrasado.
+ */
+export function fluxoMensal(rows: FluxoRow[], ano: number, contas: string[] | null, hoje?: { ano: number; mes: number } | null): MesPonto[] {
   const sel = filtraContas(rows, contas)
   const recR = new Array(12).fill(0), pagR = new Array(12).fill(0)
   const recP = new Array(12).fill(0), pagP = new Array(12).fill(0)
+  const recA = new Array(12).fill(0), pagA = new Array(12).fill(0)
+  const mesVencido = (mi: number) => hoje != null && (ano < hoje.ano || (ano === hoje.ano && mi < hoje.mes))
 
   for (const r of sel) {
     if (isRealizado(r.situacao) && r.data_mov && Number(r.data_mov.slice(0, 4)) === ano) {
@@ -139,8 +157,9 @@ export function fluxoMensal(rows: FluxoRow[], ano: number, contas: string[] | nu
       const dp = dataPrev(r)
       if (dp && Number(dp.slice(0, 4)) === ano && !isTransferencia(r.origem, r.categoria)) {
         const mi = Number(dp.slice(5, 7)) - 1
-        if (r.tipo === 'receita') recP[mi] += abs(r.valor)
-        else if (r.tipo === 'despesa') pagP[mi] += abs(r.valor)
+        const atrasado = mesVencido(mi)
+        if (r.tipo === 'receita') { if (atrasado) recA[mi] += abs(r.valor); else recP[mi] += abs(r.valor) }
+        else if (r.tipo === 'despesa') { if (atrasado) pagA[mi] += abs(r.valor); else pagP[mi] += abs(r.valor) }
       }
     }
   }
@@ -162,6 +181,7 @@ export function fluxoMensal(rows: FluxoRow[], ano: number, contas: string[] | nu
       mes: MESES[mi],
       recRealizado: recR[mi], pagRealizado: -pagR[mi],
       recPrevisto: recP[mi], pagPrevisto: -pagP[mi],
+      recAtrasado: recA[mi], pagAtrasado: -pagA[mi],
       saldoRealizado: sR, saldoPrevisto: sP,
     })
   }
