@@ -115,6 +115,19 @@ export async function readFolderFile(fileRef: string): Promise<{ buffer: Buffer;
     : drive.readFolderFile(fileRef)
 }
 
+/**
+ * Baixa uma peça honrando o header Range (byte-serving p/ vídeo/áudio). Só o S3
+ * faz range nativo; no Drive cai no download inteiro (status 200) — os vídeos
+ * migrados já estão no S3, então o caminho com range é o que importa.
+ */
+export async function readFolderFileRange(
+  fileRef: string, range: string | null,
+): Promise<{ buffer: Buffer; mime: string; name: string; status: 200 | 206; contentRange?: string; totalSize: number }> {
+  if (backendForRef(fileRef) === 's3') return s3.readFolderFileRangeS3(fileRef, range)
+  const f = await drive.readFolderFile(fileRef)
+  return { ...f, status: 200, totalSize: f.buffer.length }
+}
+
 export async function completarSubpastas(taskRef: string): Promise<{ criadas: string[] }> {
   return backendForRef(taskRef) === 's3' ? s3.completarSubpastasS3(taskRef) : drive.completarSubpastas(taskRef)
 }

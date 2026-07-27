@@ -164,6 +164,28 @@ export async function readFolderFileS3(key: string): Promise<{ buffer: Buffer; m
   return { buffer: Buffer.from(bytes), mime: r.ContentType && r.ContentType !== 'application/octet-stream' ? r.ContentType : mimeFromKey(name), name }
 }
 
+/**
+ * Byte-serving pra <video>/<audio> (Safari EXIGE 206 em resposta a Range; sem
+ * isso o vídeo não toca). Repassa o header Range direto pro S3, que resolve
+ * nativamente. `range` ausente = objeto inteiro (status 200).
+ */
+export async function readFolderFileRangeS3(
+  key: string, range: string | null,
+): Promise<{ buffer: Buffer; mime: string; name: string; status: 200 | 206; contentRange?: string; totalSize: number }> {
+  const r = await getS3().send(new GetObjectCommand({ Bucket: bucket(), Key: key, Range: range ?? undefined }))
+  const bytes = await r.Body!.transformToByteArray()
+  const name = key.split('/').pop() || 'arquivo'
+  const mime = r.ContentType && r.ContentType !== 'application/octet-stream' ? r.ContentType : mimeFromKey(name)
+  // ContentRange = "bytes 0-1023/123456"; sem range, ContentLength é o total.
+  const totalSize = r.ContentRange ? Number(r.ContentRange.split('/').pop()) : Number(r.ContentLength ?? bytes.length)
+  return {
+    buffer: Buffer.from(bytes), mime, name,
+    status: r.ContentRange ? 206 : 200,
+    contentRange: r.ContentRange,
+    totalSize: Number.isFinite(totalSize) ? totalSize : bytes.length,
+  }
+}
+
 // Leitura de peças pra revisão por visão. Espelha os tetos da versão Drive
 // (readReviewAssets em google-drive.ts) pra manter custo/latência iguais.
 const REVIEW_MAX_ASSETS      = 12

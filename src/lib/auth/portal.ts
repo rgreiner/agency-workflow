@@ -92,7 +92,10 @@ export async function iniciarSessaoPortal(user: PortalUser): Promise<void> {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    path: '/portal',
+    // path '/' (não '/portal'): as peças são servidas por /api/portal/*, que NÃO
+    // é subpath de /portal — com path '/portal' o cookie não chegava nessas rotas
+    // e toda peça voltava 401 "Sessão expirada" (imagem/vídeo/PDF/baixar).
+    path: '/',
     maxAge: PORTAL_MAX_AGE_SEG,
   })
 }
@@ -100,6 +103,8 @@ export async function iniciarSessaoPortal(user: PortalUser): Promise<void> {
 /** Encerra a sessão do portal. */
 export async function encerrarSessaoPortal(): Promise<void> {
   const jar = await cookies()
+  jar.delete({ name: COOKIE_PORTAL, path: '/' })
+  // Limpa também o cookie antigo (path '/portal') de sessões abertas antes do fix.
   jar.delete({ name: COOKIE_PORTAL, path: '/portal' })
 }
 

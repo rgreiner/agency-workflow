@@ -10,7 +10,7 @@
  */
 import { sessaoPortal } from '@/lib/auth/portal'
 import { createPortalClient } from '@/lib/supabase/portal'
-import { listPreviewFiles, readFolderFile } from '@/lib/task-folders'
+import { listPreviewFiles, readFolderFileRange } from '@/lib/task-folders'
 
 export const runtime = 'nodejs'
 
@@ -35,16 +35,20 @@ export async function GET(
     const peca = pecas.find((p) => p.ref === ref)
     if (!peca) return new Response('Não encontrado', { status: 404 })
 
-    const file = await readFolderFile(peca.ref)
+    // Range → 206 (byte-serving p/ vídeo; Safari não toca sem isso).
+    const range = request.headers.get('range')
+    const file = await readFolderFileRange(peca.ref, range)
     const baixar = new URL(request.url).searchParams.get('download') === '1'
     const nome = encodeURIComponent(file.name)
-    return new Response(new Uint8Array(file.buffer), {
-      headers: {
-        'Content-Type': file.mime,
-        'Content-Disposition': `${baixar ? 'attachment' : 'inline'}; filename*=UTF-8''${nome}`,
-        'Cache-Control': 'private, max-age=300',
-      },
-    })
+    const headers: Record<string, string> = {
+      'Content-Type': file.mime,
+      'Content-Disposition': `${baixar ? 'attachment' : 'inline'}; filename*=UTF-8''${nome}`,
+      'Cache-Control': 'private, max-age=300',
+      'Accept-Ranges': 'bytes',
+      'Content-Length': String(file.buffer.length),
+    }
+    if (file.status === 206 && file.contentRange) headers['Content-Range'] = file.contentRange
+    return new Response(new Uint8Array(file.buffer), { status: file.status, headers })
   } catch {
     return new Response('Falha ao carregar a peça', { status: 502 })
   }
