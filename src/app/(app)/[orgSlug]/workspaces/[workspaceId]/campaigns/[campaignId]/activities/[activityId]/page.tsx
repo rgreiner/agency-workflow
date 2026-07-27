@@ -312,10 +312,13 @@ export default async function ActivityPage({
 
   // "Drive" (a pasta) NÃO entra aqui — é o caminho da máquina (G:\ / Mac), logo
   // acima. Estes são os links web do Google Drive.
+  // `sub` = nome da subpasta no bucket (S3). Pasta em S3 não tem link web como o
+  // Drive tinha, então nessas tarefas o link fica vazio e derivamos o caminho da
+  // subpasta a partir da pasta da tarefa (ver isS3Folder/subBaseWin abaixo).
   const linkFields = [
-    { field: 'redacao_url',      icon: <FileText   className="w-4 h-4" />, label: 'Redação' },
-    { field: 'preview_url',      icon: <CheckSquare className="w-4 h-4"/>, label: 'Preview' },
-    { field: 'finalizacao_url',  icon: <Layers     className="w-4 h-4" />, label: 'Final' },
+    { field: 'redacao_url',      icon: <FileText   className="w-4 h-4" />, label: 'Redação', sub: 'Redação' },
+    { field: 'preview_url',      icon: <CheckSquare className="w-4 h-4"/>, label: 'Preview', sub: 'Preview' },
+    { field: 'finalizacao_url',  icon: <Layers     className="w-4 h-4" />, label: 'Final',   sub: 'Final'   },
   ] as const
 
   // Campo "Drive": caminho na máquina (drive_path) com fallback p/ drive_folder_url
@@ -325,6 +328,14 @@ export default async function ActivityPage({
   const driveWebUrl   = /^https?:\/\//i.test(driveUrlRaw) ? driveUrlRaw : null
   const driveLooksPath = /^[A-Za-z]:[\\/]/.test(driveUrlRaw) || driveUrlRaw.includes('\\')
   const driveWinPath  = (activity.drive_path ?? '').trim() || (driveLooksPath ? driveUrlRaw : '')
+
+  // Backend da pasta pelo formato da ref (igual backendForRef): ID do Drive = 20+
+  // chars sem "/" nem espaço; qualquer outra coisa = caminho de bucket (S3). Numa
+  // tarefa S3 as subpastas não têm link web — derivamos o caminho de máquina a
+  // partir da pasta da tarefa (drive_path, formato Windows) + nome da subpasta.
+  const folderRef  = (activity.drive_folder_id ?? '').trim()
+  const isS3Folder = !!folderRef && !(/^[A-Za-z0-9_-]{20,}$/.test(folderRef) && !folderRef.includes('/') && !folderRef.includes(' '))
+  const subBaseWin = driveWinPath || (folderRef ? folderRef.replace(/\//g, '\\') : '')
 
   return (
     <div className="flex flex-col bg-white min-h-0 flex-1 lg:h-full lg:overflow-hidden">
@@ -536,7 +547,7 @@ export default async function ActivityPage({
                 </div>
 
                 {/* Link fields */}
-                {linkFields.map(({ field, icon, label }) => {
+                {linkFields.map(({ field, icon, label, sub }) => {
                   const url = activity[field as keyof typeof activity] as string | null
                   return (
                     <div key={field} className="flex items-center px-4 py-3 hover:bg-gray-50/60 transition group">
@@ -560,6 +571,10 @@ export default async function ActivityPage({
                               inlineRow
                             />
                           </>
+                        ) : isS3Folder && subBaseWin ? (
+                          // Tarefa no S3: subpasta não tem link web → mostra o caminho
+                          // de máquina derivado (abrível no mount, convertido por SO).
+                          <MachinePath winPath={`${subBaseWin}\\${sub}`} compact />
                         ) : (
                           <FieldEditor
                             activityId={activityId} path={path}
