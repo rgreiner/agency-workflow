@@ -1,11 +1,12 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { sessaoPortal } from '@/lib/auth/portal'
+import { sessaoPortal, portalTemSenha } from '@/lib/auth/portal'
 import { createPortalClient } from '@/lib/supabase/portal'
 import { sairPortal } from '@/app/actions/portal'
 import { AutoRefresh } from '@/components/ui/AutoRefresh'
 import { LogOut, Clock, Building2, BadgeCheck, Plus, ArrowRight } from 'lucide-react'
 import { PortalThemeToggle } from '../PortalThemeToggle'
+import { SenhaPortalButton } from './SenhaPortalButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +29,9 @@ interface PortalDashboard {
 
 /** Painel do cliente: 3 colunas — o que está com ele × o que está com a agência. */
 export default async function PortalPainelPage() {
-  if (!(await sessaoPortal())) redirect('/portal')
+  const claims = await sessaoPortal()
+  if (!claims) redirect('/portal')
+  const temSenha = await portalTemSenha(claims.portalSub)
 
   const supabase = await createPortalClient()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -111,6 +114,7 @@ export default async function PortalPainelPage() {
           >
             <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Nova solicitação</span>
           </Link>
+          <SenhaPortalButton temSenha={temSenha} />
           <PortalThemeToggle />
           <form action={sairPortal}>
             <button

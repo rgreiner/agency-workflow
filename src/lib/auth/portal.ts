@@ -9,6 +9,7 @@ import 'server-only'
 import { createHash, randomBytes } from 'node:crypto'
 import { cookies } from 'next/headers'
 import { sql } from '@/lib/db'
+import { hashSenha, verificarSenha } from './password'
 import {
   COOKIE_PORTAL, PORTAL_MAX_AGE_SEG, mintPortalToken, verifyPortalToken,
 } from './jwt'
@@ -119,4 +120,43 @@ export async function tokenSessaoPortal(): Promise<string | null> {
   const jar = await cookies()
   const raw = jar.get(COOKIE_PORTAL)?.value
   return (await verifyPortalToken(raw)) ? raw! : null
+}
+
+// ── Senha (acesso recorrente, além do magic link) ──────────────────────────────
+
+/** Define/troca a senha do contato (scrypt). O cliente cria a própria no painel. */
+export async function definirSenhaPortal(portalUserId: string, senha: string): Promise<void> {
+  const hash = await hashSenha(senha)
+  await sql`update public.portal_users set senha_hash = ${hash} where id = ${portalUserId} and ativo`
+}
+
+/** Este contato já tem senha definida? (UI mostra "criar" vs "alterar".) */
+export async function portalTemSenha(portalUserId: string): Promise<boolean> {
+  const rows = await sql<{ tem: boolean }[]>`
+    select senha_hash is not null as tem from public.portal_users where id = ${portalUserId} limit 1
+  `
+  return rows[0]?.tem ?? false
+}
+
+/**
+ * Login por e-mail + senha. Devolve o contato ATIVO se a senha confere, senão
+ * null. Não distingue "e-mail não existe" de "senha errada" — quem chama dá a
+ * mensagem genérica. Se o mesmo e-mail atende 2 clientes, valida a senha contra
+ * cada um e entra no primeiro que casar (cada acesso tem sua própria senha).
+ */
+export async function verificarSenhaPortal(email: string, senha: string): Promise<PortalUser | null> {
+  const rows = await sql<(PortalUser & { senha_hash: string | null })[]>`
+    select id, org_id, workspace_id, nome, email, ativo, senha_hash
+    from public.portal_users
+    where lower(email) = lower(${email.trim()}) and ativo and senha_hash is not null
+    order by created_at
+  `
+  for (const r of rows) {
+    if (r.senha_hash && await verificarSenha(senha, r.senha_hash)) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { senha_hash, ...user } = r
+      return user
+    }
+  }
+  return null
 }

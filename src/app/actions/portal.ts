@@ -12,7 +12,8 @@ import { createPortalClient } from '@/lib/supabase/portal'
 import { getUsuario } from '@/lib/auth/server'
 import {
   buscarPortalUsersPorEmail, criarTokenPortal, consumirTokenPortal,
-  iniciarSessaoPortal, encerrarSessaoPortal,
+  iniciarSessaoPortal, encerrarSessaoPortal, sessaoPortal,
+  verificarSenhaPortal, definirSenhaPortal,
 } from '@/lib/auth/portal'
 import { sendMail } from '@/lib/email/send'
 import { emailLayout } from '@/lib/email/layout'
@@ -68,6 +69,27 @@ export async function entrarPortal(token: string): Promise<void> {
   if (!contato) redirect('/portal?erro=link')
   await iniciarSessaoPortal(contato)
   redirect('/portal/painel')
+}
+
+/** Login por e-mail + senha (acesso recorrente). Mensagem genérica em erro. */
+export async function loginPortalSenha(formData: FormData): Promise<void> {
+  const email = String(formData.get('email') || '').trim()
+  const senha = String(formData.get('senha') || '')
+  if (!email || !senha) redirect('/portal?erro=campos')
+
+  const contato = await verificarSenhaPortal(email, senha)
+  if (!contato) redirect('/portal?erro=senha')
+  await iniciarSessaoPortal(contato)
+  redirect('/portal/painel')
+}
+
+/** Cliente logado cria/troca a própria senha de acesso. */
+export async function criarSenhaPortal(senha: string): Promise<{ error?: string }> {
+  const claims = await sessaoPortal()
+  if (!claims) return { error: 'Sessão expirada. Entre de novo.' }
+  if (senha.length < 6) return { error: 'A senha precisa de pelo menos 6 caracteres.' }
+  await definirSenhaPortal(claims.portalSub, senha)
+  return {}
 }
 
 /** Sai do portal. */

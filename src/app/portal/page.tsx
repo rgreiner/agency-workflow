@@ -1,9 +1,9 @@
 import { redirect } from 'next/navigation'
 import { sessaoPortal } from '@/lib/auth/portal'
-import { solicitarAcessoPortal } from '@/app/actions/portal'
 import { PortalThemeToggle } from './PortalThemeToggle'
+import { PortalLoginForm } from './PortalLoginForm'
 
-/** Entrada do portal do cliente: pede o e-mail e manda o magic link. */
+/** Entrada do portal do cliente: senha (acesso recorrente) ou magic link. */
 export default async function PortalLoginPage({
   searchParams,
 }: {
@@ -33,42 +33,7 @@ export default async function PortalLoginPage({
             </p>
           </div>
         ) : (
-          <>
-            <p className="mb-6 text-center text-sm text-gray-500 leading-relaxed">
-              Sem senha: informe o <span className="font-medium text-gray-700">e-mail cadastrado
-              com a agência</span> e a gente manda um link de acesso.
-            </p>
-
-            <form action={solicitarAcessoPortal} className="space-y-4">
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                  E-mail
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                />
-              </div>
-
-              {erro === 'campos' && <p className="text-sm text-red-600">Informe o e-mail.</p>}
-              {erro === 'link' && (
-                <p className="text-sm text-red-600">
-                  Este link expirou ou já foi usado — peça um novo abaixo.
-                </p>
-              )}
-
-              <button
-                type="submit"
-                className="w-full px-4 py-3 rounded-xl text-[#fff] font-medium bg-orange-600 hover:bg-orange-700 transition"
-              >
-                Receber link de acesso
-              </button>
-            </form>
-          </>
+          <PortalLoginForm erro={erro} />
         )}
       </div>
     </div>
