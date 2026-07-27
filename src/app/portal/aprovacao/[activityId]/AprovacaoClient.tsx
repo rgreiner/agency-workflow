@@ -3,12 +3,14 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Download, FileText, Film, Image as ImageIcon, MessageSquarePlus,
-  CheckCircle2, Loader2, PartyPopper, X,
+  Download, FileText, FileType, Film, Image as ImageIcon, MessageSquarePlus,
+  CheckCircle2, Loader2, PartyPopper, X, ChevronDown, ChevronRight,
 } from 'lucide-react'
 import { registrarDecisao, type ComentarioPeca } from '@/app/actions/portal'
 
 export interface Peca { ref: string; name: string; mime: string; size: number }
+
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
 interface Props {
   activityId: string
@@ -126,6 +128,7 @@ export function AprovacaoClient({ activityId, titulo, campanha, pecas, decidido 
           const isImg = p.mime.startsWith('image/')
           const isVid = p.mime.startsWith('video/')
           const isPdf = p.mime === 'application/pdf'
+          const isDoc = p.mime === DOCX_MIME || p.name.toLowerCase().endsWith('.docx')
           const aberto = abertos.has(p.ref)
           return (
             <div key={p.ref} className="rounded-2xl border border-gray-200 overflow-hidden bg-white">
@@ -149,11 +152,13 @@ export function AprovacaoClient({ activityId, titulo, campanha, pecas, decidido 
                   </p>
                 </object>
               )}
+              {isDoc && <DocxPreview activityId={activityId} pecaRef={p.ref} />}
 
               {/* Barra da peça */}
               <div className="flex items-center gap-2 px-3.5 py-2.5 border-t border-gray-100">
                 {isImg ? <ImageIcon className="w-4 h-4 shrink-0 text-gray-400" />
                   : isVid ? <Film className="w-4 h-4 shrink-0 text-gray-400" />
+                  : isDoc ? <FileType className="w-4 h-4 shrink-0 text-blue-400" />
                   : <FileText className="w-4 h-4 shrink-0 text-gray-400" />}
                 <span className="flex-1 min-w-0 truncate text-sm text-gray-700">{p.name}</span>
 
@@ -260,5 +265,70 @@ export function AprovacaoClient({ activityId, titulo, campanha, pecas, decidido 
         </div>
       )}
     </>
+  )
+}
+
+/**
+ * Preview do conteúdo de um .docx (roteiros/textos). Carrega o HTML sob demanda
+ * (mammoth no servidor) só quando o cliente abre — 10 roteiros não convertem
+ * todos no load. O estilo do texto vem de arbitrary variants (sem plugin prose).
+ */
+function DocxPreview({ activityId, pecaRef }: { activityId: string; pecaRef: string }) {
+  const [aberto, setAberto] = useState(false)
+  const [html, setHtml] = useState<string | null>(null)
+  const [carregando, setCarregando] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+
+  async function abrir() {
+    if (aberto) { setAberto(false); return }
+    setAberto(true)
+    if (html !== null || carregando) return
+    setCarregando(true)
+    setErro(null)
+    try {
+      const res = await fetch(
+        `/api/portal/peca-texto/${activityId}?ref=${encodeURIComponent(pecaRef)}`,
+      )
+      const json = await res.json()
+      if (!res.ok) { setErro(json.error || 'Não deu pra abrir.'); return }
+      setHtml(json.html || '<p>(documento vazio)</p>')
+    } catch {
+      setErro('Falha ao carregar o documento.')
+    } finally {
+      setCarregando(false)
+    }
+  }
+
+  return (
+    <div className="bg-gray-50">
+      <button
+        onClick={abrir}
+        className="w-full flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+      >
+        {aberto ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        Ver conteúdo do documento
+      </button>
+      {aberto && (
+        <div className="px-4 pb-4">
+          {carregando && (
+            <p className="flex items-center gap-2 text-sm text-gray-400 py-4">
+              <Loader2 className="w-4 h-4 animate-spin" /> Abrindo…
+            </p>
+          )}
+          {erro && <p className="text-sm text-red-600 py-2">{erro}</p>}
+          {html !== null && (
+            <div
+              className="max-h-[60vh] overflow-y-auto rounded-xl bg-white border border-gray-100 p-5 text-sm text-gray-700 leading-relaxed
+                [&_p]:mb-2.5 [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:mt-4 [&_h1]:mb-2
+                [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1.5 [&_h3]:font-semibold [&_h3]:mt-2
+                [&_strong]:font-semibold [&_em]:italic
+                [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-2 [&_li]:mb-1
+                [&_table]:w-full [&_table]:my-2 [&_td]:border [&_td]:border-gray-200 [&_td]:px-2 [&_td]:py-1 [&_td]:align-top"
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+          )}
+        </div>
+      )}
+    </div>
   )
 }
