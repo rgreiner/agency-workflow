@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { DriveProvisioningNotice } from './DriveProvisioningNotice'
 import { StatusChanger } from './StatusChanger'
 import { ReviewBanner } from './ReviewBanner'
+import { PortalFeedback, type PortalFeedbackItem } from './PortalFeedback'
 import { AutoRefresh } from '@/components/ui/AutoRefresh'
 import { CommentBox } from './CommentBox'
 import { CommentContent } from './CommentContent'
@@ -125,7 +126,27 @@ export default async function ActivityPage({
     sb.from('documents').select('id, title').eq('briefing_workspace_id', workspaceId).eq('archived', false).maybeSingle(),
     sb.from('documents').select('id, title').eq('briefing_campaign_id', campaignId).eq('archived', false).maybeSingle(),
   ])
+
+  // Feedback do cliente pelo portal (aprovação / ajustes / resposta de pendência).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: portalFeedbackRaw } = await (sb as any)
+    .from('portal_entries')
+    .select('id, kind, mensagem, pecas, anexos, created_at, portal_user:portal_users!portal_user_id(nome)')
+    .eq('activity_id', activityId)
+    .in('kind', ['aprovacao', 'ajuste', 'resposta'])
+    .order('created_at', { ascending: false })
   const muted = !!muteRow
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const portalFeedback: PortalFeedbackItem[] = ((portalFeedbackRaw ?? []) as any[]).map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    mensagem: r.mensagem ?? '',
+    pecas: Array.isArray(r.pecas) ? r.pecas : [],
+    anexos: Array.isArray(r.anexos) ? r.anexos : [],
+    createdAt: r.created_at,
+    clienteNome: r.portal_user?.nome ?? 'Cliente',
+  }))
 
   // Quem move a tarefa precisa cobrir o status ATUAL no cargo (migration 133).
   // owner/admin passam por cima — o facilitador não tem cargo e ficaria travado.
@@ -615,6 +636,9 @@ export default async function ActivityPage({
 
         {/* ── Activity feed — full-width below content on mobile ── */}
         <div className="w-full lg:w-[360px] border-t lg:border-t-0 lg:border-l border-gray-200 flex flex-col shrink-0 min-h-0 bg-gray-50/40">
+
+          {/* Feedback do cliente (portal) — aprovação / ajustes / resposta */}
+          <PortalFeedback orgSlug={orgSlug} items={portalFeedback} />
 
           {/* Briefings vinculados — atalho pro contexto do cliente/campanha */}
           {(briefingCliente || briefingCampanha) && (
