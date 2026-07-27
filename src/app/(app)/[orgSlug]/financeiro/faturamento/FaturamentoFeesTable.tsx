@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
 import { docNumero } from '@/lib/doc-series'
 import { setProducaoSituacao } from '@/app/actions/producao'
-import { setProducaoAnexos, type Anexo } from '@/app/actions/financeiro'
+import { setProducaoAnexos, enviarFaturamentoEmail, type Anexo } from '@/app/actions/financeiro'
 import { DocsBox, faltando } from './DocsBox'
 import { FaturarButton } from './FaturarButton'
 import { ClassificacaoFields, type Classificacao } from './ClassificacaoFields'
@@ -122,6 +122,8 @@ function FeeRow({ orgSlug, fee, cat }: { orgSlug: string; fee: FeeView; cat: Cat
               action={() => setProducaoSituacao(orgSlug, fee.id, 'faturado', 'financeiro/faturamento', {
                 conta_id: cls.conta, categoria: cls.categoria, centro_custo: cls.centro, forma_pagamento: cls.forma,
               })}
+              destinatarioPadrao={fee.contatos.find(c => c.papel === 'Cliente')?.emailNf}
+              enviar={(dest) => enviarFaturamentoEmail(orgSlug, 'producao', fee.id, dest)}
             />
           </div>
         </td>

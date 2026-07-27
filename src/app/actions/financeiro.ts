@@ -553,3 +553,93 @@ export async function descartarExtrato(orgSlug: string, importRef: string, motiv
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
   revalidatePath(`/${orgSlug}/financeiro/inadimplentes`)
 }
+
+// ── Envio do faturamento por e-mail ao cliente (não automático) ─────────────────
+import { sendMail, remetenteDominio } from '@/lib/email/send'
+import { htmlFaturamento, lerAnexosFaturamento } from '@/lib/email/faturamento'
+import { docNumero } from '@/lib/doc-series'
+
+const RECEBER_TIPOS_EMAIL = ['receber_bv', 'receber_honorarios', 'receber_cliente']
+
+/**
+ * Dispara o e-mail de faturamento ao cliente com os documentos anexados
+ * (NF/Boleto/comprovantes). Só quando o financeiro escolhe "Faturar e enviar" —
+ * nunca automático. From fixo da agência (financeiro@<domínio verificado>),
+ * Reply-To de quem enviou, CC pra contabilidade. Registra o envio.
+ */
+export async function enviarFaturamentoEmail(
+  orgSlug: string, tipo: 'midia' | 'producao', docId: string, destinatario: string,
+): Promise<{ error?: string }> {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const dest = destinatario.trim()
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dest)) {
+    return { error: 'E-mail do cliente inválido — confira o destinatário.' }
+  }
+
+  const { data: org } = await supabase.from('organizations').select('id, name').eq('slug', orgSlug).single()
+  if (!org) return { error: 'Organização não encontrada' }
+
+  // Documento + cliente.
+  const tabela = tipo === 'midia' ? 'midias' : 'producao'
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: doc } = await (supabase as any)
+    .from(tabela)
+    .select('id, serie, numero, titulo, valor, detalhe, anexos, workspaces(name)')
+    .eq('id', docId).single()
+  if (!doc) return { error: 'Documento não encontrado' }
+
+  const numero = docNumero(doc.serie, doc.numero)
+  const valorTotal = Number(doc.valor ?? 0)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const todas = (Array.isArray(doc.detalhe?.parcelas) ? doc.detalhe.parcelas : []) as any[]
+  const doCliente = todas.filter(p => RECEBER_TIPOS_EMAIL.includes(p?.tipo))
+  const parcelas = (doCliente.length ? doCliente : []).map(p => ({
+    vencimento: (p?.vencimento as string) ?? null,
+    valor: Number(p?.valor ?? 0),
+  }))
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const anexosDoc = (Array.isArray(doc.anexos) ? doc.anexos : []) as any[]
+  const attachments = await lerAnexosFaturamento(anexosDoc)
+
+  // Remetente fixo da agência no domínio verificado; CC pra contabilidade.
+  const dominio = remetenteDominio()
+  const from = dominio ? `${org.name} Financeiro <financeiro@${dominio}>` : undefined
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: cfg } = await (supabase as any).from('org_settings').select('contabil_emails').eq('org_id', org.id).maybeSingle()
+  const cc = ((cfg?.contabil_emails ?? []) as string[]).filter(Boolean)
+
+  const html = htmlFaturamento({
+    orgName: org.name,
+    clienteNome: doc.workspaces?.name ?? 'Cliente',
+    docNumero: numero,
+    titulo: doc.titulo || 'Faturamento',
+    valorTotal,
+    parcelas,
+    anexosNomes: attachments.map(a => a.filename),
+  })
+
+  const { error } = await sendMail({
+    to: dest,
+    from,
+    replyTo: user.email || undefined,
+    cc: cc.length ? cc : undefined,
+    subject: `Faturamento ${numero} — ${org.name}`,
+    html,
+    attachments,
+  })
+  if (error) return { error: `Faturado, mas o e-mail falhou: ${error}` }
+
+  // Registra o envio (rastro).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any).rpc('registrar_faturamento_envio', {
+    p_user_id: user.id, p_org: org.id, p_tipo: tipo, p_doc_id: docId,
+    p_doc_numero: numero, p_destinatario: dest, p_cc: cc,
+  })
+
+  revalidatePath(`/${orgSlug}/financeiro/faturamento`)
+  return {}
+}

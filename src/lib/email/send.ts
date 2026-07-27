@@ -27,6 +27,11 @@ const MAX_ANEXOS_BYTES = 25 * 1024 * 1024
 export async function sendMail(opts: {
   to: string | string[]; subject: string; html: string
   attachments?: MailAttachment[]
+  /** Remetente por envio (default RESEND_FROM). Precisa ser de domínio verificado. */
+  from?: string
+  /** Responder-para (qualquer e-mail — não passa por SPF/DKIM). */
+  replyTo?: string | string[]
+  cc?: string | string[]
 }): Promise<{ error?: string; id?: string }> {
   const resend = getResend()
   if (!resend) return { error: 'Envio de e-mail não configurado (defina RESEND_API_KEY).' }
@@ -39,7 +44,9 @@ export async function sendMail(opts: {
 
   try {
     const { data, error } = await resend.emails.send({
-      from: FROM, to: opts.to, subject: opts.subject, html: opts.html,
+      from: opts.from || FROM, to: opts.to, subject: opts.subject, html: opts.html,
+      ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
+      ...(opts.cc ? { cc: opts.cc } : {}),
       ...(anexos.length ? { attachments: anexos.map(a => ({ filename: a.filename, content: a.content })) } : {}),
     })
     if (error) return { error: error.message }
@@ -47,4 +54,10 @@ export async function sendMail(opts: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Falha ao enviar e-mail' }
   }
+}
+
+/** Domínio verificado no Resend, extraído do RESEND_FROM (ex.: "oneaone.com.br"). */
+export function remetenteDominio(): string | null {
+  const m = (process.env.RESEND_FROM ?? '').match(/@([^>\s]+)/)
+  return m ? m[1] : null
 }

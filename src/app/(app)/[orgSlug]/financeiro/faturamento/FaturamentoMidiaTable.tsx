@@ -6,7 +6,7 @@ import { ChevronRight, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
 import { docNumero } from '@/lib/doc-series'
-import { lancarMidia, setMidiaAnexos, type Anexo, type FinanceCentro, type FinanceCategoriaGrupo } from '@/app/actions/financeiro'
+import { lancarMidia, setMidiaAnexos, enviarFaturamentoEmail, type Anexo, type FinanceCentro, type FinanceCategoriaGrupo } from '@/app/actions/financeiro'
 import { DocsBox, faltando } from './DocsBox'
 import { FaturarButton } from './FaturarButton'
 import { ClassificacaoFields, type ContaRef, type Classificacao } from './ClassificacaoFields'
@@ -118,6 +118,8 @@ function MidiaRow({ orgSlug, midia, cat }: { orgSlug: string; midia: MidiaView; 
               action={() => lancarMidia(orgSlug, midia.id, {
                 conta_id: cls.conta, categoria: cls.categoria, centro_custo: cls.centro, forma_pagamento: cls.forma,
               })}
+              destinatarioPadrao={midia.contatos.find(c => c.papel === 'Cliente')?.emailNf}
+              enviar={(dest) => enviarFaturamentoEmail(orgSlug, 'midia', midia.id, dest)}
             />
           </div>
         </td>
