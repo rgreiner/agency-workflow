@@ -11,7 +11,7 @@ import { ItemImageField } from '@/components/ui/ItemImageField'
 import type { ClienteOpt, MemberOpt } from '../../midias/simplificada/MidiaForm'
 import type { FornecedorOpt } from '@/lib/midia-selectors'
 
-export interface Opcao { fornecedor_id: string; n_orc: string; pgto: string; quant: string; valor_unit: string; selecionado: boolean }
+export interface Opcao { fornecedor_id: string; n_orc: string; pgto: string; quant: string; valor_unit: string; valor_total?: string; selecionado: boolean }
 export interface ItemOrc { nome: string; descricao: string; job: string; opcoes: Opcao[]; imagem?: string }
 export interface OrcamentoValues {
   workspace_id: string; campaign_id: string; faturar: string; emissao: string; validade_dias: string; bv_pct: string
@@ -26,9 +26,17 @@ const cellCls = 'w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm fo
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 const cardCls = 'bg-white rounded-2xl border border-gray-200 p-5'
 
-const newOpcao = (): Opcao => ({ fornecedor_id: '', n_orc: '', pgto: '', quant: '1', valor_unit: '', selecionado: false })
+const newOpcao = (): Opcao => ({ fornecedor_id: '', n_orc: '', pgto: '', quant: '1', valor_unit: '', valor_total: '', selecionado: false })
 const newItem = (): ItemOrc => ({ nome: '', descricao: '', job: '', opcoes: [newOpcao()] })
-const opcaoTotal = (o: Opcao) => (parseInt(o.quant || '1', 10) || 0) * parseMoney(o.valor_unit)
+const oQtd = (o: Opcao) => parseInt(o.quant || '1', 10) || 0
+// Total da opção: prioriza o total digitado (fornecedor que passa "500 un por 3000");
+// senão calcula quant × valor unitário.
+const opcaoTotal = (o: Opcao) => {
+  const t = parseMoney(o.valor_total ?? '')
+  return t > 0 ? t : oQtd(o) * parseMoney(o.valor_unit)
+}
+// Número → string BR ("3.118,44"): formato que os inputs usam e que parseMoney reconverte certo.
+const fmtBR = (v: number) => (isFinite(v) ? v : 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 function emptyValues(today: string, responsavelId: string): OrcamentoValues {
   return {
@@ -50,7 +58,10 @@ export function OrcamentoForm({
   const router = useRouter()
   const [form, setForm] = useState<OrcamentoValues>({
     ...emptyValues(today, defaultResponsavelId), ...initial,
-    itens: initial?.itens?.length ? initial.itens : [newItem()],
+    itens: (initial?.itens?.length ? initial.itens : [newItem()]).map(it => ({
+      ...it,
+      opcoes: it.opcoes.map(o => ({ ...o, valor_total: o.valor_total ?? (parseMoney(o.valor_unit) ? fmtBR(oQtd(o) * parseMoney(o.valor_unit)) : '') })),
+    })),
   })
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
@@ -61,6 +72,13 @@ export function OrcamentoForm({
   const delItem = (i: number) => setForm(f => ({ ...f, itens: f.itens.filter((_, idx) => idx !== i) }))
   const setOpcao = (ii: number, oi: number, k: keyof Opcao, v: string | boolean) =>
     setForm(f => ({ ...f, itens: f.itens.map((it, idx) => idx !== ii ? it : { ...it, opcoes: it.opcoes.map((o, jdx) => jdx === oi ? { ...o, [k]: v } : o) }) }))
+  const patchOpcao = (ii: number, oi: number, fn: (o: Opcao) => Opcao) =>
+    setForm(f => ({ ...f, itens: f.itens.map((it, idx) => idx !== ii ? it : { ...it, opcoes: it.opcoes.map((o, jdx) => jdx === oi ? fn(o) : o) }) }))
+  // Unit ↔ total: digitou unit → recalcula total; digitou total → recalcula unit;
+  // mudou a quantidade → mantém o unit e recalcula o total.
+  const setOpcaoUnit = (ii: number, oi: number, v: string) => patchOpcao(ii, oi, o => ({ ...o, valor_unit: v, valor_total: parseMoney(v) ? fmtBR(oQtd(o) * parseMoney(v)) : '' }))
+  const setOpcaoTotal = (ii: number, oi: number, v: string) => patchOpcao(ii, oi, o => ({ ...o, valor_total: v, valor_unit: oQtd(o) && parseMoney(v) ? fmtBR(parseMoney(v) / oQtd(o)) : o.valor_unit }))
+  const setOpcaoQuant = (ii: number, oi: number, v: string) => patchOpcao(ii, oi, o => { const q = parseInt(v || '1', 10) || 0; return { ...o, quant: v, valor_total: parseMoney(o.valor_unit) ? fmtBR(q * parseMoney(o.valor_unit)) : o.valor_total } })
   // Clicar alterna: escolhe a opção (e desmarca as outras) ou, se já era a escolhida, desmarca.
   const toggleOpcao = (ii: number, oi: number) =>
     setForm(f => ({ ...f, itens: f.itens.map((it, idx) => idx !== ii ? it : { ...it, opcoes: it.opcoes.map((o, jdx) => jdx === oi ? { ...o, selecionado: !o.selecionado } : { ...o, selecionado: false }) }) }))
@@ -173,9 +191,9 @@ export function OrcamentoForm({
                         <td className="px-1 py-1"><Combobox size="sm" value={o.fornecedor_id} onChange={v => setOpcao(ii, oi, 'fornecedor_id', v)} options={fornecedorOptions} placeholder="Fornecedor" /></td>
                         <td className="px-1 py-1"><input value={o.n_orc} onChange={e => setOpcao(ii, oi, 'n_orc', e.target.value)} className={cellCls} /></td>
                         <td className="px-1 py-1"><input value={o.pgto} onChange={e => setOpcao(ii, oi, 'pgto', e.target.value)} className={cellCls} /></td>
-                        <td className="px-1 py-1"><input value={o.quant} onChange={e => setOpcao(ii, oi, 'quant', e.target.value)} className={cn(cellCls, 'text-right')} /></td>
-                        <td className="px-1 py-1"><input inputMode="decimal" value={o.valor_unit} onChange={e => setOpcao(ii, oi, 'valor_unit', e.target.value)} placeholder="0,00" className={cn(cellCls, 'text-right')} /></td>
-                        <td className="px-1 py-1 text-right font-medium whitespace-nowrap">{formatBRL(opcaoTotal(o))}</td>
+                        <td className="px-1 py-1"><input inputMode="numeric" value={o.quant} onChange={e => setOpcaoQuant(ii, oi, e.target.value)} className={cn(cellCls, 'text-right')} /></td>
+                        <td className="px-1 py-1"><input inputMode="decimal" value={o.valor_unit} onChange={e => setOpcaoUnit(ii, oi, e.target.value)} placeholder="0,00" className={cn(cellCls, 'text-right')} /></td>
+                        <td className="px-1 py-1"><input inputMode="decimal" value={o.valor_total ?? ''} onChange={e => setOpcaoTotal(ii, oi, e.target.value)} placeholder="0,00" className={cn(cellCls, 'text-right')} /></td>
                         <td className="px-1 py-1 text-right">{it.opcoes.length > 1 && <button aria-label="Remover" type="button" onClick={() => delOpcao(ii, oi)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-3.5 h-3.5" /></button>}</td>
                       </tr>
                     ))}

@@ -30,7 +30,7 @@ export interface ExternaValues {
   job: string; aut_veiculo: string; codigo_identificador: string; nota_fiscal: string
   mes: string; ano: string; bisemana: string; periodo: string; praca: string; abrangencia: string; especie: string
   negociacao: string; producao_tipo: string; pedido_producao: string
-  producao_valor: string; producao_comissao_pct: string; producao_quantidade: string
+  producao_valor: string; producao_comissao_pct: string; producao_quantidade: string; producao_total: string
   /** Quem paga a comissão da produção quando ela é "De Terceiros" (migration 132). */
   producao_fornecedor_id: string
   custo: string; desconto_exibicao: string
@@ -56,6 +56,10 @@ const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 const cardCls = 'bg-white rounded-2xl border border-gray-200 p-5'
 
 const newLoc = (): Localizacao => ({ endereco: '', cidade: '' })
+// Número → string BR ("3.000,00"): mesmo formato "como digitado" dos outros campos
+// de dinheiro daqui (parseMoney reconverte certo; nunca gravar com ponto decimal).
+const fmtBR = (v: number) => (isFinite(v) ? v : 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const prodQtdDe = (q: string) => parseInt(q || '1', 10) || 1
 function emptyValues(today: string, responsavelId: string): ExternaValues {
   const [y, m] = today.split('-')
   return {
@@ -63,7 +67,7 @@ function emptyValues(today: string, responsavelId: string): ExternaValues {
     emissao: today, job: '', aut_veiculo: '', codigo_identificador: '', nota_fiscal: '',
     mes: String(Number(m)), ano: y, bisemana: 'outro', periodo: '', praca: '', abrangencia: 'estadual', especie: 'Outdoor',
     negociacao: 'custos_normais', producao_tipo: 'no_veiculo', pedido_producao: '',
-    producao_valor: '', producao_comissao_pct: '', producao_quantidade: '', producao_fornecedor_id: '',
+    producao_valor: '', producao_comissao_pct: '', producao_quantidade: '', producao_total: '', producao_fornecedor_id: '',
     custo: '', desconto_exibicao: '0',
     desconto_pct: '20', faturamento: 'valor_bruto', prazo: '15_dfm', data_base: today, dias_agencia: '7',
     primeira_veiculacao: '', ultima_veiculacao: '', contato: '', responsavel_id: responsavelId, situacao: 'em_aberto',
@@ -83,6 +87,7 @@ export function ExternaForm({
   const [form, setForm] = useState<ExternaValues>({
     ...emptyValues(today, defaultResponsavelId), ...initial, texto_legal: initial?.texto_legal || defaultTextoLegal,
     localizacoes: initial?.localizacoes?.length ? initial.localizacoes : [newLoc()],
+    producao_total: initial?.producao_total || (parseMoney(initial?.producao_valor ?? '') ? fmtBR(prodQtdDe(initial?.producao_quantidade ?? '') * parseMoney(initial?.producao_valor ?? '')) : ''),
   })
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
@@ -93,6 +98,11 @@ export function ExternaForm({
   const [dataBaseManual, setDataBaseManual] = useState(!!initial?.data_base)
 
   function set<K extends keyof ExternaValues>(k: K, v: ExternaValues[K]) { setForm(f => ({ ...f, [k]: v })) }
+  // Produção unit ↔ total: digitou unit → recalcula total; digitou total → recalcula
+  // unit (fornecedor que passa "500 un por 3000"); mudou a quantidade → mantém o unit.
+  const setProducaoUnit = (v: string) => setForm(f => ({ ...f, producao_valor: v, producao_total: parseMoney(v) ? fmtBR(prodQtdDe(f.producao_quantidade) * parseMoney(v)) : '' }))
+  const setProducaoTotal = (v: string) => setForm(f => ({ ...f, producao_total: v, producao_valor: parseMoney(v) ? fmtBR(parseMoney(v) / prodQtdDe(f.producao_quantidade)) : f.producao_valor }))
+  const setProducaoQuant = (v: string) => setForm(f => ({ ...f, producao_quantidade: v, producao_total: parseMoney(f.producao_valor) ? fmtBR(prodQtdDe(v) * parseMoney(f.producao_valor)) : f.producao_total }))
   function setPrimeiraVeiculacao(v: string) {
     setForm(f => ({ ...f, primeira_veiculacao: v, data_base: dataBaseManual || !v ? f.data_base : v }))
   }
@@ -160,8 +170,8 @@ export function ExternaForm({
   const pagadorProducao = form.producao_tipo === 'de_terceiros'
     ? (fornecedores.find(f => f.id === form.producao_fornecedor_id)?.name ?? 'fornecedor a definir')
     : (veiculos.find(v => v.id === form.veiculo_id)?.name ?? 'veículo')
-  const producaoQtd = parseInt(form.producao_quantidade || '1', 10) || 1
-  const producaoTotal = parseMoney(form.producao_valor) * producaoQtd
+  const producaoQtd = prodQtdDe(form.producao_quantidade)
+  const producaoTotal = parseMoney(form.producao_total) > 0 ? parseMoney(form.producao_total) : parseMoney(form.producao_valor) * producaoQtd
   const producaoComissao = producaoTotal * (parseMoney(form.producao_comissao_pct) / 100)
 
   const bisemanaOptions = useMemo(() => {
@@ -306,10 +316,11 @@ export function ExternaForm({
             <div><label className={labelCls}>Produção — Tipo</label><Select value={form.producao_tipo} onChange={v => set('producao_tipo', v)} options={PRODUCAO_TIPO} /></div>
             <div><label className={labelCls}>Pedido de Produção</label><input value={form.pedido_producao} onChange={e => set('pedido_producao', e.target.value)} className={inputCls} /></div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
-            <div><label className={labelCls}>Produção — Valor unit. (R$)</label><input inputMode="decimal" value={form.producao_valor} onChange={e => set('producao_valor', e.target.value)} placeholder="0,00" className={inputCls} /></div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
+            <div><label className={labelCls}>Produção — Quantidade</label><input inputMode="numeric" value={form.producao_quantidade} onChange={e => setProducaoQuant(e.target.value)} placeholder="1" className={inputCls} /></div>
+            <div><label className={labelCls}>Produção — Valor unit. (R$)</label><input inputMode="decimal" value={form.producao_valor} onChange={e => setProducaoUnit(e.target.value)} placeholder="0,00" className={inputCls} /></div>
+            <div><label className={labelCls}>Produção — Valor total (R$)</label><input inputMode="decimal" value={form.producao_total} onChange={e => setProducaoTotal(e.target.value)} placeholder="0,00" className={inputCls} /></div>
             <div><label className={labelCls}>Produção — Comissão (%)</label><input inputMode="decimal" value={form.producao_comissao_pct} onChange={e => set('producao_comissao_pct', e.target.value)} placeholder="0" className={inputCls} /></div>
-            <div><label className={labelCls}>Produção — Quantidade</label><input inputMode="numeric" value={form.producao_quantidade} onChange={e => set('producao_quantidade', e.target.value)} placeholder="1" className={inputCls} /></div>
           </div>
 
           {/* Quem produziu é quem paga a comissão. "No Veículo" já se sabe (é o
