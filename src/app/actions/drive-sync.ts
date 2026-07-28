@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
-import { folderConfigured, listSubfolders, inspectTaskFolder, createTaskFolders, resolvePathPrefix, type TaskFoldersResult } from '@/lib/task-folders'
+import { folderConfigured, listSubfolders, inspectTaskFolder, createTaskFolders, resolvePathPrefix, backendForRef, type TaskFoldersResult } from '@/lib/task-folders'
 import { logSystemError } from '@/lib/system-error'
 
 /** Normaliza nome p/ casamento: sem acento, minúsculas, sem numeração "01 - ", separadores unificados. */
@@ -101,7 +101,9 @@ export async function applyCampaignDriveReconcile(
     const { data: s } = await (supabase as any).from('org_settings').select('drive_path_prefix').eq('org_id', orgId).single()
     orgPrefix = s?.drive_path_prefix ?? null
   }
-  const prefix = resolvePathPrefix(orgPrefix)
+  // Prefixo pelo BACKEND da campanha (per-ref), não pelo modo global: uma campanha
+  // do Drive tem que gerar caminho G:\ mesmo com o R2_* ligado (folderProvider='s3').
+  const prefix = resolvePathPrefix(orgPrefix, backendForRef(folderId))
   const joinLocal = (drivePath: string) => `${prefix.replace(/[\\/]+$/, '')}\\${drivePath}\\`
 
   const persist = (activityId: string, r: TaskFoldersResult) => supabase.rpc('set_activity_drive', {
