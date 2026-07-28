@@ -1,6 +1,7 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
+import { backendForRef } from '@/lib/task-folders'
 
 /**
  * Verificações de consistência ("o que não ficou correto" que NÃO é exceção).
@@ -36,18 +37,20 @@ export interface HealthCheck {
 
 const CONCLUIDO = 'concluido'
 
-/** IDs das campanhas da org que TÊM pasta de Drive (só elas deveriam ter tarefas com pasta). */
+/** Campanhas da org que TÊM pasta (id → nome + ref da pasta, p/ saber o backend). */
 async function campanhasComDrive(supabase: SupabaseClient<Database>, orgId: string) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any
   const { data: ws } = await sb.from('workspaces').select('id').eq('org_id', orgId)
   const wsIds = (ws ?? []).map((w: { id: string }) => w.id)
-  if (wsIds.length === 0) return new Map<string, string>()
+  const map = new Map<string, { name: string; folderId: string }>()
+  if (wsIds.length === 0) return map
 
   const { data: camps } = await sb
-    .from('campaigns').select('id, name').in('workspace_id', wsIds).not('drive_folder_id', 'is', null)
-  const map = new Map<string, string>()
-  for (const c of (camps ?? []) as { id: string; name: string }[]) map.set(c.id, c.name)
+    .from('campaigns').select('id, name, drive_folder_id').in('workspace_id', wsIds).not('drive_folder_id', 'is', null)
+  for (const c of (camps ?? []) as { id: string; name: string; drive_folder_id: string }[]) {
+    map.set(c.id, { name: c.name, folderId: c.drive_folder_id })
+  }
   return map
 }
 
@@ -76,7 +79,7 @@ async function checkAtividadesSemDrive(supabase: SupabaseClient<Database>, orgId
       items.push({
         id: a.id,
         label: a.title || 'Sem título',
-        sublabel: camps.get(a.campaign_id),
+        sublabel: camps.get(a.campaign_id)?.name,
         fix: { kind: 'provision-drive', activityId: a.id },
       })
     }
@@ -103,14 +106,17 @@ async function checkCamposSemLink(supabase: SupabaseClient<Database>, orgId: str
   const { data: ws } = await sb.from('workspaces').select('id').eq('org_id', orgId)
   const wsIds = (ws ?? []).map((w: { id: string }) => w.id)
   if (wsIds.length > 0) {
-    const { data: camps } = await sb.from('campaigns').select('id, name').in('workspace_id', wsIds)
+    const { data: camps } = await sb.from('campaigns').select('id, name, drive_folder_id').in('workspace_id', wsIds)
     const campName = new Map<string, string>()
-    for (const c of (camps ?? []) as { id: string; name: string }[]) campName.set(c.id, c.name)
+    const campFolder = new Map<string, string | null>()
+    for (const c of (camps ?? []) as { id: string; name: string; drive_folder_id: string | null }[]) {
+      campName.set(c.id, c.name); campFolder.set(c.id, c.drive_folder_id)
+    }
 
     if (campName.size > 0) {
       const { data } = await sb
         .from('activities')
-        .select('id, title, campaign_id, redacao_url, finalizacao_url, preview_url')
+        .select('id, title, campaign_id, drive_folder_id, redacao_url, finalizacao_url, preview_url')
         .in('campaign_id', [...campName.keys()])
         .eq('archived', false)
         .not('drive_folder_id', 'is', null)
@@ -119,8 +125,13 @@ async function checkCamposSemLink(supabase: SupabaseClient<Database>, orgId: str
         .order('created_at', { ascending: false })
         .limit(200)
 
-      type Row = { id: string; title: string; campaign_id: string; redacao_url: string | null; finalizacao_url: string | null; preview_url: string | null }
+      type Row = { id: string; title: string; campaign_id: string; drive_folder_id: string; redacao_url: string | null; finalizacao_url: string | null; preview_url: string | null }
       for (const a of (data ?? []) as Row[]) {
+        // Pasta no storage errado (backend da tarefa ≠ da campanha) → tratada no
+        // check 'vinculo-errado' com re-provisão; reler a subpasta aqui seria no
+        // storage errado e não resolveria.
+        const cf = campFolder.get(a.campaign_id)
+        if (cf && backendForRef(a.drive_folder_id) !== backendForRef(cf)) continue
         const faltam = [
           !a.redacao_url && 'Redação',
           !a.finalizacao_url && 'Final',
@@ -141,6 +152,53 @@ async function checkCamposSemLink(supabase: SupabaseClient<Database>, orgId: str
     label: 'Tarefas com campos sem link',
     description: 'Tarefas com pasta de Drive vinculada mas sem o link de Redação, Final ou Preview. Pasta antiga criada à mão pode não ter a subpasta (era opcional) — a correção cria o que faltar e vincula.',
     fixLabel: 'Re-vincular campos',
+    items,
+  }
+}
+
+/**
+ * Tarefas ATIVAS cuja pasta está no STORAGE ERRADO: o backend da ref da tarefa
+ * (S3/Drive) difere do backend da campanha. Acontece na transição — tarefa criada
+ * enquanto a campanha estava no S3 e a campanha depois voltou pro Drive (ou vice-
+ * versa). A tarefa aponta pro lugar errado e some dos outros checks (tem pasta E
+ * tem link, só que do backend errado). Corrige gerando a pasta no backend da
+ * campanha (regenera + regrava as refs).
+ */
+async function checkVinculoErrado(supabase: SupabaseClient<Database>, orgId: string): Promise<HealthCheck> {
+  const camps = await campanhasComDrive(supabase, orgId)
+  const items: HealthItem[] = []
+
+  if (camps.size > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase as any)
+      .from('activities')
+      .select('id, title, campaign_id, drive_folder_id, status')
+      .in('campaign_id', [...camps.keys()])
+      .eq('archived', false)
+      .not('drive_folder_id', 'is', null)
+      .neq('status', CONCLUIDO)
+      .order('created_at', { ascending: false })
+      .limit(200)
+
+    for (const a of (data ?? []) as { id: string; title: string; campaign_id: string; drive_folder_id: string }[]) {
+      const camp = camps.get(a.campaign_id)
+      if (!camp) continue
+      if (backendForRef(a.drive_folder_id) !== backendForRef(camp.folderId)) {
+        items.push({
+          id: a.id,
+          label: a.title || 'Sem título',
+          sublabel: `${camp.name} — pasta no storage errado`,
+          fix: { kind: 'provision-drive', activityId: a.id },
+        })
+      }
+    }
+  }
+
+  return {
+    id: 'vinculo-errado',
+    label: 'Tarefas vinculadas no storage errado',
+    description: 'Tarefas cuja pasta ficou num storage (S3/Drive) diferente do da campanha — criadas durante a transição. A correção gera a pasta no storage certo e revincula os campos.',
+    fixLabel: 'Re-vincular',
     items,
   }
 }
@@ -177,6 +235,7 @@ async function checkCronParado(supabase: SupabaseClient<Database>): Promise<Heal
 export async function runHealthChecks(supabase: SupabaseClient<Database>, orgId: string): Promise<HealthCheck[]> {
   return Promise.all([
     checkAtividadesSemDrive(supabase, orgId),
+    checkVinculoErrado(supabase, orgId),
     checkCamposSemLink(supabase, orgId),
     checkCronParado(supabase),
     // Fase futura (quando o Financeiro/BTG existir): extrato sem conciliar, fee sem lançamento…
