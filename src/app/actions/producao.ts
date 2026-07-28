@@ -59,7 +59,7 @@ export async function updateProducao(orgSlug: string, producaoId: string, formDa
   redirect(dest)
 }
 
-/** Gera um Pedido de Produção por item (com opção escolhida) de um Orçamento aprovado. */
+/** Gera um Pedido de Produção por FORNECEDOR (agrupando os itens escolhidos) de um Orçamento aprovado. */
 export async function gerarPedidosDoOrcamento(orgSlug: string, orcamentoId: string) {
   const supabase = await createClient()
   const user = await getUsuario()
@@ -84,8 +84,12 @@ export async function gerarPedidosDoOrcamento(orgSlug: string, orcamentoId: stri
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const itens: any[] = Array.isArray(orc.detalhe?.itens) ? orc.detalhe.itens : []
-  let count = 0
 
+  // Agrupa por FORNECEDOR: itens cuja opção escolhida é do mesmo fornecedor viram
+  // UMA PP só (com vários itens), não uma PP por item. A ordem das PPs segue a ordem
+  // em que cada fornecedor aparece pela primeira vez no orçamento.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const grupos = new Map<string, { itens: any[]; valor: number }>()
   for (const it of itens) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const opcoes: any[] = Array.isArray(it.opcoes) ? it.opcoes : []
@@ -95,26 +99,36 @@ export async function gerarPedidosDoOrcamento(orgSlug: string, orcamentoId: stri
     const quant = parseInt(sel.quant || '1', 10) || 1
     const valor = parseMoney(sel.valor_unit || '') * quant
 
+    const g = grupos.get(sel.fornecedor_id) ?? { itens: [], valor: 0 }
+    g.itens.push({ nome: it.nome ?? '', descricao: it.descricao ?? '', n_orc: sel.n_orc ?? '', quant: String(quant), valor: sel.valor_unit ?? '' })
+    g.valor += valor
+    grupos.set(sel.fornecedor_id, g)
+  }
+
+  let count = 0
+  for (const [fornecedor_id, g] of grupos) {
+    // Título: um item mantém "Orçamento - Item"; vários itens ficam só com o do orçamento.
+    const titulo = g.itens.length === 1 && g.itens[0].nome ? `${orc.titulo} - ${g.itens[0].nome}` : orc.titulo
     const payload = {
       tipo: 'pedido',
       workspace_id: orc.workspace_id,
       campaign_id: orc.campaign_id ?? '',
-      titulo: `${orc.titulo}${it.nome ? ` - ${it.nome}` : ''}`,
+      titulo,
       faturar: orc.faturar ?? 'contra_cliente',
       emissao: new Date().toISOString().slice(0, 10),
       bv_pct: String(orc.bv_pct ?? 15),
       honorarios_pct: String(orc.honorarios_pct ?? 0),
-      valor: String(valor),
+      valor: String(g.valor),
       situacao: 'em_aberto',
       // Coluna de verdade (migration 137). O detalhe.orcamento_id continua por
       // compatibilidade, mas é ele que o PedidoForm apaga ao salvar — quem manda é a coluna.
       origem_orcamento_id: orcamentoId,
       detalhe: {
-        fornecedor_id: sel.fornecedor_id,
+        fornecedor_id,
         entrega: '',
         prazo: 'a_vista',
         orcamento_id: orcamentoId,
-        itens: [{ nome: it.nome ?? '', descricao: it.descricao ?? '', n_orc: sel.n_orc ?? '', quant: String(quant), valor: sel.valor_unit ?? '' }],
+        itens: g.itens,
         parcelas: [],
       },
     }
