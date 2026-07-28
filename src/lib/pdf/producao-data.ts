@@ -108,7 +108,7 @@ export async function loadProducaoDoc(supabase: any, orgId: string, producaoId: 
 
   if (p.tipo === 'fee') {
     const parcelas: FeeParcela[] = (Array.isArray(det.parcelas) ? det.parcelas : [])
-      .map((pc: any) => ({ vencimento: pc?.vencimento ?? null, valor: money(pc?.valor) }))
+      .map((pc: any) => ({ vencimento: pc?.vencimento ?? null, valor: Number(pc?.valor) || 0 }))
     return {
       ...base, tipo: 'fee',
       fee: {
@@ -145,9 +145,11 @@ export async function loadProducaoDoc(supabase: any, orgId: string, producaoId: 
     }))
     // Só o que o fornecedor recebe do cliente (datas p/ ele emitir a NF). As parcelas
     // de comissão/honorários (receber_*) são internas — nunca vão pro PDF do fornecedor.
+    // valor da parcela é salvo como número canônico (String(parseMoney(...)) → "623.69"),
+    // então lê com Number — parseMoney trataria o ponto como milhar e multiplicaria por 100.
     const pagamentos: PagamentoParcela[] = (Array.isArray(det.parcelas) ? det.parcelas : [])
       .filter((pc: any) => (pc?.tipo ?? 'cliente_paga_fornecedor') === 'cliente_paga_fornecedor')
-      .map((pc: any) => ({ vencimento: pc?.vencimento ?? null, valor: money(pc?.valor) }))
+      .map((pc: any) => ({ vencimento: pc?.vencimento ?? null, valor: Number(pc?.valor) || 0 }))
     return {
       ...base, tipo: 'pedido',
       pedido: {
