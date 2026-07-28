@@ -30,6 +30,28 @@ const newItem = (): ItemPed => ({ nome: '', descricao: '', n_orc: '', quant: '1'
 const newParcela = (tipo = 'cliente_paga_fornecedor', venc = '', valor = ''): Parcela => ({ vencimento: venc, valor, tipo })
 const itemTotal = (it: ItemPed) => (parseInt(it.quant || '1', 10) || 0) * parseMoney(it.valor)
 
+// Math de datas em 'YYYY-MM-DD' via UTC (sem deslocar por fuso).
+function addDaysISO(iso: string, days: number): string {
+  if (!iso) return iso
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d)); dt.setUTCDate(dt.getUTCDate() + days)
+  return dt.toISOString().slice(0, 10)
+}
+function addMonthsISO(iso: string, months: number): string {
+  if (!iso) return iso
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d)); dt.setUTCMonth(dt.getUTCMonth() + months)
+  return dt.toISOString().slice(0, 10)
+}
+// Divide um total (R$) em n parcelas iguais em centavos; a última absorve o resto.
+function dividirValor(total: number, n: number): number[] {
+  const cents = Math.round(total * 100)
+  const base = Math.floor(cents / n)
+  const arr = new Array(n).fill(base)
+  arr[n - 1] += cents - base * n
+  return arr.map(c => c / 100)
+}
+
 function emptyValues(today: string, responsavelId: string): PedidoValues {
   return {
     workspace_id: '', campaign_id: '', fornecedor_id: '', titulo: '',
@@ -56,6 +78,10 @@ export function PedidoForm({
   })
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
+  // Modal do "Parcelado": pergunta 1º vencimento + qtd antes de gerar.
+  const [parcModal, setParcModal] = useState(false)
+  const [parcPrimeiroVenc, setParcPrimeiroVenc] = useState('')
+  const [parcQtd, setParcQtd] = useState('2')
 
   function set<K extends keyof PedidoValues>(k: K, v: PedidoValues[K]) { setForm(f => ({ ...f, [k]: v })) }
   const setItem = (i: number, k: keyof ItemPed, v: string) => setForm(f => ({ ...f, itens: f.itens.map((it, idx) => idx === i ? { ...it, [k]: v } : it) }))
@@ -77,12 +103,41 @@ export function PedidoForm({
     { value: 'receber_honorarios', label: `Receber Honorários do Cliente${cliNome ? ` (${cliNome})` : ''}` },
   ]
 
-  function gerarAutomaticas() {
+  // Gera n parcelas do cliente→fornecedor (mensais a partir do 1º vencimento) e,
+  // por parcela, a comissão e os honorários proporcionais — que caem dias_agencia
+  // após cada cobrança (a mesma regra que a tela mostra e que se montava à mão).
+  function gerarParcelas(primeiroVenc: string, qtd: number) {
+    const n = Math.max(1, qtd)
+    const dias = parseInt(form.dias_agencia || '0', 10) || 0
+    const valores = valorTotal > 0 ? dividirValor(valorTotal, n) : null
+    const bvs = bv > 0 ? dividirValor(bv, n) : null
+    const hons = honorarios > 0 ? dividirValor(honorarios, n) : null
     const ps: Parcela[] = []
-    if (valorTotal > 0) ps.push(newParcela('cliente_paga_fornecedor', form.emissao, String(valorTotal)))
-    if (bv > 0) ps.push(newParcela('receber_bv', form.emissao, String(bv)))
-    if (honorarios > 0) ps.push(newParcela('receber_honorarios', form.emissao, String(honorarios)))
+    for (let i = 0; i < n; i++) {
+      const vencCliente = addMonthsISO(primeiroVenc, i)
+      const vencComissao = addDaysISO(vencCliente, dias)
+      if (valores) ps.push(newParcela('cliente_paga_fornecedor', vencCliente, String(valores[i])))
+      if (bvs) ps.push(newParcela('receber_bv', vencComissao, String(bvs[i])))
+      if (hons) ps.push(newParcela('receber_honorarios', vencComissao, String(hons[i])))
+    }
     setForm(f => ({ ...f, parcelas: ps }))
+  }
+
+  function onGerarClick() {
+    if (form.prazo === 'parcelado') {
+      setParcPrimeiroVenc(form.emissao || today)
+      setParcQtd('2')
+      setParcModal(true)
+      return
+    }
+    gerarParcelas(form.emissao, 1)
+  }
+
+  function confirmarParcelado() {
+    const qtd = parseInt(parcQtd || '1', 10) || 1
+    if (!parcPrimeiroVenc) return
+    gerarParcelas(parcPrimeiroVenc, qtd)
+    setParcModal(false)
   }
 
   const campanhaOptions = useMemo(() => {
@@ -191,7 +246,7 @@ export function PedidoForm({
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Parcelas (pagamento)</h3>
             <div className="flex gap-2">
-              <button type="button" onClick={gerarAutomaticas} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition">Gerar automáticas (1x)</button>
+              <button type="button" onClick={onGerarClick} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition">{form.prazo === 'parcelado' ? 'Gerar automáticas…' : 'Gerar automáticas (1x)'}</button>
               <button type="button" onClick={addParc} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition"><Plus className="w-3.5 h-3.5" /> Parcela</button>
             </div>
           </div>
@@ -231,6 +286,28 @@ export function PedidoForm({
           </button>
         </div>
       </form>
+
+      {parcModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center px-4" role="dialog" aria-modal="true" aria-label="Gerar parcelas">
+          <div className="absolute inset-0 bg-gray-900/40 backdrop-blur-[2px] animate-[fadeIn_0.12s_ease-out]" onMouseDown={() => setParcModal(false)} />
+          <div className="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl border border-gray-200 p-6 animate-[paletteIn_0.15s_ease-out]" onMouseDown={e => e.stopPropagation()}>
+            <h2 className="text-sm font-semibold text-gray-900">Gerar parcelas</h2>
+            <p className="text-sm text-gray-500 mt-1 leading-relaxed">Informe o primeiro vencimento e em quantas vezes o cliente paga o fornecedor. As parcelas mensais serão geradas automaticamente.</p>
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              <div><label className={labelCls}>Primeiro vencimento</label><input type="date" value={parcPrimeiroVenc} onChange={e => setParcPrimeiroVenc(e.target.value)} className={inputCls} /></div>
+              <div><label className={labelCls}>Nº de parcelas</label><input inputMode="numeric" value={parcQtd} onChange={e => setParcQtd(e.target.value.replace(/\D/g, ''))} className={cn(inputCls, 'text-right')} /></div>
+            </div>
+            {valorTotal > 0 && (() => {
+              const n = Math.max(1, parseInt(parcQtd || '1', 10) || 1)
+              return <p className="text-xs text-gray-400 mt-2">{n}× de aprox. {formatBRL(valorTotal / n)} (cliente → fornecedor){bv > 0 ? ' + comissão por parcela' : ''}.</p>
+            })()}
+            <div className="flex items-center justify-end gap-2 mt-6">
+              <button type="button" onClick={() => setParcModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition">Cancelar</button>
+              <button type="button" onClick={confirmarParcelado} disabled={!parcPrimeiroVenc || !(parseInt(parcQtd || '0', 10) > 0)} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[#fff] bg-orange-600 hover:bg-orange-700 rounded-lg transition disabled:opacity-50">Gerar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
