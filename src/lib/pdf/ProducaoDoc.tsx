@@ -156,9 +156,23 @@ function Pedido({ d }: { d: Extract<ProducaoDocData, { tipo: 'pedido' }> }) {
       <View style={t.box}>
         <Cell label="Valor Total" valor={brl(pd.valorTotal)} />
         <Cell label="Faturar" valor={pd.faturarLabel} />
-        <Cell label="Comissão" valor={`${String(pd.comissaoPct).replace('.', ',')}% (${brl(pd.comissao)})`} />
+        <Cell label="Prazo" valor={pd.prazoLabel || '—'} />
         <Cell label="Entrega" valor={dataBR(pd.entrega)} />
       </View>
+
+      {pd.pagamentos.length > 0 && (
+        <View wrap={false}>
+          <Secao titulo="Condições de pagamento" />
+          <Text style={[s.fraco, { marginBottom: 6 }]}>Datas em que o cliente efetua o pagamento ao fornecedor — emitir a NF para cada vencimento abaixo.</Text>
+          <View style={{ width: '66%' }}>
+            <View style={t.th}><Text style={[t.thText, { flex: 1 }]}>Vencimento</Text><Text style={[t.thText, { flex: 1 }, t.right]}>Valor</Text></View>
+            {pd.pagamentos.map((pc, i) => (
+              <View key={i} style={t.tr}><Text style={{ flex: 1 }}>{dataBR(pc.vencimento)}</Text><Text style={[{ flex: 1 }, t.right]}>{brl(pc.valor)}</Text></View>
+            ))}
+            <View style={t.trForte}><Text style={{ flex: 1 }}>Total</Text><Text style={[{ flex: 1 }, t.right]}>{brl(pd.pagamentos.reduce((acc, pc) => acc + pc.valor, 0))}</Text></View>
+          </View>
+        </View>
+      )}
 
       <Notas notas={pd.notas} />
       <Rodapes observacao={d.observacao} textoLegal={d.textoLegal} />

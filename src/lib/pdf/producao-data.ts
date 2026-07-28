@@ -4,8 +4,10 @@
 // no que buscam do banco. Uma definição só do documento (lib/pdf/ProducaoDoc).
 
 import { loadOrgDocs } from '@/lib/agency'
-import { parseMoney } from '@/lib/midia'
+import { parseMoney, MIDIA_PRAZO_OPTIONS } from '@/lib/midia'
 import type { Agencia } from './kit'
+
+const PRAZO_LABEL: Record<string, string> = Object.fromEntries(MIDIA_PRAZO_OPTIONS.map(o => [o.value, o.label]))
 
 const TIPO_LABEL: Record<string, string> = {
   fee: 'Fee', proposta: 'Proposta', pedido: 'Pedido de Produção', orcamento: 'Orçamento',
@@ -41,6 +43,7 @@ interface Base {
 }
 
 export interface FeeParcela { vencimento: string | null; valor: number }
+export interface PagamentoParcela { vencimento: string | null; valor: number }
 export interface PropostaItem { tipoLabel: string; nome: string; quantidade: string; total: number }
 export interface PedidoItem { nome: string; descricao: string; nOrc: string; quant: string; valor: number }
 export interface OrcOpcao { fornecedor: string; nOrc: string; pgto: string; quant: string; valorUnit: number; total: number; selecionado: boolean }
@@ -50,7 +53,7 @@ export interface LegalNote { text: string; highlight?: boolean }
 export type ProducaoDocData = Base & (
   | { tipo: 'fee'; fee: { de: string | null; ate: string | null; numParcelas: string; valorMensal: number; parcelas: FeeParcela[]; total: number } }
   | { tipo: 'proposta'; proposta: { introducao: string; itens: PropostaItem[]; total: number } }
-  | { tipo: 'pedido'; pedido: { fornecedor: { nome: string; cnpj: string }; entrega: string | null; faturarLabel: string; valorTotal: number; comissaoPct: number; comissao: number; itens: PedidoItem[]; notas: LegalNote[] } }
+  | { tipo: 'pedido'; pedido: { fornecedor: { nome: string; cnpj: string }; entrega: string | null; faturarLabel: string; prazoLabel: string; valorTotal: number; comissaoPct: number; comissao: number; itens: PedidoItem[]; pagamentos: PagamentoParcela[]; notas: LegalNote[] } }
   | { tipo: 'orcamento'; orcamento: { itens: OrcItem[]; notas: LegalNote[] } }
 )
 
@@ -140,14 +143,20 @@ export async function loadProducaoDoc(supabase: any, orgId: string, producaoId: 
     const itens: PedidoItem[] = (Array.isArray(det.itens) ? det.itens : []).map((it: any) => ({
       nome: it?.nome ?? '', descricao: it?.descricao ?? '', nOrc: it?.n_orc ?? '', quant: it?.quant ?? '', valor: money(it?.valor),
     }))
+    // Só o que o fornecedor recebe do cliente (datas p/ ele emitir a NF). As parcelas
+    // de comissão/honorários (receber_*) são internas — nunca vão pro PDF do fornecedor.
+    const pagamentos: PagamentoParcela[] = (Array.isArray(det.parcelas) ? det.parcelas : [])
+      .filter((pc: any) => (pc?.tipo ?? 'cliente_paga_fornecedor') === 'cliente_paga_fornecedor')
+      .map((pc: any) => ({ vencimento: pc?.vencimento ?? null, valor: money(pc?.valor) }))
     return {
       ...base, tipo: 'pedido',
       pedido: {
         fornecedor: { nome: forn?.name ?? '—', cnpj: forn?.tax_id ? `CNPJ: ${forn.tax_id}` : '' },
         entrega: det.entrega ?? null,
         faturarLabel: FATURAR_LABEL[p.faturar] ?? p.faturar ?? '—',
+        prazoLabel: PRAZO_LABEL[String(det.prazo ?? '')] ?? '',
         valorTotal: valor, comissaoPct: bvPct, comissao: Math.round(valor * bvPct) / 100,
-        itens, notas: nfNotes,
+        itens, pagamentos, notas: nfNotes,
       },
     }
   }
