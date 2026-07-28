@@ -10,7 +10,7 @@ import { PRODUCAO_SITUACAO_OPTIONS, MIDIA_PRAZO_OPTIONS, formatBRL, parseMoney }
 import type { ClienteOpt, MemberOpt } from '../../midias/simplificada/MidiaForm'
 import type { FornecedorOpt } from '@/lib/midia-selectors'
 
-export interface ItemPed { nome: string; descricao: string; n_orc: string; quant: string; valor: string }
+export interface ItemPed { nome: string; descricao: string; n_orc: string; quant: string; valor: string; valor_total?: string }
 export interface Parcela { vencimento: string; valor: string; tipo: string }
 export interface PedidoValues {
   workspace_id: string; campaign_id: string; fornecedor_id: string; titulo: string
@@ -26,9 +26,15 @@ const cellCls = 'w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm fo
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 const cardCls = 'bg-white rounded-2xl border border-gray-200 p-5'
 
-const newItem = (): ItemPed => ({ nome: '', descricao: '', n_orc: '', quant: '1', valor: '' })
+const newItem = (): ItemPed => ({ nome: '', descricao: '', n_orc: '', quant: '1', valor: '', valor_total: '' })
 const newParcela = (tipo = 'cliente_paga_fornecedor', venc = '', valor = ''): Parcela => ({ vencimento: venc, valor, tipo })
-const itemTotal = (it: ItemPed) => (parseInt(it.quant || '1', 10) || 0) * parseMoney(it.valor)
+const qtd = (it: ItemPed) => parseInt(it.quant || '1', 10) || 0
+// Total do item: prioriza o total digitado (fornecedor que passa "500 un por 3000");
+// senão calcula quant × valor unitário.
+const itemTotal = (it: ItemPed) => {
+  const t = parseMoney(it.valor_total ?? '')
+  return t > 0 ? t : qtd(it) * parseMoney(it.valor)
+}
 
 // Math de datas em 'YYYY-MM-DD' via UTC (sem deslocar por fuso).
 function addDaysISO(iso: string, days: number): string {
@@ -50,6 +56,31 @@ function dividirValor(total: number, n: number): number[] {
   const arr = new Array(n).fill(base)
   arr[n - 1] += cents - base * n
   return arr.map(c => c / 100)
+}
+// Número → string BR ("3.118,44"). É o formato que os inputs usam e que parseMoney
+// reconverte certo — nunca gravar String(numero) com ponto (parseMoney o lê ×100).
+const fmtBR = (v: number) => (isFinite(v) ? v : 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+// Linha de conferência: soma das parcelas de um tipo × alvo esperado, com indicativo
+// de "confere / acima / abaixo".
+function ResumoParcela({ label, soma, alvo, muted }: { label: string; soma: number; alvo: number; muted?: boolean }) {
+  const delta = soma - alvo
+  const ok = Math.abs(delta) < 0.005
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className={muted ? 'text-gray-400' : 'text-gray-600'}>{label}</span>
+      <span className="flex items-center gap-2">
+        <span className={cn('tabular-nums', muted ? 'text-gray-500' : 'font-medium text-gray-900')}>{formatBRL(soma)}</span>
+        {ok ? (
+          <span className="inline-flex items-center gap-1 text-xs text-emerald-600"><Check className="w-3 h-3" /> confere</span>
+        ) : (
+          <span className={cn('text-xs px-1.5 py-0.5 rounded-md', delta > 0 ? 'text-amber-700 bg-amber-50' : 'text-red-700 bg-red-50')}>
+            {formatBRL(Math.abs(delta))} {delta > 0 ? 'acima' : 'abaixo'}
+          </span>
+        )}
+      </span>
+    </div>
+  )
 }
 
 function emptyValues(today: string, responsavelId: string): PedidoValues {
@@ -73,7 +104,10 @@ export function PedidoForm({
   const router = useRouter()
   const [form, setForm] = useState<PedidoValues>({
     ...emptyValues(today, defaultResponsavelId), ...initial,
-    itens: initial?.itens?.length ? initial.itens : [newItem()],
+    itens: (initial?.itens?.length ? initial.itens : [newItem()]).map(it => ({
+      ...it,
+      valor_total: it.valor_total ?? (parseMoney(it.valor) ? fmtBR(qtd(it) * parseMoney(it.valor)) : ''),
+    })),
     parcelas: initial?.parcelas ?? [],
   })
   const [isPending, startTransition] = useTransition()
@@ -85,6 +119,12 @@ export function PedidoForm({
 
   function set<K extends keyof PedidoValues>(k: K, v: PedidoValues[K]) { setForm(f => ({ ...f, [k]: v })) }
   const setItem = (i: number, k: keyof ItemPed, v: string) => setForm(f => ({ ...f, itens: f.itens.map((it, idx) => idx === i ? { ...it, [k]: v } : it) }))
+  // Digitou unitário → recalcula total. Digitou total → recalcula unitário. Mudou a
+  // quantidade → mantém o unitário e recalcula o total.
+  const mapItem = (i: number, fn: (it: ItemPed) => ItemPed) => setForm(f => ({ ...f, itens: f.itens.map((it, idx) => idx === i ? fn(it) : it) }))
+  const setItemUnit = (i: number, v: string) => mapItem(i, it => ({ ...it, valor: v, valor_total: parseMoney(v) ? fmtBR(qtd(it) * parseMoney(v)) : '' }))
+  const setItemTotal = (i: number, v: string) => mapItem(i, it => ({ ...it, valor_total: v, valor: qtd(it) && parseMoney(v) ? fmtBR(parseMoney(v) / qtd(it)) : it.valor }))
+  const setItemQuant = (i: number, v: string) => mapItem(i, it => { const q = parseInt(v || '1', 10) || 0; return { ...it, quant: v, valor_total: parseMoney(it.valor) ? fmtBR(q * parseMoney(it.valor)) : it.valor_total } })
   const addItem = () => setForm(f => ({ ...f, itens: [...f.itens, newItem()] }))
   const delItem = (i: number) => setForm(f => ({ ...f, itens: f.itens.filter((_, idx) => idx !== i) }))
   const setParc = (i: number, k: keyof Parcela, v: string) => setForm(f => ({ ...f, parcelas: f.parcelas.map((p, idx) => idx === i ? { ...p, [k]: v } : p) }))
@@ -94,6 +134,12 @@ export function PedidoForm({
   const valorTotal = useMemo(() => form.itens.reduce((s, it) => s + itemTotal(it), 0), [form.itens])
   const bv = valorTotal * (parseMoney(form.bv_pct) / 100)
   const honorarios = valorTotal * (parseMoney(form.honorarios_pct) / 100)
+
+  // Somas por tipo de parcela — pra conferir contra o valor total / comissão / honorários.
+  const somaParc = (tipo: string) => form.parcelas.filter(p => p.tipo === tipo).reduce((s, p) => s + parseMoney(p.valor), 0)
+  const somaPagForn = somaParc('cliente_paga_fornecedor')
+  const somaBvParc = somaParc('receber_bv')
+  const somaHonParc = somaParc('receber_honorarios')
 
   const fornNome = fornecedores.find(f => f.id === form.fornecedor_id)?.name
   const cliNome = clientes.find(c => c.id === form.workspace_id)?.name
@@ -116,9 +162,9 @@ export function PedidoForm({
     for (let i = 0; i < n; i++) {
       const vencCliente = addMonthsISO(primeiroVenc, i)
       const vencComissao = addDaysISO(vencCliente, dias)
-      if (valores) ps.push(newParcela('cliente_paga_fornecedor', vencCliente, String(valores[i])))
-      if (bvs) ps.push(newParcela('receber_bv', vencComissao, String(bvs[i])))
-      if (hons) ps.push(newParcela('receber_honorarios', vencComissao, String(hons[i])))
+      if (valores) ps.push(newParcela('cliente_paga_fornecedor', vencCliente, fmtBR(valores[i])))
+      if (bvs) ps.push(newParcela('receber_bv', vencComissao, fmtBR(bvs[i])))
+      if (hons) ps.push(newParcela('receber_honorarios', vencComissao, fmtBR(hons[i])))
     }
     setForm(f => ({ ...f, parcelas: ps }))
   }
@@ -218,10 +264,11 @@ export function PedidoForm({
                   {form.itens.length > 1 && <button aria-label="Remover" type="button" onClick={() => delItem(i)} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>}
                 </div>
                 <textarea rows={2} value={it.descricao} onChange={e => setItem(i, 'descricao', e.target.value)} placeholder="Descrição" className={cn(inputCls, 'resize-y min-h-[42px] mb-2')} />
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div><label className={labelCls}>Nº Orç.</label><input value={it.n_orc} onChange={e => setItem(i, 'n_orc', e.target.value)} className={cellCls} /></div>
-                  <div><label className={labelCls}>Quantidade</label><input value={it.quant} onChange={e => setItem(i, 'quant', e.target.value)} className={cn(cellCls, 'text-right')} /></div>
-                  <div><label className={labelCls}>Valor (R$)</label><input inputMode="decimal" value={it.valor} onChange={e => setItem(i, 'valor', e.target.value)} placeholder="0,00" className={cn(cellCls, 'text-right')} /></div>
+                  <div><label className={labelCls}>Quantidade</label><input inputMode="numeric" value={it.quant} onChange={e => setItemQuant(i, e.target.value)} className={cn(cellCls, 'text-right')} /></div>
+                  <div><label className={labelCls}>Valor unit. (R$)</label><input inputMode="decimal" value={it.valor} onChange={e => setItemUnit(i, e.target.value)} placeholder="0,00" className={cn(cellCls, 'text-right')} /></div>
+                  <div><label className={labelCls}>Valor total (R$)</label><input inputMode="decimal" value={it.valor_total ?? ''} onChange={e => setItemTotal(i, e.target.value)} placeholder="0,00" className={cn(cellCls, 'text-right')} /></div>
                 </div>
               </div>
             ))}
@@ -262,6 +309,13 @@ export function PedidoForm({
                   <button aria-label="Remover" type="button" onClick={() => delParc(i)} className="text-gray-300 hover:text-red-500 transition shrink-0 self-center"><Trash2 className="w-4 h-4" /></button>
                 </div>
               ))}
+            </div>
+          )}
+          {form.parcelas.length > 0 && (
+            <div className="mt-4 pt-3 border-t border-gray-100 space-y-1.5">
+              <ResumoParcela label="Total das parcelas (cliente → fornecedor)" soma={somaPagForn} alvo={valorTotal} />
+              {somaBvParc > 0 && <ResumoParcela label="Comissão nas parcelas" soma={somaBvParc} alvo={bv} muted />}
+              {somaHonParc > 0 && <ResumoParcela label="Honorários nas parcelas" soma={somaHonParc} alvo={honorarios} muted />}
             </div>
           )}
         </div>
