@@ -52,6 +52,20 @@ export async function setColaboradorArquivado(orgSlug: string, id: string, arqui
   revalidatePath(`/${orgSlug}/rh`)
 }
 
+/** Lista os documentos de um colaborador (sob demanda, p/ a modal na listagem). RLS filtra por rh_can. */
+export async function listarDocumentos(orgSlug: string, colaboradorId: string) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (c.supabase as any)
+    .from('rh_documento')
+    .select('id, tipo, nome, competencia, created_at')
+    .eq('colaborador_id', colaboradorId)
+    .order('created_at', { ascending: false })
+  if (error) return { error: error.message }
+  return { documentos: (data ?? []) as { id: string; tipo: string; nome: string | null; competencia: string | null; created_at: string }[] }
+}
+
 /** Registra um documento já enviado (chave vinda de /api/rh/upload). */
 export async function adicionarDocumento(
   orgSlug: string, colaboradorId: string,

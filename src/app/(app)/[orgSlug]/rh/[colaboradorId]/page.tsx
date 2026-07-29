@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { assertRhAccess } from '@/lib/rh'
 import { unwrap, unwrapOne } from '@/lib/supabase/unwrap'
-import { ColaboradorClient, type Colaborador, type Documento, type GestorRef, type MembroRef } from './ColaboradorClient'
+import { ColaboradorClient, type Colaborador, type GestorRef, type MembroRef } from './ColaboradorClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,13 +22,6 @@ export default async function ColaboradorPage({ params }: { params: Promise<{ or
     .from('organization_members').select('user_id, profiles!user_id(full_name, email)')
     .eq('org_id', orgId), 'membros')
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const documentos = unwrap<Documento>(await (supabase as any)
-    .from('rh_documento')
-    .select('id, tipo, nome, competencia, created_at')
-    .eq('colaborador_id', colaboradorId)
-    .order('created_at', { ascending: false }), 'documentos')
-
   // Possíveis gestores: os outros colaboradores ativos da org.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const gestores = unwrap<GestorRef>(await (supabase as any)
@@ -37,5 +30,5 @@ export default async function ColaboradorPage({ params }: { params: Promise<{ or
     .eq('org_id', orgId).eq('arquivado', false).neq('id', colaboradorId)
     .order('nome', { ascending: true }), 'gestores')
 
-  return <ColaboradorClient orgSlug={orgSlug} colab={colab} documentos={documentos} gestores={gestores} membros={membros} />
+  return <ColaboradorClient orgSlug={orgSlug} colab={colab} gestores={gestores} membros={membros} />
 }

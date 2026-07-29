@@ -3,9 +3,10 @@
 import { useState, useMemo, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { UserCog, Plus, Loader2, Archive } from 'lucide-react'
+import { UserCog, Plus, Loader2, Archive, Paperclip } from 'lucide-react'
 import { toast } from 'sonner'
 import { salvarColaborador } from '@/app/actions/rh'
+import { DocumentosModal } from './DocumentosModal'
 
 export interface ColaboradorRow {
   id: string
@@ -29,6 +30,7 @@ const inputCls = 'w-full px-4 py-2.5 bg-gray-100 border border-transparent round
 export function PessoasClient({ orgSlug, colaboradores }: { orgSlug: string; colaboradores: ColaboradorRow[] }) {
   const [aba, setAba] = useState<'ativos' | 'todos' | 'arquivados'>('ativos')
   const [novo, setNovo] = useState(false)
+  const [docsFor, setDocsFor] = useState<{ id: string; nome: string } | null>(null)
 
   const lista = useMemo(() => colaboradores.filter(c =>
     aba === 'arquivados' ? c.arquivado : aba === 'ativos' ? (!c.arquivado && c.status !== 'desligado') : !c.arquivado
@@ -76,6 +78,7 @@ export function PessoasClient({ orgSlug, colaboradores }: { orgSlug: string; col
                 <th className="text-left px-4 py-3 font-medium">Vínculo</th>
                 <th className="text-left px-4 py-3 font-medium">Admissão</th>
                 <th className="text-left px-4 py-3 font-medium">Situação</th>
+                <th className="px-4 py-3 font-medium w-px"></th>
               </tr>
             </thead>
             <tbody>
@@ -93,6 +96,12 @@ export function PessoasClient({ orgSlug, colaboradores }: { orgSlug: string; col
                     <td className="px-4 py-3 text-gray-500">{c.tipo_vinculo ? (VINCULO[c.tipo_vinculo] ?? c.tipo_vinculo) : '—'}</td>
                     <td className="px-4 py-3 text-gray-500 tabular-nums">{fmt(c.data_admissao)}</td>
                     <td className="px-4 py-3"><span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${st.cls}`}>{st.label}</span></td>
+                    <td className="px-4 py-3 text-right">
+                      <button onClick={() => setDocsFor({ id: c.id, nome: c.nome })} title="Documentos"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-gray-500 hover:text-orange-600 hover:bg-orange-50 transition">
+                        <Paperclip className="w-3.5 h-3.5" /> Documentos
+                      </button>
+                    </td>
                   </tr>
                 )
               })}
@@ -102,6 +111,7 @@ export function PessoasClient({ orgSlug, colaboradores }: { orgSlug: string; col
       )}
 
       {novo && <NovaPessoaModal orgSlug={orgSlug} onClose={() => setNovo(false)} />}
+      {docsFor && <DocumentosModal orgSlug={orgSlug} colaboradorId={docsFor.id} nome={docsFor.nome} onClose={() => setDocsFor(null)} />}
     </div>
   )
 }
