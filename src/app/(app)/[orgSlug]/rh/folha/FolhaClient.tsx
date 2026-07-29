@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useMemo, useRef, useTransition } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Wallet, Upload, Loader2, Check, X, Users, Landmark } from 'lucide-react'
+import { Wallet, Upload, Loader2, Check, X, Users, Landmark, Link2, Plus, AlertTriangle, Ban } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatBRL, parseMoney } from '@/lib/midia'
-import { importarFolha, gerarLancamentosFolha } from '@/app/actions/rh'
+import { importarFolha, carregarPlanoFolha, aplicarFolhaFinanceiro, type PlanoPessoa, type AplicarSalario } from '@/app/actions/rh'
 
 export interface FolhaRow {
   competencia: string; nome: string | null; liquido: number | string | null
@@ -112,8 +112,14 @@ export function FolhaClient({ orgSlug, linhas }: { orgSlug: string; linhas: Folh
   )
 }
 
-// venc padrão: salários = dia 30 da competência; INSS/FGTS = dia 20 do mês seguinte.
-function vencSalarios(comp: string): string { return `${comp}-30` }
+/** Último dia ÚTIL do mês da competência (salários são pagos nele). */
+function vencSalarios(comp: string): string {
+  const [y, m] = comp.split('-').map(Number)
+  const d = new Date(Date.UTC(y, m, 0))            // último dia do mês
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() - 1)
+  return d.toISOString().slice(0, 10)
+}
+/** INSS/FGTS: dia 20 do mês seguinte (recebe a guia dia 10, paga dia 20). */
 function vencEncargos(comp: string): string {
   const [y, m] = comp.split('-').map(Number)
   const ny = m === 12 ? y + 1 : y
@@ -121,72 +127,168 @@ function vencEncargos(comp: string): string {
   return `${ny}-${String(nm).padStart(2, '0')}-20`
 }
 
+type Acao = 'vincular' | 'criar' | 'ignorar'
+const money = 'w-32 px-3 py-1.5 text-sm text-right bg-gray-100 border border-transparent rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500'
+const dateI = 'px-3 py-1.5 text-sm bg-gray-100 border border-transparent rounded-lg text-gray-800'
+
 function ReconcModal({ orgSlug, comp, onClose }: { orgSlug: string; comp: CompAgg; onClose: () => void }) {
   const router = useRouter()
-  const [salarios, setSalarios] = useState(formatBRL(comp.liquido).replace('R$', '').trim())
-  const [vSal, setVSal] = useState(vencSalarios(comp.competencia))
+  const [plano, setPlano] = useState<{ salarios: PlanoPessoa[]; socios: { nome: string }[] } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [acoes, setAcoes] = useState<Record<string, Acao>>({})
   const [inss, setInss] = useState('')
   const [vInss, setVInss] = useState(vencEncargos(comp.competencia))
   const [fgts, setFgts] = useState(comp.fgts > 0 ? formatBRL(comp.fgts).replace('R$', '').trim() : '')
   const [vFgts, setVFgts] = useState(vencEncargos(comp.competencia))
   const [saving, start] = useTransition()
+  const [down, setDown] = useState(false)
 
-  function gerar() {
+  const carregar = useCallback(async () => {
+    const r = await carregarPlanoFolha(orgSlug, comp.competencia)
+    if (r?.error) { toast.error(r.error); setLoading(false); return }
+    const p = r?.plano
+    setPlano({ salarios: p?.salarios ?? [], socios: p?.socios ?? [] })
+    // Default: achou → vincular; não achou → criar; já vinculado → nada a fazer.
+    const ini: Record<string, Acao> = {}
+    for (const s of p?.salarios ?? []) {
+      const k = s.colaborador_id ?? s.nome
+      ini[k] = s.status === 'achado' ? 'vincular' : s.status === 'novo' ? 'criar' : 'ignorar'
+    }
+    setAcoes(ini)
+    setLoading(false)
+  }, [orgSlug, comp.competencia])
+
+  // O plano vem do servidor (read-only) ao abrir a modal.
+  useEffect(() => { carregar() }, [carregar]) // eslint-disable-line react-hooks/set-state-in-effect
+
+  function aplicar() {
+    const salarios: AplicarSalario[] = (plano?.salarios ?? []).map(s => {
+      const k = s.colaborador_id ?? s.nome
+      return {
+        colaborador_id: s.colaborador_id, nome: s.nome, acao: acoes[k] ?? 'ignorar',
+        lancamento_id: s.lancamento_id, valor: s.liquido, venc: vencSalarios(comp.competencia),
+      }
+    })
     start(async () => {
-      const r = await gerarLancamentosFolha(orgSlug, {
-        competencia: comp.competencia,
-        salarios: parseMoney(salarios), vencSalarios: vSal,
-        inss: parseMoney(inss), vencInss: vInss,
-        fgts: parseMoney(fgts), vencFgts: vFgts,
+      const r = await aplicarFolhaFinanceiro(orgSlug, {
+        competencia: comp.competencia, salarios,
+        inss: parseMoney(inss), vencInss: vInss, fgts: parseMoney(fgts), vencFgts: vFgts,
       })
       if (r?.error) { toast.error(r.error); return }
-      toast.success(`${r.gerados} lançamento(s) gerado(s) no Financeiro.`)
+      const x = r.resultado
+      toast.success(`${x?.vinculados ?? 0} vinculado(s) · ${x?.criados ?? 0} criado(s) · ${x?.guias ?? 0} guia(s).`)
       onClose(); router.refresh()
     })
   }
 
-  const money = 'w-32 px-3 py-1.5 text-sm text-right bg-gray-100 border border-transparent rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500'
-  const dateI = 'px-3 py-1.5 text-sm bg-gray-100 border border-transparent rounded-lg text-gray-800'
+  const setAcao = (k: string, a: Acao) => setAcoes(p => ({ ...p, [k]: a }))
+  const totalFolha = (plano?.salarios ?? []).reduce((s, p) => s + n(p.liquido), 0)
 
   return (
-    <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="modal-card w-full max-w-lg bg-white rounded-2xl shadow-xl border border-gray-200">
+    <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+      onMouseDown={() => setDown(true)}
+      onClick={e => { if (down && e.target === e.currentTarget) onClose(); setDown(false) }}>
+      <div className="modal-card w-full max-w-3xl max-h-[90vh] overflow-hidden bg-white rounded-2xl shadow-xl border border-gray-200 flex flex-col" onMouseDown={e => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">Gerar no Financeiro — {compLabel(comp.competencia)}</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Cria as saídas "a pagar". Valores das guias vêm da contabilidade (INSS/FGTS incluem a parte patronal).</p>
+          <h2 className="text-base font-semibold text-gray-900">Financeiro — {compLabel(comp.competencia)}</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Um lançamento por pessoa (vence no último dia útil). Sócios não recebem salário — só as guias. Busca o lançamento existente e vincula; se não achar, cria.</p>
         </div>
-        <div className="px-6 py-5 space-y-3">
-          <Linha label="Salários (líquido)" hint="paga dia 30">
-            <input inputMode="decimal" value={salarios} onChange={e => setSalarios(e.target.value)} className={money} />
-            <input type="date" value={vSal} onChange={e => setVSal(e.target.value)} className={dateI} />
-          </Linha>
-          <Linha label="INSS (guia)" hint="paga dia 20">
-            <input inputMode="decimal" value={inss} onChange={e => setInss(e.target.value)} placeholder="da guia" className={money} />
-            <input type="date" value={vInss} onChange={e => setVInss(e.target.value)} className={dateI} />
-          </Linha>
-          <Linha label="FGTS (guia)" hint="paga dia 20">
-            <input inputMode="decimal" value={fgts} onChange={e => setFgts(e.target.value)} className={money} />
-            <input type="date" value={vFgts} onChange={e => setVFgts(e.target.value)} className={dateI} />
-          </Linha>
-          <p className="text-[11px] text-gray-400 pt-1">Deixe zerado o que não quiser gerar. Reprocessar a mesma competência atualiza o que ainda está em aberto (não duplica nem mexe no que já foi pago).</p>
+
+        <div className="overflow-y-auto flex-1 px-6 py-4">
+          {loading ? (
+            <p className="text-sm text-gray-400 py-8 text-center">Buscando lançamentos…</p>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-gray-700">Salários por pessoa</h3>
+                <span className="text-xs text-gray-400">{plano?.salarios.length ?? 0} pessoas · <b className="text-gray-700 tabular-nums">{formatBRL(totalFolha)}</b></span>
+              </div>
+              <div className="rounded-xl border border-gray-200 divide-y divide-gray-50 mb-5">
+                {(plano?.salarios ?? []).map(s => {
+                  const k = s.colaborador_id ?? s.nome
+                  const acao = acoes[k] ?? 'ignorar'
+                  const diverge = s.lanc_valor != null && Math.abs(n(s.lanc_valor) - n(s.liquido)) > 0.005
+                  return (
+                    <div key={k} className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-gray-900 truncate">{s.nome}</div>
+                          <div className="text-xs text-gray-500 tabular-nums">
+                            folha <b className="text-gray-700">{formatBRL(n(s.liquido))}</b>
+                            {s.status === 'vinculado' && <span className="text-emerald-600"> · já vinculado</span>}
+                            {s.status === 'achado' && <span className="text-sky-600"> · achou lançamento de {formatBRL(n(s.lanc_valor))}</span>}
+                            {s.status === 'novo' && <span className="text-amber-600"> · sem lançamento</span>}
+                          </div>
+                          {diverge && (
+                            <div className="text-[11px] text-amber-700 mt-1 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" /> difere em {formatBRL(Math.abs(n(s.lanc_valor) - n(s.liquido)))} — vincular não altera o valor do lançamento
+                            </div>
+                          )}
+                        </div>
+                        {s.status === 'vinculado' ? (
+                          <span className="text-xs text-emerald-600 inline-flex items-center gap-1 shrink-0"><Check className="w-3.5 h-3.5" /> ok</span>
+                        ) : (
+                          <div className="flex items-center gap-1 shrink-0">
+                            {s.status === 'achado' && (
+                              <button onClick={() => setAcao(k, 'vincular')}
+                                className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg transition active:scale-[0.97] ${acao === 'vincular' ? 'bg-sky-600 text-[#fff]' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                                <Link2 className="w-3.5 h-3.5" /> Vincular
+                              </button>
+                            )}
+                            <button onClick={() => setAcao(k, 'criar')}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg transition active:scale-[0.97] ${acao === 'criar' ? 'bg-orange-600 text-[#fff]' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                              <Plus className="w-3.5 h-3.5" /> Criar
+                            </button>
+                            <button onClick={() => setAcao(k, 'ignorar')} title="Não fazer nada"
+                              className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg transition active:scale-[0.97] ${acao === 'ignorar' ? 'bg-gray-700 text-[#fff]' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                              <Ban className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {!!plano?.socios.length && (
+                <div className="rounded-xl bg-gray-50 px-4 py-3 mb-5">
+                  <div className="text-xs font-medium text-gray-600 mb-1">Sócios (pró-labore) — sem lançamento de salário</div>
+                  <div className="text-xs text-gray-500">{plano.socios.map(s => s.nome).join(' · ')}</div>
+                  <div className="text-[11px] text-gray-400 mt-1">As guias abaixo já incluem a parte deles.</div>
+                </div>
+              )}
+
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">Guias (consolidadas)</h3>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div><span className="text-sm text-gray-700">INSS</span> <span className="text-[11px] text-gray-400">valor da guia · paga dia 20</span></div>
+                  <div className="flex items-center gap-2">
+                    <input inputMode="decimal" value={inss} onChange={e => setInss(e.target.value)} placeholder="da guia" className={money} />
+                    <input type="date" value={vInss} onChange={e => setVInss(e.target.value)} className={dateI} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <div><span className="text-sm text-gray-700">FGTS</span> <span className="text-[11px] text-gray-400">valor da guia · paga dia 20</span></div>
+                  <div className="flex items-center gap-2">
+                    <input inputMode="decimal" value={fgts} onChange={e => setFgts(e.target.value)} className={money} />
+                    <input type="date" value={vFgts} onChange={e => setVFgts(e.target.value)} className={dateI} />
+                  </div>
+                </div>
+                <p className="text-[11px] text-gray-400">Deixe zerado o que não quiser gerar. Reprocessar atualiza só o que está em aberto (não duplica nem mexe no que já foi pago).</p>
+              </div>
+            </>
+          )}
         </div>
+
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-100">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
-          <button onClick={gerar} disabled={saving}
+          <button onClick={aplicar} disabled={saving || loading}
             className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Landmark className="w-4 h-4" />} Gerar lançamentos
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Landmark className="w-4 h-4" />} Aplicar
           </button>
         </div>
       </div>
-    </div>
-  )
-}
-
-function Linha({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <div><span className="text-sm text-gray-700">{label}</span> <span className="text-[11px] text-gray-400">{hint}</span></div>
-      <div className="flex items-center gap-2">{children}</div>
     </div>
   )
 }

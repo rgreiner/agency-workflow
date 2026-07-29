@@ -138,28 +138,58 @@ export async function importarFolha(orgSlug: string, competencia: string, linhas
   return { resultado: data as { linhas: number; criados: number; casados: number } }
 }
 
-export interface FolhaFinanceiroInput {
-  competencia: string        // AAAA-MM
-  salarios: number; vencSalarios: string
-  inss: number; vencInss: string
-  fgts: number; vencFgts: string
+export interface PlanoPessoa {
+  colaborador_id: string | null; nome: string; liquido: number
+  status: 'vinculado' | 'achado' | 'novo'
+  lancamento_id: string | null; lanc_valor: number | null; lanc_venc: string | null; lanc_situacao: string | null
+}
+export interface FolhaPlano {
+  competencia: string
+  salarios: PlanoPessoa[]
+  socios: { nome: string }[]
 }
 
-/** Gera os lançamentos "a pagar" da folha no Financeiro (Salários dia 30 · INSS/FGTS dia 20). */
-export async function gerarLancamentosFolha(orgSlug: string, i: FolhaFinanceiroInput) {
+/** Plano de conciliação da competência: por pessoa, com o lançamento candidato (read-only). */
+export async function carregarPlanoFolha(orgSlug: string, competencia: string) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  const comp = /^\d{4}-\d{2}$/.test(competencia) ? `${competencia}-01` : null
+  if (!comp) return { error: 'Competência inválida' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (c.supabase as any).rpc('rh_folha_plano', {
+    p_org_id: c.orgId, p_competencia: comp,
+  })
+  if (error) return { error: error.message }
+  return { plano: data as FolhaPlano }
+}
+
+export interface AplicarSalario {
+  colaborador_id: string | null; nome: string
+  acao: 'vincular' | 'criar' | 'ignorar'
+  lancamento_id?: string | null; valor?: number; venc?: string
+}
+
+/** Aplica a conciliação: salários por pessoa (vincular/criar) + guias INSS/FGTS. */
+export async function aplicarFolhaFinanceiro(orgSlug: string, i: {
+  competencia: string; salarios: AplicarSalario[]
+  inss: number; vencInss: string; fgts: number; vencFgts: string
+}) {
   const c = await ctx(orgSlug)
   if ('error' in c) return { error: c.error }
   const comp = /^\d{4}-\d{2}$/.test(i.competencia) ? `${i.competencia}-01` : null
   if (!comp) return { error: 'Competência inválida' }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (c.supabase as any).rpc('rh_gerar_lancamentos_folha', {
-    p_org_id: c.orgId, p_competencia: comp,
-    p_salarios: i.salarios || 0, p_venc_salarios: i.vencSalarios || null,
+  const { data, error } = await (c.supabase as any).rpc('rh_folha_aplicar', {
+    p_org_id: c.orgId, p_competencia: comp, p_salarios: i.salarios,
     p_inss: i.inss || 0, p_venc_inss: i.vencInss || null,
     p_fgts: i.fgts || 0, p_venc_fgts: i.vencFgts || null,
   })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/rh/folha`)
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
-  return { gerados: (data as { gerados: number })?.gerados ?? 0 }
+  return { resultado: data as { vinculados: number; criados: number; guias: number } }
 }
+
+// gerarLancamentosFolha (consolidado "Salários") foi substituído por
+// carregarPlanoFolha + aplicarFolhaFinanceiro — agora é 1 lançamento POR PESSOA,
+// sócios sem salário e vínculo ao lançamento manual existente (migration 161).
