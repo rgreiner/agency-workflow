@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import { Plus, Layout, Clock } from 'lucide-react'
+import { Plus, Layout, Clock, Lock } from 'lucide-react'
+import { roleRank, BOARD_LEVEL_SHORT } from '@/lib/boards/access'
+import type { MemberRole } from '@/types'
 
 export default async function BoardsPage({
   params,
@@ -20,7 +22,7 @@ export default async function BoardsPage({
 
   const { data: boards } = await supabase
     .from('visual_boards')
-    .select('id, title, kind, created_at, updated_at, created_by, profiles!created_by(full_name, avatar_url)')
+    .select('id, title, kind, min_role, created_at, updated_at, created_by, profiles!created_by(full_name, avatar_url)')
     .eq('org_id', org.id)
     .order('updated_at', { ascending: false })
 
@@ -77,6 +79,9 @@ export default async function BoardsPage({
           {boards.map(board => {
             const creator = board.profiles as { full_name: string | null; avatar_url: string | null } | null
             const isMapa = (board as { kind?: string }).kind === 'mapa'
+            const minRole = ((board as { min_role?: MemberRole }).min_role ?? 'member') as MemberRole
+            // Só sinaliza quando restrito acima do padrão "Equipe" (Gerência+).
+            const restrito = roleRank(minRole) >= roleRank('manager')
             const updatedAt = new Date(board.updated_at).toLocaleDateString('pt-BR', {
               day: '2-digit', month: 'short',
             })
@@ -117,6 +122,12 @@ export default async function BoardsPage({
                     </p>
                     {isMapa && (
                       <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-700 shrink-0">mapa</span>
+                    )}
+                    {restrito && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 shrink-0" title={`Acesso: ${BOARD_LEVEL_SHORT[minRole]}`}>
+                        <Lock className="w-2.5 h-2.5" />
+                        {BOARD_LEVEL_SHORT[minRole]}
+                      </span>
                     )}
                   </div>
                   <div className="flex items-center gap-1.5 mt-1">

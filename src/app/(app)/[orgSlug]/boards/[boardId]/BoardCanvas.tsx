@@ -17,6 +17,8 @@ import { FrameEl } from './elements/FrameEl'
 import { ChecklistEl } from './elements/ChecklistEl'
 import { InspectorPanel } from './InspectorPanel'
 import { applyInlineFontSize, currentSelectionFontSize } from './RichTextArea'
+import { BoardAccessControl } from './BoardAccessControl'
+import type { MemberRole } from '@/types'
 import {
   ChevronLeft, Check, Loader2,
   MousePointer2, StickyNote, Type, ImageIcon, ArrowRight,
@@ -40,10 +42,12 @@ type Pt         = { x: number; y: number }
 type Guide      = { axis: 'x' | 'y'; pos: number; start: number; end: number }
 
 interface Props {
-  boardId:      string
-  orgSlug:      string
-  initialTitle: string
-  initialData:  BoardData
+  boardId:        string
+  orgSlug:        string
+  initialTitle:   string
+  initialData:    BoardData
+  viewerRole:     MemberRole
+  initialMinRole: MemberRole
 }
 
 // ── Arrow geometry ─────────────────────────────────────────────────────────────
@@ -340,7 +344,7 @@ function CanvasToolbar({ tool, onTool }: { tool: Tool; onTool: (t: Tool) => void
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Props) {
+export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData, viewerRole, initialMinRole }: Props) {
   const supabase = createClient()
 
   const [title, setTitle]               = useState(initialTitle)
@@ -811,6 +815,10 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData }: Pro
             <button onClick={() => zoomTo(Math.min(MAX_SCALE, scaleRef.current * 1.2))} style={zoomBtnStyle} title="Aumentar zoom"><ZoomIn size={14} color="#6b7280" /></button>
             <button onClick={fitToView} style={{ ...zoomBtnStyle, marginLeft: 2 }} title="Ajustar à tela"><Maximize2 size={14} color="#6b7280" /></button>
           </div>
+
+          <div style={{ width: 1, height: 20, backgroundColor: '#e5e7eb', margin: '0 2px' }} />
+
+          <BoardAccessControl boardId={boardId} initialMinRole={initialMinRole} viewerRole={viewerRole} />
 
           {/* Delete board */}
           <button

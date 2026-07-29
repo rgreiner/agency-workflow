@@ -7,6 +7,8 @@ import { createClient } from '@/lib/supabase/client'
 import { updateBoardTitle, deleteBoard } from '@/app/actions/boards'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { cn } from '@/lib/utils'
+import { BoardAccessControl } from './BoardAccessControl'
+import type { MemberRole } from '@/types'
 import {
   ChevronLeft, Check, Loader2, Pencil, X, Trash2, ZoomIn, ZoomOut,
   FileDown, Printer, Plus, Palette, Crosshair, LayoutGrid, ArrowLeftRight,
@@ -26,8 +28,9 @@ const clampZ = (z: number) => Math.min(Z_MAX, Math.max(Z_MIN, z))
 /** Câmera do canvas: o mapa inteiro é um `translate + scale`, não um scroll. */
 interface View { x: number; y: number; z: number }
 
-export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData }: {
+export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData, viewerRole, initialMinRole }: {
   boardId: string; orgSlug: string; initialTitle: string; initialData: MindMapData
+  viewerRole: MemberRole; initialMinRole: MemberRole
 }) {
   const supabase = createClient()
   const [title, setTitle] = useState(initialTitle)
@@ -351,6 +354,10 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData }: {
             className="px-2 py-1.5 text-[11px] font-semibold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 min-w-[44px]">{Math.round(view.z * 100)}%</button>
           <button onClick={() => zoomCenter(1.15)} aria-label="Aumentar zoom" className="p-1.5 border border-gray-200 rounded-lg hover:bg-gray-50"><ZoomIn className="w-3.5 h-3.5 text-gray-500" /></button>
         </div>
+
+        <div className="w-px h-5 bg-gray-200 mx-0.5" />
+
+        <BoardAccessControl boardId={boardId} initialMinRole={initialMinRole} viewerRole={viewerRole} />
 
         <button onClick={() => setConfirmDelete(true)} aria-label="Excluir mapa" className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition">
           <Trash2 className="w-4 h-4" />

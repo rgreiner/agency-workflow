@@ -606,6 +606,7 @@ export type Database = {
           title: string
           kind: string
           data: Json
+          min_role: string
           created_by: string
           created_at: string
           updated_at: string
@@ -617,6 +618,7 @@ export type Database = {
           title?: string
           kind?: string
           data?: Json
+          min_role?: string
           created_by: string
           created_at?: string
           updated_at?: string
@@ -628,6 +630,7 @@ export type Database = {
           title?: string
           kind?: string
           data?: Json
+          min_role?: string
           created_by?: string
           created_at?: string
           updated_at?: string
