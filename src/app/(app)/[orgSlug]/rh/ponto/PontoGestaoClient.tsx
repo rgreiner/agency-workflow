@@ -2,9 +2,10 @@
 
 import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Clock, FileText, Check, X, Ban, CalendarX } from 'lucide-react'
+import { Clock, FileText, Check, X, Ban, CalendarX, CalendarClock } from 'lucide-react'
 import { toast } from 'sonner'
 import { decidirExtra, decidirJustificativa } from '@/app/actions/rh-ponto'
+import { JornadaEditor, type JornadaVals } from '../JornadaEditor'
 
 interface Colab { nome: string | null }
 export interface ExtraPend { id: string; data: string; minutos: number; saldo_min: number; acima_10h: boolean; rh_colaborador: Colab | null }
@@ -14,7 +15,7 @@ const dataBR = (d: string) => { const [y, m, dd] = d.split('-'); return `${dd}/$
 const saldoStr = (m: number) => `+${Math.floor(Math.abs(m) / 60)}h${String(Math.abs(m) % 60).padStart(2, '0')}`
 const TIPO: Record<string, string> = { esqueci: 'Esqueceu de bater', atestado: 'Atestado', medico: 'Consulta médica', falta: 'Falta', outro: 'Outro' }
 
-export function PontoGestaoClient({ orgSlug, extras, justificativas }: { orgSlug: string; extras: ExtraPend[]; justificativas: JustPend[] }) {
+export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadrao }: { orgSlug: string; extras: ExtraPend[]; justificativas: JustPend[]; jornadaPadrao: Partial<JornadaVals> | null }) {
   const router = useRouter()
   const [pending, start] = useTransition()
 
@@ -35,6 +36,15 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas }: { orgSlug
     <div className="p-6 max-w-4xl">
       <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-1"><Clock className="w-5 h-5 text-orange-600" /> Ponto — aprovações</h1>
       <p className="text-gray-500 text-sm mb-6">Horas extras (aprova o gestor) e justificativas (decide o RH).</p>
+
+      {/* Jornada padrão da empresa */}
+      <section className="mb-8">
+        <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5"><CalendarClock className="w-4 h-4" /> Jornada padrão da empresa</h2>
+        <p className="text-xs text-gray-400 mb-3">O modelo aplicado a quem não tem jornada personalizada. Personalização por pessoa fica na ficha.</p>
+        <div className="rounded-2xl border border-gray-200 bg-white p-5">
+          <JornadaEditor orgSlug={orgSlug} colaboradorId={null} inicial={jornadaPadrao} />
+        </div>
+      </section>
 
       {/* Horas extras */}
       <section className="mb-8">

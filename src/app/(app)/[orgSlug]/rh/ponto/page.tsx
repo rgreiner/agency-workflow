@@ -1,6 +1,7 @@
 import { assertRhAccess } from '@/lib/rh'
-import { unwrap } from '@/lib/supabase/unwrap'
+import { unwrap, unwrapOne } from '@/lib/supabase/unwrap'
 import { PontoGestaoClient, type ExtraPend, type JustPend } from './PontoGestaoClient'
+import type { JornadaVals } from '../JornadaEditor'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,5 +23,12 @@ export default async function PontoGestaoPage({ params }: { params: Promise<{ or
     .eq('org_id', orgId).eq('status', 'pendente')
     .order('created_at', { ascending: false }), 'justificativas')
 
-  return <PontoGestaoClient orgSlug={orgSlug} extras={extras} justificativas={justs} />
+  // Jornada padrão da org (colaborador_id null) — pode não existir se a org é nova.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const jornadaPadrao = unwrapOne<Partial<JornadaVals>>(await (supabase as any)
+    .from('rh_jornada')
+    .select('entrada, intervalo_ini, intervalo_fim, saida, flex_min, dias_semana')
+    .eq('org_id', orgId).is('colaborador_id', null).maybeSingle(), 'jornada padrão')
+
+  return <PontoGestaoClient orgSlug={orgSlug} extras={extras} justificativas={justs} jornadaPadrao={jornadaPadrao} />
 }

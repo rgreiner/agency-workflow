@@ -2,12 +2,13 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Loader2, Check, Archive, ArchiveRestore } from 'lucide-react'
+import { ArrowLeft, Loader2, Check, Archive, ArchiveRestore, CalendarClock } from 'lucide-react'
 import { toast } from 'sonner'
 import { Select } from '@/components/ui/Select'
 import { formatBRL, parseMoney } from '@/lib/midia'
 import { maskCPF, maskPhone } from '@/lib/masks'
 import { salvarColaborador, setColaboradorArquivado } from '@/app/actions/rh'
+import { JornadaEditor, type JornadaVals } from '../JornadaEditor'
 
 export interface Colaborador {
   id: string; nome: string; cpf: string | null; email: string | null; telefone: string | null
@@ -23,8 +24,9 @@ const STATUS = [{ value: 'ativo', label: 'Ativo' }, { value: 'afastado', label: 
 const inputCls = 'w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 const labelCls = 'block text-sm font-medium text-gray-700 mb-1.5'
 
-export function ColaboradorClient({ orgSlug, colab, gestores, membros }: {
+export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOverride, jornadaPadrao }: {
   orgSlug: string; colab: Colaborador; gestores: GestorRef[]; membros: MembroRef[]
+  jornadaOverride: Partial<JornadaVals> | null; jornadaPadrao: Partial<JornadaVals> | null
 }) {
   const router = useRouter()
   const [f, setF] = useState({
@@ -105,6 +107,13 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros }: {
       </div>
 
       <p className="text-xs text-gray-400 mt-3">Os documentos ficam na lista de Pessoas — botão “Documentos” na linha da pessoa.</p>
+
+      {/* Jornada: herda o padrão da empresa ou personaliza */}
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 mt-4">
+        <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-3"><CalendarClock className="w-4 h-4" /> Jornada</h2>
+        <JornadaEditor orgSlug={orgSlug} colaboradorId={colab.id}
+          inicial={jornadaOverride ?? jornadaPadrao} temOverride={!!jornadaOverride} padrao={jornadaPadrao} />
+      </div>
     </div>
   )
 }

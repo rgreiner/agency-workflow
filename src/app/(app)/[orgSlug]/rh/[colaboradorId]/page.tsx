@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { assertRhAccess } from '@/lib/rh'
 import { unwrap, unwrapOne } from '@/lib/supabase/unwrap'
 import { ColaboradorClient, type Colaborador, type GestorRef, type MembroRef } from './ColaboradorClient'
+import type { JornadaVals } from '../JornadaEditor'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,5 +31,19 @@ export default async function ColaboradorPage({ params }: { params: Promise<{ or
     .eq('org_id', orgId).eq('arquivado', false).neq('id', colaboradorId)
     .order('nome', { ascending: true }), 'gestores')
 
-  return <ColaboradorClient orgSlug={orgSlug} colab={colab} gestores={gestores} membros={membros} />
+  // Jornada: override da pessoa (se houver) + padrão da org (fallback exibido quando herda).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const jornadaOverride = unwrapOne<Partial<JornadaVals>>(await (supabase as any)
+    .from('rh_jornada')
+    .select('entrada, intervalo_ini, intervalo_fim, saida, flex_min, dias_semana')
+    .eq('colaborador_id', colaboradorId).maybeSingle(), 'jornada pessoa')
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const jornadaPadrao = unwrapOne<Partial<JornadaVals>>(await (supabase as any)
+    .from('rh_jornada')
+    .select('entrada, intervalo_ini, intervalo_fim, saida, flex_min, dias_semana')
+    .eq('org_id', orgId).is('colaborador_id', null).maybeSingle(), 'jornada padrão')
+
+  return <ColaboradorClient orgSlug={orgSlug} colab={colab} gestores={gestores} membros={membros}
+    jornadaOverride={jornadaOverride} jornadaPadrao={jornadaPadrao} />
 }

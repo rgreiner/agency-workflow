@@ -52,6 +52,36 @@ export async function setColaboradorArquivado(orgSlug: string, id: string, arqui
   revalidatePath(`/${orgSlug}/rh`)
 }
 
+export interface JornadaInput {
+  entrada?: string; intervalo_ini?: string; intervalo_fim?: string; saida?: string
+  flex_min?: number; dias_semana?: number[]
+}
+
+/** Salva a jornada: padrão da org (colaboradorId null) ou override por pessoa. */
+export async function salvarJornada(orgSlug: string, colaboradorId: string | null, data: JornadaInput) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (c.supabase as any).rpc('rh_upsert_jornada', {
+    p_org_id: c.orgId, p_colaborador_id: colaboradorId, p_data: data,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/rh/ponto`)
+  if (colaboradorId) revalidatePath(`/${orgSlug}/rh/${colaboradorId}`)
+  return { ok: true }
+}
+
+/** Remove o override de uma pessoa → volta a herdar a jornada padrão da org. */
+export async function resetarJornada(orgSlug: string, colaboradorId: string) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (c.supabase as any).rpc('rh_reset_jornada', { p_colaborador_id: colaboradorId })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/rh/${colaboradorId}`)
+  return { ok: true }
+}
+
 /** Lista os documentos de um colaborador (sob demanda, p/ a modal na listagem). RLS filtra por rh_can. */
 export async function listarDocumentos(orgSlug: string, colaboradorId: string) {
   const c = await ctx(orgSlug)
