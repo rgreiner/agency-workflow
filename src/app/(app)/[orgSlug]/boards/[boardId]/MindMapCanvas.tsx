@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import {
   type MindNode, type MindMapData, type LaidNode, MIND_COLORS, TEXT_COLORS,
-  LINE_H, PAD_X, newNode, layoutMap, edgePath, nodeBox, addChild, addSibling,
+  LINE_H, PAD_X, newNode, layoutMap, edgePath, underlinePath, branchWidth, nodeBox, addChild, addSibling,
   removeNode, updateNode, findParent, findNode, toMarkdown, slugify,
   clearOffsets, hasOffsets,
 } from '@/types/mindmap'
@@ -456,11 +456,22 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData, vie
           }}
         >
           <svg width={layout.width} height={layout.height} className="absolute inset-0 pointer-events-none overflow-visible">
+            {/* Traço do ramo: chega na base do filho e segue no sublinhado —
+                um único gesto do centro até a folha, afinando com a profundidade. */}
             {layout.edges.map(e => {
               const from = posById.get(e.fromId), to = posById.get(e.toId)
               if (!from || !to) return null
-              return <path key={`${e.fromId}-${e.toId}`} d={edgePath(from, to)} fill="none" stroke={to.color} strokeWidth={2} strokeOpacity={0.55} />
+              return (
+                <path key={`${e.fromId}-${e.toId}`} d={edgePath(from, to)} fill="none"
+                  stroke={to.color} strokeWidth={branchWidth(to.depth)} strokeLinecap="round" />
+              )
             })}
+            {layout.nodes.map(ln => (
+              ln.side === 'root' ? null : (
+                <path key={`u-${ln.node.id}`} d={underlinePath(ln)} fill="none"
+                  stroke={ln.color} strokeWidth={branchWidth(ln.depth)} strokeLinecap="round" />
+              )
+            ))}
           </svg>
 
           {layout.nodes.map(ln => {
@@ -470,6 +481,7 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData, vie
             const editing = editingId === ln.node.id
             const kids = ln.node.children.length
             const { lines } = nodeBox(ln.node)
+            // Sem caixa, o texto é o elemento — cor escura legível, nunca sobre cor.
             const textColor = ln.node.textColor ?? (isRoot ? '#ffffff' : '#1f2937')
             return (
               <div key={ln.node.id} data-node className="absolute group" style={{ left: ln.x, top: ln.y, width: ln.w, height: ln.h }}>
@@ -481,19 +493,17 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData, vie
                   onClick={e => { e.stopPropagation(); setSelId(ln.node.id); focusCanvas() }}
                   onDoubleClick={e => { e.stopPropagation(); setSelId(ln.node.id); startEdit(ln.node.id) }}
                   className={cn(
-                    'w-full h-full flex items-center gap-1 rounded-xl border-2 transition-shadow select-none touch-none',
-                    // O ramo esquerdo cresce pra esquerda: o "+" acompanha o lado.
-                    isLeft ? 'flex-row-reverse' : '',
+                    'w-full h-full flex items-center select-none touch-none transition-colors',
+                    // Só a raiz mantém caixa (é o centro do mapa); os ramos são texto puro.
+                    isRoot ? 'rounded-xl justify-center' : 'rounded-md',
                     draggingId === ln.node.id ? 'cursor-grabbing' : 'cursor-grab',
-                    !isSel && 'hover:shadow-sm',
                   )}
                   style={{
-                    paddingLeft: isLeft ? 6 : PAD_X,
-                    paddingRight: isLeft ? PAD_X : 6,
-                    backgroundColor: isRoot ? ln.color : `${ln.color}14`,
-                    borderColor: isSel ? ln.color : `${ln.color}66`,
-                    // Halo na cor do nó — seleção que se enxerga de longe.
-                    boxShadow: isSel ? `0 0 0 3px ${ln.color}40, 0 2px 8px ${ln.color}30` : undefined,
+                    paddingLeft: PAD_X,
+                    paddingRight: PAD_X,
+                    backgroundColor: isRoot ? ln.color : isSel ? `${ln.color}1f` : undefined,
+                    // Seleção sem contorno pesado: leve véu na cor do ramo.
+                    boxShadow: isSel && !isRoot ? `0 0 0 2px ${ln.color}59` : isRoot && isSel ? `0 0 0 3px ${ln.color}40` : undefined,
                   }}
                 >
                   {editing ? (
@@ -512,38 +522,38 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData, vie
                       placeholder="Novo tópico"
                       rows={lines.length}
                       className="flex-1 min-w-0 bg-transparent text-[13px] leading-[19px] resize-none outline-none placeholder:text-gray-400"
-                      style={{ color: textColor, fontWeight: ln.node.bold || isRoot ? 600 : 400, fontStyle: ln.node.italic ? 'italic' : undefined, height: lines.length * LINE_H }}
+                      style={{ color: textColor, fontWeight: ln.node.bold ? 700 : isRoot ? 600 : 500, fontStyle: ln.node.italic ? 'italic' : undefined, height: lines.length * LINE_H }}
                       autoFocus
                     />
                   ) : (
                     // `whitespace-pre` com as linhas do layout: a caixa e o texto
                     // quebram exatamente igual — nada é cortado com reticências.
                     <span className="flex-1 min-w-0 text-[13px] leading-[19px] whitespace-pre"
-                      style={{ color: textColor, fontWeight: ln.node.bold || isRoot ? 600 : 400, fontStyle: ln.node.italic ? 'italic' : undefined }}>
+                      style={{ color: textColor, fontWeight: ln.node.bold ? 700 : isRoot ? 600 : 500, fontStyle: ln.node.italic ? 'italic' : undefined }}>
                       {ln.node.text ? lines.join('\n') : <span className="opacity-50">Novo tópico</span>}
                     </span>
                   )}
 
-                  {/* + no fim da caixa = mesmo que Tab. Aparece no hover ou quando selecionado. */}
-                  {!editing && (
-                    <button
-                      data-nodrag
-                      onClick={e => { e.stopPropagation(); setSelId(ln.node.id); addChildTo(ln.node.id) }}
-                      title="Novo nó filho (Tab)"
-                      aria-label="Novo nó filho"
-                      className={cn(
-                        'shrink-0 w-5 h-5 rounded-md flex items-center justify-center transition-opacity',
-                        isSel ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
-                      )}
-                      style={{
-                        backgroundColor: isRoot ? '#ffffff33' : `${ln.color}22`,
-                        color: isRoot ? '#fff' : ln.color,
-                      }}
-                    >
-                      <Plus className="w-3 h-3" />
-                    </button>
-                  )}
                 </div>
+
+                {/* + fora do nó (não há mais caixa p/ abrigá-lo): fica do lado em
+                    que o ramo abre. Aparece no hover ou quando selecionado. */}
+                {!editing && (
+                  <button
+                    data-nodrag
+                    onClick={e => { e.stopPropagation(); setSelId(ln.node.id); addChildTo(ln.node.id) }}
+                    title="Novo nó filho (Tab)"
+                    aria-label="Novo nó filho"
+                    className={cn(
+                      'absolute top-1/2 -translate-y-1/2 w-5 h-5 rounded-full flex items-center justify-center transition-opacity shadow-sm',
+                      isLeft ? '-left-7' : '-right-7',
+                      isSel ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+                    )}
+                    style={{ backgroundColor: `${ln.color}26`, color: ln.color }}
+                  >
+                    <Plus className="w-3 h-3" />
+                  </button>
+                )}
 
                 {/* Contador = botão de ocultar/expandir daquele nó em diante.
                     Fica do lado em que o ramo abre e mostra quantos estão escondidos. */}
@@ -554,7 +564,8 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData, vie
                     title={ln.node.collapsed ? `Expandir ${kids} nó(s) escondido(s)` : 'Ocultar daqui em diante'}
                     aria-label={ln.node.collapsed ? 'Expandir ramo' : 'Ocultar ramo'}
                     className={cn(
-                      'absolute top-1/2 -translate-y-1/2 w-5 h-5 rounded-full text-[10px] font-bold text-[#fff] flex items-center justify-center border-2 border-white shadow-sm hover:scale-125 transition-all',
+                      // Sobre a ponta do sublinhado — é dali que o ramo continua.
+                      'absolute bottom-0 translate-y-1/2 w-5 h-5 rounded-full text-[10px] font-bold text-[#fff] flex items-center justify-center border-2 border-white shadow-sm hover:scale-125 transition-all',
                       isLeft ? '-left-2.5' : '-right-2.5',
                       ln.node.collapsed || isSel ? 'opacity-100' : 'opacity-60 group-hover:opacity-100',
                     )}

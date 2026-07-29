@@ -20,15 +20,22 @@ export interface MindMapData { root: MindNode }
 export const MIND_COLORS = ['#f97316', '#0ea5e9', '#10b981', '#a855f7', '#ef4444', '#eab308', '#64748b'] as const
 export const TEXT_COLORS = ['#1f2937', '#ffffff', '#f97316', '#0284c7', '#059669', '#dc2626', '#7c3aed'] as const
 
-export const NODE_MIN_H = 40
+// Estilo "orgânico" (MindNode): o nó NÃO tem caixa — o texto se apoia numa
+// linha na cor do ramo, que é o próprio traço vindo do pai. Por isso o padding
+// é mínimo (só respiro do texto) e a largura do nó = largura do texto.
+export const NODE_MIN_H = 30
 export const NODE_MAX_W = 260     // largura máxima: passou disso, o texto quebra em linhas
 export const LINE_H     = 19      // altura da linha (texto 13px)
-export const PAD_X      = 12      // padding horizontal do nó
-export const PAD_Y      = 10      // padding vertical do nó
-export const AFFORD_W   = 24      // espaço reservado pro botão "+" dentro da caixa
-export const H_GAP      = 56      // distância horizontal entre níveis
-export const V_GAP      = 12      // respiro vertical entre irmãos
-export const PAD        = 32      // margem do canvas
+export const PAD_X      = 5       // respiro lateral do texto sobre a linha
+export const PAD_Y      = 5       // respiro entre o texto e a linha de baixo
+export const H_GAP      = 64      // distância horizontal entre níveis
+export const V_GAP      = 18      // respiro vertical entre irmãos (sem caixa, precisa de mais ar)
+export const PAD        = 40      // margem do canvas
+
+/** Espessura do traço por profundidade: grosso no centro, fino na folha. */
+export function branchWidth(depth: number): number {
+  return Math.max(1.5, 4 - depth * 0.7)
+}
 
 export function newNode(text = ''): MindNode {
   return { id: crypto.randomUUID(), text, children: [] }
@@ -45,8 +52,8 @@ export function emptyMap(title: string): MindMapData {
 const charW = (bold?: boolean) => (bold ? 7.5 : 7.1)
 const estW = (s: string, bold?: boolean) => s.length * charW(bold)
 
-/** Largura útil de texto: a caixa cheia menos padding e o espaço do botão "+". */
-const TEXT_MAX_W = NODE_MAX_W - PAD_X * 2 - AFFORD_W
+/** Largura útil de texto: a largura máxima menos o respiro lateral. */
+const TEXT_MAX_W = NODE_MAX_W - PAD_X * 2
 
 /** Quebra o texto em linhas que cabem na largura máxima (palavra gigante quebra na força). */
 export function wrapLines(text: string, bold?: boolean): string[] {
@@ -72,11 +79,12 @@ export function wrapLines(text: string, bold?: boolean): string[] {
   return out.length ? out : ['']
 }
 
-/** Caixa do nó: largura, altura e as linhas já quebradas. Nada é truncado. */
+/** Medida do nó: largura, altura e as linhas já quebradas. Nada é truncado.
+ *  Sem caixa, a largura acompanha o texto (o mínimo é só p/ o nó vazio). */
 export function nodeBox(n: Pick<MindNode, 'text' | 'bold'>): { w: number; h: number; lines: string[] } {
   const lines = wrapLines(n.text || 'Novo tópico', n.bold)
   const widest = Math.max(...lines.map(l => estW(l, n.bold)))
-  const w = Math.round(Math.min(NODE_MAX_W, Math.max(128, widest + PAD_X * 2 + AFFORD_W)))
+  const w = Math.round(Math.min(NODE_MAX_W, Math.max(52, widest + PAD_X * 2)))
   const h = Math.max(NODE_MIN_H, lines.length * LINE_H + PAD_Y * 2)
   return { w, h, lines }
 }
@@ -191,14 +199,26 @@ export function layoutMap(root: MindNode): Layout {
   return { nodes, edges, width, height }
 }
 
-/** Curva do pai pro filho; sai pelo lado em que o ramo abre. */
+/**
+ * Curva do pai pro filho; sai pelo lado em que o ramo abre.
+ * Chega na BASE do filho — assim a curva continua no sublinhado do texto e o
+ * ramo vira um traço só, do centro até a folha (estilo MindNode). Da raiz
+ * (que mantém caixa) sai pelo meio da lateral.
+ */
 export function edgePath(from: LaidNode, to: LaidNode): string {
   const rightward = to.side !== 'left'
   const x1 = rightward ? from.x + from.w : from.x
   const x2 = rightward ? to.x : to.x + to.w
-  const y1 = from.y + from.h / 2, y2 = to.y + to.h / 2
+  const y1 = from.side === 'root' ? from.y + from.h / 2 : from.y + from.h
+  const y2 = to.y + to.h
   const mx = x1 + (x2 - x1) / 2
   return `M${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`
+}
+
+/** Sublinhado do nó: o trecho reto sob o texto, no fim do traço do ramo. */
+export function underlinePath(n: LaidNode): string {
+  const y = n.y + n.h
+  return `M${n.x} ${y} L${n.x + n.w} ${y}`
 }
 
 // ── Operações na árvore (imutáveis: devolvem uma raiz nova) ──────────────────

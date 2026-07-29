@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { notFound } from 'next/navigation'
 import { PrintToolbar } from '@/components/ui/PrintToolbar'
-import { layoutMap, edgePath, nodeBox, emptyMap, LINE_H, PAD_X, PAD_Y, type MindMapData } from '@/types/mindmap'
+import { layoutMap, edgePath, underlinePath, branchWidth, nodeBox, emptyMap, LINE_H, PAD_X, PAD_Y, type MindMapData } from '@/types/mindmap'
 
 /**
  * Versão de impressão do mapa mental → "Salvar como PDF" do navegador.
@@ -55,9 +55,14 @@ export default async function MapaPrintPage({
               if (!from || !to) return null
               return (
                 <path key={`${e.fromId}-${e.toId}`} d={edgePath(from, to)}
-                  fill="none" stroke={to.color} strokeWidth={2} strokeOpacity={0.55} />
+                  fill="none" stroke={to.color} strokeWidth={branchWidth(to.depth)} strokeLinecap="round" />
               )
             })}
+            {/* Sublinhado de cada nó: fecha o traço do ramo sob o texto. */}
+            {L.nodes.map(n => n.side === 'root' ? null : (
+              <path key={`u-${n.node.id}`} d={underlinePath(n)}
+                fill="none" stroke={n.color} strokeWidth={branchWidth(n.depth)} strokeLinecap="round" />
+            ))}
             {L.nodes.map(n => {
               const isRoot = n.node.id === rootId
               const badgeX = n.side === 'left' ? n.x : n.x + n.w
@@ -66,11 +71,13 @@ export default async function MapaPrintPage({
               const top = n.y + (n.h - lines.length * LINE_H) / 2
               return (
                 <g key={n.node.id}>
-                  <rect x={n.x} y={n.y} width={n.w} height={n.h} rx={10}
-                    fill={isRoot ? n.color : `${n.color}14`}
-                    stroke={isRoot ? n.color : `${n.color}66`} strokeWidth={2} />
+                  {/* Só a raiz tem caixa; os ramos são texto sobre a linha. */}
+                  {isRoot && (
+                    <rect x={n.x} y={n.y} width={n.w} height={n.h} rx={10}
+                      fill={n.color} stroke={n.color} strokeWidth={2} />
+                  )}
                   <text x={n.x + PAD_X} fontSize={13}
-                    fontWeight={n.node.bold || isRoot ? 600 : 400}
+                    fontWeight={n.node.bold ? 700 : isRoot ? 600 : 500}
                     fontStyle={n.node.italic ? 'italic' : undefined}
                     fill={n.node.textColor ?? (isRoot ? '#ffffff' : '#1f2937')}>
                     {lines.map((l, i) => (
@@ -81,8 +88,8 @@ export default async function MapaPrintPage({
                   </text>
                   {n.node.collapsed && n.node.children.length > 0 && (
                     <>
-                      <circle cx={badgeX} cy={n.y + n.h / 2} r={9} fill={n.color} />
-                      <text x={badgeX} y={n.y + n.h / 2 + 3.5} fontSize={10} fontWeight={700}
+                      <circle cx={badgeX} cy={n.y + n.h} r={9} fill={n.color} />
+                      <text x={badgeX} y={n.y + n.h + 3.5} fontSize={10} fontWeight={700}
                         fill="#ffffff" textAnchor="middle">{n.node.children.length}</text>
                     </>
                   )}
