@@ -18,7 +18,7 @@ import {
   type MindNode, type MindMapData, type LaidNode, MIND_COLORS, TEXT_COLORS,
   LINE_H, PAD_X, newNode, layoutMap, edgePath, underlinePath, branchWidth, nodeBox, addChild, addSibling,
   removeNode, updateNode, findParent, findNode, toMarkdown, slugify,
-  clearOffsets, hasOffsets,
+  clearOffsets, hasOffsets, countNodes,
 } from '@/types/mindmap'
 
 const Z_MIN = 0.2
@@ -62,6 +62,9 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData, vie
   // Arrasto do nó: guarda a base no pointerdown pra o delta não acumular erro.
   const dragRef = useRef<{ id: string; sx: number; sy: number; dx0: number; dy0: number; base: MindNode; moved: boolean } | null>(null)
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  // O click dispara depois do pointerup: sem esta trava, terminar um arrasto
+  // sobre o nó selecionado abriria a edição.
+  const justDragged = useRef(false)
   // Arrasto do fundo: move a câmera, não o conteúdo.
   const panRef = useRef<{ sx: number; sy: number; x0: number; y0: number } | null>(null)
 
@@ -154,6 +157,41 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData, vie
   function focusCanvas() { viewportRef.current?.focus() }
   function startEdit(id: string) { setEditingId(id) }
   function stopEdit() { setEditingId(null); focusCanvas() }
+
+  // ── Entrar em edição com o cursor onde a pessoa clicou ─────────────────────
+  // Sem isso a edição começa sempre no fim do texto e corrigir uma palavra no
+  // meio vira tentativa e erro. O offset é lido do <span> AINDA montado (antes
+  // do React trocar por <textarea>) e aplicado no textarea quando ele monta.
+  const pendingCaret = useRef<number | null>(null)
+  // O textarea re-renderiza a cada tecla (o texto é salvo direto); sem esta
+  // marca o ref reposicionaria o cursor no fim a cada caractere digitado.
+  const caretAppliedRef = useRef<HTMLTextAreaElement | null>(null)
+
+  function caretOffsetFromPoint(clientX: number, clientY: number): number | null {
+    const d = document as Document & {
+      caretRangeFromPoint?: (x: number, y: number) => Range | null
+      caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null
+    }
+    let node: Node | null = null
+    let offset = 0
+    if (d.caretRangeFromPoint) {
+      const r = d.caretRangeFromPoint(clientX, clientY)
+      if (!r) return null
+      node = r.startContainer; offset = r.startOffset
+    } else if (d.caretPositionFromPoint) {
+      const p = d.caretPositionFromPoint(clientX, clientY)
+      if (!p) return null
+      node = p.offsetNode; offset = p.offset
+    }
+    // Só serve se caiu direto no texto do nó (nó vazio mostra o placeholder).
+    return node && node.nodeType === Node.TEXT_NODE ? offset : null
+  }
+
+  function beginEditAt(id: string, clientX?: number, clientY?: number) {
+    pendingCaret.current = clientX != null && clientY != null ? caretOffsetFromPoint(clientX, clientY) : null
+    setSelId(id)
+    startEdit(id)
+  }
   /** Texto salvo ao digitar — sem rascunho, sem commit no blur (era o que dava corrida). */
   function setText(id: string, text: string) { commit(updateNode(rootRef.current, id, { text })) }
 
@@ -173,8 +211,14 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData, vie
     const r = rootRef.current
     if (id === r.id) { toast.error('O tema central não pode ser removido.'); return }
     const parent = findParent(r, id)
+    const node = findNode(r, id)
+    const kids = node ? countNodes(node) - 1 : 0
     commit(removeNode(r, id))
     setSelId(parent?.id ?? r.id)
+    // Apagar um ramo leva a subárvore junto: sempre dá pra voltar.
+    toast(kids > 0 ? `Ramo excluído (${kids + 1} tópicos)` : 'Tópico excluído', {
+      action: { label: 'Desfazer', onClick: () => { commit(r); setSelId(id) } },
+    })
   }
   function toggleCollapse(id: string) {
     const n = findNode(rootRef.current, id)
@@ -225,7 +269,46 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData, vie
   function onNodeUp(e: React.PointerEvent) {
     const d = dragRef.current
     dragRef.current = null
-    if (d?.moved) { setDraggingId(null); e.stopPropagation() }
+    if (d?.moved) {
+      justDragged.current = true
+      setDraggingId(null)
+      e.stopPropagation()
+      pinSideAfterDrag(d.id)
+    }
+  }
+
+  /**
+   * Ao soltar um ramo de nível 1, grava o lado onde ele ficou. Sem isso o
+   * balanceamento automático continua mandando e o nó volta/abre pro lado
+   * errado. Ao trocar de lado, o dx/dy é recalculado pro nó ficar EXATAMENTE
+   * onde foi solto — mudar de lado não pode empurrar nada.
+   */
+  function pinSideAfterDrag(id: string) {
+    const r = rootRef.current
+    if (findParent(r, id)?.id !== r.id) return   // só nível 1 tem lado
+    const L = layoutRef.current
+    const ln = L.nodes.find(n => n.node.id === id)
+    const rootLn = L.nodes.find(n => n.side === 'root')
+    if (!ln || !rootLn) return
+
+    const side: 'left' | 'right' =
+      ln.x + ln.w / 2 < rootLn.x + rootLn.w / 2 ? 'left' : 'right'
+    if (ln.side === side) {
+      // Mesmo lado: só fixa, nada se move.
+      if (findNode(r, id)?.side !== side) commit(updateNode(r, id, { side }))
+      return
+    }
+
+    // Trocou de lado: mede a posição automática do outro lado (dx/dy zerados) e
+    // devolve o deslocamento que mantém o nó no lugar em que foi solto.
+    // Coordenadas relativas à raiz porque cada layout normaliza a origem.
+    const probe = layoutMap(updateNode(r, id, { side, dx: 0, dy: 0 }))
+    const pn = probe.nodes.find(n => n.node.id === id)
+    const pr = probe.nodes.find(n => n.side === 'root')
+    if (!pn || !pr) { commit(updateNode(r, id, { side })); return }
+    const dx = Math.round((ln.x - rootLn.x) - (pn.x - pr.x))
+    const dy = Math.round((ln.y - rootLn.y) - (pn.y - pr.y))
+    commit(updateNode(r, id, { side, dx, dy }))
   }
 
   // ── Arrastar o fundo = mover o mapa inteiro ────────────────────────────────
@@ -490,8 +573,15 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData, vie
                   onPointerMove={onNodeMove}
                   onPointerUp={onNodeUp}
                   onPointerCancel={() => { dragRef.current = null; setDraggingId(null) }}
-                  onClick={e => { e.stopPropagation(); setSelId(ln.node.id); focusCanvas() }}
-                  onDoubleClick={e => { e.stopPropagation(); setSelId(ln.node.id); startEdit(ln.node.id) }}
+                  // 1º clique seleciona; clicar de novo entra na edição com o
+                  // cursor onde se clicou (como em qualquer editor de texto).
+                  onClick={e => {
+                    e.stopPropagation()
+                    if (justDragged.current) { justDragged.current = false; return }
+                    if (isSel && !editing) { beginEditAt(ln.node.id, e.clientX, e.clientY); return }
+                    setSelId(ln.node.id); focusCanvas()
+                  }}
+                  onDoubleClick={e => { e.stopPropagation(); beginEditAt(ln.node.id, e.clientX, e.clientY) }}
                   className={cn(
                     'w-full h-full flex items-center select-none touch-none transition-colors',
                     // Só a raiz mantém caixa (é o centro do mapa); os ramos são texto puro.
@@ -508,6 +598,17 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData, vie
                 >
                   {editing ? (
                     <textarea
+                      // Ao montar: cursor onde a pessoa clicou (ou no fim, se veio
+                      // do F2/nó novo). Nunca seleciona tudo — digitar não apaga o texto.
+                      ref={el => {
+                        if (!el || el === caretAppliedRef.current) return
+                        caretAppliedRef.current = el
+                        const p = pendingCaret.current
+                        pendingCaret.current = null
+                        el.focus()
+                        const at = Math.min(p ?? el.value.length, el.value.length)
+                        el.setSelectionRange(at, at)
+                      }}
                       value={ln.node.text}
                       onChange={e => setText(ln.node.id, e.target.value)}
                       // Só encerra se a edição ainda for DESTE nó: ao criar o próximo,
@@ -523,7 +624,6 @@ export function MindMapCanvas({ boardId, orgSlug, initialTitle, initialData, vie
                       rows={lines.length}
                       className="flex-1 min-w-0 bg-transparent text-[13px] leading-[19px] resize-none outline-none placeholder:text-gray-400"
                       style={{ color: textColor, fontWeight: ln.node.bold ? 700 : isRoot ? 600 : 500, fontStyle: ln.node.italic ? 'italic' : undefined, height: lines.length * LINE_H }}
-                      autoFocus
                     />
                   ) : (
                     // `whitespace-pre` com as linhas do layout: a caixa e o texto

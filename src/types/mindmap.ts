@@ -286,6 +286,11 @@ export function hasOffsets(n: MindNode): boolean {
   return n.dx != null || n.dy != null || n.children.some(hasOffsets)
 }
 
+/** Quantos nós há na subárvore (contando ela mesma). */
+export function countNodes(n: MindNode): number {
+  return 1 + n.children.reduce((a, c) => a + countNodes(c), 0)
+}
+
 // ── Export ──────────────────────────────────────────────────────────────────
 
 /** Árvore → markdown (raiz vira H1, ramos viram bullets aninhados por profundidade). */

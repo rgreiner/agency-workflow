@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { toast } from 'sonner'
 import type { BoardElement, BoardData, Arrow, BoardElementType, ImageElement } from '@/types/board'
 import { createElement, effectiveFontSize, FONT_MIN, FONT_MAX, FONT_STEP } from '@/types/board'
 import { updateBoardTitle, deleteBoard } from '@/app/actions/boards'
@@ -469,6 +470,9 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData, viewe
   }
 
   function deleteEl(id: string) {
+    // Guarda o estado pra desfazer: apagar sem volta é o que mais assusta.
+    const prevEls = elementsRef.current
+    const prevArrows = arrowsRef.current
     setElements(prev => {
       const next = prev.filter(el => el.id !== id)
       elementsRef.current = next
@@ -482,6 +486,17 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData, viewe
     setSelectedId(null)
     setEditingId(null)
     scheduleSave()
+    toast('Bloco excluído', {
+      action: {
+        label: 'Desfazer',
+        onClick: () => {
+          setElements(prevEls); elementsRef.current = prevEls
+          setArrows(prevArrows); arrowsRef.current = prevArrows
+          setSelectedId(id)
+          scheduleSave()
+        },
+      },
+    })
   }
 
   function addElement(type: BoardElementType, screenX: number, screenY: number) {

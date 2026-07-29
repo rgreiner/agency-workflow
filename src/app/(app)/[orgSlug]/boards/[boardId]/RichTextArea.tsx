@@ -55,22 +55,49 @@ interface Props {
  * cada tecla), então o cursor nunca "pula". Fora de edição, sincronizamos o
  * innerHTML com a prop.
  */
+/** Range no ponto (x,y); cai no fim do conteúdo quando não há ponto. */
+function caretRangeAt(pt: { x: number; y: number } | null, host: HTMLElement): Range {
+  const d = document as Document & {
+    caretRangeFromPoint?: (x: number, y: number) => Range | null
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null
+  }
+  if (pt) {
+    const r = d.caretRangeFromPoint?.(pt.x, pt.y)
+    if (r && host.contains(r.startContainer)) return r
+    const p = d.caretPositionFromPoint?.(pt.x, pt.y)
+    if (p && host.contains(p.offsetNode)) {
+      const r2 = document.createRange()
+      r2.setStart(p.offsetNode, p.offset)
+      r2.collapse(true)
+      return r2
+    }
+  }
+  const end = document.createRange()
+  end.selectNodeContents(host)
+  end.collapse(false)
+  return end
+}
+
 export function RichTextArea({ html, editing, placeholder, style, onStopEdit }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const lastHtml = useRef(html)
+  // Onde o duplo-clique caiu, lido antes do elemento virar editável.
+  const enterPoint = useRef<{ x: number; y: number } | null>(null)
 
-  // Entrar em edição: semeia o conteúdo atual e posiciona o cursor no fim.
+  // Entrar em edição: semeia o conteúdo e põe o cursor ONDE a pessoa clicou —
+  // cair sempre no fim do texto obriga a navegar de seta pra corrigir no meio.
+  // Sem ponto de clique (ex.: bloco recém-criado), vai pro fim.
   useEffect(() => {
     if (!editing || !ref.current) return
     const node = ref.current
     if (node.innerHTML !== html) node.innerHTML = html
     lastHtml.current = html
+    const pt = enterPoint.current
+    enterPoint.current = null
     requestAnimationFrame(() => {
       node.focus()
-      const range = document.createRange()
-      range.selectNodeContents(node)
-      range.collapse(false)
       const sel = window.getSelection()
+      const range = caretRangeAt(pt, node)
       sel?.removeAllRanges()
       sel?.addRange(range)
     })
@@ -99,6 +126,9 @@ export function RichTextArea({ html, editing, placeholder, style, onStopEdit }: 
       className="board-richtext"
       onInput={() => { lastHtml.current = ref.current?.innerHTML ?? '' }}
       onBlur={() => onStopEdit(lastHtml.current)}
+      // Guarda o ponto ANTES de entrar em edição: é o que leva o cursor pro
+      // lugar clicado em vez do fim do texto.
+      onDoubleClick={e => { if (!editing) enterPoint.current = { x: e.clientX, y: e.clientY } }}
       onPointerDown={e => { if (editing) e.stopPropagation() }}
       onKeyDown={e => {
         // O canvas ignora eventos vindos de contentEditable (ver onKey em
