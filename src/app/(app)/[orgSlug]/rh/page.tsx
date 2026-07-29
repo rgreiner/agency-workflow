@@ -1,5 +1,6 @@
 import { assertRhAccess } from '@/lib/rh'
 import { unwrap } from '@/lib/supabase/unwrap'
+import { hojeBRT } from '@/lib/hoje'
 import { PessoasClient, type ColaboradorRow } from './PessoasClient'
 
 export const dynamic = 'force-dynamic'
@@ -17,5 +18,5 @@ export default async function RhPage({ params }: { params: Promise<{ orgSlug: st
     .order('status', { ascending: true })
     .order('nome', { ascending: true }), 'colaboradores')
 
-  return <PessoasClient orgSlug={orgSlug} colaboradores={colaboradores} />
+  return <PessoasClient orgSlug={orgSlug} colaboradores={colaboradores} hoje={hojeBRT()} />
 }

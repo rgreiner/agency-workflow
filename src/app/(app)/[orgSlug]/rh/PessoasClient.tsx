@@ -25,9 +25,40 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   desligado: { label: 'Desligado', cls: 'bg-gray-100 text-gray-500' },
 }
 const VINCULO: Record<string, string> = { clt: 'CLT', pj: 'PJ', estagio: 'Estágio', outro: 'Outro' }
+
+// ── Tempo de casa / contrato de experiência (45d + 45d → efetivação em 90d) ──
+const dd = (iso: string) => { const [, m, d] = iso.split('-'); return `${d}/${m}` }
+function diffDays(aISO: string, bISO: string): number {
+  return Math.floor((Date.parse(`${bISO}T00:00:00Z`) - Date.parse(`${aISO}T00:00:00Z`)) / 86400000)
+}
+function addDays(iso: string, n: number): string {
+  return new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10)
+}
+function tempoDeCasa(admISO: string, refISO: string): string {
+  const [ay, am, ad] = admISO.split('-').map(Number)
+  const [ry, rm, rd] = refISO.split('-').map(Number)
+  let meses = (ry - ay) * 12 + (rm - am) - (rd < ad ? 1 : 0)
+  if (meses < 0) meses = 0
+  const y = Math.floor(meses / 12), m = meses % 12
+  if (y === 0) return `${m} ${m === 1 ? 'mês' : 'meses'}`
+  if (m === 0) return `${y} ${y === 1 ? 'ano' : 'anos'}`
+  return `${y}a ${m}m`
+}
+/** Rótulo da coluna: experiência (1º/2º período), tempo de casa efetivado, ou duração se desligado. */
+function periodo(c: ColaboradorRow, hoje: string): { txt: string; sub?: string; exp?: boolean } | null {
+  if (!c.data_admissao) return null
+  if (c.status === 'desligado') return { txt: `durou ${tempoDeCasa(c.data_admissao, c.data_demissao || hoje)}` }
+  const days = diffDays(c.data_admissao, hoje)
+  const temExperiencia = c.tipo_vinculo !== 'estagio' && c.tipo_vinculo !== 'pj'
+  if (temExperiencia && days >= 0 && days <= 90) {
+    if (days <= 45) return { exp: true, txt: 'Experiência 1º', sub: `${days}/45 d · vence ${dd(addDays(c.data_admissao, 45))}` }
+    return { exp: true, txt: 'Experiência 2º', sub: `${days}/90 d · efetiva ${dd(addDays(c.data_admissao, 90))}` }
+  }
+  return { txt: tempoDeCasa(c.data_admissao, hoje), sub: `aniversário ${dd(c.data_admissao)}` }
+}
 const inputCls = 'w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 
-export function PessoasClient({ orgSlug, colaboradores }: { orgSlug: string; colaboradores: ColaboradorRow[] }) {
+export function PessoasClient({ orgSlug, colaboradores, hoje }: { orgSlug: string; colaboradores: ColaboradorRow[]; hoje: string }) {
   const [aba, setAba] = useState<'ativos' | 'todos' | 'arquivados'>('ativos')
   const [novo, setNovo] = useState(false)
   const [docsFor, setDocsFor] = useState<{ id: string; nome: string } | null>(null)
@@ -77,6 +108,7 @@ export function PessoasClient({ orgSlug, colaboradores }: { orgSlug: string; col
                 <th className="text-left px-4 py-3 font-medium">Cargo</th>
                 <th className="text-left px-4 py-3 font-medium">Vínculo</th>
                 <th className="text-left px-4 py-3 font-medium">Admissão</th>
+                <th className="text-left px-4 py-3 font-medium">Tempo de casa</th>
                 <th className="text-left px-4 py-3 font-medium">Situação</th>
                 <th className="px-4 py-3 font-medium w-px"></th>
               </tr>
@@ -95,6 +127,18 @@ export function PessoasClient({ orgSlug, colaboradores }: { orgSlug: string; col
                     <td className="px-4 py-3 text-gray-600">{c.cargo || '—'}</td>
                     <td className="px-4 py-3 text-gray-500">{c.tipo_vinculo ? (VINCULO[c.tipo_vinculo] ?? c.tipo_vinculo) : '—'}</td>
                     <td className="px-4 py-3 text-gray-500 tabular-nums">{fmt(c.data_admissao)}</td>
+                    <td className="px-4 py-3">{(() => {
+                      const p = periodo(c, hoje)
+                      if (!p) return <span className="text-gray-300">—</span>
+                      return (
+                        <div className="leading-tight">
+                          {p.exp
+                            ? <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">{p.txt}</span>
+                            : <span className="text-gray-700">{p.txt}</span>}
+                          {p.sub && <div className="text-[11px] text-gray-400 mt-0.5">{p.sub}</div>}
+                        </div>
+                      )
+                    })()}</td>
                     <td className="px-4 py-3"><span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${st.cls}`}>{st.label}</span></td>
                     <td className="px-4 py-3 text-right">
                       <button onClick={() => setDocsFor({ id: c.id, nome: c.nome })} title="Documentos"
