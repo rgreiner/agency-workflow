@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import type { ActivityStatus } from '@/types'
 import { commentPreview } from '@/lib/html'
+import { porNome } from '@/lib/utils'
 
 export interface LastComment {
   content: string
@@ -86,7 +87,7 @@ export async function loadActivityList(
     const wsIds = workspaces?.map(w => w.id) ?? []
     if (wsIds.length) {
       const { data } = await supabase
-        .from('campaigns').select('id, name, workspace_id, workspaces(name)').in('workspace_id', wsIds).eq('archived', false)
+        .from('campaigns').select('id, name, workspace_id, workspaces(name)').in('workspace_id', wsIds).eq('archived', false).order('name')
       campaigns = (data ?? []) as unknown as CampRow[]
     }
   }
@@ -159,7 +160,7 @@ export async function loadActivityList(
   const members: ListMember[] = (membersRaw ?? []).map(m => {
     const p = m.profiles as unknown as { full_name: string | null; email: string; avatar_url: string | null } | null
     return { userId: m.user_id as string, fullName: p?.full_name ?? null, email: p?.email ?? '', avatarUrl: p?.avatar_url ?? null }
-  }).filter(m => m.email || m.fullName)
+  }).filter(m => m.email || m.fullName).sort(porNome(m => m.fullName ?? m.email))
 
   const campMap = Object.fromEntries(
     (campaigns ?? []).map(c => [c.id, {

@@ -7,6 +7,7 @@ import { UserPrefsProvider } from '@/components/providers/UserPrefsProvider'
 import { ChatDock } from '@/components/chat/ChatDock'
 import { TabUnreadBadge } from '@/components/layout/TabUnreadBadge'
 import { computeAccess, ACCESS_SELECT, type MembershipRow } from '@/lib/auth/access'
+import { porNome } from '@/lib/utils'
 
 export default async function OrgLayout({
   children,
@@ -54,6 +55,7 @@ export default async function OrgLayout({
   const { data: workspacesRaw } = await supabase
     .from('workspaces')
     .select('id, name, color, campaigns(id, name)')
+    .order('name', { referencedTable: 'campaigns' })
     .eq('org_id', org.id)
     .eq('archived', false)
     .eq('campaigns.archived', false)
@@ -83,6 +85,7 @@ export default async function OrgLayout({
     .map(m => (Array.isArray(m.profiles) ? m.profiles[0] : m.profiles))
     .filter((p): p is { id: string; full_name: string | null; avatar_url: string | null } => !!p && p.id !== user.id)
     .map(p => ({ id: p.id, name: p.full_name ?? 'Sem nome', avatarUrl: p.avatar_url ?? null }))
+    .sort(porNome(m => m.name))
 
   // Cadastro de status da org (migration 168) — fonte única do app inteiro.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

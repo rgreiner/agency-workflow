@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { loadViewPrefs } from '@/app/actions/prefs'
 import { GanttClient } from './GanttClient'
+import { porNome } from '@/lib/utils'
 
 export default async function GanttPage({
   params,
@@ -23,11 +24,11 @@ export default async function GanttPage({
     .eq('org_id', org.id)
 
   const { data: workspaces } = await supabase
-    .from('workspaces').select('id, name').eq('org_id', org.id).neq('archived', true)
+    .from('workspaces').select('id, name').eq('org_id', org.id).neq('archived', true).order('name')
   const wsIds = workspaces?.map(w => w.id) ?? []
 
   const { data: campaigns } = wsIds.length
-    ? await supabase.from('campaigns').select('id, name, workspace_id, workspaces(name)').in('workspace_id', wsIds).eq('archived', false)
+    ? await supabase.from('campaigns').select('id, name, workspace_id, workspaces(name)').in('workspace_id', wsIds).eq('archived', false).order('name')
     : { data: [] }
   const campIds = campaigns?.map(c => c.id) ?? []
 
@@ -52,6 +53,7 @@ export default async function GanttPage({
   const profiles = (members ?? [])
     .map(m => m.profiles as unknown as { id: string; full_name: string | null; avatar_url: string | null })
     .filter(Boolean)
+    .sort(porNome(p => p.full_name))
 
   const workspaceList = (workspaces ?? []).map(w => ({ id: w.id, name: w.name }))
   const dbPrefs = await loadViewPrefs(orgSlug, 'views/gantt')

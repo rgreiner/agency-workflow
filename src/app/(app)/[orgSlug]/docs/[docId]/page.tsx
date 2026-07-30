@@ -68,6 +68,7 @@ export default async function DocPage({
   // Clientes (+ campanhas) para associar o documento e para o seletor de briefing
   const { data: workspaces } = await supabase
     .from('workspaces').select('id, name, campaigns(id, name)')
+    .order('name', { referencedTable: 'campaigns' })
     .eq('org_id', org.id).eq('archived', false).eq('campaigns.archived', false).order('name')
 
   // Opções combinadas cliente+campanha p/ o seletor de briefing (com busca).

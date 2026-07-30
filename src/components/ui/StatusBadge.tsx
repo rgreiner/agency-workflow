@@ -1,5 +1,7 @@
 'use client'
 
+import { useMemo } from 'react'
+
 import { useOrgSettings } from '@/components/providers/OrgSettingsProvider'
 import { buildStatusConfig, getMergedStatusConfig, type StatusConfig } from '@/types'
 import { cn } from '@/lib/utils'
@@ -11,7 +13,13 @@ import { cn } from '@/lib/utils'
  */
 export function useStatusConfig(): StatusConfig[] {
   const { statuses, statusOverrides } = useOrgSettings()
-  return statuses.length ? buildStatusConfig(statuses) : getMergedStatusConfig(statusOverrides)
+  // useMemo é OBRIGATÓRIO aqui: sem ele cada render devolve um array novo, e
+  // qualquer consumidor que compare referência (useEffect com [cfg], estado
+  // derivado) entra em render infinito — foi o React #301 de 30/07/2026.
+  return useMemo(
+    () => (statuses.length ? buildStatusConfig(statuses) : getMergedStatusConfig(statusOverrides)),
+    [statuses, statusOverrides],
+  )
 }
 
 /**

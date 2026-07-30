@@ -5,6 +5,19 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/**
+ * Comparador A–Z em português: ignora acento e maiúscula ("Ávila" antes de "Bravo",
+ * "iFood" junto de "Ifood"). Use em TODA lista de nome própria — cliente, campanha,
+ * pessoa, fornecedor. No banco, o equivalente é `.order('name')` (a collation do
+ * Postgres é en_US.utf8 e já ordena acento direito).
+ *
+ *   pessoas.sort(porNome(p => p.name))
+ */
+export function porNome<T>(get: (x: T) => string | null | undefined) {
+  return (a: T, b: T) =>
+    (get(a) ?? '').localeCompare(get(b) ?? '', 'pt-BR', { sensitivity: 'base' })
+}
+
 export function slugify(text: string): string {
   return text
     .toLowerCase()

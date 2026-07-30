@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { porNome } from '@/lib/utils'
 
 export async function createDocument(
   orgId: string,
@@ -97,7 +98,7 @@ export async function getDocShareInfo(orgId: string, docId: string) {
     userId: m.user_id as string,
     fullName: (m.profiles?.full_name ?? null) as string | null,
     email: (m.profiles?.email ?? '') as string,
-  }))
+  })).sort(porNome((m: { fullName: string | null; email: string }) => m.fullName ?? m.email))
   return {
     visibility: (doc.visibility as 'org' | 'custom'),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

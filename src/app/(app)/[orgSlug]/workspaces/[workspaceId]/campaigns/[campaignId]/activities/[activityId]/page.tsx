@@ -118,7 +118,7 @@ export default async function ActivityPage({
     { data: briefingCliente },
     { data: briefingCampanha },
   ] = await Promise.all([
-    orgId ? supabase.from('workspaces').select('id, name, campaigns(id, name)').eq('org_id', orgId).eq('archived', false).eq('campaigns.archived', false).order('name') : Promise.resolve({ data: [] }),
+    orgId ? supabase.from('workspaces').select('id, name, campaigns(id, name)').eq('org_id', orgId).eq('archived', false).eq('campaigns.archived', false).order('name').order('name', { referencedTable: 'campaigns' }) : Promise.resolve({ data: [] }),
     (user && orgId) ? supabase.from('organization_members').select('role, org_positions(allowed_statuses)').eq('org_id', orgId).eq('user_id', user.id).single() : Promise.resolve({ data: null }),
     orgId ? supabase.from('organization_members').select('user_id, profiles!user_id(id, full_name, email, avatar_url)').eq('org_id', orgId) : Promise.resolve({ data: [] }),
     commentIds.length ? sb.from('activity_comment_reactions').select('comment_id, user_id, emoji').in('comment_id', commentIds) : Promise.resolve({ data: [] }),

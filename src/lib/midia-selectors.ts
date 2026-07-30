@@ -15,6 +15,7 @@ export async function loadMidiaSelectors(orgSlug: string) {
 
   const { data: wsRaw } = await supabase
     .from('workspaces').select('id, name, campaigns(id, name)')
+    .order('name', { referencedTable: 'campaigns' })
     .eq('org_id', org.id).eq('archived', false).eq('campaigns.archived', false).order('name')
   const clientes: ClienteOpt[] = (wsRaw ?? []).map(w => ({
     id: w.id, name: w.name, campaigns: (w.campaigns as unknown as { id: string; name: string }[]) ?? [],
@@ -58,6 +59,7 @@ export async function loadProducaoSelectors(orgSlug: string) {
 
   const { data: wsRaw } = await supabase
     .from('workspaces').select('id, name, campaigns(id, name)')
+    .order('name', { referencedTable: 'campaigns' })
     .eq('org_id', org.id).eq('archived', false).eq('campaigns.archived', false).order('name')
   const clientes: ClienteOpt[] = (wsRaw ?? []).map(w => ({
     id: w.id, name: w.name, campaigns: (w.campaigns as unknown as { id: string; name: string }[]) ?? [],

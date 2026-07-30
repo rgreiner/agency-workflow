@@ -23,6 +23,7 @@ export default async function NovaMidiaPage({
   const { data: wsRaw } = await supabase
     .from('workspaces')
     .select('id, name, campaigns(id, name)')
+    .order('name', { referencedTable: 'campaigns' })
     .eq('org_id', org.id)
     .eq('archived', false)
     .eq('campaigns.archived', false)
