@@ -84,11 +84,20 @@ export default async function OrgLayout({
     .filter((p): p is { id: string; full_name: string | null; avatar_url: string | null } => !!p && p.id !== user.id)
     .map(p => ({ id: p.id, name: p.full_name ?? 'Sem nome', avatarUrl: p.avatar_url ?? null }))
 
+  // Cadastro de status da org (migration 168) — fonte única do app inteiro.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: statusRows } = await (supabase as any)
+    .from('org_status')
+    .select('valor, label, grupo, bg, txt, ordem, papel')
+    .eq('org_id', org.id)
+    .order('ordem') as { data: import('@/types').OrgStatusRow[] | null }
+
   const orgSettings = {
     orgId:           org.id,
     logoUrl:         rawSettings?.logo_url ?? null,
     accentColor:     rawSettings?.accent_color ?? '#f97316',
     statusOverrides: (rawSettings?.status_overrides as unknown[] ?? []) as import('@/types').StatusOverride[],
+    statuses:        statusRows ?? [],
   }
 
   const accent = orgSettings.accentColor

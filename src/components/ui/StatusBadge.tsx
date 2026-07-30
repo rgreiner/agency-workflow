@@ -1,13 +1,17 @@
 'use client'
 
 import { useOrgSettings } from '@/components/providers/OrgSettingsProvider'
-import { getMergedStatusConfig, type StatusConfig } from '@/types'
+import { buildStatusConfig, getMergedStatusConfig, type StatusConfig } from '@/types'
 import { cn } from '@/lib/utils'
 
-/** Config de status já mesclada com as cores definidas em Configurações → Aparência. */
+/**
+ * Status da org (Configurações → Aparência): nome, cor, ordem e quais existem.
+ * Cai na lista fixa só se a org ainda não tiver cadastro (migration 168 semeia
+ * todas, então na prática é fallback de segurança).
+ */
 export function useStatusConfig(): StatusConfig[] {
-  const { statusOverrides } = useOrgSettings()
-  return getMergedStatusConfig(statusOverrides)
+  const { statuses, statusOverrides } = useOrgSettings()
+  return statuses.length ? buildStatusConfig(statuses) : getMergedStatusConfig(statusOverrides)
 }
 
 /**

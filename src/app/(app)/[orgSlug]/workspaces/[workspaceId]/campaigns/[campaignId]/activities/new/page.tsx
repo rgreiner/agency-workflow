@@ -3,7 +3,8 @@
 import { useState, useTransition, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createActivity } from '@/app/actions/activity'
-import { STATUS_CONFIG, PRIORITY_CONFIG, COMPLEXITY_CONFIG } from '@/types'
+import { PRIORITY_CONFIG, COMPLEXITY_CONFIG } from '@/types'
+import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { ArrowLeft, FolderOpen, ExternalLink, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DatePicker } from '@/components/ui/DatePicker'
@@ -50,6 +51,7 @@ function driveOpenUrl(id: string) {
 }
 
 export default function NewActivityPage() {
+  const statusCfg = useStatusConfig()
   const { orgSlug, workspaceId, campaignId } = useParams<{
     orgSlug: string; workspaceId: string; campaignId: string
   }>()
@@ -233,11 +235,12 @@ export default function NewActivityPage() {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Status inicial</label>
           <div className="flex flex-wrap gap-2">
-            {STATUS_CONFIG.filter(s => s.group !== 'done').map((s) => (
+            {statusCfg.filter(s => s.group !== 'done').map((s) => (
               <button key={s.value} type="button" onClick={() => setF('status', s.value)}
                 className={cn('px-3 py-1.5 rounded-full text-xs font-medium border transition',
-                  form.status === s.value ? `${s.bgColor} ${s.color} border-transparent` : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                )}>
+                  form.status === s.value ? 'border-transparent' : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                )}
+                style={form.status === s.value ? { backgroundColor: s.bg, color: s.text } : undefined}>
                 {s.label}
               </button>
             ))}

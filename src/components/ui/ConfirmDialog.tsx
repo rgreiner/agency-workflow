@@ -12,13 +12,15 @@ interface Props {
   loading?: boolean
   onConfirm: () => void
   onCancel: () => void
+  /** Campo extra dentro do diálogo (ex.: escolher o destino antes de excluir). */
+  children?: React.ReactNode
 }
 
 export function ConfirmDialog({
   open, title, description,
   confirmLabel = 'Excluir', cancelLabel = 'Cancelar',
   loading = false,
-  onConfirm, onCancel,
+  onConfirm, onCancel, children,
 }: Props) {
   const cancelRef = useRef<HTMLButtonElement>(null)
 
@@ -57,6 +59,7 @@ export function ConfirmDialog({
             {/* pre-line: descrição com mais de um parágrafo (ex.: destravar um
                 documento já faturado) precisa respirar pra ser lida de verdade. */}
             <p className="text-sm text-gray-500 mt-1 leading-relaxed whitespace-pre-line">{description}</p>
+            {children}
           </div>
         </div>
 

@@ -1,4 +1,13 @@
-export type ActivityStatus =
+/**
+ * Os status deixaram de ser fixos (migration 168): cada org cadastra os seus em
+ * Configurações → Aparência. A união abaixo é a SEMENTE (o que toda org nasce
+ * tendo) e serve de autocomplete; `(string & {})` deixa entrar status novos.
+ * Os valores com papel de sistema — briefing, redacao, design, finalizacao,
+ * aprovacao_cliente, concluido — existem sempre: o banco não deixa excluir.
+ */
+export type ActivityStatus = SeedStatus | (string & {})
+
+export type SeedStatus =
   // Trabalho interno
   | 'briefing'
   | 'pendente_cliente'
@@ -34,10 +43,11 @@ export interface StatusConfig {
   value: ActivityStatus
   label: string
   group: StatusGroup
-  color: string    // Tailwind text class (default)
-  bgColor: string  // Tailwind bg class (default)
+  color: string    // Tailwind text class — só a semente tem; status novo vem ''
+  bgColor: string  // Tailwind bg class — idem. Prefira sempre bg/text (hex).
   bg: string       // hex bg (used for inline styles + customization)
   text: string     // hex text (used for inline styles + customization)
+  papel?: string | null  // inicial | conclusao | aprovacao_cliente | gate_* → não excluível
 }
 
 export const STATUS_CONFIG: StatusConfig[] = [
@@ -75,6 +85,39 @@ export function getMergedStatusConfig(overrides: StatusOverride[] = []): StatusC
     const o = overrides.find(x => x.value === s.value)
     if (!o) return s
     return { ...s, label: o.label ?? s.label, bg: o.bg ?? s.bg, text: o.text ?? s.text }
+  })
+}
+
+/** Linha de `org_status` (migration 168) — o cadastro de status da organização. */
+export interface OrgStatusRow {
+  valor: string
+  label: string
+  grupo: string
+  bg: string
+  txt: string
+  ordem: number
+  papel: string | null
+}
+
+/**
+ * Monta a config de status a partir do cadastro da org. As classes Tailwind
+ * (`color`/`bgColor`) só existem para os status da semente — status criado pela
+ * org usa o hex, como todo o resto do app já faz.
+ */
+export function buildStatusConfig(rows: OrgStatusRow[] = []): StatusConfig[] {
+  if (!rows.length) return STATUS_CONFIG
+  return rows.map(r => {
+    const seed = STATUS_CONFIG.find(s => s.value === r.valor)
+    return {
+      value: r.valor,
+      label: r.label,
+      group: (r.grupo === 'external' || r.grupo === 'done' ? r.grupo : 'internal') as StatusGroup,
+      color: seed?.color ?? '',
+      bgColor: seed?.bgColor ?? '',
+      bg: r.bg,
+      text: r.txt,
+      papel: r.papel,
+    }
   })
 }
 

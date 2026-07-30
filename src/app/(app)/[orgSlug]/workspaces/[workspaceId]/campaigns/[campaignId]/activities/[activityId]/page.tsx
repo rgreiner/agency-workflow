@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { notFound } from 'next/navigation'
-import { getMergedStatusConfig, PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity, type StatusOverride } from '@/types'
+import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity, type StatusOverride } from '@/types'
+import { getStatusConfig } from '@/lib/status'
 import { cn, formatDate, isOverdue } from '@/lib/utils'
 import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink, X, Target } from 'lucide-react'
 import Link from 'next/link'
@@ -225,7 +226,7 @@ export default async function ActivityPage({
   ].sort((a, b) => a.at.localeCompare(b.at))
 
   // Cores de status seguem Configurações → Aparência (mescladas) — rawSettings vem do Lote 2
-  const statusConfig = getMergedStatusConfig((rawSettings?.status_overrides ?? []) as StatusOverride[])
+  const statusConfig = await getStatusConfig(supabase, orgId, (rawSettings?.status_overrides ?? []) as StatusOverride[])
 
   const priorityCfg  = PRIORITY_CONFIG[activity.priority as ActivityPriority]
   const complexityCfg = COMPLEXITY_CONFIG[activity.complexity as ActivityComplexity]

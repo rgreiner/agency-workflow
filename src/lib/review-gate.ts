@@ -22,7 +22,15 @@ const KIND_LABEL: Record<ReviewKind, string> = {
   design:      'Design',
   finalizacao: 'Finalização',
 }
+// Ordem do fluxo. Com status configuráveis (migration 168) a ordem é da ORG —
+// `ordem` da tabela org_status. A lista fixa fica como fallback, e status que a
+// org criou depois do gate entram no fim (indexOf -1 → tratado em `posicao`).
 const ORDER = STATUS_CONFIG.map(s => s.value as string)
+
+function posicao(ordem: string[], v: string): number {
+  const i = ordem.indexOf(v)
+  return i === -1 ? Number.MAX_SAFE_INTEGER : i
+}
 
 // Teto de tempo da revisão em 2º plano — evita ficar preso em "revisando…".
 const REVIEW_TIMEOUT_MS = 150_000
@@ -35,12 +43,36 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 }
 
 /** Qual revisão disparar ao mudar de status (ou null). Avanço = sair do gate p/ um status posterior. */
-export function reviewKindForAdvance(from: string | null | undefined, to: string): ReviewKind | null {
+export function reviewKindForAdvance(
+  from: string | null | undefined,
+  to: string,
+  ordem: string[] = ORDER,
+): ReviewKind | null {
+  const ord = ordem.length ? ordem : ORDER
   for (const kind of Object.keys(GATE_STATUS) as ReviewKind[]) {
     const g = GATE_STATUS[kind]
-    if (from === g && to !== g && ORDER.indexOf(to) > ORDER.indexOf(g)) return kind
+    if (from === g && to !== g && posicao(ord, to) > posicao(ord, g)) return kind
   }
   return null
+}
+
+/**
+ * Ordem do fluxo da org dona desta tarefa (cadastro de status), com fallback na
+ * lista fixa. Uma query só — quem chama em lote resolve pelo primeiro id.
+ */
+export async function ordemStatusDaAtividade(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any, activityId: string | undefined,
+): Promise<string[]> {
+  if (!activityId) return ORDER
+  const { data: act } = await supabase
+    .from('activities').select('campaigns(workspaces(org_id))').eq('id', activityId).single()
+  const campanha = (act as { campaigns?: { workspaces?: { org_id?: string } } } | null)?.campaigns
+  const orgId = campanha?.workspaces?.org_id
+  if (!orgId) return ORDER
+  const { data } = await supabase
+    .from('org_status').select('valor').eq('org_id', orgId).order('ordem') as { data: { valor: string }[] | null }
+  return data?.length ? data.map(r => r.valor) : ORDER
 }
 
 interface KindOutcome { clean: boolean; errors: ReviewError[]; provider: string; note?: string }

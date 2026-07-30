@@ -1033,27 +1033,10 @@ export type Database = {
     Enums: {
       activity_complexity: "simple" | "medium" | "complex"
       activity_priority: "low" | "medium" | "high" | "urgent"
-      activity_status:
-        | "briefing"
-        | "pendente_cliente"
-        | "planejamento"
-        | "insight"
-        | "redacao"
-        | "design"
-        | "edicao"
-        | "finalizacao"
-        | "revisao_interna"
-        | "validacao_atendimento"
-        | "orcamento"
-        | "producao_fornecedores"
-        | "producao_audiovisual"
-        | "validacao_midia"
-        | "midia"
-        | "social"
-        | "aprovacao_cliente"
-        | "implantacao_digital"
-        | "implantacao_off"
-        | "concluido"
+      // A coluna virou `text` na migration 168 (status é cadastro por org, não
+      // mais enum do Postgres). O nome do "enum" fica aqui só porque o restante
+      // deste arquivo o referencia; os valores válidos vêm de `org_status`.
+      activity_status: string
       member_role: "owner" | "admin" | "manager" | "member" | "viewer"
       org_plan: "free" | "starter" | "pro" | "enterprise"
     }

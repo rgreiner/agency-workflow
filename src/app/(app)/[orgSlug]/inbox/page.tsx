@@ -1,7 +1,8 @@
 import { getNotifications } from '@/app/actions/notifications'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
-import { getMergedStatusConfig, type StatusOverride } from '@/types'
+import { type StatusOverride } from '@/types'
+import { getStatusConfig } from '@/lib/status'
 import { InboxClient } from './InboxClient'
 import { MyTasksPanel, type MyTask } from './MyTasksPanel'
 import { TodoPanel, type Todo } from './TodoPanel'
@@ -23,7 +24,7 @@ export default async function InboxPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: rawSettings } = await (supabase as any)
     .from('org_settings').select('status_overrides').eq('org_id', org?.id ?? '').single()
-  const statusConfig = getMergedStatusConfig((rawSettings?.status_overrides ?? []) as StatusOverride[])
+  const statusConfig = await getStatusConfig(supabase, org?.id, (rawSettings?.status_overrides ?? []) as StatusOverride[])
 
   // To-do pessoal (anotações livres) deste usuário nesta org
   let todos: Todo[] = []

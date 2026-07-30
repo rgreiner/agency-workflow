@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
-import { getMergedStatusConfig, type StatusOverride } from '@/types'
+import { type StatusOverride } from '@/types'
+import { getStatusConfig } from '@/lib/status'
 import {
   AlertCircle, CheckCircle2, Clock, CalendarClock,
   AlertTriangle, ChevronRight, Users, Activity, Timer, Target,
@@ -39,7 +40,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ orgS
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: rawSettings } = await (supabase as any)
     .from('org_settings').select('status_overrides').eq('org_id', orgData.id).single()
-  const statusConfig = getMergedStatusConfig((rawSettings?.status_overrides ?? []) as StatusOverride[])
+  const statusConfig = await getStatusConfig(supabase, orgData.id, (rawSettings?.status_overrides ?? []) as StatusOverride[])
 
   // ── Camadas gated (pessoal + equipe se owner/admin + financeiro se can_finance) ──
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

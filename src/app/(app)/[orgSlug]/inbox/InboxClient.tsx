@@ -12,6 +12,7 @@ import {
   type NotificationItem,
 } from '@/app/actions/notifications'
 import { messageOf, timeLabel, groupByDay, NotifIcon } from '@/lib/notifications'
+import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { NotifSoundToggle } from './NotifSoundToggle'
 
 /** Entrada da lista: uma notificação ou um grupo de notificações da mesma tarefa. */
@@ -248,6 +249,7 @@ function EntryRow({ entry, selected, expanded, onToggleExpand, onToggleSelect, o
   onMarkRead: (ids: string[]) => void
   onRemove: (ids: string[]) => void
 }) {
+  const statusCfg = useStatusConfig()
   const its = entry.items
   const head = its[0]
   const ids = its.map(i => i.id)
@@ -272,7 +274,7 @@ function EntryRow({ entry, selected, expanded, onToggleExpand, onToggleSelect, o
           <span className={cn('shrink-0 max-w-[34%] truncate text-sm', anyUnread ? 'font-semibold text-gray-900' : 'font-medium text-gray-700')}>
             {head.title}
           </span>
-          <span className="flex-1 min-w-0 truncate text-sm text-gray-500">{messageOf(head)}</span>
+          <span className="flex-1 min-w-0 truncate text-sm text-gray-500">{messageOf(head, statusCfg)}</span>
           {isGroup && (
             <span className="shrink-0 text-[11px] font-medium text-orange-700 bg-orange-100 rounded-full px-2 py-0.5">
               {its.length} atualizações
@@ -311,7 +313,7 @@ function EntryRow({ entry, selected, expanded, onToggleExpand, onToggleSelect, o
             <button key={n.id} onClick={() => onOpen([n])}
               className="w-full flex items-center gap-3 pl-11 pr-3 py-2 text-left hover:bg-white transition">
               <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', n.readAt ? 'bg-gray-300' : 'bg-orange-500')} />
-              <span className="flex-1 min-w-0 truncate text-sm text-gray-600">{messageOf(n)}</span>
+              <span className="flex-1 min-w-0 truncate text-sm text-gray-600">{messageOf(n, statusCfg)}</span>
               <span className="shrink-0 text-xs text-gray-400">{timeLabel(n.createdAt)}</span>
             </button>
           ))}

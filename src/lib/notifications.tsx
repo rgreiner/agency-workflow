@@ -1,18 +1,19 @@
 import { MessageSquare, ArrowRightLeft, UserPlus, LogIn, AtSign, FolderSync, AlarmClock, MessageSquareReply, Inbox, BadgeCheck, PenLine } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { STATUS_CONFIG } from '@/types'
+import { STATUS_CONFIG, type StatusConfig } from '@/types'
 import type { NotificationItem } from '@/app/actions/notifications'
 
-export function statusLabel(v: unknown) {
-  return STATUS_CONFIG.find(s => s.value === v)?.label ?? String(v ?? '')
+/** `statuses` = cadastro da org (useStatusConfig); sem ele, a lista fixa. */
+export function statusLabel(v: unknown, statuses: StatusConfig[] = STATUS_CONFIG) {
+  return statuses.find(s => s.value === v)?.label ?? String(v ?? '')
 }
 
-export function messageOf(n: NotificationItem): string {
+export function messageOf(n: NotificationItem, statuses: StatusConfig[] = STATUS_CONFIG): string {
   const actor = n.actorName ?? 'Alguém'
   const to = n.data?.to
   switch (n.type) {
-    case 'status_change':  return `${actor} mudou o status${to ? ` para ${statusLabel(to)}` : ''}`
-    case 'entered_status': return `Entrou em ${statusLabel(to)} — sua etapa`
+    case 'status_change':  return `${actor} mudou o status${to ? ` para ${statusLabel(to, statuses)}` : ''}`
+    case 'entered_status': return `Entrou em ${statusLabel(to, statuses)} — sua etapa`
     case 'new_comment':    return `${actor} comentou${n.data?.preview ? `: ${n.data.preview}` : ''}`
     case 'mention':        return `${actor} ${n.data?.all ? 'mencionou todos' : 'mencionou você'}${n.data?.preview ? `: ${n.data.preview}` : ''}`
     case 'assigned':       return 'Você foi associado a esta tarefa'

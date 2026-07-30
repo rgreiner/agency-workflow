@@ -5,7 +5,7 @@ import { getUsuario } from '@/lib/auth/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { provisionActivitiesDrive, moveActivityDrive, regenerateActivityDrive } from '@/lib/drive-provision'
-import { scheduleReview, reviewKindForAdvance } from '@/lib/review-gate'
+import { scheduleReview, reviewKindForAdvance, ordemStatusDaAtividade } from '@/lib/review-gate'
 import { scheduleRecurrence, isConclusion } from '@/lib/recurrence-gate'
 
 /**
@@ -173,7 +173,7 @@ export async function updateActivityStatus(
 
   if (error) return { error: error.message }
 
-  const reviewKind = reviewKindForAdvance(fromStatus, newStatus)
+  const reviewKind = reviewKindForAdvance(fromStatus, newStatus, await ordemStatusDaAtividade(supabase, activityId))
   if (reviewKind) {
     scheduleReview({ supabase, userId: user.id, activityId, kind: reviewKind, toStatus: newStatus })
   }
@@ -302,9 +302,11 @@ export async function bulkUpdateStatus(path: string, ids: string[], newStatus: s
     }).then(r => ({ error: r.error })))
   if (err) return { error: err.message }
 
+  // Todas as tarefas do lote são da mesma org — resolve a ordem uma vez só.
+  const ordem = await ordemStatusDaAtividade(supabase, ids[0])
   for (const id of ids) {
     const from = fromMap.get(id) ?? null
-    const reviewKind = reviewKindForAdvance(from, newStatus)
+    const reviewKind = reviewKindForAdvance(from, newStatus, ordem)
     if (reviewKind) {
       scheduleReview({ supabase, userId: user.id, activityId: id, kind: reviewKind, toStatus: newStatus })
     }

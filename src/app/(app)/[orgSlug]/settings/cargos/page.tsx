@@ -1,7 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { notFound } from 'next/navigation'
-import { STATUS_CONFIG } from '@/types'
 import { PositionCard } from './PositionCard'
 import { NewPositionForm } from './NewPositionForm'
 

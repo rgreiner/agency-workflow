@@ -2,23 +2,13 @@
 
 import { useState, useTransition, useRef } from 'react'
 import { useParams } from 'next/navigation'
-import { STATUS_CONFIG } from '@/types'
 import type { StatusOverride } from '@/types'
+import { StatusManager } from './StatusManager'
 import { upsertOrgSettings } from '@/app/actions/org-settings'
 import { useOrgSettings } from '@/components/providers/OrgSettingsProvider'
 import { uploadFile } from '@/lib/storage/upload-client'
 import { toast } from 'sonner'
-import { Loader2, RotateCcw, Upload, X } from 'lucide-react'
-
-// Returns #ffffff or #1e293b depending on which has better contrast with the bg
-function contrastColor(hex: string): string {
-  const r = parseInt(hex.slice(1, 3), 16)
-  const g = parseInt(hex.slice(3, 5), 16)
-  const b = parseInt(hex.slice(5, 7), 16)
-  // Perceived luminance (WCAG formula)
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-  return luminance > 0.55 ? '#1e293b' : '#ffffff'
-}
+import { Loader2, Upload, X } from 'lucide-react'
 
 const ACCENT_PRESETS = [
   '#6366f1', // indigo
@@ -43,7 +33,7 @@ export default function AparenciaPage() {
   const [logoUrl,     setLogoUrl]     = useState(settings.logoUrl ?? '')
   const [uploading,   setUploading]   = useState(false)
   const [accentColor, setAccentColor] = useState(settings.accentColor)
-  const [overrides,   setOverrides]   = useState<StatusOverride[]>(settings.statusOverrides)
+  const [overrides]                   = useState<StatusOverride[]>(settings.statusOverrides)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const orgId    = settings.orgId
@@ -66,32 +56,12 @@ export default function AparenciaPage() {
     }
   }
 
-  function getOverride(value: string): StatusOverride {
-    return overrides.find(o => o.value === value) ?? { value }
-  }
-
-  function setOverride(value: string, patch: Partial<StatusOverride>) {
-    setOverrides(prev => {
-      const existing = prev.find(o => o.value === value)
-      if (existing) {
-        return prev.map(o => o.value === value ? { ...o, ...patch } : o)
-      }
-      return [...prev, { value, ...patch }]
-    })
-  }
-
-  function resetStatus(value: string) {
-    setOverrides(prev => prev.filter(o => o.value !== value))
-  }
-
   function handleSave() {
     startTransition(async () => {
-      const result = await upsertOrgSettings(
-        orgId,
-        logoUrl || null,
-        accentColor,
-        overrides.filter(o => o.label || o.bg || o.text),
-      )
+      // Nome/cor de status agora vivem em `org_status` (StatusManager); aqui ficam
+      // logo e cor de destaque. Os overrides antigos seguem sendo repassados
+      // intactos para não apagar o histórico de quem ainda não migrou.
+      const result = await upsertOrgSettings(orgId, logoUrl || null, accentColor, overrides)
       if (result?.error) toast.error(result.error)
       else toast.success('Configurações salvas!')
     })
@@ -195,81 +165,8 @@ export default function AparenciaPage() {
         </div>
       </section>
 
-      {/* ── Status ── */}
-      <section>
-        <h2 className="text-sm font-semibold text-gray-900 mb-1">Status das atividades</h2>
-        <p className="text-xs text-gray-500 mb-4">Personalize os nomes e cores de cada etapa do fluxo.</p>
-
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <div className="grid grid-cols-[1fr_160px_32px] gap-3 px-4 py-2 bg-gray-50 border-b border-gray-100 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-            <span>Nome</span>
-            <span>Cor</span>
-            <span />
-          </div>
-
-          {STATUS_CONFIG.map(s => {
-            const o = getOverride(s.value)
-            const currentBg   = o.bg   ?? s.bg
-            const currentText = o.text ?? s.text
-            const isModified  = !!(o.label || o.bg || o.text)
-
-            return (
-              <div
-                key={s.value}
-                className="grid grid-cols-[1fr_160px_32px] gap-3 items-center px-4 py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition"
-              >
-                {/* Name */}
-                <div className="flex items-center gap-2 min-w-0">
-                  <span
-                    className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold shrink-0"
-                    style={{ backgroundColor: currentBg, color: currentText }}
-                  >
-                    {o.label ?? s.label}
-                  </span>
-                  <input
-                    type="text"
-                    value={o.label ?? s.label}
-                    onChange={e => setOverride(s.value, { label: e.target.value === s.label ? undefined : e.target.value })}
-                    className="flex-1 text-xs border border-transparent hover:border-gray-200 focus:border-orange-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-orange-400 bg-transparent min-w-0"
-                  />
-                </div>
-
-                {/* Bg color — text auto-calculated for contrast */}
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="color"
-                    value={currentBg}
-                    onChange={e => {
-                      const bg   = e.target.value
-                      const text = contrastColor(bg)
-                      setOverride(s.value, { bg, text })
-                    }}
-                    className="w-6 h-6 rounded cursor-pointer border border-gray-200"
-                  />
-                  <span className="text-[11px] text-gray-500 font-mono">{currentBg}</span>
-                  <span
-                    className="text-[10px] font-medium px-1.5 py-0.5 rounded"
-                    style={{ backgroundColor: currentBg, color: currentText }}
-                  >
-                    Aa
-                  </span>
-                </label>
-
-                {/* Reset */}
-                <button
-                  type="button"
-                  onClick={() => resetStatus(s.value)}
-                  disabled={!isModified}
-                  title="Restaurar padrão"
-                  className="p-1 rounded text-gray-300 hover:text-gray-500 disabled:opacity-0 transition"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )
-          })}
-        </div>
-      </section>
+      {/* ── Status: cadastro da org (adicionar/editar/reordenar/excluir) ── */}
+      <StatusManager orgSlug={orgSlug} orgId={orgId} />
 
       {/* Save button */}
       <div className="flex justify-end pb-8">

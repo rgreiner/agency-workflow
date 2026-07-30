@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { STATUS_CONFIG } from '@/types'
+import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { updatePosition, deletePosition } from '@/app/actions/settings'
 import { ChevronDown, ChevronUp, Trash2, Check, Loader2, AlertTriangle, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -34,6 +34,7 @@ const PRESET_COLORS = [
 ]
 
 export function PositionCard({ position, orgSlug }: Props) {
+  const statusCfg = useStatusConfig()
   const [expanded, setExpanded] = useState(false)
   const [name, setName] = useState(position.name)
   const [color, setColor] = useState(position.color)
@@ -60,7 +61,7 @@ export function PositionCard({ position, orgSlug }: Props) {
   }
 
   function toggleGroup(group: string) {
-    const groupStatuses = STATUS_CONFIG.filter(s => s.group === group).map(s => s.value as string)
+    const groupStatuses = statusCfg.filter(s => s.group === group).map(s => s.value as string)
     const allSelected = groupStatuses.every(s => selected.includes(s))
     if (allSelected) {
       setSelected(prev => prev.filter(s => !groupStatuses.includes(s)))
@@ -181,7 +182,7 @@ export function PositionCard({ position, orgSlug }: Props) {
             </label>
             <div className="space-y-3">
               {groups.map(group => {
-                const groupStatuses = STATUS_CONFIG.filter(s => s.group === group)
+                const groupStatuses = statusCfg.filter(s => s.group === group)
                 const allChecked = groupStatuses.every(s => selected.includes(s.value))
                 const someChecked = groupStatuses.some(s => selected.includes(s.value))
 
@@ -216,10 +217,9 @@ export function PositionCard({ position, orgSlug }: Props) {
                             onClick={() => toggleStatus(s.value)}
                             className={cn(
                               'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition',
-                              checked
-                                ? `${s.bgColor} ${s.color} border-transparent`
-                                : 'bg-white text-gray-400 border-gray-200 hover:border-gray-300'
+                              checked ? 'border-transparent' : 'bg-white text-gray-400 border-gray-200 hover:border-gray-300'
                             )}
+                            style={checked ? { backgroundColor: s.bg, color: s.text } : undefined}
                           >
                             {checked && <Check className="w-2.5 h-2.5" />}
                             {s.label}
