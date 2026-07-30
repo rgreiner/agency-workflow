@@ -13,7 +13,7 @@ import { JornadaEditor, type JornadaVals } from '../JornadaEditor'
 export interface Colaborador {
   id: string; nome: string; cpf: string | null; email: string | null; telefone: string | null
   cargo: string | null; tipo_vinculo: string | null; data_admissao: string | null; data_demissao: string | null
-  status: string; gestor_id: string | null; salario_atual: number | string | null; observacao: string | null; arquivado: boolean
+  status: string; gestor_id: string | null; salario_atual: number | string | null; beneficios_mensal: number | string | null; observacao: string | null; arquivado: boolean
   membro_user_id: string | null
 }
 export interface GestorRef { id: string; nome: string }
@@ -34,6 +34,7 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
     cargo: colab.cargo ?? '', tipo_vinculo: colab.tipo_vinculo ?? '', status: colab.status ?? 'ativo',
     data_admissao: colab.data_admissao ?? '', data_demissao: colab.data_demissao ?? '',
     gestor_id: colab.gestor_id ?? '', salario_atual: colab.salario_atual != null ? formatBRL(Number(colab.salario_atual)).replace('R$', '').trim() : '',
+    beneficios_mensal: colab.beneficios_mensal != null && Number(colab.beneficios_mensal) > 0 ? formatBRL(Number(colab.beneficios_mensal)).replace('R$', '').trim() : '',
     observacao: colab.observacao ?? '', membro_user_id: colab.membro_user_id ?? '',
   })
   const set = (k: keyof typeof f, v: string) => setF(p => ({ ...p, [k]: v }))
@@ -48,6 +49,7 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
         // Demissão só faz sentido p/ desligado; se voltou a ativo, limpa.
         data_demissao: f.status === 'desligado' ? f.data_demissao : null,
         salario_atual: f.salario_atual ? String(parseMoney(f.salario_atual)) : null,
+        beneficios_mensal: f.beneficios_mensal ? String(parseMoney(f.beneficios_mensal)) : '0',
         gestor_id: f.gestor_id || null,
       })
       if (r?.error) toast.error(r.error)
@@ -93,6 +95,8 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
           <div><label className={labelCls}>Situação</label><Select value={f.status} onChange={v => set('status', v)} options={STATUS} /></div>
           {f.status === 'desligado' && <div><label className={labelCls}>Demissão</label><input type="date" value={f.data_demissao} onChange={e => set('data_demissao', e.target.value)} className={inputCls} /></div>}
           <div><label className={labelCls}>Salário atual</label><input inputMode="decimal" value={f.salario_atual} onChange={e => set('salario_atual', e.target.value)} className={inputCls} placeholder="0,00" /></div>
+          {/* Custo-empresa de VR/VA/plano etc. — entra na camada 4 do custo/hora (migration 170) */}
+          <div><label className={labelCls}>Benefícios (custo mensal)</label><input inputMode="decimal" value={f.beneficios_mensal} onChange={e => set('beneficios_mensal', e.target.value)} className={inputCls} placeholder="0,00" /></div>
           <div><label className={labelCls}>Gestor</label><Select value={f.gestor_id} onChange={v => set('gestor_id', v)} options={[{ value: '', label: '— nenhum —' }, ...gestores.map(g => ({ value: g.id, label: g.nome }))]} /></div>
           <div><label className={labelCls}>Vincular ao login <span className="font-normal text-gray-400">(habilita o ponto)</span></label>
             <Select value={f.membro_user_id} onChange={v => set('membro_user_id', v)} options={[{ value: '', label: '— não vinculado —' }, ...membros.map(m => ({ value: m.user_id, label: m.profiles?.full_name || m.profiles?.email || m.user_id }))]} /></div>

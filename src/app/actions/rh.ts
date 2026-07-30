@@ -15,6 +15,8 @@ export interface ColaboradorInput {
   data_demissao?: string | null
   status?: string | null
   gestor_id?: string | null
+  /** Custo-empresa mensal de VR/VA/plano — camada 4 do custo/hora (migration 170). */
+  beneficios_mensal?: string | null
   salario_atual?: string | null
   observacao?: string | null
   membro_user_id?: string | null

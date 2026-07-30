@@ -1,5 +1,7 @@
 import { assertHorasAccess } from '@/lib/horas'
+import { getUsuario } from '@/lib/auth/server'
 import { HorasClient, type LinhaTarefa, type LinhaPessoa } from './HorasClient'
+import { CustoHora, type CamadaPessoa, type PrecoVenda } from './CustoHora'
 
 export const metadata = { title: 'Horas — Flow' }
 
@@ -42,20 +44,35 @@ export default async function HorasPage({
 
   const { de, ate, preset } = periodo(sp.p, sp.de, sp.ate)
 
-  const [tarefasRes, pessoasRes] = await Promise.all([
+  const user = await getUsuario()
+
+  const [tarefasRes, pessoasRes, camadasRes, precoRes, membroRes] = await Promise.all([
     sb.rpc('horas_por_atividade', { p_org: orgId, p_ini: de, p_fim: ate }),
     sb.rpc('horas_por_pessoa', { p_org: orgId, p_ini: de, p_fim: ate }),
+    // Composição do custo: exige can_rh de verdade (expõe salário) — pode negar
+    // para owner de horas sem RH; nesse caso a seção simplesmente não aparece.
+    sb.rpc('horas_custo_camadas', { p_org: orgId }),
+    sb.rpc('horas_preco_venda', { p_org: orgId }),
+    user ? sb.from('organization_members').select('role').eq('org_id', orgId).eq('user_id', user.id).single() : Promise.resolve({ data: null }),
   ])
 
   const tarefas = (tarefasRes.data ?? []) as LinhaTarefa[]
   const pessoas = (pessoasRes.data ?? []) as LinhaPessoa[]
   const erro = (tarefasRes.error?.message ?? pessoasRes.error?.message ?? null) as string | null
+  const camadas = (camadasRes.data ?? []) as CamadaPessoa[]
+  const preco = (precoRes.data ?? null) as PrecoVenda | null
+  const canConfig = ['owner', 'admin'].includes((membroRes.data as { role?: string } | null)?.role ?? '')
 
   return (
-    <HorasClient
-      orgSlug={orgSlug}
-      de={de} ate={ate} preset={preset}
-      tarefas={tarefas} pessoas={pessoas} erro={erro}
-    />
+    <>
+      <HorasClient
+        orgSlug={orgSlug}
+        de={de} ate={ate} preset={preset}
+        tarefas={tarefas} pessoas={pessoas} erro={erro}
+      />
+      <div className="px-6 pb-10 max-w-6xl -mt-2">
+        <CustoHora orgSlug={orgSlug} orgId={orgId} camadas={camadas} preco={preco} canConfig={canConfig} />
+      </div>
+    </>
   )
 }
