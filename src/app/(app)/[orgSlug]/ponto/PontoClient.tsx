@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Clock, LogIn, Coffee, Undo2, LogOut, Loader2, FileText, Check } from 'lucide-react'
+import { Clock, LogIn, Coffee, Undo2, Loader2, FileText, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { Select } from '@/components/ui/Select'
 import { baterPonto, criarJustificativa } from '@/app/actions/rh-ponto'
@@ -13,6 +13,10 @@ export interface PontoDia {
   // Marcação original, quando o RH ajustou o ponto via justificativa aprovada.
   ajuste_de?: { entrada?: string; intervalo_ini?: string; intervalo_fim?: string; saida?: string } | null
   ajuste_em?: string | null
+  // Lista aberta de marcações do dia (N pares) + diagnóstico do almoço.
+  marcacoes?: string[]
+  intervalo_maior_min?: number | null
+  intervalo_ok?: boolean | null
 }
 
 const hm = (t: string | null) => t ? t.slice(0, 5) : '—'
@@ -27,27 +31,22 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
   const [just, setJust] = useState(false)
   const d = diaHoje
 
-  const proxima: { tipo: string; label: string; icon: typeof LogIn } | null =
-    !d?.entrada ? { tipo: 'entrada', label: 'Entrada', icon: LogIn }
-    : !d?.intervalo_ini ? { tipo: 'intervalo_ini', label: 'Início do intervalo', icon: Coffee }
-    : !d?.intervalo_fim ? { tipo: 'intervalo_fim', label: 'Retorno do intervalo', icon: Undo2 }
-    : !d?.saida ? { tipo: 'saida', label: 'Saída', icon: LogOut }
-    : null
+  // N marcações livres: ímpar = está trabalhando (próxima é saída/pausa),
+  // par = está fora (próxima é entrada/retorno).
+  const horas = d?.marcacoes ?? []
+  const dentro = horas.length % 2 === 1
+  const proxima = horas.length === 0
+    ? { label: 'Entrada', icon: LogIn }
+    : dentro ? { label: 'Saída (pausa ou fim do dia)', icon: Coffee }
+             : { label: 'Retorno', icon: Undo2 }
 
-  function bater(tipo: string) {
+  function bater() {
     start(async () => {
-      const r = await baterPonto(orgSlug, colaboradorId, tipo)
+      const r = await baterPonto(orgSlug, colaboradorId)
       if (r?.error) toast.error(r.error)
       else { toast.success('Ponto registrado!'); router.refresh() }
     })
   }
-
-  const marcacoes = [
-    { label: 'Entrada', v: d?.entrada, icon: LogIn },
-    { label: 'Intervalo', v: d?.intervalo_ini, icon: Coffee },
-    { label: 'Retorno', v: d?.intervalo_fim, icon: Undo2 },
-    { label: 'Saída', v: d?.saida, icon: LogOut },
-  ]
 
   return (
     <div className="p-6 max-w-2xl">
@@ -63,25 +62,35 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
 
       {/* Marcações de hoje */}
       <div className="rounded-2xl border border-gray-200 bg-white p-6">
-        <div className="grid grid-cols-4 gap-3 mb-5">
-          {marcacoes.map(m => (
-            <div key={m.label} className={`rounded-xl border p-3 text-center ${m.v ? 'border-orange-200 bg-orange-50/50' : 'border-gray-100 bg-gray-50'}`}>
-              <m.icon className={`w-4 h-4 mx-auto mb-1 ${m.v ? 'text-orange-600' : 'text-gray-300'}`} />
-              <div className="text-[11px] text-gray-400">{m.label}</div>
-              <div className={`text-base font-semibold tabular-nums ${m.v ? 'text-gray-900' : 'text-gray-300'}`}>{hm(m.v ?? null)}</div>
-            </div>
-          ))}
-        </div>
-
-        {proxima ? (
-          <button onClick={() => bater(proxima.tipo)} disabled={pending}
-            className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 text-[#fff] font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
-            {pending ? <Loader2 className="w-5 h-5 animate-spin" /> : <proxima.icon className="w-5 h-5" />} Bater {proxima.label.toLowerCase()}
-          </button>
+        {horas.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-4 mb-2">Nenhuma marcação hoje.</p>
         ) : (
-          <div className="text-center py-2">
-            <p className="text-sm text-emerald-700 font-medium inline-flex items-center gap-1.5"><Check className="w-4 h-4" /> Jornada de hoje concluída</p>
-            {d && <p className="text-xs text-gray-500 mt-1">Trabalhado: <b className="tabular-nums">{Math.floor(d.minutos / 60)}h{String(d.minutos % 60).padStart(2, '0')}</b> · saldo <b className={`tabular-nums ${d.saldo_min < 0 ? 'text-red-600' : d.saldo_min > 0 ? 'text-emerald-600' : 'text-gray-500'}`}>{saldoStr(d.saldo_min)}</b>{d.extra_status === 'pendente' && ' · extra aguardando o gestor'}</p>}
+          <div className="flex flex-wrap gap-2 mb-5">
+            {horas.map((h, i) => (
+              <div key={i} className="rounded-xl border border-orange-200 bg-orange-50/50 px-3 py-2 text-center min-w-[5rem]">
+                <div className="text-[11px] text-gray-400">{i === 0 ? 'Entrada' : i % 2 === 1 ? 'Saída' : 'Retorno'}</div>
+                <div className="text-base font-semibold tabular-nums text-gray-900">{hm(h)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button onClick={bater} disabled={pending}
+          className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 text-[#fff] font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
+          {pending ? <Loader2 className="w-5 h-5 animate-spin" /> : <proxima.icon className="w-5 h-5" />} Bater {proxima.label.toLowerCase()}
+        </button>
+        <p className="text-[11px] text-gray-400 text-center mt-2">
+          Pode pausar quantas vezes precisar. Só o almoço (o maior intervalo do dia) precisa ter no mínimo 1h.
+        </p>
+
+        {d && !dentro && horas.length > 0 && (
+          <div className="text-center pt-3 mt-3 border-t border-gray-100">
+            <p className="text-xs text-gray-500">Trabalhado: <b className="tabular-nums">{Math.floor(d.minutos / 60)}h{String(d.minutos % 60).padStart(2, '0')}</b> · saldo <b className={`tabular-nums ${d.saldo_min < 0 ? 'text-red-600' : d.saldo_min > 0 ? 'text-emerald-600' : 'text-gray-500'}`}>{saldoStr(d.saldo_min)}</b>{d.extra_status === 'pendente' && ' · extra aguardando o gestor'}</p>
+            {d.intervalo_ok === false && (
+              <p className="text-[11px] text-amber-700 mt-1 inline-flex items-center gap-1">
+                <Check className="w-3 h-3" /> Almoço de {Math.floor((d.intervalo_maior_min ?? 0) / 60)}h{String((d.intervalo_maior_min ?? 0) % 60).padStart(2, '0')} — abaixo de 1h, o RH vai revisar.
+              </p>
+            )}
           </div>
         )}
       </div>

@@ -34,10 +34,19 @@ export default async function PontoPage({ params }: { params: Promise<{ orgSlug:
   const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: dias } = await (supabase as any)
-    .from('rh_ponto').select('data, entrada, intervalo_ini, intervalo_fim, saida, minutos, saldo_min, acima_10h, extra_status, ajuste_de, ajuste_em')
+    .from('rh_ponto').select('id, data, entrada, intervalo_ini, intervalo_fim, saida, minutos, saldo_min, acima_10h, extra_status, ajuste_de, ajuste_em, intervalo_maior_min, intervalo_ok, rh_marcacao(hora, seq)')
     .eq('colaborador_id', colab.id).order('data', { ascending: false }).limit(15)
 
-  const lista = (dias ?? []) as PontoDia[]
+  // rh_marcacao vem aninhada; achata em uma lista de horas na ordem do dia.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lista = ((dias ?? []) as any[]).map(d => ({
+    ...d,
+    marcacoes: (d.rh_marcacao ?? [])
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .sort((a: any, b: any) => a.seq - b.seq)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((m: any) => m.hora as string),
+  })) as PontoDia[]
   const diaHoje = lista.find(d => d.data === hoje) ?? null
 
   return <PontoClient orgSlug={orgSlug} colaboradorId={colab.id} nome={colab.nome} hoje={hoje} diaHoje={diaHoje} recentes={lista.filter(d => d.data !== hoje)} />

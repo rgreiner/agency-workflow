@@ -13,12 +13,14 @@ async function ctx(orgSlug: string) {
   return { supabase, orgId: org.id as string, userId: user.id as string }
 }
 
-/** Bate uma marcação (entrada/intervalo_ini/intervalo_fim/saida) do próprio colaborador. */
-export async function baterPonto(orgSlug: string, colaboradorId: string, tipo: string) {
+/** Registra a próxima marcação do dia. Não há tipo fixo: são N pares livres
+ *  (entrada, pausas quantas precisar, saída). A regra do almoço de 1h é conferida
+ *  no fechamento do dia (intervalo_ok), não no clique. */
+export async function baterPonto(orgSlug: string, colaboradorId: string) {
   const c = await ctx(orgSlug)
   if ('error' in c) return { error: c.error }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (c.supabase as any).rpc('rh_bater_ponto', { p_colaborador_id: colaboradorId, p_tipo: tipo })
+  const { data, error } = await (c.supabase as any).rpc('rh_bater_ponto', { p_colaborador_id: colaboradorId })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/ponto`)
   return { ok: true, resultado: data }
