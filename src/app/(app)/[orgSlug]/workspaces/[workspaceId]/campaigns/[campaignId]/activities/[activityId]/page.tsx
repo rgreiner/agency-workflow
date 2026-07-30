@@ -10,6 +10,7 @@ import { StatusChanger } from './StatusChanger'
 import { ReviewBanner } from './ReviewBanner'
 import { PortalFeedback, type PortalFeedbackItem } from './PortalFeedback'
 import { AutoRefresh } from '@/components/ui/AutoRefresh'
+import { FocusTracker } from '@/components/ui/FocusTracker'
 import { CommentBox } from './CommentBox'
 import { CommentContent } from './CommentContent'
 import { ScrollFeedBottom } from './ScrollFeedBottom'
@@ -489,6 +490,10 @@ export default async function ActivityPage({
             {/* Atualiza a tarefa sozinha (revisão em 2º plano, mudanças de outros);
                 mais rápido enquanto uma revisão está rodando. */}
             <AutoRefresh fast={activity.review_status === 'reviewing'} />
+
+            {/* Apontamento de horas implícito: marca a abertura desta tarefa.
+                O tempo vai daqui até a próxima tarefa aberta, dentro do ponto. */}
+            <FocusTracker activityId={activityId} origem={modal ? 'modal' : 'pagina'} />
 
             {/* Revisão por IA (Redação/Design/Finalização) — "revisando…" / apontamentos + avançar mesmo assim */}
             <ReviewBanner

@@ -118,6 +118,7 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Pessoas', href: 'rh' },
     { label: 'Folha',   href: 'rh/folha' },
     { label: 'Ponto',   href: 'rh/ponto' },
+    { label: 'Horas',   href: 'rh/horas' },
     { label: 'Calendário', href: 'rh/calendario' },
     { label: 'Fechamento', href: 'rh/fechamento' },
   ] },
