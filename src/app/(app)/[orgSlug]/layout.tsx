@@ -5,6 +5,7 @@ import { AppShell } from '@/components/layout/AppShell'
 import { OrgSettingsProvider } from '@/components/providers/OrgSettingsProvider'
 import { UserPrefsProvider } from '@/components/providers/UserPrefsProvider'
 import { ChatDock } from '@/components/chat/ChatDock'
+import { PontoPrompt } from '@/components/ponto/PontoPrompt'
 import { TabUnreadBadge } from '@/components/layout/TabUnreadBadge'
 import { computeAccess, ACCESS_SELECT, type MembershipRow } from '@/lib/auth/access'
 import { porNome } from '@/lib/utils'
@@ -141,6 +142,9 @@ export default async function OrgLayout({
 
       {/* Messenger interno — dock global no canto inferior direito */}
       <ChatDock orgId={org.id} orgSlug={orgSlug} meId={user.id} members={chatMembers} />
+      {/* Lembrete de ponto: card no canto perto dos horários da jornada +
+          preventivo (trabalhando sem ponto aberto). Sem ficha vinculada, nada. */}
+      <PontoPrompt orgSlug={orgSlug} />
 
       {/* Total de não-lidas (inbox + chat) no título da aba */}
       <TabUnreadBadge />

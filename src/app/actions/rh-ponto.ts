@@ -98,3 +98,37 @@ export async function decidirExtra(orgSlug: string, pontoId: string, status: str
   revalidatePath(`/${orgSlug}/rh/ponto`)
   return { ok: true }
 }
+
+/** Estado do dia para o lembrete de ponto (card no canto). null = sem ficha vinculada. */
+export async function pontoEstado() {
+  try {
+    const supabase = await createClient()
+    const user = await getUsuario()
+    if (!user) return null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase as any).rpc('rh_ponto_estado')
+    return (data ?? null) as {
+      colaborador_id: string
+      dia: string
+      marcacoes: string[]
+      jornada: { entrada: string; intervalo_ini: string; intervalo_fim: string; saida: string; flex_min: number }
+      primeiro_foco: string | null
+      agora: string
+    } | null
+  } catch {
+    return null
+  }
+}
+
+/** Entrada retroativa confirmada: registra a 1ª marcação do dia na hora do
+ *  primeiro foco (travado no servidor — sem foco, sem retro). */
+export async function baterEntradaRetro(orgSlug: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('rh_bater_entrada_retro')
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/ponto`)
+  return { ok: true, hora: (data as { hora?: string })?.hora }
+}
