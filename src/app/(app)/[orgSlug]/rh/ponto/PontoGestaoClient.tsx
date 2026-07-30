@@ -6,6 +6,7 @@ import { Clock, FileText, Check, X, Ban, CalendarX, CalendarClock } from 'lucide
 import { toast } from 'sonner'
 import { decidirExtra, decidirJustificativa } from '@/app/actions/rh-ponto'
 import { JornadaEditor, type JornadaVals } from '../JornadaEditor'
+import { ImportarPontomais } from './ImportarPontomais'
 
 interface Colab { nome: string | null }
 export interface ExtraPend { id: string; data: string; minutos: number; saldo_min: number; acima_10h: boolean; rh_colaborador: Colab | null }
@@ -50,8 +51,13 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
 
   return (
     <div className="p-6 max-w-4xl">
-      <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-1"><Clock className="w-5 h-5 text-orange-600" /> Ponto — aprovações</h1>
-      <p className="text-gray-500 text-sm mb-6">Horas extras (aprova o gestor) e justificativas (decide o RH).</p>
+      <div className="flex items-start justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-1"><Clock className="w-5 h-5 text-orange-600" /> Ponto — aprovações</h1>
+          <p className="text-gray-500 text-sm">Horas extras (aprova o gestor) e justificativas (decide o RH).</p>
+        </div>
+        <ImportarPontomais orgSlug={orgSlug} />
+      </div>
 
       {/* Jornada padrão da empresa */}
       <section className="mb-8">

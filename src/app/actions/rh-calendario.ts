@@ -55,6 +55,42 @@ export async function salvarFechamentoConfig(orgSlug: string, diaIni: number, di
   return { ok: true }
 }
 
+/** Importa o histórico do Pontomais (uma chamada por pessoa) + feriados detectados. */
+export async function importarPontomais(orgSlug: string, payload: {
+  dataRef: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  pessoas: { nome: string; dias: any[]; saldoFinalMin: number | null }[]
+  feriados: { data: string; nome: string; tipo: string }[]
+}) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+
+  const resultados: { nome: string; dias: number; erro?: string }[] = []
+  for (const p of payload.pessoas) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (c.supabase as any).rpc('rh_importar_pontomais', {
+      p_org_id: c.orgId, p_nome: p.nome, p_dias: p.dias,
+      p_saldo_final_min: p.saldoFinalMin, p_data_ref: payload.dataRef,
+    })
+    if (error) resultados.push({ nome: p.nome, dias: 0, erro: error.message })
+    else resultados.push(data as { nome: string; dias: number; erro?: string })
+  }
+
+  let feriados = 0
+  for (const f of payload.feriados) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (c.supabase as any).rpc('rh_upsert_feriado', {
+      p_org_id: c.orgId, p_data: f.data, p_nome: f.nome, p_tipo: f.tipo,
+    })
+    if (!error) feriados++
+  }
+
+  revalidatePath(`/${orgSlug}/rh/ponto`)
+  revalidatePath(`/${orgSlug}/rh/calendario`)
+  revalidatePath(`/${orgSlug}/rh/fechamento`)
+  return { resultados, feriados }
+}
+
 export interface FechamentoLinha {
   colaborador_id: string; nome: string; cpf: string | null; cargo: string | null
   hn_min: number; he50_min: number; he100_min: number; faltas_min: number
