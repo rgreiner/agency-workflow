@@ -63,8 +63,22 @@ export function PainelAnalise({ lancamentos, categorias, centros }: {
   }, [lancamentos, gran])
 
   const [periodo, setPeriodo] = useState<string>('')
-  // período válido = o escolhido, se existir na granularidade atual; senão o mais recente.
-  const periodoAtivo = periodos.includes(periodo) ? periodo : (periodos[0] ?? '')
+
+  // Período em que estamos AGORA (em BRT — perto da virada do ano, UTC erraria).
+  const periodoCorrente = useMemo(() => {
+    const hoje = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+    return periodoDe(hoje, gran)
+  }, [gran])
+
+  // Período válido = o escolhido, se existir nesta granularidade. Senão o CORRENTE
+  // — não o primeiro da lista: como há lançamento com vencimento lá na frente
+  // (fee e parcelas chegam a 2032), "o mais recente" abria o painel num ano futuro.
+  // Sem dado no período corrente, cai no mais recente que já começou.
+  const periodoAtivo = periodos.includes(periodo)
+    ? periodo
+    : periodos.includes(periodoCorrente)
+      ? periodoCorrente
+      : (periodos.find(p => p <= periodoCorrente) ?? periodos[0] ?? '')
 
   const macroMap = useMemo(() => macroPorCategoria(categorias), [categorias])
   const cores = useMemo(() => coresPorNome(categorias), [categorias])
