@@ -17,7 +17,7 @@ const CLS: Record<string, string> = {
   emenda: 'bg-amber-50 text-amber-700 ring-amber-200',
   facultativo: 'bg-sky-50 text-sky-700 ring-sky-200',
 }
-const DOW = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
+const DOW = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
 const iso = (y: number, m: number, d: number) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
@@ -35,10 +35,10 @@ export function CalendarioClient({ orgSlug, feriados, hoje }: { orgSlug: string;
   const mapa = useMemo(() => new Map(feriados.map(f => [f.data, f])), [feriados])
   const doAno = useMemo(() => feriados.filter(f => f.data.startsWith(String(ano))), [feriados, ano])
 
-  // Grade do mês começando na segunda (ISO).
+  // Grade do mês começando no domingo.
   const grade = useMemo(() => {
     const primeiro = new Date(Date.UTC(ano, mes - 1, 1))
-    const offset = (primeiro.getUTCDay() + 6) % 7            // seg=0 … dom=6
+    const offset = primeiro.getUTCDay()                      // dom=0 … sáb=6
     const dias = new Date(Date.UTC(ano, mes, 0)).getUTCDate()
     const cells: (number | null)[] = Array(offset).fill(null)
     for (let d = 1; d <= dias; d++) cells.push(d)
@@ -95,7 +95,7 @@ export function CalendarioClient({ orgSlug, feriados, hoje }: { orgSlug: string;
               if (d === null) return <div key={i} />
               const data = iso(ano, mes, d)
               const f = mapa.get(data)
-              const fds = (i % 7) >= 5
+              const fds = (i % 7) === 0 || (i % 7) === 6   // domingo e sábado
               const isHoje = data === hoje
               return (
                 <button key={i} onClick={() => abrir(d)}
