@@ -27,7 +27,12 @@ export async function baterPonto(orgSlug: string, colaboradorId: string, tipo: s
 /** Abre uma justificativa (falta/atestado/esqueci) → decisão do RH. */
 export async function criarJustificativa(
   orgSlug: string, colaboradorId: string,
-  j: { tipo: string; data_ini: string; data_fim: string; descricao?: string | null; doc_id?: string | null },
+  j: {
+    tipo: string; data_ini: string; data_fim: string; descricao?: string | null; doc_id?: string | null
+    // Horário correto (opcional): se informado, a aprovação do RH AJUSTA a marcação.
+    hora_entrada?: string | null; hora_intervalo_ini?: string | null
+    hora_intervalo_fim?: string | null; hora_saida?: string | null
+  },
 ) {
   const c = await ctx(orgSlug)
   if ('error' in c) return { error: c.error }
@@ -36,6 +41,8 @@ export async function criarJustificativa(
     org_id: c.orgId, colaborador_id: colaboradorId, tipo: j.tipo,
     data_ini: j.data_ini, data_fim: j.data_fim || j.data_ini,
     descricao: j.descricao || null, doc_id: j.doc_id || null, created_by: c.userId,
+    hora_entrada: j.hora_entrada || null, hora_intervalo_ini: j.hora_intervalo_ini || null,
+    hora_intervalo_fim: j.hora_intervalo_fim || null, hora_saida: j.hora_saida || null,
   })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/ponto`)
@@ -43,18 +50,37 @@ export async function criarJustificativa(
   return { ok: true }
 }
 
-/** RH decide a justificativa: aprovado | rejeitado | abonado | falta. */
-export async function decidirJustificativa(orgSlug: string, id: string, status: string) {
+/** RH decide a justificativa: aprovado | rejeitado | abonado | falta.
+ *  Se `horas` vier (ou já estiver na justificativa), aprovar AJUSTA a marcação do ponto
+ *  — preservando a original em rh_ponto.ajuste_de. */
+export async function decidirJustificativa(orgSlug: string, id: string, status: string, horas?: {
+  hora_entrada?: string | null; hora_intervalo_ini?: string | null
+  hora_intervalo_fim?: string | null; hora_saida?: string | null
+}) {
   const c = await ctx(orgSlug)
   if ('error' in c) return { error: c.error }
   if (!['aprovado', 'rejeitado', 'abonado', 'falta'].includes(status)) return { error: 'Status inválido' }
+
+  // O RH pode corrigir/informar o horário na hora de decidir.
+  if (horas && Object.values(horas).some(v => v)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: e1 } = await (c.supabase as any).from('rh_justificativa')
+      .update({
+        hora_entrada: horas.hora_entrada || null, hora_intervalo_ini: horas.hora_intervalo_ini || null,
+        hora_intervalo_fim: horas.hora_intervalo_fim || null, hora_saida: horas.hora_saida || null,
+      })
+      .eq('id', id).eq('org_id', c.orgId)
+    if (e1) return { error: e1.message }
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (c.supabase as any).from('rh_justificativa')
-    .update({ status, decidido_por: c.userId, decidido_em: new Date().toISOString() })
-    .eq('id', id).eq('org_id', c.orgId)   // RLS (rh_can) garante que só RH decide
+  const { data, error } = await (c.supabase as any).rpc('rh_decidir_justificativa', {
+    p_id: id, p_status: status,
+  })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/rh/ponto`)
-  return { ok: true }
+  revalidatePath(`/${orgSlug}/ponto`)
+  return { ok: true, ajustados: (data as { pontos_ajustados: number })?.pontos_ajustados ?? 0 }
 }
 
 /** Gestor decide a hora extra do dia: aprovado | rejeitado (opcionalmente aloca em projeto). */

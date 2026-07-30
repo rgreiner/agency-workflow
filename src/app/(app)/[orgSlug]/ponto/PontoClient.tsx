@@ -10,6 +10,9 @@ import { baterPonto, criarJustificativa } from '@/app/actions/rh-ponto'
 export interface PontoDia {
   data: string; entrada: string | null; intervalo_ini: string | null; intervalo_fim: string | null
   saida: string | null; minutos: number; saldo_min: number; acima_10h: boolean; extra_status: string | null
+  // Marcação original, quando o RH ajustou o ponto via justificativa aprovada.
+  ajuste_de?: { entrada?: string; intervalo_ini?: string; intervalo_fim?: string; saida?: string } | null
+  ajuste_em?: string | null
 }
 
 const hm = (t: string | null) => t ? t.slice(0, 5) : '—'
@@ -92,7 +95,13 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
               {recentes.map(r => (
                 <tr key={r.data} className="border-b border-gray-50 last:border-0">
                   <td className="px-4 py-2 text-gray-500 tabular-nums">{dataBR(r.data)}</td>
-                  <td className="px-2 py-2 text-gray-600 tabular-nums">{hm(r.entrada)}–{hm(r.intervalo_ini)} · {hm(r.intervalo_fim)}–{hm(r.saida)}</td>
+                  <td className="px-2 py-2 text-gray-600 tabular-nums">
+                    {hm(r.entrada)}–{hm(r.intervalo_ini)} · {hm(r.intervalo_fim)}–{hm(r.saida)}
+                    {r.ajuste_em && (
+                      <span title={`Ajustado pelo RH. Marcação original: ${[r.ajuste_de?.entrada, r.ajuste_de?.saida].filter(Boolean).map(t => hm(t as string)).join(' – ') || '—'}`}
+                        className="ml-1.5 text-[10px] text-amber-600">ajustado</span>
+                    )}
+                  </td>
                   <td className="px-2 py-2 text-right text-gray-500 tabular-nums">{Math.floor(r.minutos / 60)}h{String(r.minutos % 60).padStart(2, '0')}</td>
                   <td className={`px-4 py-2 text-right tabular-nums font-medium ${r.saldo_min < 0 ? 'text-red-600' : r.saldo_min > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>{saldoStr(r.saldo_min)}</td>
                 </tr>
@@ -114,11 +123,16 @@ function JustificarModal({ orgSlug, colaboradorId, onClose }: { orgSlug: string;
   const [dataIni, setDataIni] = useState(hoje)
   const [dataFim, setDataFim] = useState(hoje)
   const [descricao, setDescricao] = useState('')
+  const [hEnt, setHEnt] = useState('')
+  const [hSai, setHSai] = useState('')
   const [saving, start] = useTransition()
 
   function enviar() {
     start(async () => {
-      const r = await criarJustificativa(orgSlug, colaboradorId, { tipo, data_ini: dataIni, data_fim: dataFim, descricao })
+      const r = await criarJustificativa(orgSlug, colaboradorId, {
+        tipo, data_ini: dataIni, data_fim: dataFim, descricao,
+        hora_entrada: hEnt || null, hora_saida: hSai || null,
+      })
       if (r?.error) toast.error(r.error)
       else { toast.success('Justificativa enviada ao RH.'); onClose(); router.refresh() }
     })
@@ -140,6 +154,14 @@ function JustificarModal({ orgSlug, colaboradorId, onClose }: { orgSlug: string;
           <div className="grid grid-cols-2 gap-3">
             <div><label className="block text-sm text-gray-600 mb-1.5">De</label><input type="date" value={dataIni} onChange={e => setDataIni(e.target.value)} className={inputCls} /></div>
             <div><label className="block text-sm text-gray-600 mb-1.5">Até</label><input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} className={inputCls} /></div>
+          </div>
+          <div className="rounded-xl bg-gray-50 p-3 space-y-2">
+            <div className="text-xs font-medium text-gray-600">Horário correto <span className="font-normal text-gray-400">(opcional)</span></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="block text-[11px] text-gray-500 mb-1">Entrada</label><input type="time" value={hEnt} onChange={e => setHEnt(e.target.value)} className={inputCls} /></div>
+              <div><label className="block text-[11px] text-gray-500 mb-1">Saída</label><input type="time" value={hSai} onChange={e => setHSai(e.target.value)} className={inputCls} /></div>
+            </div>
+            <p className="text-[11px] text-gray-400">Preencha se bateu no horário errado (ex.: chegou 8h39 e só bateu 9h37). Ao aprovar, o RH corrige a marcação — a original fica no histórico.</p>
           </div>
           <div><label className="block text-sm text-gray-600 mb-1.5">Descrição</label><textarea value={descricao} onChange={e => setDescricao(e.target.value)} rows={2} className={inputCls} placeholder="Opcional" /></div>
           <p className="text-[11px] text-gray-400">Atestado: envie o PDF depois na sua ficha (o RH anexa à justificativa).</p>

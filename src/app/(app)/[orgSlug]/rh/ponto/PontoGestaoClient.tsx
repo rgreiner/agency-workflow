@@ -1,6 +1,6 @@
 'use client'
 
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Clock, FileText, Check, X, Ban, CalendarX, CalendarClock } from 'lucide-react'
 import { toast } from 'sonner'
@@ -9,15 +9,26 @@ import { JornadaEditor, type JornadaVals } from '../JornadaEditor'
 
 interface Colab { nome: string | null }
 export interface ExtraPend { id: string; data: string; minutos: number; saldo_min: number; acima_10h: boolean; rh_colaborador: Colab | null }
-export interface JustPend { id: string; data_ini: string; data_fim: string; tipo: string; descricao: string | null; status: string; rh_colaborador: Colab | null }
+export interface JustPend {
+  id: string; data_ini: string; data_fim: string; tipo: string; descricao: string | null; status: string
+  hora_entrada: string | null; hora_saida: string | null
+  rh_colaborador: Colab | null
+}
 
 const dataBR = (d: string) => { const [y, m, dd] = d.split('-'); return `${dd}/${m}/${y}` }
 const saldoStr = (m: number) => `+${Math.floor(Math.abs(m) / 60)}h${String(Math.abs(m) % 60).padStart(2, '0')}`
 const TIPO: Record<string, string> = { esqueci: 'Esqueceu de bater', atestado: 'Atestado', medico: 'Consulta médica', falta: 'Falta', outro: 'Outro' }
 
+const hhmm = (t: string | null) => (t ?? '').slice(0, 5)
+
 export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadrao }: { orgSlug: string; extras: ExtraPend[]; justificativas: JustPend[]; jornadaPadrao: Partial<JornadaVals> | null }) {
   const router = useRouter()
   const [pending, start] = useTransition()
+  // Horário que o RH vai gravar ao aprovar (pré-carregado com o que a pessoa pediu).
+  const [horas, setHoras] = useState<Record<string, { ent: string; sai: string }>>(() =>
+    Object.fromEntries(justificativas.map(j => [j.id, { ent: hhmm(j.hora_entrada), sai: hhmm(j.hora_saida) }])))
+  const setHora = (id: string, k: 'ent' | 'sai', v: string) =>
+    setHoras(p => ({ ...p, [id]: { ...(p[id] ?? { ent: '', sai: '' }), [k]: v } }))
 
   function extra(id: string, status: string) {
     start(async () => {
@@ -26,9 +37,14 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
     })
   }
   function just(id: string, status: string) {
+    const h = horas[id]
     start(async () => {
-      const r = await decidirJustificativa(orgSlug, id, status)
-      if (r?.error) toast.error(r.error); else { toast.success('Justificativa decidida.'); router.refresh() }
+      const r = await decidirJustificativa(orgSlug, id, status, { hora_entrada: h?.ent || null, hora_saida: h?.sai || null })
+      if (r?.error) toast.error(r.error)
+      else {
+        toast.success(r.ajustados ? `Aprovada — marcação ajustada (${r.ajustados} dia(s)).` : 'Justificativa decidida.')
+        router.refresh()
+      }
     })
   }
 
@@ -83,6 +99,16 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
                     <div className="text-sm font-medium text-gray-900">{j.rh_colaborador?.nome ?? '—'} <span className="text-[10px] font-medium text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 ml-1">{TIPO[j.tipo] ?? j.tipo}</span></div>
                     <div className="text-xs text-gray-500 tabular-nums">{dataBR(j.data_ini)}{j.data_fim !== j.data_ini && ` – ${dataBR(j.data_fim)}`}{j.descricao && <span className="text-gray-400"> · {j.descricao}</span>}</div>
                   </div>
+                </div>
+                <div className="flex items-center gap-2 mb-2 rounded-lg bg-gray-50 px-2.5 py-2 w-fit">
+                  <span className="text-[11px] text-gray-500">Corrigir marcação:</span>
+                  <label className="text-[11px] text-gray-400">entrada</label>
+                  <input type="time" value={horas[j.id]?.ent ?? ''} onChange={e => setHora(j.id, 'ent', e.target.value)}
+                    className="px-2 py-1 text-xs bg-white border border-gray-200 rounded-md text-gray-800" />
+                  <label className="text-[11px] text-gray-400">saída</label>
+                  <input type="time" value={horas[j.id]?.sai ?? ''} onChange={e => setHora(j.id, 'sai', e.target.value)}
+                    className="px-2 py-1 text-xs bg-white border border-gray-200 rounded-md text-gray-800" />
+                  <span className="text-[11px] text-gray-400">— em branco = só decide, não altera o ponto</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={() => just(j.id, 'aprovado')} disabled={pending} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 text-[#fff] hover:bg-emerald-700 disabled:opacity-50 transition"><Check className="w-3.5 h-3.5" /> Aprovar</button>

@@ -34,7 +34,7 @@ export default async function PontoPage({ params }: { params: Promise<{ orgSlug:
   const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: dias } = await (supabase as any)
-    .from('rh_ponto').select('data, entrada, intervalo_ini, intervalo_fim, saida, minutos, saldo_min, acima_10h, extra_status')
+    .from('rh_ponto').select('data, entrada, intervalo_ini, intervalo_fim, saida, minutos, saldo_min, acima_10h, extra_status, ajuste_de, ajuste_em')
     .eq('colaborador_id', colab.id).order('data', { ascending: false }).limit(15)
 
   const lista = (dias ?? []) as PontoDia[]
