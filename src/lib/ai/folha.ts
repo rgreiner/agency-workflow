@@ -78,7 +78,9 @@ export async function pdfToText(bytes: Buffer): Promise<string> {
 export async function extrairFolha(texto: string): Promise<FolhaExtraida | null> {
   if (!process.env.ANTHROPIC_API_KEY) return null
   const Anthropic = (await import('@anthropic-ai/sdk')).default
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  // maxRetries acima do padrão (2): 529 "Overloaded" é sobrecarga momentânea da
+  // API e o backoff exponencial do SDK costuma resolver sem custo nenhum.
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 5, timeout: 120_000 })
   const model = process.env.FOLHA_MODEL_CLAUDE || process.env.REVIEW_MODEL_CLAUDE || 'claude-sonnet-4-6'
 
   const msg = await client.messages.create({

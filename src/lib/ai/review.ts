@@ -204,7 +204,9 @@ const ERROS_TOOL_SCHEMA = {
 
 async function runClaude(system: string, parts: ReviewPart[]): Promise<{ model: string; list: ReviewError[] }> {
   const Anthropic = (await import('@anthropic-ai/sdk')).default
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  // maxRetries acima do padrão (2): 529 "Overloaded" é sobrecarga momentânea da
+  // API e o backoff exponencial do SDK costuma resolver sem custo nenhum.
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 5, timeout: 120_000 })
   const model = process.env.REVIEW_MODEL_CLAUDE || process.env.REDACAO_REVIEW_MODEL_CLAUDE || 'claude-opus-4-8'
 
   const content = parts.map(p => {

@@ -32,8 +32,51 @@ function posicao(ordem: string[], v: string): number {
   return i === -1 ? Number.MAX_SAFE_INTEGER : i
 }
 
-// Teto de tempo da revisão em 2º plano — evita ficar preso em "revisando…".
+// Teto de tempo POR TENTATIVA — evita ficar preso em "revisando…".
 const REVIEW_TIMEOUT_MS = 150_000
+// Sobrecarga do provider (529 "Overloaded", 429, 5xx) costuma passar em segundos.
+// O SDK já retenta rápido; esta espera é a de fôlego, entre tentativas cheias.
+const RETRY_DELAY_MS = 45_000
+const TENTATIVAS = 2
+
+const espera = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+/**
+ * Falha que vale retentar: sobrecarga/limite do provider, 5xx e queda de rede.
+ * Erro de conteúdo (schema, arquivo ilegível, chave inválida) NÃO entra aqui —
+ * repetir só gastaria tempo e daria o mesmo resultado.
+ */
+function ehTransiente(e: unknown): boolean {
+  const status = (e as { status?: number })?.status
+  if (typeof status === 'number') return status === 408 || status === 429 || status >= 500
+  const msg = String((e as Error)?.message ?? e)
+  // O caminho do Gemini não é SDK: o erro chega como texto ("Gemini 503: …"),
+  // então o código HTTP no começo da mensagem também vale como sinal.
+  return /^\D{0,20}\b(408|429|5\d\d)\b/.test(msg)
+    || /overloaded|rate.?limit|too many requests|quota|timeout|tempo esgotado|ECONNRESET|ETIMEDOUT|fetch failed|socket hang up/i.test(msg)
+}
+
+/** Roda a revisão com uma segunda chance quando a falha é transitória. */
+async function comTentativas(
+  kind: ReviewKind,
+  supabase: SupabaseClient<Database>,
+  activityId: string,
+  userId: string,
+  label: string,
+): Promise<KindOutcome | null> {
+  let ultimo: unknown
+  for (let n = 1; n <= TENTATIVAS; n++) {
+    try {
+      return await withTimeout(runKind(kind, supabase, activityId, userId), REVIEW_TIMEOUT_MS, `revisão de ${label}`)
+    } catch (e) {
+      ultimo = e
+      if (n === TENTATIVAS || !ehTransiente(e)) throw e
+      console.warn(`[review:${kind}] tentativa ${n} falhou (transitória), repetindo em ${RETRY_DELAY_MS / 1000}s`, e)
+      await espera(RETRY_DELAY_MS)
+    }
+  }
+  throw ultimo
+}
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -119,7 +162,7 @@ export function scheduleReview(params: {
 
     try {
       await setReview('reviewing', null, null)
-      const out = await withTimeout(runKind(kind, supabase, activityId, userId), REVIEW_TIMEOUT_MS, `revisão de ${label}`)
+      const out = await comTentativas(kind, supabase, activityId, userId, label)
 
       if (!out || out.note) {
         await setReview('clean', null, null)

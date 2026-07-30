@@ -507,6 +507,28 @@ export async function toggleCommentReaction(path: string, commentId: string, emo
 }
 
 /**
+ * "Tentar de novo" — redispara a revisão que falhou por erro técnico (ex.: 529
+ * "Overloaded" do provider). A tarefa não se move: ela já avançou quando o gate
+ * rodou; aqui só a checagem roda outra vez, em 2º plano.
+ */
+export async function retryReview(path: string, activityId: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { data: act } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .from('activities').select('status, review_kind, review_status').eq('id', activityId).single() as any
+  if (!act) return { error: 'Tarefa não encontrada' }
+  if (act.review_status !== 'failed') return { error: 'Esta revisão não está pendente de nova tentativa' }
+
+  const kind = (act.review_kind || 'redacao') as 'redacao' | 'design' | 'finalizacao'
+  scheduleReview({ supabase, userId: user.id, activityId, kind, toStatus: act.status as string })
+  revalidatePath(path)
+  return { ok: true }
+}
+
+/**
  * "Avançar mesmo assim" — assume os apontamentos da revisão e avança a tarefa para
  * o status que tentou antes (review_target), via RPC direto p/ não re-disparar a
  * revisão. Quem clica fica registrado no comentário (responsabilização).
