@@ -38,18 +38,20 @@ const dataHoraBR = (iso: string) =>
  * mesmo status repetido; a linha expandida soma os totais por etapa.
  * Tempo CORRIDO (lead time do processo) — horas trabalhadas ficam em RH → Horas.
  */
-export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, tarefas, agora }: {
+export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, campanhaInicial = '', tarefas, agora }: {
   orgSlug: string
   workspaceId: string
   clienteNome: string
   campanhas: { id: string; name: string }[]
+  /** Entrando pela campanha, o filtro já vem aplicado nela. */
+  campanhaInicial?: string
   tarefas: TarefaTempos[]
   agora: string
 }) {
   const pathname = usePathname()
   const statusCfg = useStatusConfig()
   const [periodo, setPeriodo] = useState('30')
-  const [campanha, setCampanha] = useState('')
+  const [campanha, setCampanha] = useState(campanhaInicial)
   const [aberta, setAberta] = useState<string | null>(null)
 
   const corDe = useMemo(() => {

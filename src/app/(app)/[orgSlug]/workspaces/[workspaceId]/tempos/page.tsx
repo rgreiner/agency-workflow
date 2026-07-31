@@ -15,10 +15,13 @@ export const metadata = { title: 'Tempos — Flow' }
  */
 export default async function TemposPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ orgSlug: string; workspaceId: string }>
+  searchParams: Promise<{ c?: string }>
 }) {
   const { orgSlug, workspaceId } = await params
+  const { c } = await searchParams
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) redirect('/login')
@@ -85,6 +88,7 @@ export default async function TemposPage({
       workspaceId={workspaceId}
       clienteNome={workspace.name}
       campanhas={(campanhas ?? []) as { id: string; name: string }[]}
+      campanhaInicial={c && campIds.includes(c) ? c : ''}
       tarefas={tarefas}
       agora={agora}
     />

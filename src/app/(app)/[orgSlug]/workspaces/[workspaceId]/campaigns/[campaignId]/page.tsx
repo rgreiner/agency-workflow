@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
+import { GanttChart } from 'lucide-react'
 import { loadActivityList } from '@/lib/activity-list'
 import { ListaClient } from '../../../../views/lista/ListaClient'
 import { CampaignEditButton } from './CampaignEditButton'
@@ -43,6 +44,13 @@ export default async function CampaignPage({
       newActivityCampaign={{ workspaceId, campaignId }}
       secondaryActions={
         <div className="flex items-center gap-2">
+          <Link
+            href={`/${orgSlug}/workspaces/${workspaceId}/tempos?c=${campaignId}`}
+            title="Quanto tempo cada trabalho desta campanha ficou em cada etapa"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition"
+          >
+            <GanttChart className="w-4 h-4" /> <span className="hidden sm:inline">Tempos</span>
+          </Link>
           {campaign.drive_folder_id && <DriveSyncButton orgSlug={orgSlug} campaignId={campaignId} autoOpen={autoOpenSync} />}
           <ImportSpecsButton orgSlug={orgSlug} campaignId={campaignId} />
         </div>
