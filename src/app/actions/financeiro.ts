@@ -343,6 +343,112 @@ export async function setProducaoAnexos(orgSlug: string, producaoId: string, ane
   revalidatePath(`/${orgSlug}/financeiro/faturamento`)
 }
 
+// ── Importar guia (Darf/FGTS/DAS/GPS/parcelamento) ───────────
+/** Lançamento candidato a receber a guia — em aberto, no mês do vencimento dela. */
+export interface GuiaCandidato {
+  id: string
+  descricao: string | null
+  categoria: string | null
+  centro_custo: string | null
+  contato_nome: string | null
+  valor: number
+  vencimento: string | null
+  conta_id: string | null
+  origem_tipo: string | null
+}
+
+/** Palavras que identificam cada tipo de guia no lançamento (regex com \b: "das"
+ *  não pode casar "Manutenção das Salas"). */
+const GUIA_PADROES: Record<string, RegExp[]> = {
+  darf: [/\bdarf\b/i, /\bdctf\w*\b/i, /\binss\b/i, /\birrf\b/i],
+  fgts: [/\bfgts\b/i],
+  das: [/\bdas\b/i, /\bsimples\b/i],
+  gps: [/\bgps\b/i, /\binss\b/i, /\bprevid/i],
+  parcelamento: [/\bparcelamento\b/i, /\bparcela\b/i],
+  outro: [],
+}
+
+/** Busca lançamentos em aberto que combinam com a guia extraída (match e ranking
+ *  em JS — controle fino de word boundary que o ilike não dá). Top 3. */
+export async function buscarCandidatosGuia(orgSlug: string, g: {
+  tipo: string; vencimento: string | null; competencia: string | null
+  valor: number | null; palavras_chave?: string[]
+}) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+  const { data: org } = await supabase
+    .from('organizations').select('id').eq('slug', orgSlug).single()
+  if (!org) return { error: 'Organização não encontrada' }
+
+  // Janela: o mês do vencimento da guia (sem venc: mês seguinte à competência).
+  const base = g.vencimento ?? (g.competencia ? `${g.competencia}-01` : null)
+  if (!base) return { candidatos: [] as GuiaCandidato[] }
+  const d = new Date(`${base.slice(0, 10)}T00:00:00Z`)
+  if (!g.vencimento) d.setUTCMonth(d.getUTCMonth() + 1)
+  const y = d.getUTCFullYear(); const m = d.getUTCMonth()
+  const ini = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10)
+  const fim = new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: rows } = await (supabase as any)
+    .from('lancamentos')
+    .select('id, descricao, categoria, centro_custo, contato_nome, valor, vencimento, conta_id, origem_tipo')
+    .eq('org_id', org.id).eq('tipo', 'saida').eq('situacao', 'em_aberto')
+    .gte('vencimento', ini).lte('vencimento', fim)
+    .limit(300)
+  const lista = (rows ?? []) as (Omit<GuiaCandidato, 'valor'> & { valor: number | string })[]
+
+  const padroes = [
+    ...(GUIA_PADROES[g.tipo] ?? []),
+    ...(g.palavras_chave ?? []).map(p => new RegExp(`\\b${p.replace(/[.*+?^${}()|[\]\\]/g, '')}\\b`, 'i')),
+  ]
+  const ehParcela = (t: string) => /\bparcelamento\b/i.test(t) || /\bparcela\b/i.test(t)
+  const diaGuia = g.vencimento ? Number(g.vencimento.slice(8, 10)) : 20
+
+  const pontuados: { l: GuiaCandidato; score: number }[] = []
+  for (const l of lista) {
+    const texto = `${l.categoria ?? ''} ${l.descricao ?? ''} ${l.contato_nome ?? ''}`
+    // Guia comum nunca casa parcelamento (e vice-versa) — venc no mesmo mês confunde.
+    if (g.tipo !== 'parcelamento' && ehParcela(texto)) continue
+    if (g.tipo === 'parcelamento' && !ehParcela(texto)) continue
+    const valor = Number(l.valor ?? 0)
+    const hits = padroes.filter(p => p.test(texto)).length
+    const valorIgual = g.valor != null && Math.abs(valor - g.valor) < 0.005
+    if (hits === 0 && !valorIgual) continue
+    const distDia = l.vencimento ? Math.abs(Number(l.vencimento.slice(8, 10)) - diaGuia) : 31
+    const distValor = g.valor != null ? Math.abs(valor - g.valor) : 0
+    pontuados.push({ l: { ...l, valor }, score: hits * 1000 - distDia * 10 - Math.min(distValor / 100, 9) })
+  }
+  pontuados.sort((a, b) => b.score - a.score)
+
+  return { candidatos: pontuados.slice(0, 3).map(x => x.l) }
+}
+
+/** Aplica a guia num lançamento em aberto: valor real, vencimento, competência e
+ *  o PDF anexado (RPC fin_aplicar_guia — recusa se já estiver pago). */
+export async function aplicarGuiaLancamento(orgSlug: string, i: {
+  lancamentoId: string; valor: number; vencimento: string | null
+  competencia: string | null; anexo: Anexo | null
+}) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+  const { data: org } = await supabase
+    .from('organizations').select('id').eq('slug', orgSlug).single()
+  if (!org) return { error: 'Organização não encontrada' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('fin_aplicar_guia', {
+    p_org_id: org.id, p_lancamento_id: i.lancamentoId,
+    p_valor: i.valor, p_venc: i.vencimento,
+    p_competencia: i.competencia ? `${i.competencia}-01` : null,
+    p_anexo: i.anexo,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+}
+
 export async function reabrirLancamento(orgSlug: string, lancamentoId: string) {
   const supabase = await createClient()
   const user = await getUsuario()

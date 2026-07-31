@@ -21,7 +21,8 @@ import {
 import { categoriaNomes, isTransferenciaCategoria } from '@/lib/finance-categorias'
 import { EMITENTES, EMITENTE_LABEL, chipDocumento, numeroDoNome, textoBuscavel } from '@/lib/documento-fiscal'
 import { uploadFile } from '@/lib/storage/upload-client'
-import { Paperclip, ExternalLink, CalendarClock } from 'lucide-react'
+import { Paperclip, ExternalLink, CalendarClock, Landmark } from 'lucide-react'
+import { GuiaImportModal } from './GuiaImportModal'
 
 export interface Lancamento {
   id: string
@@ -115,6 +116,9 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
   const [cardFilter, setCardFilter] = useState<null | 'rec_aberto' | 'rec_real' | 'desp_aberto' | 'desp_real'>(null)
   const [creating, setCreating] = useState(false)
   const [transferindo, setTransferindo] = useState(false)
+  // PDF de guia (Darf/FGTS/DAS…) escolhido pra importar — abre o modal de conciliação.
+  const [guiaFile, setGuiaFile] = useState<File | null>(null)
+  const guiaRef = useRef<HTMLInputElement>(null)
   const [editing, setEditing] = useState<Lancamento | null>(null)
   // 'vencimento' = veio do botão Renegociar: o modal abre com a data em foco.
   const [editFoco, setEditFoco] = useState<'vencimento' | null>(null)
@@ -266,6 +270,12 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <PeriodoSelector periodo={periodo} setPeriodo={setPeriodo} today={today} />
+          <input ref={guiaRef} type="file" accept="application/pdf" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) setGuiaFile(f); e.target.value = '' }} />
+          <button onClick={() => guiaRef.current?.click()} title="Importar guia (Darf/FGTS/DAS…) — atualiza o lançamento em aberto ou cria um novo"
+            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50 transition active:scale-[0.97]">
+            <Landmark className="w-4 h-4" /> Guia
+          </button>
           <button onClick={() => setTransferindo(true)}
             className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50 transition active:scale-[0.97]">
             <ArrowLeftRight className="w-4 h-4" /> Transferência
@@ -382,6 +392,9 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       )}
       {transferindo && (
         <TransferenciaModal orgSlug={orgSlug} contas={contas} today={today} onClose={() => setTransferindo(false)} />
+      )}
+      {guiaFile && (
+        <GuiaImportModal orgSlug={orgSlug} file={guiaFile} categorias={categorias} centros={centros} onClose={() => setGuiaFile(null)} />
       )}
 
       {/* Barra flutuante da seleção */}
@@ -1100,7 +1113,7 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs font-medium text-gray-600 inline-flex items-center gap-1.5"><Paperclip className="w-3.5 h-3.5" /> Anexos <span className="font-normal text-gray-400">(NF, boleto, nota)</span></label>
                 <div className="flex items-center gap-1.5">
-                  <div className="w-28"><Select value={anexoTipo} onChange={setAnexoTipo} size="sm" options={[{ value: 'NF', label: 'NF' }, { value: 'Boleto', label: 'Boleto' }, { value: 'Outro', label: 'Outro' }]} /></div>
+                  <div className="w-28"><Select value={anexoTipo} onChange={setAnexoTipo} size="sm" options={[{ value: 'NF', label: 'NF' }, { value: 'Boleto', label: 'Boleto' }, { value: 'Guia', label: 'Guia' }, { value: 'Outro', label: 'Outro' }]} /></div>
                   <input ref={fileRef} type="file" accept=".pdf,image/*" className="hidden"
                     onChange={e => { const f = e.target.files?.[0]; if (f) onPickFile(f); e.target.value = '' }} />
                   <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
