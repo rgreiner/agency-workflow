@@ -18,7 +18,7 @@ import {
   impactoExcluirLancamento,
   type FinanceCategoriaGrupo, type FinanceCentro, type Anexo, type ImpactoExclusao,
 } from '@/app/actions/financeiro'
-import { categoriaNomes } from '@/lib/finance-categorias'
+import { categoriaNomes, isTransferenciaCategoria } from '@/lib/finance-categorias'
 import { EMITENTES, EMITENTE_LABEL, chipDocumento, numeroDoNome, textoBuscavel } from '@/lib/documento-fiscal'
 import { uploadFile } from '@/lib/storage/upload-client'
 import { Paperclip, ExternalLink, CalendarClock } from 'lucide-react'
@@ -896,6 +896,10 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
     e.preventDefault()
     setError('')
     if (!readonly && !form.descricao.trim() && !form.contato_nome.trim()) { setError('Informe a descrição ou o contato'); return }
+    // Centro de custo obrigatório (transferência é isenta: zero-soma, sem centro).
+    if (!readonly && !form.centro_custo && !lancamento?.transferencia_id && !isTransferenciaCategoria(form.categoria)) {
+      setError('Informe o centro de custo — ele diz de qual cliente vem (ou sai) o dinheiro.'); return
+    }
     const data = {
       tipo: form.tipo,
       descricao: form.descricao.trim() || null,
@@ -1021,7 +1025,7 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
               <Select value={form.categoria} onChange={v => setForm(f => ({ ...f, categoria: v }))} options={catOptions} placeholder="—" />
             </div>
             <div>
-              <label className={labelCls}>Centro de custo</label>
+              <label className={labelCls}>Centro de custo <span className="text-orange-500">*</span></label>
               <Select value={form.centro_custo} onChange={v => setForm(f => ({ ...f, centro_custo: v }))} options={centroOptions} placeholder="—" />
             </div>
           </div>

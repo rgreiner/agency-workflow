@@ -70,6 +70,20 @@ export async function setLancamentoFlags(orgSlug: string, lancamentoId: string, 
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
 }
 
+/**
+ * Centro de custo é OBRIGATÓRIO (decisão do Rafael 31/07/2026): é ele que diz de
+ * qual cliente veio (ou sai) o dinheiro — sem ele a rentabilidade por cliente
+ * fica cega. Transferência entre contas é isenta (zero-soma, não é venda nem
+ * despesa). O caminho da conciliação bancária (criarLancamentoConc) fica de fora
+ * de propósito: lá o lançamento nasce do movimento e o filtro "sem centro" da
+ * tela cobra a classificação depois.
+ */
+function faltaCentro(data: { centro_custo?: string | null; categoria?: string | null }): boolean {
+  if ((data.centro_custo ?? '').trim()) return false
+  return !(data.categoria ?? '').toLowerCase().startsWith('transfer')
+}
+const ERRO_CENTRO = 'Informe o centro de custo — ele diz de qual cliente vem (ou sai) o dinheiro.'
+
 // ── Lançamento manual ────────────────────────────────────────
 export interface LancamentoInput {
   tipo?: string
@@ -100,6 +114,7 @@ export interface PromoverInput extends LancamentoInput {
   juros?: string | null; multa?: string | null; desconto?: string | null; tarifa?: string | null
 }
 export async function promoverExtrato(orgSlug: string, importRef: string, data: PromoverInput) {
+  if (faltaCentro(data)) return { error: ERRO_CENTRO }
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
@@ -117,6 +132,7 @@ export async function promoverExtrato(orgSlug: string, importRef: string, data: 
 }
 
 export async function createLancamento(orgSlug: string, data: LancamentoInput) {
+  if (faltaCentro(data)) return { error: ERRO_CENTRO }
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
@@ -176,6 +192,7 @@ export async function excluirTransferencia(orgSlug: string, transferenciaId: str
 
 /** Cria uma série: modo 'parcelado' (divide o valor) ou 'recorrente' (repete) em N meses. */
 export async function createLancamentosSerie(orgSlug: string, data: LancamentoInput, modo: string, n: number) {
+  if (faltaCentro(data)) return { error: ERRO_CENTRO }
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
@@ -193,6 +210,7 @@ export async function createLancamentosSerie(orgSlug: string, data: LancamentoIn
 }
 
 export async function updateLancamento(orgSlug: string, lancamentoId: string, data: LancamentoInput) {
+  if (faltaCentro(data)) return { error: ERRO_CENTRO }
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
