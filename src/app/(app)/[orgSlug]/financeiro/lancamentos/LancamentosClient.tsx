@@ -182,6 +182,17 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
     [selecionaveis, selecionados],
   )
 
+  // Soma dos selecionados p/ a barra. Separa entrada × saída (a seleção pode ser
+  // mista) — somar tudo junto trataria despesa como receita.
+  const selTotais = useMemo(() => {
+    let entrada = 0, saida = 0
+    for (const l of selecionaveis) {
+      if (!selecionados.has(l.id)) continue
+      if (l.tipo === 'saida') saida += val(l); else entrada += val(l)
+    }
+    return { entrada, saida, liquido: entrada - saida }
+  }, [selecionaveis, selecionados])
+
   function toggleUm(id: string) {
     setSelecionados(prev => {
       const next = new Set(prev)
@@ -379,6 +390,16 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
           <span className="text-sm font-medium tabular-nums">
             {selIds.length} selecionado{selIds.length > 1 ? 's' : ''}
           </span>
+          {(selTotais.entrada > 0 || selTotais.saida > 0) && (
+            <>
+              <span className="h-4 w-px bg-white/15" />
+              <span className="text-sm tabular-nums flex items-center gap-2">
+                {selTotais.entrada > 0 && <span className="text-emerald-400">+{formatBRL(selTotais.entrada)}</span>}
+                {selTotais.saida > 0 && <span className="text-red-400">−{formatBRL(selTotais.saida)}</span>}
+                {selTotais.entrada > 0 && selTotais.saida > 0 && <span className="text-gray-300">= {formatBRL(selTotais.liquido)}</span>}
+              </span>
+            </>
+          )}
           <button onClick={() => setLoteAberto(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-orange-600 hover:bg-orange-700 transition-colors active:scale-[0.97]">
             <Pencil className="w-3.5 h-3.5" /> Editar em lote
