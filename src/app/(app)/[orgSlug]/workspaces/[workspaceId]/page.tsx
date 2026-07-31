@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import { Plus } from 'lucide-react'
+import { Plus, GanttChart } from 'lucide-react'
 import { loadActivityList } from '@/lib/activity-list'
 import { ListaClient } from '../../views/lista/ListaClient'
 import { WorkspaceEditButton } from './WorkspaceEditButton'
@@ -100,6 +100,13 @@ export default async function WorkspacePage({
         }
         secondaryActions={
           <>
+            <Link
+              href={`/${orgSlug}/workspaces/${workspaceId}/tempos`}
+              title="Quanto tempo cada trabalho ficou em cada etapa"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition"
+            >
+              <GanttChart className="w-4 h-4" /> <span className="hidden sm:inline">Tempos</span>
+            </Link>
             {campaignOptions.length > 0 && (
               <ImportSpecsButton orgSlug={orgSlug} campaigns={campaignOptions} />
             )}
