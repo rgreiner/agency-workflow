@@ -22,6 +22,13 @@ export interface TarefaTempos {
   segmentos: Segmento[]
 }
 
+/** Visão macro: os grupos do cadastro de status viram "com quem está a bola". */
+const GRUPO_CFG: Record<string, { label: string; bg: string; text: string }> = {
+  internal: { label: 'Com a agência', bg: '#ffedd5', text: '#c2410c' },
+  external: { label: 'Com o cliente', bg: '#dbeafe', text: '#1d4ed8' },
+  done:     { label: 'Encerrado',     bg: '#f3f4f6', text: '#6b7280' },
+}
+
 const PERIODOS = [
   { value: '30', label: 'Últimos 30 dias' },
   { value: '90', label: 'Últimos 90 dias' },
@@ -55,6 +62,20 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
   const [periodo, setPeriodo] = useState('30')
   const [campanha, setCampanha] = useState(campanhaInicial)
   const [aberta, setAberta] = useState<string | null>(null)
+  // Nível da visão: 'etapas' = cada status (micro) · 'grupos' = com a agência ×
+  // com o cliente (macro). A última escolha fica salva.
+  const [modo, setModo] = useState<'etapas' | 'grupos'>('etapas')
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('tempos-modo-v1')
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (raw === 'grupos' || raw === 'etapas') setModo(raw)
+    } catch {}
+  }, [])
+  function trocaModo(m: 'etapas' | 'grupos') {
+    setModo(m)
+    try { localStorage.setItem('tempos-modo-v1', m) } catch {}
+  }
   // Status "desligados" da visualização (clique na legenda): o segmento some da
   // barra e o total desconta — útil p/ etapas de espera longa (ex.: aprovação
   // do cliente) que esmagam as etapas de trabalho. Preferência da pessoa.
@@ -85,21 +106,61 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
     })
   }
 
+  const [offGrupos, setOffGrupos] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('tempos-grupos-off-v1')
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (raw) setOffGrupos(new Set(JSON.parse(raw) as string[]))
+    } catch {}
+  }, [])
+
   function toggleStatus(v: string) {
-    setOff(prev => {
+    const grupos = modo === 'grupos'
+    const setter = grupos ? setOffGrupos : setOff
+    setter(prev => {
       const n = new Set(prev)
       if (n.has(v)) n.delete(v); else n.add(v)
-      try { localStorage.setItem('tempos-status-off-v1', JSON.stringify([...n])) } catch {}
+      try { localStorage.setItem(grupos ? 'tempos-grupos-off-v1' : 'tempos-status-off-v1', JSON.stringify([...n])) } catch {}
       return n
     })
   }
+  /** O conjunto de "desligados" ativo no modo atual. */
+  const offAtivo = modo === 'grupos' ? offGrupos : off
 
   const corDe = useMemo(() => {
     const m = new Map<string, { bg: string; text: string; label: string }>()
     for (const s of statusCfg) m.set(s.value as string, { bg: s.bg, text: s.text, label: s.label })
     return m
   }, [statusCfg])
-  const cor = (status: string) => corDe.get(status) ?? { bg: '#e5e7eb', text: '#374151', label: status }
+  const cor = (chave: string) =>
+    (modo === 'grupos' ? GRUPO_CFG[chave] : corDe.get(chave))
+    ?? { bg: '#e5e7eb', text: '#374151', label: chave }
+
+  const grupoDe = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const s of statusCfg) m.set(s.value as string, s.group)
+    return (status: string) => m.get(status) ?? 'internal'
+  }, [statusCfg])
+
+  // No modo grupos, sequências do mesmo grupo (briefing→plano→design) viram UM
+  // bloco contínuo — a barra responde "com quem estava a bola", não a etapa.
+  const vistaPorTarefa = useMemo(() => {
+    if (modo === 'etapas') return null
+    const m = new Map<string, Segmento[]>()
+    for (const t of tarefas) {
+      const out: Segmento[] = []
+      for (const seg of t.segmentos) {
+        const g = grupoDe(seg.status)
+        const ult = out[out.length - 1]
+        if (ult && ult.status === g) { ult.fim = seg.fim; ult.ms += seg.ms }
+        else out.push({ status: g, ini: seg.ini, fim: seg.fim, ms: seg.ms })
+      }
+      m.set(t.id, out)
+    }
+    return m
+  }, [modo, grupoDe, tarefas])
+  const segmentosDe = (t: TarefaTempos): Segmento[] => vistaPorTarefa?.get(t.id) ?? t.segmentos
 
   // Eixo: da janela escolhida até agora. Segmentos são recortados ao eixo
   // (a barra de uma tarefa antiga entra "cortada", com indicador de que começou antes).
@@ -121,8 +182,8 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
   }, [tarefas, campanha, iniEixo])
 
   const comSegmento = useMemo(
-    () => visiveis.filter(t => t.segmentos.some(x => !off.has(x.status))),
-    [visiveis, off])
+    () => visiveis.filter(t => segmentosDe(t).some(x => !offAtivo.has(x.status))),
+    [visiveis, offAtivo, vistaPorTarefa])  // eslint-disable-line react-hooks/exhaustive-deps
   const ocultasNoRecorte = useMemo(
     () => comSegmento.filter(t => tarefasOff.has(t.id)).length,
     [comSegmento, tarefasOff])
@@ -178,11 +239,16 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
     return { marcas, fds }
   }, [iniEixo, fimEixo, rangeMs])
 
-  // legenda: só status que aparecem nas tarefas visíveis, na ordem do fluxo
+  // legenda: no micro, os status usados (ordem do fluxo); no macro, os grupos
   const legenda = useMemo(() => {
-    const usados = new Set(visiveis.flatMap(t => t.segmentos.map(s => s.status)))
+    const usados = new Set(visiveis.flatMap(t => segmentosDe(t).map(s => s.status)))
+    if (modo === 'grupos') {
+      return (['internal', 'external', 'done'] as const)
+        .filter(g => usados.has(g))
+        .map(g => ({ value: g, label: GRUPO_CFG[g].label, bg: GRUPO_CFG[g].bg, text: GRUPO_CFG[g].text }))
+    }
     return statusCfg.filter(s => usados.has(s.value as string))
-  }, [visiveis, statusCfg])
+  }, [visiveis, statusCfg, modo, vistaPorTarefa])  // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="p-6 max-w-6xl">
@@ -200,7 +266,20 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
             Quanto tempo cada trabalho ficou em cada status — idas e voltas incluídas. Tempo corrido do processo.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* micro (etapa a etapa) × macro (com quem está a bola) */}
+          <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 text-xs">
+            <button type="button" onClick={() => trocaModo('etapas')}
+              className={cn('px-2.5 py-1 rounded-md font-medium transition-colors',
+                modo === 'etapas' ? 'bg-gray-900 text-[#fff]' : 'text-gray-500 hover:text-gray-700')}>
+              Etapas
+            </button>
+            <button type="button" onClick={() => trocaModo('grupos')}
+              className={cn('px-2.5 py-1 rounded-md font-medium transition-colors',
+                modo === 'grupos' ? 'bg-gray-900 text-[#fff]' : 'text-gray-500 hover:text-gray-700')}>
+              Agência × Cliente
+            </button>
+          </div>
           <Select size="sm" value={campanha} onChange={setCampanha}
             options={[{ value: '', label: 'Todas as campanhas' }, ...campanhas.map(c => ({ value: c.id, label: c.name }))]} />
           <Select size="sm" value={periodo} onChange={setPeriodo} options={PERIODOS} />
@@ -211,7 +290,7 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
       {legenda.length > 0 && (
         <div className="flex flex-wrap gap-x-1.5 gap-y-1.5 mb-4 items-center">
           {legenda.map(s => {
-            const desligado = off.has(s.value as string)
+            const desligado = offAtivo.has(s.value as string)
             return (
               <button
                 key={s.value}
@@ -231,8 +310,12 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
               </button>
             )
           })}
-          {off.size > 0 && (
-            <button type="button" onClick={() => { setOff(new Set()); try { localStorage.removeItem('tempos-status-off-v1') } catch {} }}
+          {offAtivo.size > 0 && (
+            <button type="button"
+              onClick={() => {
+                if (modo === 'grupos') { setOffGrupos(new Set()); try { localStorage.removeItem('tempos-grupos-off-v1') } catch {} }
+                else { setOff(new Set()); try { localStorage.removeItem('tempos-status-off-v1') } catch {} }
+              }}
               className="text-[11px] text-orange-600 hover:underline px-1">
               mostrar todos
             </button>
@@ -277,12 +360,14 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
               {ts.map(t => {
                 const inicioT = new Date(t.criada).getTime()
                 const comecouAntes = inicioT < iniEixo
-                const segsOn = t.segmentos.filter(x => !off.has(x.status))
+                const segsOn = segmentosDe(t).filter(x => !offAtivo.has(x.status))
                 const leadMs = segsOn.reduce((s, x) => s + x.ms, 0)
                 const expandida = aberta === t.id
+                const ordemChave = (v: string) => modo === 'grupos'
+                  ? ['internal', 'external', 'done'].indexOf(v)
+                  : statusCfg.findIndex(s => s.value === v)
                 const totais = expandida
-                  ? totaisPorStatus(segsOn).sort((a, b) =>
-                      statusCfg.findIndex(s => s.value === a.status) - statusCfg.findIndex(s => s.value === b.status))
+                  ? totaisPorStatus(segsOn).sort((a, b) => ordemChave(a.status) - ordemChave(b.status))
                   : []
                 const oculta = tarefasOff.has(t.id)
                 return (
@@ -353,7 +438,7 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
 
                       {/* lead time total */}
                       <span className="px-3 py-2.5 text-right text-xs tabular-nums text-gray-500"
-                        title={off.size ? 'Tempo de processo SEM os status ocultos' : 'Tempo total de processo (corrido)'}>
+                        title={offAtivo.size ? 'Tempo de processo SEM os status ocultos' : 'Tempo total de processo (corrido)'}>
                         {fmtDuracao(leadMs)}
                       </span>
 
