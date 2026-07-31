@@ -48,7 +48,7 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, tar
 }) {
   const pathname = usePathname()
   const statusCfg = useStatusConfig()
-  const [periodo, setPeriodo] = useState('90')
+  const [periodo, setPeriodo] = useState('30')
   const [campanha, setCampanha] = useState('')
   const [aberta, setAberta] = useState<string | null>(null)
 
@@ -89,26 +89,41 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, tar
     return [...m.entries()]
   }, [visiveis])
 
-  // marcas do eixo (início de cada semana ou mês, conforme o range)
-  const marcas = useMemo(() => {
-    const out: { pos: number; label: string }[] = []
+  // marcas do eixo: DIA a dia no recorte curto (~mês); semana no médio; mês no longo
+  const { marcas, fds } = useMemo(() => {
+    const marcas: { pos: number; label: string }[] = []
+    const fds: { pos: number; w: number }[] = []
     const dias = rangeMs / 86_400_000
-    const passo = dias > 120 ? 'mes' : 'semana'
+    const passo = dias <= 45 ? 'dia' : dias <= 120 ? 'semana' : 'mes'
     const d = new Date(iniEixo)
     d.setHours(0, 0, 0, 0)
     if (passo === 'mes') { d.setDate(1); d.setMonth(d.getMonth() + 1) }
-    else { const dow = d.getDay(); d.setDate(d.getDate() + ((8 - dow) % 7 || 7)) }
+    else if (passo === 'semana') { const dow = d.getDay(); d.setDate(d.getDate() + ((8 - dow) % 7 || 7)) }
+    else d.setDate(d.getDate() + 1)
+    let primeira = true
     while (d.getTime() < fimEixo) {
-      out.push({
-        pos: ((d.getTime() - iniEixo) / rangeMs) * 100,
-        label: passo === 'mes'
-          ? d.toLocaleDateString('pt-BR', { month: 'short' })
-          : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-      })
-      if (passo === 'mes') d.setMonth(d.getMonth() + 1)
-      else d.setDate(d.getDate() + 7)
+      const pos = ((d.getTime() - iniEixo) / rangeMs) * 100
+      if (passo === 'dia') {
+        // dia do mês; vira "dd/mm" na primeira marca e a cada virada de mês
+        marcas.push({
+          pos,
+          label: primeira || d.getDate() === 1
+            ? d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+            : String(d.getDate()).padStart(2, '0'),
+        })
+        // sombra do fim de semana (sáb/dom) p/ leitura diária
+        if (d.getDay() === 6 || d.getDay() === 0) fds.push({ pos, w: (86_400_000 / rangeMs) * 100 })
+        d.setDate(d.getDate() + 1)
+      } else if (passo === 'semana') {
+        marcas.push({ pos, label: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) })
+        d.setDate(d.getDate() + 7)
+      } else {
+        marcas.push({ pos, label: d.toLocaleDateString('pt-BR', { month: 'short' }) })
+        d.setMonth(d.getMonth() + 1)
+      }
+      primeira = false
     }
-    return out
+    return { marcas, fds }
   }, [iniEixo, fimEixo, rangeMs])
 
   // legenda: só status que aparecem nas tarefas visíveis, na ordem do fluxo
@@ -160,8 +175,11 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, tar
         <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
           {/* régua do eixo */}
           <div className="relative h-7 border-b border-gray-100 ml-[280px] mr-[86px] hidden md:block">
+            {fds.map((f, i) => (
+              <span key={`f${i}`} className="absolute top-0 h-full bg-gray-100/60" style={{ left: `${f.pos}%`, width: `${f.w}%` }} />
+            ))}
             {marcas.map((m, i) => (
-              <span key={i} className="absolute top-0 h-full flex items-center text-[10px] text-gray-400 border-l border-gray-100 pl-1"
+              <span key={i} className="absolute top-0 h-full flex items-center text-[9.5px] text-gray-400 border-l border-gray-100 pl-0.5 whitespace-nowrap"
                 style={{ left: `${m.pos}%` }}>
                 {m.label}
               </span>
@@ -201,6 +219,9 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, tar
 
                       {/* barra segmentada (desktop) */}
                       <span className="relative h-9 hidden md:block">
+                        {fds.map((f, i) => (
+                          <span key={`f${i}`} className="absolute top-0 h-full bg-gray-50/80" style={{ left: `${f.pos}%`, width: `${f.w}%` }} />
+                        ))}
                         {marcas.map((m, i) => (
                           <span key={i} className="absolute top-0 h-full border-l border-gray-50" style={{ left: `${m.pos}%` }} />
                         ))}
