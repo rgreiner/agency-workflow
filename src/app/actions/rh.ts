@@ -145,10 +145,18 @@ export interface PlanoPessoa {
   status: 'vinculado' | 'achado' | 'novo'
   lancamento_id: string | null; lanc_valor: number | null; lanc_venc: string | null; lanc_situacao: string | null
 }
+export interface PlanoGuia {
+  status: 'vinculado' | 'achado' | 'novo'
+  lancamento_id: string | null; valor: number | null; venc: string | null
+  situacao: string | null; descricao: string | null
+}
 export interface FolhaPlano {
   competencia: string
   salarios: PlanoPessoa[]
   socios: { nome: string }[]
+  guias?: { inss: PlanoGuia; fgts: PlanoGuia }
+  palpite_inss?: number
+  palpite_fgts?: number
 }
 
 /** Plano de conciliação da competência: por pessoa, com o lançamento candidato (read-only). */
@@ -171,10 +179,12 @@ export interface AplicarSalario {
   lancamento_id?: string | null; valor?: number; venc?: string
 }
 
-/** Aplica a conciliação: salários por pessoa (vincular/criar) + guias INSS/FGTS. */
+/** Aplica a conciliação: salários por pessoa (vincular/criar) + guias INSS/FGTS
+ *  (com o provisionado a adotar, quando o plano achou um). */
 export async function aplicarFolhaFinanceiro(orgSlug: string, i: {
   competencia: string; salarios: AplicarSalario[]
   inss: number; vencInss: string; fgts: number; vencFgts: string
+  inssLanc?: string | null; fgtsLanc?: string | null
 }) {
   const c = await ctx(orgSlug)
   if ('error' in c) return { error: c.error }
@@ -185,6 +195,7 @@ export async function aplicarFolhaFinanceiro(orgSlug: string, i: {
     p_org_id: c.orgId, p_competencia: comp, p_salarios: i.salarios,
     p_inss: i.inss || 0, p_venc_inss: i.vencInss || null,
     p_fgts: i.fgts || 0, p_venc_fgts: i.vencFgts || null,
+    p_inss_lanc: i.inssLanc || null, p_fgts_lanc: i.fgtsLanc || null,
   })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/rh/folha`)

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Wallet, Upload, Loader2, Check, X, Users, Landmark, Link2, Plus, AlertTriangle, Ban } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatBRL, parseMoney } from '@/lib/midia'
-import { importarFolha, carregarPlanoFolha, aplicarFolhaFinanceiro, type PlanoPessoa, type AplicarSalario } from '@/app/actions/rh'
+import { importarFolha, carregarPlanoFolha, aplicarFolhaFinanceiro, type PlanoPessoa, type PlanoGuia, type AplicarSalario } from '@/app/actions/rh'
 
 export interface FolhaRow {
   competencia: string; nome: string | null; liquido: number | string | null
@@ -127,13 +127,30 @@ function vencEncargos(comp: string): string {
   return `${ny}-${String(nm).padStart(2, '0')}-20`
 }
 
+const ddmm = (iso: string | null) => iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : ''
+
+/** O que vai acontecer com o provisionado da guia (Darf/FGTS) ao aplicar. */
+function GuiaHint({ guia }: { guia?: PlanoGuia }) {
+  if (!guia || guia.status === 'novo') {
+    return <p className="text-[11px] text-amber-600 mt-1">sem provisionado no mês seguinte — cria um lançamento novo</p>
+  }
+  if (guia.status === 'vinculado') {
+    return <p className="text-[11px] text-emerald-600 mt-1">já vinculado · {guia.situacao === 'em_aberto' ? 'reprocessar atualiza o valor' : 'já pago — não muda'}</p>
+  }
+  return (
+    <p className="text-[11px] text-sky-700 mt-1">
+      atualiza o provisionado “{guia.descricao}” de {formatBRL(n(guia.valor))} ({ddmm(guia.venc)})
+    </p>
+  )
+}
+
 type Acao = 'vincular' | 'criar' | 'ignorar'
 const money = 'w-32 px-3 py-1.5 text-sm text-right bg-gray-100 border border-transparent rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500'
 const dateI = 'px-3 py-1.5 text-sm bg-gray-100 border border-transparent rounded-lg text-gray-800'
 
 function ReconcModal({ orgSlug, comp, onClose }: { orgSlug: string; comp: CompAgg; onClose: () => void }) {
   const router = useRouter()
-  const [plano, setPlano] = useState<{ salarios: PlanoPessoa[]; socios: { nome: string }[] } | null>(null)
+  const [plano, setPlano] = useState<{ salarios: PlanoPessoa[]; socios: { nome: string }[]; guias?: { inss: PlanoGuia; fgts: PlanoGuia } } | null>(null)
   const [loading, setLoading] = useState(true)
   const [acoes, setAcoes] = useState<Record<string, Acao>>({})
   const [inss, setInss] = useState('')
@@ -147,7 +164,7 @@ function ReconcModal({ orgSlug, comp, onClose }: { orgSlug: string; comp: CompAg
     const r = await carregarPlanoFolha(orgSlug, comp.competencia)
     if (r?.error) { toast.error(r.error); setLoading(false); return }
     const p = r?.plano
-    setPlano({ salarios: p?.salarios ?? [], socios: p?.socios ?? [] })
+    setPlano({ salarios: p?.salarios ?? [], socios: p?.socios ?? [], guias: p?.guias })
     // Default: achou → vincular; não achou → criar; já vinculado → nada a fazer.
     const ini: Record<string, Acao> = {}
     for (const s of p?.salarios ?? []) {
@@ -155,6 +172,13 @@ function ReconcModal({ orgSlug, comp, onClose }: { orgSlug: string; comp: CompAg
       ini[k] = s.status === 'achado' ? 'vincular' : s.status === 'novo' ? 'criar' : 'ignorar'
     }
     setAcoes(ini)
+    // Palpite das guias vem da própria folha (Darf = INSS+IRRF; FGTS = soma).
+    // O valor real chega com a guia dia 10 — reprocessar atualiza o em aberto.
+    const brl = (v: number) => formatBRL(v).replace('R$', '').trim()
+    if (n(p?.palpite_inss) > 0) setInss(brl(n(p?.palpite_inss)))
+    if (n(p?.palpite_fgts) > 0) setFgts(brl(n(p?.palpite_fgts)))
+    if (p?.guias?.inss?.venc) setVInss(p.guias.inss.venc)
+    if (p?.guias?.fgts?.venc) setVFgts(p.guias.fgts.venc)
     setLoading(false)
   }, [orgSlug, comp.competencia])
 
@@ -173,6 +197,8 @@ function ReconcModal({ orgSlug, comp, onClose }: { orgSlug: string; comp: CompAg
       const r = await aplicarFolhaFinanceiro(orgSlug, {
         competencia: comp.competencia, salarios,
         inss: parseMoney(inss), vencInss: vInss, fgts: parseMoney(fgts), vencFgts: vFgts,
+        inssLanc: plano?.guias?.inss?.lancamento_id ?? null,
+        fgtsLanc: plano?.guias?.fgts?.lancamento_id ?? null,
       })
       if (r?.error) { toast.error(r.error); return }
       const x = r.resultado
@@ -191,7 +217,7 @@ function ReconcModal({ orgSlug, comp, onClose }: { orgSlug: string; comp: CompAg
       <div className="modal-card w-full max-w-3xl max-h-[90vh] overflow-hidden bg-white rounded-2xl shadow-xl border border-gray-200 flex flex-col" onMouseDown={e => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-gray-100">
           <h2 className="text-base font-semibold text-gray-900">Financeiro — {compLabel(comp.competencia)}</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Um lançamento por pessoa (vence no último dia útil). Sócios não recebem salário — só as guias. Busca o lançamento existente e vincula; se não achar, cria.</p>
+          <p className="text-xs text-gray-500 mt-0.5">Previsto → realizado: acha o custo provisionado da pessoa no mês e atualiza pro valor da folha; se não achar, cria. Sócios não recebem salário — só as guias.</p>
         </div>
 
         <div className="overflow-y-auto flex-1 px-6 py-4">
@@ -216,14 +242,18 @@ function ReconcModal({ orgSlug, comp, onClose }: { orgSlug: string; comp: CompAg
                           <div className="text-xs text-gray-500 tabular-nums">
                             folha <b className="text-gray-700">{formatBRL(n(s.liquido))}</b>
                             {s.status === 'vinculado' && <span className="text-emerald-600"> · já vinculado</span>}
-                            {s.status === 'achado' && <span className="text-sky-600"> · achou lançamento de {formatBRL(n(s.lanc_valor))}</span>}
-                            {s.status === 'novo' && <span className="text-amber-600"> · sem lançamento</span>}
+                            {s.status === 'achado' && <span className="text-sky-600"> · provisionado de {formatBRL(n(s.lanc_valor))}</span>}
+                            {s.status === 'novo' && <span className="text-amber-600"> · sem provisionado no mês</span>}
                           </div>
-                          {diverge && (
-                            <div className="text-[11px] text-amber-700 mt-1 flex items-center gap-1">
-                              <AlertTriangle className="w-3 h-3" /> difere em {formatBRL(Math.abs(n(s.lanc_valor) - n(s.liquido)))} — vincular não altera o valor do lançamento
+                          {diverge && s.status === 'achado' && (s.lanc_situacao === 'em_aberto' ? (
+                            <div className="text-[11px] text-sky-700 mt-1 flex items-center gap-1">
+                              <Link2 className="w-3 h-3" /> vincular atualiza o provisionado para {formatBRL(n(s.liquido))} (diferença de {formatBRL(Math.abs(n(s.lanc_valor) - n(s.liquido)))})
                             </div>
-                          )}
+                          ) : (
+                            <div className="text-[11px] text-amber-700 mt-1 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" /> lançamento já pago — vincular só carimba a origem, sem alterar o valor
+                            </div>
+                          ))}
                         </div>
                         {s.status === 'vinculado' ? (
                           <span className="text-xs text-emerald-600 inline-flex items-center gap-1 shrink-0"><Check className="w-3.5 h-3.5" /> ok</span>
@@ -261,21 +291,27 @@ function ReconcModal({ orgSlug, comp, onClose }: { orgSlug: string; comp: CompAg
 
               <h3 className="text-sm font-semibold text-gray-700 mb-2">Guias (consolidadas)</h3>
               <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div><span className="text-sm text-gray-700">INSS</span> <span className="text-[11px] text-gray-400">valor da guia · paga dia 20</span></div>
-                  <div className="flex items-center gap-2">
-                    <input inputMode="decimal" value={inss} onChange={e => setInss(e.target.value)} placeholder="da guia" className={money} />
-                    <input type="date" value={vInss} onChange={e => setVInss(e.target.value)} className={dateI} />
+                <div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div><span className="text-sm text-gray-700">INSS + IRRF (Darf)</span> <span className="text-[11px] text-gray-400">valor da guia · paga dia 20</span></div>
+                    <div className="flex items-center gap-2">
+                      <input inputMode="decimal" value={inss} onChange={e => setInss(e.target.value)} placeholder="da guia" className={money} />
+                      <input type="date" value={vInss} onChange={e => setVInss(e.target.value)} className={dateI} />
+                    </div>
                   </div>
+                  <GuiaHint guia={plano?.guias?.inss} />
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                  <div><span className="text-sm text-gray-700">FGTS</span> <span className="text-[11px] text-gray-400">valor da guia · paga dia 20</span></div>
-                  <div className="flex items-center gap-2">
-                    <input inputMode="decimal" value={fgts} onChange={e => setFgts(e.target.value)} className={money} />
-                    <input type="date" value={vFgts} onChange={e => setVFgts(e.target.value)} className={dateI} />
+                <div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div><span className="text-sm text-gray-700">FGTS</span> <span className="text-[11px] text-gray-400">valor da guia · paga dia 20</span></div>
+                    <div className="flex items-center gap-2">
+                      <input inputMode="decimal" value={fgts} onChange={e => setFgts(e.target.value)} className={money} />
+                      <input type="date" value={vFgts} onChange={e => setVFgts(e.target.value)} className={dateI} />
+                    </div>
                   </div>
+                  <GuiaHint guia={plano?.guias?.fgts} />
                 </div>
-                <p className="text-[11px] text-gray-400">Deixe zerado o que não quiser gerar. Reprocessar atualiza só o que está em aberto (não duplica nem mexe no que já foi pago).</p>
+                <p className="text-[11px] text-gray-400">Valores pré-preenchidos com o palpite da própria folha — confira com a guia (chega dia 10). Deixe zerado o que não quiser gerar. Reprocessar atualiza só o que está em aberto (não duplica nem mexe no que já foi pago).</p>
               </div>
             </>
           )}
