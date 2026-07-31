@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ChevronDown, ChevronRight, GanttChart, Repeat2 } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Eye, EyeOff, GanttChart, Repeat2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { fmtDuracao, totaisPorStatus, type Segmento } from '@/lib/status-tempos'
@@ -17,6 +17,8 @@ export interface TarefaTempos {
   statusAtual: string
   arquivada: boolean
   criada: string
+  /** Última transição para um status de encerramento (null = ainda na pauta). */
+  concluidaEm: string | null
   segmentos: Segmento[]
 }
 
@@ -64,6 +66,25 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
       if (raw) setOff(new Set(JSON.parse(raw) as string[]))
     } catch {}
   }, [])
+  // Tarefas ocultas uma a uma (olhinho na linha) — persistido como os status.
+  const [tarefasOff, setTarefasOff] = useState<Set<string>>(new Set())
+  const [verOcultas, setVerOcultas] = useState(false)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('tempos-tarefas-off-v1')
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (raw) setTarefasOff(new Set(JSON.parse(raw) as string[]))
+    } catch {}
+  }, [])
+  function toggleTarefa(id: string) {
+    setTarefasOff(prev => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id); else n.add(id)
+      try { localStorage.setItem('tempos-tarefas-off-v1', JSON.stringify([...n])) } catch {}
+      return n
+    })
+  }
+
   function toggleStatus(v: string) {
     setOff(prev => {
       const n = new Set(prev)
@@ -99,9 +120,15 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
     })
   }, [tarefas, campanha, iniEixo])
 
-  const linhas = useMemo(
+  const comSegmento = useMemo(
     () => visiveis.filter(t => t.segmentos.some(x => !off.has(x.status))),
     [visiveis, off])
+  const ocultasNoRecorte = useMemo(
+    () => comSegmento.filter(t => tarefasOff.has(t.id)).length,
+    [comSegmento, tarefasOff])
+  const linhas = useMemo(
+    () => (verOcultas ? comSegmento : comSegmento.filter(t => !tarefasOff.has(t.id))),
+    [comSegmento, tarefasOff, verOcultas])
 
   // agrupa por campanha, preservando a ordem (mais recente primeiro dentro do grupo)
   const grupos = useMemo(() => {
@@ -213,6 +240,16 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
         </div>
       )}
 
+      {ocultasNoRecorte > 0 && (
+        <div className="mb-3 -mt-1">
+          <button type="button" onClick={() => setVerOcultas(v => !v)}
+            className="inline-flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-600 transition-colors">
+            {verOcultas ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+            {verOcultas ? 'Esconder as ocultas de novo' : `${ocultasNoRecorte} tarefa(s) oculta(s) — mostrar`}
+          </button>
+        </div>
+      )}
+
       {linhas.length === 0 ? (
         <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-500">
           Nenhuma tarefa com atividade neste período.
@@ -247,12 +284,15 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
                   ? totaisPorStatus(segsOn).sort((a, b) =>
                       statusCfg.findIndex(s => s.value === a.status) - statusCfg.findIndex(s => s.value === b.status))
                   : []
+                const oculta = tarefasOff.has(t.id)
                 return (
-                  <div key={t.id} className="border-b border-gray-50 last:border-0">
-                    <button
-                      type="button"
+                  <div key={t.id} className={cn('border-b border-gray-50 last:border-0', oculta && verOcultas && 'opacity-45')}>
+                    <div
+                      role="button"
+                      tabIndex={0}
                       onClick={() => setAberta(expandida ? null : t.id)}
-                      className="w-full grid grid-cols-[minmax(0,1fr)_70px] md:grid-cols-[280px_minmax(0,1fr)_86px] items-center gap-0 px-0 py-0 text-left hover:bg-gray-50/50 transition-colors"
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setAberta(expandida ? null : t.id) } }}
+                      className="group w-full grid grid-cols-[minmax(0,1fr)_70px_30px] md:grid-cols-[280px_minmax(0,1fr)_86px_30px] items-center gap-0 px-0 py-0 text-left cursor-pointer hover:bg-gray-50/50 transition-colors"
                     >
                       {/* título */}
                       <span className="flex items-center gap-1.5 px-4 py-2.5 min-w-0">
@@ -262,6 +302,12 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
                         <span className={cn('text-sm truncate', t.arquivada ? 'text-gray-400' : 'text-gray-800')} title={t.titulo}>
                           {t.titulo}
                         </span>
+                        {t.concluidaEm && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-green-600 bg-green-50 rounded-full px-1.5 py-px shrink-0"
+                            title={`Concluída em ${dataHoraBR(t.concluidaEm)}`}>
+                            <Check className="w-2.5 h-2.5" /> {dataBR(t.concluidaEm)}
+                          </span>
+                        )}
                       </span>
 
                       {/* barra segmentada (desktop) */}
@@ -274,6 +320,15 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
                         ))}
                         {comecouAntes && (
                           <span className="absolute left-0 top-1/2 -translate-y-1/2 text-[9px] text-gray-300 select-none">◂</span>
+                        )}
+                        {t.concluidaEm && new Date(t.concluidaEm).getTime() >= iniEixo && (
+                          <span
+                            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-[13px] h-[13px] rounded-full bg-green-500 ring-2 ring-white flex items-center justify-center z-10"
+                            style={{ left: `${((Math.min(new Date(t.concluidaEm).getTime(), fimEixo) - iniEixo) / rangeMs) * 100}%` }}
+                            title={`Concluída em ${dataHoraBR(t.concluidaEm)}`}
+                          >
+                            <Check className="w-2 h-2 text-[#fff]" strokeWidth={4} />
+                          </span>
                         )}
                         {segsOn.map((s, i) => {
                           const a = Math.max(new Date(s.ini).getTime(), iniEixo)
@@ -301,7 +356,18 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
                         title={off.size ? 'Tempo de processo SEM os status ocultos' : 'Tempo total de processo (corrido)'}>
                         {fmtDuracao(leadMs)}
                       </span>
-                    </button>
+
+                      {/* mostrar/ocultar esta tarefa */}
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); toggleTarefa(t.id) }}
+                        title={oculta ? 'Voltar a mostrar esta tarefa' : 'Ocultar esta tarefa da visão'}
+                        className={cn('p-1 mr-2 rounded-md transition-colors justify-self-end',
+                          oculta ? 'text-gray-400 hover:text-gray-600' : 'text-gray-200 hover:text-gray-500 md:opacity-0 md:group-hover:opacity-100')}
+                      >
+                        {oculta ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
 
                     {expandida && (
                       <div className="px-11 pb-3 -mt-0.5">

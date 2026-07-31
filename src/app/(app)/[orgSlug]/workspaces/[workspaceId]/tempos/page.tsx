@@ -69,7 +69,13 @@ export default async function TemposPage({
   const tarefas: TarefaTempos[] = ((acts ?? []) as {
     id: string; title: string; status: string; created_at: string; archived: boolean; campaign_id: string
   }[]).map(a => {
-    const segs: Segmento[] = buildSegmentos(a.created_at, a.status, porTarefa.get(a.id) ?? [], agora, finais)
+    const hist = porTarefa.get(a.id) ?? []
+    const segs: Segmento[] = buildSegmentos(a.created_at, a.status, hist, agora, finais)
+    // Data de conclusão = última transição PARA um status de encerramento
+    // (só quando a tarefa está concluída agora — reaberta volta a ser "na pauta").
+    const concluidaEm = finais.has(a.status)
+      ? (hist.filter(h => finais.has(h.to_status)).at(-1)?.changed_at ?? a.created_at)
+      : null
     return {
       id: a.id,
       titulo: a.title,
@@ -78,6 +84,7 @@ export default async function TemposPage({
       statusAtual: a.status,
       arquivada: a.archived,
       criada: a.created_at,
+      concluidaEm,
       segmentos: segs,
     }
   }).filter(t => t.segmentos.length > 0)
