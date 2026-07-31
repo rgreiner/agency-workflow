@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ChevronDown, ChevronRight, GanttChart, Repeat2 } from 'lucide-react'
@@ -53,6 +53,25 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
   const [periodo, setPeriodo] = useState('30')
   const [campanha, setCampanha] = useState(campanhaInicial)
   const [aberta, setAberta] = useState<string | null>(null)
+  // Status "desligados" da visualização (clique na legenda): o segmento some da
+  // barra e o total desconta — útil p/ etapas de espera longa (ex.: aprovação
+  // do cliente) que esmagam as etapas de trabalho. Preferência da pessoa.
+  const [off, setOff] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('tempos-status-off-v1')
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (raw) setOff(new Set(JSON.parse(raw) as string[]))
+    } catch {}
+  }, [])
+  function toggleStatus(v: string) {
+    setOff(prev => {
+      const n = new Set(prev)
+      if (n.has(v)) n.delete(v); else n.add(v)
+      try { localStorage.setItem('tempos-status-off-v1', JSON.stringify([...n])) } catch {}
+      return n
+    })
+  }
 
   const corDe = useMemo(() => {
     const m = new Map<string, { bg: string; text: string; label: string }>()
@@ -80,16 +99,20 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
     })
   }, [tarefas, campanha, iniEixo])
 
+  const linhas = useMemo(
+    () => visiveis.filter(t => t.segmentos.some(x => !off.has(x.status))),
+    [visiveis, off])
+
   // agrupa por campanha, preservando a ordem (mais recente primeiro dentro do grupo)
   const grupos = useMemo(() => {
     const m = new Map<string, TarefaTempos[]>()
-    for (const t of visiveis) {
+    for (const t of linhas) {
       const arr = m.get(t.campanha) ?? []
       arr.push(t)
       m.set(t.campanha, arr)
     }
     return [...m.entries()]
-  }, [visiveis])
+  }, [linhas])
 
   // marcas do eixo: DIA a dia no recorte curto (~mês); semana no médio; mês no longo
   const { marcas, fds } = useMemo(() => {
@@ -157,19 +180,40 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
         </div>
       </div>
 
-      {/* Legenda */}
+      {/* Legenda — clique desliga/religa o status na visualização */}
       {legenda.length > 0 && (
-        <div className="flex flex-wrap gap-x-3 gap-y-1.5 mb-4">
-          {legenda.map(s => (
-            <span key={s.value} className="inline-flex items-center gap-1.5 text-[11px] text-gray-500">
-              <span className="w-2.5 h-2.5 rounded-[4px]" style={{ backgroundColor: s.bg, boxShadow: `inset 0 0 0 1px ${s.text}22` }} />
-              {s.label}
-            </span>
-          ))}
+        <div className="flex flex-wrap gap-x-1.5 gap-y-1.5 mb-4 items-center">
+          {legenda.map(s => {
+            const desligado = off.has(s.value as string)
+            return (
+              <button
+                key={s.value}
+                type="button"
+                onClick={() => toggleStatus(s.value as string)}
+                title={desligado ? 'Mostrar este status de novo' : 'Ocultar este status da visualização'}
+                className={cn(
+                  'inline-flex items-center gap-1.5 text-[11px] px-1.5 py-0.5 rounded-lg transition-colors active:scale-[0.97]',
+                  desligado ? 'text-gray-300 hover:text-gray-500' : 'text-gray-500 hover:bg-gray-100'
+                )}
+              >
+                <span className="w-2.5 h-2.5 rounded-[4px] transition-opacity"
+                  style={desligado
+                    ? { boxShadow: 'inset 0 0 0 1px #d1d5db' }
+                    : { backgroundColor: s.bg, boxShadow: `inset 0 0 0 1px ${s.text}22` }} />
+                <span className={desligado ? 'line-through' : ''}>{s.label}</span>
+              </button>
+            )
+          })}
+          {off.size > 0 && (
+            <button type="button" onClick={() => { setOff(new Set()); try { localStorage.removeItem('tempos-status-off-v1') } catch {} }}
+              className="text-[11px] text-orange-600 hover:underline px-1">
+              mostrar todos
+            </button>
+          )}
         </div>
       )}
 
-      {visiveis.length === 0 ? (
+      {linhas.length === 0 ? (
         <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-500">
           Nenhuma tarefa com atividade neste período.
         </div>
@@ -196,10 +240,11 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
               {ts.map(t => {
                 const inicioT = new Date(t.criada).getTime()
                 const comecouAntes = inicioT < iniEixo
-                const leadMs = t.segmentos.reduce((s, x) => s + x.ms, 0)
+                const segsOn = t.segmentos.filter(x => !off.has(x.status))
+                const leadMs = segsOn.reduce((s, x) => s + x.ms, 0)
                 const expandida = aberta === t.id
                 const totais = expandida
-                  ? totaisPorStatus(t.segmentos).sort((a, b) =>
+                  ? totaisPorStatus(segsOn).sort((a, b) =>
                       statusCfg.findIndex(s => s.value === a.status) - statusCfg.findIndex(s => s.value === b.status))
                   : []
                 return (
@@ -230,7 +275,7 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
                         {comecouAntes && (
                           <span className="absolute left-0 top-1/2 -translate-y-1/2 text-[9px] text-gray-300 select-none">◂</span>
                         )}
-                        {t.segmentos.map((s, i) => {
+                        {segsOn.map((s, i) => {
                           const a = Math.max(new Date(s.ini).getTime(), iniEixo)
                           const b = Math.min(new Date(s.fim).getTime(), fimEixo)
                           if (b <= a) return null
@@ -252,7 +297,8 @@ export function TemposClient({ orgSlug, workspaceId, clienteNome, campanhas, cam
                       </span>
 
                       {/* lead time total */}
-                      <span className="px-3 py-2.5 text-right text-xs tabular-nums text-gray-500" title="Tempo total de processo (corrido)">
+                      <span className="px-3 py-2.5 text-right text-xs tabular-nums text-gray-500"
+                        title={off.size ? 'Tempo de processo SEM os status ocultos' : 'Tempo total de processo (corrido)'}>
                         {fmtDuracao(leadMs)}
                       </span>
                     </button>
