@@ -24,9 +24,9 @@ export interface TarefaTempos {
 
 /** Visão macro: os grupos do cadastro de status viram "com quem está a bola". */
 const GRUPO_CFG: Record<string, { label: string; bg: string; text: string }> = {
-  internal: { label: 'Com a agência', bg: '#ffedd5', text: '#c2410c' },
-  external: { label: 'Com o cliente', bg: '#dbeafe', text: '#1d4ed8' },
-  done:     { label: 'Encerrado',     bg: '#f3f4f6', text: '#6b7280' },
+  internal: { label: 'Com a agência', bg: '#fb923c', text: '#7c2d12' },
+  external: { label: 'Com o cliente', bg: '#60a5fa', text: '#1e3a8a' },
+  done:     { label: 'Encerrado',     bg: '#d1d5db', text: '#374151' },
 }
 
 const PERIODOS = [
