@@ -7,10 +7,10 @@ export default async function ListaPage({
   searchParams,
 }: {
   params: Promise<{ orgSlug: string }>
-  searchParams: Promise<{ ws?: string; view?: string; persons?: string; statuses?: string; date?: string }>
+  searchParams: Promise<{ ws?: string; view?: string; persons?: string; statuses?: string; date?: string; resp?: string }>
 }) {
   const { orgSlug } = await params
-  const { ws, view, persons, statuses, date } = await searchParams
+  const { ws, view, persons, statuses, date, resp } = await searchParams
   const archivedView = view === 'arquivadas'
   const csv = (s?: string) => (s ?? '').split(',').map(x => x.trim()).filter(Boolean)
 
@@ -29,6 +29,7 @@ export default async function ListaPage({
       initialPersons={csv(persons)}
       initialStatuses={csv(statuses)}
       initialDate={date}
+      initialRespEtapa={resp === 'etapa'}
       dbPrefs={dbPrefs}
       view={archivedView ? 'arquivadas' : 'ativas'}
     />

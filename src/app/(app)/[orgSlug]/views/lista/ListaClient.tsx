@@ -84,7 +84,7 @@ function matchesDateFilter(due: string | null, f: string, today: string): boolea
 // ── Types ─────────────────────────────────────────────────────────────────
 
 interface Assignee { full_name: string | null; avatar_url: string | null }
-interface Member { userId: string; fullName: string | null; email: string; avatarUrl: string | null }
+interface Member { userId: string; fullName: string | null; email: string; avatarUrl: string | null; allowedStatuses?: string[] }
 interface LastComment { content: string; at: string; author: string | null }
 interface Activity {
   id: string; title: string; status: string; priority: string
@@ -104,6 +104,9 @@ interface Props {
   initialPersons?: string[]
   initialStatuses?: string[]
   initialDate?: string
+  /** `true` = o filtro de pessoa vale como "responsável pela ETAPA" (cargo × status),
+   *  a mesma régua do dashboard de Gestão — e não como responsável atribuído. */
+  initialRespEtapa?: boolean
   /** Preferências salvas no banco (colunas + presets) — seguem o usuário entre máquinas. */
   dbPrefs?: Record<string, unknown> | null
   view: 'ativas' | 'arquivadas'
@@ -123,7 +126,7 @@ interface Props {
 
 // ── Component ─────────────────────────────────────────────────────────────
 
-export function ListaClient({ orgSlug, activities, campMap, members, initialWorkspace, initialPersons, initialStatuses, initialDate, dbPrefs, view, title = 'Lista de atividades', routeBase = 'views/lista', breadcrumb, titleActions, secondaryActions, newActivityCampaign }: Props) {
+export function ListaClient({ orgSlug, activities, campMap, members, initialWorkspace, initialPersons, initialStatuses, initialDate, initialRespEtapa, dbPrefs, view, title = 'Lista de atividades', routeBase = 'views/lista', breadcrumb, titleActions, secondaryActions, newActivityCampaign }: Props) {
   const listPath = `/${orgSlug}/${routeBase}`
   const statusConfig = useStatusConfig()
   const isArchivedView = view === 'arquivadas'
@@ -158,6 +161,10 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
   const [filterStatuses, setFilterStatuses] = useState<string[]>(initialStatuses ?? [])
   const [filterPriorities, setFilterPriorities] = useState<string[]>([])
   const [filterDate, setFilterDate] = useState(initialDate ?? '')
+  // Chegou do dashboard de Gestão: lá "quem acumula atraso" é o dono da ETAPA
+  // (cargo × status), não quem está atribuído. Sem isto o drill-down abria vazio —
+  // a Gestão aponta o Atendimento e a atividade está atribuída ao designer.
+  const [respEtapa, setRespEtapa] = useState(!!initialRespEtapa)
   const [onlyMine, setOnlyMine] = useState(false)
   const me = getUsuarioClient()?.id ?? null
   const pickerRef = useRef<HTMLDivElement>(null)
@@ -362,6 +369,19 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
     }, {} as Record<string, { id: string; name: string }>)
   ).sort((a, b) => a.name.localeCompare(b.name))
 
+  // "Responsável pela ETAPA" — réplica da regra do dashboard_gestao (resp_direto →
+  // resp_cargo): dono é quem está atribuído E cujo cargo responde pelo status atual;
+  // se nenhum atribuído responde por ele, cai pro cargo (todo mundo que responde).
+  // É por isso que uma tarefa parada em "Pendente do cliente" é do Atendimento
+  // mesmo estando atribuída ao designer.
+  const statusDoCargo = new Map(members.map(m => [m.userId, new Set(m.allowedStatuses ?? [])]))
+  const ehDonoDaEtapa = (a: Activity) => {
+    const diretos = a.assignedIds.filter(id => statusDoCargo.get(id)?.has(a.status))
+    return diretos.length > 0
+      ? diretos.some(id => filterPersons.includes(id))
+      : filterPersons.some(p => statusDoCargo.get(p)?.has(a.status))
+  }
+
   // Filter activities by workspace if active, applying optimistic status overrides
   const todayYMD = new Date().toISOString().slice(0, 10)
   const filteredActivities = activities
@@ -369,7 +389,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
     .map(a => overrides[a.id] ? { ...a, status: overrides[a.id] } : a)
     .filter(a => !onlyMine || (!!me && a.assignedIds.includes(me)))
     .filter(a => filterWorkspaces.length === 0 || filterWorkspaces.includes(campMap[a.campaign_id]?.workspaceId ?? ''))
-    .filter(a => filterPersons.length === 0 || a.assignedIds.some(id => filterPersons.includes(id)))
+    .filter(a => filterPersons.length === 0 || (respEtapa ? ehDonoDaEtapa(a) : a.assignedIds.some(id => filterPersons.includes(id))))
     .filter(a => filterStatuses.length === 0 || filterStatuses.includes(a.status))
     .filter(a => filterPriorities.length === 0 || filterPriorities.includes(a.priority))
     .filter(a => matchesDateFilter(a.due_date, filterDate, todayYMD))
@@ -548,6 +568,15 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
           allLabel="Todas as pessoas"
           options={members.map(m => ({ value: m.userId, label: m.fullName ?? m.email }))}
         />
+        {/* O recorte por pessoa mudou de significado (veio da Gestão): sem dizer
+            isso, a lista parece filtrada errado. Clicar volta ao responsável. */}
+        {respEtapa && filterPersons.length > 0 && (
+          <button onClick={() => setRespEtapa(false)}
+            title="Contando quem responde pela etapa (cargo × status), como no dashboard de Gestão. Clique para filtrar por responsável atribuído."
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 transition-colors">
+            responsável pela etapa <X className="w-3 h-3" />
+          </button>
+        )}
         <MultiSelect
           values={filterStatuses}
           onChange={setFilterStatuses}
@@ -570,7 +599,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
         />
         {hasFilter && (
           <button
-            onClick={() => { setFilterWorkspaces([]); setFilterPersons([]); setFilterStatuses([]); setFilterPriorities([]); setFilterDate('') }}
+            onClick={() => { setFilterWorkspaces([]); setFilterPersons([]); setFilterStatuses([]); setFilterPriorities([]); setFilterDate(''); setRespEtapa(false) }}
             className="text-xs text-gray-400 hover:text-gray-600 transition px-2 py-1.5"
           >
             Limpar filtros

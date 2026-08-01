@@ -38,6 +38,9 @@ export interface ListMember {
   fullName: string | null
   email: string
   avatarUrl: string | null
+  /** Status que o CARGO da pessoa responde (org_positions.allowed_statuses).
+   *  É a régua de "responsável pela etapa" que o dashboard de Gestão usa. */
+  allowedStatuses: string[]
 }
 
 export interface ActivityListData {
@@ -155,11 +158,15 @@ export async function loadActivityList(
 
   const { data: membersRaw } = await supabase
     .from('organization_members')
-    .select('user_id, profiles!user_id(full_name, email, avatar_url)')
+    .select('user_id, profiles!user_id(full_name, email, avatar_url), org_positions(allowed_statuses)')
     .eq('org_id', org.id)
   const members: ListMember[] = (membersRaw ?? []).map(m => {
     const p = m.profiles as unknown as { full_name: string | null; email: string; avatar_url: string | null } | null
-    return { userId: m.user_id as string, fullName: p?.full_name ?? null, email: p?.email ?? '', avatarUrl: p?.avatar_url ?? null }
+    const pos = m.org_positions as unknown as { allowed_statuses: string[] | null } | null
+    return {
+      userId: m.user_id as string, fullName: p?.full_name ?? null, email: p?.email ?? '',
+      avatarUrl: p?.avatar_url ?? null, allowedStatuses: pos?.allowed_statuses ?? [],
+    }
   }).filter(m => m.email || m.fullName).sort(porNome(m => m.fullName ?? m.email))
 
   const campMap = Object.fromEntries(

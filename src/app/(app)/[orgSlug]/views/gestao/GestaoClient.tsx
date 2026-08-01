@@ -155,7 +155,9 @@ function Operacao({ orgSlug, gestao }: { orgSlug: string; gestao: GestaoData | n
 
   function href(q: { status?: string; ws?: string; overdue?: boolean; noduedate?: boolean }) {
     const p = new URLSearchParams()
-    if (person && person !== 'none') p.set('persons', person)
+    // resp=etapa: aqui "quem acumula atraso" é o dono da ETAPA (cargo × status).
+    // Sem avisar a Lista, ela filtraria por responsável atribuído e abriria vazia.
+    if (person && person !== 'none') { p.set('persons', person); p.set('resp', 'etapa') }
     if (q.status) p.set('statuses', q.status)
     if (q.ws) p.set('ws', q.ws)
     if (q.overdue) p.set('date', 'overdue')
