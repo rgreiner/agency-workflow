@@ -4,10 +4,10 @@ import { useRef, useState, useTransition } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
 import { AvatarCropper } from '@/components/ui/AvatarCropper'
 import { uploadFile } from '@/lib/storage/upload-client'
-import { updateMember, removeMember, setMemberAvatar, carregarCargaMembro, type MembroCarga } from '@/app/actions/settings'
+import { updateMember, arquivarMembro, setMemberAvatar, carregarCargaMembro, type MembroCarga } from '@/app/actions/settings'
 import { ResetPasswordButton } from './ResetPasswordButton'
 import { Select } from '@/components/ui/Select'
-import { Trash2, Check, Loader2, AlertTriangle, Camera } from 'lucide-react'
+import { Archive, ArchiveRestore, Check, Loader2, Camera } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -26,15 +26,18 @@ interface Props {
   isMe: boolean
   isOwner: boolean
   roleLabels: Record<string, string>
-  /** Para quem as atividades desta pessoa podem ser transferidas na remoção. */
+  /** Para quem as atividades desta pessoa podem ser transferidas ao arquivar. */
   outrosMembros: { userId: string; nome: string }[]
+  /** Já saiu: sem acesso, fora do operacional, vínculo mantido pelo histórico. */
+  arquivado?: boolean
+  arquivadoEm?: string | null
 }
 
 const ROLES = ['owner', 'admin', 'manager', 'member', 'viewer']
 
 export function MemberRow({
   memberId, orgSlug, orgId, profile, position, role, canFinance, canVendas, canRh,
-  positions, isAdmin, isMe, isOwner, roleLabels, outrosMembros,
+  positions, isAdmin, isMe, isOwner, roleLabels, outrosMembros, arquivado = false, arquivadoEm,
 }: Props) {
   const [selectedPosition, setSelectedPosition] = useState(position?.id ?? '')
   const [selectedRole, setSelectedRole] = useState(role)
@@ -125,16 +128,24 @@ export function MemberRow({
 
   function handleRemove() {
     startTransition(async () => {
-      const result = await removeMember(orgSlug, orgId, memberId, destino || null)
+      const result = await arquivarMembro(orgSlug, orgId, memberId, { transferirPara: destino || null })
       if (result?.error) { toast.error(result.error); return }
       // `soltas` = o que saiu da pessoa (é o número que o admin acompanha);
       // `transferidas` é menor quando o destino já era responsável junto.
       const r = result.resultado
       const nomeDestino = outrosMembros.find(o => o.userId === destino)?.nome
-      toast.success(!r?.soltas ? 'Membro removido.'
-        : destino ? `Membro removido — ${r.soltas} atividade(s) passaram para ${nomeDestino}.`
-          : `Membro removido — ${r.soltas} atividade(s) ficaram sem responsável.`)
+      toast.success(!r?.soltas ? 'Membro arquivado.'
+        : destino ? `Membro arquivado — ${r.soltas} atividade(s) passaram para ${nomeDestino}.`
+          : `Membro arquivado — ${r.soltas} atividade(s) ficaram sem responsável.`)
       setConfirmRemove(false)
+    })
+  }
+
+  function desarquivar() {
+    startTransition(async () => {
+      const r = await arquivarMembro(orgSlug, orgId, memberId, { arquivar: false })
+      if (r?.error) toast.error(r.error)
+      else toast.success('Membro reativado — o acesso volta imediatamente.')
     })
   }
 
@@ -187,7 +198,10 @@ export function MemberRow({
               {profile?.full_name ?? '—'}
               {isMe && <span className="ml-1.5 text-xs text-gray-400">(você)</span>}
             </p>
-            <p className="text-xs text-gray-400">{profile?.email}</p>
+            <p className="text-xs text-gray-400">
+              {profile?.email}
+              {arquivado && arquivadoEm && <span className="ml-1.5">· saiu em {arquivadoEm.slice(0, 10).split('-').reverse().join('/')}</span>}
+            </p>
           </div>
         </div>
       </td>
@@ -351,16 +365,25 @@ export function MemberRow({
             {canEdit && profile && (
               <ResetPasswordButton orgId={orgId} userId={profile.id} name={profile.full_name ?? profile.email} />
             )}
-            {canEdit && (
+            {canEdit && (arquivado ? (
+              <button
+                onClick={desarquivar}
+                disabled={isPending}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition disabled:opacity-50"
+                title="Reativar — devolve o acesso"
+              >
+                <ArchiveRestore className="w-3.5 h-3.5" />
+              </button>
+            ) : (
               <button
                 onClick={pedirRemocao}
                 disabled={isPending}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-50"
-                title="Remover membro"
+                className="p-1.5 rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition disabled:opacity-50"
+                title="Arquivar — tira o acesso e mantém o histórico"
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Archive className="w-3.5 h-3.5" />
               </button>
-            )}
+            ))}
             {canEdit && confirmRemove && (
               <div
                 className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
@@ -371,11 +394,11 @@ export function MemberRow({
                   onClick={e => e.stopPropagation()}
                 >
                   <div className="flex items-center gap-2 mb-2">
-                    <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
-                    <h3 className="text-base font-semibold text-gray-900">Remover membro</h3>
+                    <Archive className="w-5 h-5 text-amber-500 shrink-0" />
+                    <h3 className="text-base font-semibold text-gray-900">Arquivar membro</h3>
                   </div>
                   <p className="text-sm text-gray-600">
-                    Remover <strong className="text-gray-900">{profile?.full_name ?? profile?.email ?? 'este membro'}</strong> da organização? A pessoa perde o acesso imediatamente.
+                    Arquivar <strong className="text-gray-900">{profile?.full_name ?? profile?.email ?? 'este membro'}</strong>? A pessoa perde o acesso imediatamente e sai dos filtros e seletores — mas continua ligada ao histórico e às métricas do que entregou. Dá para reativar depois.
                   </p>
 
                   {/* Sem isto a atividade continuava atribuída a quem saiu: não
@@ -419,9 +442,9 @@ export function MemberRow({
                       type="button"
                       onClick={handleRemove}
                       disabled={isPending}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-red-600 text-[#fff] rounded-xl hover:bg-red-700 disabled:opacity-50 transition"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-amber-600 text-[#fff] rounded-xl hover:bg-amber-700 disabled:opacity-50 transition"
                     >
-                      {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} Remover
+                      {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />} Arquivar
                     </button>
                   </div>
                 </div>

@@ -50,6 +50,8 @@ export default async function MembrosPage({
     can_finance: boolean | null
     can_vendas: boolean | null
     can_rh: boolean | null
+    arquivado: boolean | null
+    arquivado_em: string | null
     profiles: { id: string; full_name: string | null; email: string; avatar_url: string | null } | null
     org_positions: { id: string; name: string; color: string } | null
   }
@@ -57,10 +59,14 @@ export default async function MembrosPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: membersRaw } = await (supabase as any)
     .from('organization_members')
-    .select('id, role, position_id, can_finance, can_vendas, can_rh, profiles!user_id(id, full_name, email, avatar_url), org_positions(id, name, color)')
+    .select('id, role, position_id, can_finance, can_vendas, can_rh, arquivado, arquivado_em, profiles!user_id(id, full_name, email, avatar_url), org_positions(id, name, color)')
     .eq('org_id', org.id)
     .order('joined_at', { ascending: true })
-  const members = (membersRaw ?? []) as MemberRowData[]
+  const todos = (membersRaw ?? []) as MemberRowData[]
+  // Arquivados ficam numa lista à parte: não ocupam a contagem de assentos nem
+  // se misturam com quem está trabalhando, mas seguem visíveis (e reversíveis).
+  const members = todos.filter(m => !m.arquivado)
+  const arquivados = todos.filter(m => m.arquivado)
 
   const { data: positions } = await supabase
     .from('org_positions')
@@ -118,7 +124,9 @@ export default async function MembrosPage({
                   isMe={isMe}
                   isOwner={isOwner}
                   roleLabels={ROLE_LABELS}
-                  // Destinos possíveis das atividades ao remover esta pessoa.
+                  arquivado={!!m.arquivado}
+                  arquivadoEm={m.arquivado_em}
+                  // Destinos possíveis das atividades ao arquivar esta pessoa.
                   outrosMembros={members
                     .filter(o => o.id !== m.id)
                     .map(o => {
@@ -132,6 +140,62 @@ export default async function MembrosPage({
           </tbody>
         </table>
       </div>
+
+      {/* Quem saiu: sem acesso e fora do operacional, mas o vínculo continua —
+          é ele que dá dono ao histórico e às métricas do que a pessoa entregou. */}
+      {arquivados.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-sm font-semibold text-gray-700 mb-1">Arquivados</h2>
+          <p className="text-xs text-gray-500 mb-3">
+            Sem acesso e fora dos filtros e seletores. Continuam ligados ao histórico e às métricas do que entregaram.
+          </p>
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
+            <table className="w-full min-w-[480px]">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/50">
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Pessoa</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Cargo</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Papel</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Financeiro</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Vendas</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">RH</th>
+                  {isAdmin && <th className="w-10" />}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {arquivados.map(m => {
+                  const profile = m.profiles as unknown as {
+                    id: string; full_name: string | null; email: string; avatar_url: string | null
+                  } | null
+                  const position = m.org_positions as unknown as { id: string; name: string; color: string } | null
+                  return (
+                    <MemberRow
+                      key={m.id}
+                      memberId={m.id}
+                      orgSlug={orgSlug}
+                      orgId={org.id}
+                      profile={profile}
+                      position={position}
+                      role={m.role}
+                      canFinance={m.can_finance ?? false}
+                      canVendas={m.can_vendas ?? false}
+                      canRh={m.can_rh ?? false}
+                      positions={positions ?? []}
+                      isAdmin={isAdmin}
+                      isMe={profile?.id === user.id}
+                      isOwner={m.role === 'owner'}
+                      roleLabels={ROLE_LABELS}
+                      arquivado
+                      arquivadoEm={m.arquivado_em}
+                      outrosMembros={[]}
+                    />
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

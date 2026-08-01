@@ -156,11 +156,17 @@ export async function loadActivityList(
     }
   }
 
-  const { data: membersRaw } = await supabase
+  // `as any`: a coluna `arquivado` (migration 178) ainda não está nos tipos gerados.
+  // Arquivado (saiu da agência) não entra em filtro nem em seletor de responsável —
+  // o nome dele continua aparecendo no histórico das atividades em que trabalhou.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: membersRaw } = await (supabase as any)
     .from('organization_members')
     .select('user_id, profiles!user_id(full_name, email, avatar_url), org_positions(allowed_statuses)')
     .eq('org_id', org.id)
-  const members: ListMember[] = (membersRaw ?? []).map(m => {
+    .eq('arquivado', false)
+  type MemberRaw = { user_id: string; profiles: unknown; org_positions: unknown }
+  const members: ListMember[] = ((membersRaw ?? []) as MemberRaw[]).map(m => {
     const p = m.profiles as unknown as { full_name: string | null; email: string; avatar_url: string | null } | null
     const pos = m.org_positions as unknown as { allowed_statuses: string[] | null } | null
     return {

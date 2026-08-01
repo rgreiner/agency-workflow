@@ -124,9 +124,30 @@ export async function carregarCargaMembro(orgId: string, memberId: string) {
   return { carga: data as MembroCarga }
 }
 
-/** Remove o membro. `transferirPara` (user_id de outro membro) leva as atividades
- *  ativas junto; sem destino, elas ficam SEM responsável — nunca apontando para
- *  alguém que saiu da org. */
+/** Arquiva o membro (offboarding padrão): tira o acesso e o tira do operacional,
+ *  mas MANTÉM o vínculo — o histórico e as métricas do que ele entregou seguem
+ *  com dono. `transferirPara` leva as atividades ativas junto. */
+export async function arquivarMembro(
+  orgSlug: string, orgId: string, memberId: string,
+  opts?: { arquivar?: boolean; transferirPara?: string | null },
+) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('arquivar_membro', {
+    p_org_id: orgId, p_member_id: memberId,
+    p_arquivar: opts?.arquivar ?? true,
+    p_transferir_para: opts?.transferirPara || null,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/settings/membros`)
+  return { resultado: data as { arquivado: boolean; transferidas: number; soltas: number } }
+}
+
+/** Remove o membro DE VEZ (some da lista, perde o vínculo com o histórico).
+ *  Use só para engano de convite; para quem saiu da agência, arquive. */
 export async function removeMember(orgSlug: string, orgId: string, memberId: string, transferirPara?: string | null) {
   const supabase = await createClient()
   const user = await getUsuario()
