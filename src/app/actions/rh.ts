@@ -145,6 +145,19 @@ export interface PlanoPessoa {
   status: 'vinculado' | 'achado' | 'novo'
   lancamento_id: string | null; lanc_valor: number | null; lanc_venc: string | null; lanc_situacao: string | null
 }
+/** O que acontece ao marcar a ficha como "Desligado": o gatilho da migration 179
+ *  arquiva o acesso e solta as atividades ativas. A tela avisa ANTES de salvar. */
+export async function carregarImpactoDesligamento(orgSlug: string, colaboradorId: string) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (c.supabase as any).rpc('rh_impacto_desligamento', {
+    p_colaborador_id: colaboradorId,
+  })
+  if (error) return { error: error.message }
+  return { impacto: data as { tem_acesso: boolean; ativas: number } }
+}
+
 export interface PlanoGuia {
   status: 'vinculado' | 'achado' | 'novo'
   lancamento_id: string | null; valor: number | null; venc: string | null

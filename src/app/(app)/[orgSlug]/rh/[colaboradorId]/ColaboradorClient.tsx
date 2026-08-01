@@ -2,12 +2,12 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Loader2, Check, Archive, ArchiveRestore, CalendarClock } from 'lucide-react'
+import { ArrowLeft, Loader2, Check, Archive, ArchiveRestore, CalendarClock, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Select } from '@/components/ui/Select'
 import { formatBRL, parseMoney } from '@/lib/midia'
 import { maskCPF, maskPhone } from '@/lib/masks'
-import { salvarColaborador, setColaboradorArquivado } from '@/app/actions/rh'
+import { salvarColaborador, setColaboradorArquivado, carregarImpactoDesligamento } from '@/app/actions/rh'
 import { JornadaEditor, type JornadaVals } from '../JornadaEditor'
 
 export interface Colaborador {
@@ -37,7 +37,19 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
     beneficios_mensal: colab.beneficios_mensal != null && Number(colab.beneficios_mensal) > 0 ? formatBRL(Number(colab.beneficios_mensal)).replace('R$', '').trim() : '',
     observacao: colab.observacao ?? '', membro_user_id: colab.membro_user_id ?? '',
   })
-  const set = (k: keyof typeof f, v: string) => setF(p => ({ ...p, [k]: v }))
+  // Desligar aqui corta o acesso e solta as atividades (gatilho da migration 179).
+  // A ficha avisa o tamanho disso ANTES de salvar — ninguém deve descobrir depois.
+  const [impacto, setImpacto] = useState<{ tem_acesso: boolean; ativas: number } | null>(null)
+  const set = (k: keyof typeof f, v: string) => {
+    setF(p => ({ ...p, [k]: v }))
+    if (k === 'status') {
+      if (v !== 'desligado') { setImpacto(null); return }
+      startAction(async () => {
+        const r = await carregarImpactoDesligamento(orgSlug, colab.id)
+        if (!r?.error) setImpacto(r.impacto ?? null)
+      })
+    }
+  }
   const [saving, startSave] = useTransition()
   const [pending, startAction] = useTransition()
 
@@ -101,6 +113,22 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
           <div><label className={labelCls}>Vincular ao login <span className="font-normal text-gray-400">(habilita o ponto)</span></label>
             <Select value={f.membro_user_id} onChange={v => set('membro_user_id', v)} options={[{ value: '', label: '— não vinculado —' }, ...membros.map(m => ({ value: m.user_id, label: m.profiles?.full_name || m.profiles?.email || m.user_id }))]} /></div>
           <div className="col-span-2"><label className={labelCls}>Observação</label><textarea value={f.observacao} onChange={e => set('observacao', e.target.value)} rows={2} className={inputCls} /></div>
+
+          {/* Desligar aqui é o offboarding inteiro: salvar corta o acesso e solta
+              as atividades. Dizer isso antes evita a descoberta pelo susto. */}
+          {f.status === 'desligado' && impacto && (impacto.tem_acesso || impacto.ativas > 0) && (
+            <div className="col-span-2 rounded-xl border border-amber-200 bg-amber-50 p-3 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-800">
+                <p className="font-medium">Ao salvar, o offboarding acontece sozinho:</p>
+                <ul className="mt-1 space-y-0.5 list-disc list-inside">
+                  {impacto.tem_acesso && <li>o acesso é arquivado na hora (perde o login e sai dos filtros)</li>}
+                  {impacto.ativas > 0 && <li><strong>{impacto.ativas}</strong> atividade(s) ativa(s) ficam sem responsável — redistribua pelo filtro “Sem responsável” da Lista</li>}
+                </ul>
+                <p className="mt-1 text-amber-700">O histórico e as métricas do que a pessoa entregou continuam com ela.</p>
+              </div>
+            </div>
+          )}
         </div>
         <div className="flex justify-end">
           <button onClick={salvar} disabled={saving}
