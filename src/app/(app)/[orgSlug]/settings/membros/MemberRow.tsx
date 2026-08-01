@@ -4,8 +4,9 @@ import { useRef, useState, useTransition } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
 import { AvatarCropper } from '@/components/ui/AvatarCropper'
 import { uploadFile } from '@/lib/storage/upload-client'
-import { updateMember, removeMember, setMemberAvatar } from '@/app/actions/settings'
+import { updateMember, removeMember, setMemberAvatar, carregarCargaMembro, type MembroCarga } from '@/app/actions/settings'
 import { ResetPasswordButton } from './ResetPasswordButton'
+import { Select } from '@/components/ui/Select'
 import { Trash2, Check, Loader2, AlertTriangle, Camera } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -25,13 +26,15 @@ interface Props {
   isMe: boolean
   isOwner: boolean
   roleLabels: Record<string, string>
+  /** Para quem as atividades desta pessoa podem ser transferidas na remoção. */
+  outrosMembros: { userId: string; nome: string }[]
 }
 
 const ROLES = ['owner', 'admin', 'manager', 'member', 'viewer']
 
 export function MemberRow({
   memberId, orgSlug, orgId, profile, position, role, canFinance, canVendas, canRh,
-  positions, isAdmin, isMe, isOwner, roleLabels,
+  positions, isAdmin, isMe, isOwner, roleLabels, outrosMembros,
 }: Props) {
   const [selectedPosition, setSelectedPosition] = useState(position?.id ?? '')
   const [selectedRole, setSelectedRole] = useState(role)
@@ -41,6 +44,9 @@ export function MemberRow({
   const [isDirty, setIsDirty] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [confirmRemove, setConfirmRemove] = useState(false)
+  // Carga da pessoa (carregada ao abrir o aviso) + para quem transferir.
+  const [carga, setCarga] = useState<MembroCarga | null>(null)
+  const [destino, setDestino] = useState('')
 
   // Troca de avatar pelo admin (upload + cropper, mesmo fluxo do Meu Perfil).
   const avatarInputRef = useRef<HTMLInputElement>(null)
@@ -107,11 +113,28 @@ export function MemberRow({
     })
   }
 
+  /** Abre o aviso já com a carga da pessoa (o admin decide o destino sabendo o tamanho). */
+  function pedirRemocao() {
+    setConfirmRemove(true); setCarga(null); setDestino('')
+    startTransition(async () => {
+      const r = await carregarCargaMembro(orgId, memberId)
+      if (r?.error) toast.error(r.error)
+      else setCarga(r.carga ?? null)
+    })
+  }
+
   function handleRemove() {
     startTransition(async () => {
-      const result = await removeMember(orgSlug, orgId, memberId)
-      if (result?.error) toast.error(result.error)
-      else toast.success('Membro removido.')
+      const result = await removeMember(orgSlug, orgId, memberId, destino || null)
+      if (result?.error) { toast.error(result.error); return }
+      // `soltas` = o que saiu da pessoa (é o número que o admin acompanha);
+      // `transferidas` é menor quando o destino já era responsável junto.
+      const r = result.resultado
+      const nomeDestino = outrosMembros.find(o => o.userId === destino)?.nome
+      toast.success(!r?.soltas ? 'Membro removido.'
+        : destino ? `Membro removido — ${r.soltas} atividade(s) passaram para ${nomeDestino}.`
+          : `Membro removido — ${r.soltas} atividade(s) ficaram sem responsável.`)
+      setConfirmRemove(false)
     })
   }
 
@@ -330,7 +353,7 @@ export function MemberRow({
             )}
             {canEdit && (
               <button
-                onClick={() => setConfirmRemove(true)}
+                onClick={pedirRemocao}
                 disabled={isPending}
                 className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-50"
                 title="Remover membro"
@@ -354,6 +377,36 @@ export function MemberRow({
                   <p className="text-sm text-gray-600">
                     Remover <strong className="text-gray-900">{profile?.full_name ?? profile?.email ?? 'este membro'}</strong> da organização? A pessoa perde o acesso imediatamente.
                   </p>
+
+                  {/* Sem isto a atividade continuava atribuída a quem saiu: não
+                      aparecia em "Sem responsável" nem nos filtros por pessoa. */}
+                  {carga === null ? (
+                    <p className="mt-3 text-xs text-gray-400 inline-flex items-center gap-1.5">
+                      <Loader2 className="w-3 h-3 animate-spin" /> Verificando atividades…
+                    </p>
+                  ) : carga.ativas === 0 ? (
+                    <p className="mt-3 text-xs text-gray-500">Sem atividades ativas atribuídas.</p>
+                  ) : (
+                    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                      <p className="text-xs text-amber-800">
+                        Está com <strong>{carga.ativas}</strong> atividade(s) ativa(s)
+                        {carga.atrasadas > 0 && <> · <strong>{carga.atrasadas}</strong> atrasada(s)</>}
+                        {carga.so_dela > 0 && <> · <strong>{carga.so_dela}</strong> só com ela</>}.
+                      </p>
+                      <div className="mt-2">
+                        <label className="block text-[11px] font-medium text-gray-600 mb-1">Passar as atividades para</label>
+                        <Select value={destino} onChange={setDestino} size="sm"
+                          options={[{ value: '', label: 'Ninguém — deixar sem responsável' },
+                            ...outrosMembros.map(o => ({ value: o.userId, label: o.nome }))]} />
+                        <p className="text-[11px] text-gray-500 mt-1">
+                          {destino
+                            ? 'As ativas passam para essa pessoa; as concluídas e arquivadas ficam como estão.'
+                            : 'Elas ficam sem responsável — aparecem no card “Sem responsável” e no filtro da Lista.'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex justify-end gap-2 mt-5">
                     <button
                       type="button"

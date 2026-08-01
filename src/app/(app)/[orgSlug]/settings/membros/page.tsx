@@ -118,6 +118,14 @@ export default async function MembrosPage({
                   isMe={isMe}
                   isOwner={isOwner}
                   roleLabels={ROLE_LABELS}
+                  // Destinos possíveis das atividades ao remover esta pessoa.
+                  outrosMembros={members
+                    .filter(o => o.id !== m.id)
+                    .map(o => {
+                      const p = o.profiles as unknown as { id: string; full_name: string | null; email: string } | null
+                      return { userId: p?.id ?? '', nome: p?.full_name ?? p?.email ?? '' }
+                    })
+                    .filter(o => o.userId && o.nome)}
                 />
               )
             })}

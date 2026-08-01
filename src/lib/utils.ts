@@ -5,6 +5,10 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/** Valor sintético do filtro de pessoas = "sem NENHUM responsável atribuído".
+ *  Mora aqui para o deep-link da Gestão e o filtro da Lista falarem o mesmo. */
+export const SEM_RESPONSAVEL = '__sem_resp__'
+
 /**
  * Comparador A–Z em português: ignora acento e maiúscula ("Ávila" antes de "Bravo",
  * "iFood" junto de "Ifood"). Use em TODA lista de nome própria — cliente, campanha,

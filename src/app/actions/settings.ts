@@ -108,19 +108,41 @@ export async function updateMember(
   revalidatePath(`/${orgSlug}/settings/membros`)
 }
 
-export async function removeMember(orgSlug: string, orgId: string, memberId: string) {
+/** O que está atribuído à pessoa nesta org — prévia antes de remover, para o
+ *  admin decidir se transfere ou deixa sem responsável. */
+export interface MembroCarga { user_id: string; ativas: number; atrasadas: number; so_dela: number }
+
+export async function carregarCargaMembro(orgId: string, memberId: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('org_membro_carga', {
+    p_org_id: orgId, p_member_id: memberId,
+  })
+  if (error) return { error: error.message }
+  return { carga: data as MembroCarga }
+}
+
+/** Remove o membro. `transferirPara` (user_id de outro membro) leva as atividades
+ *  ativas junto; sem destino, elas ficam SEM responsável — nunca apontando para
+ *  alguém que saiu da org. */
+export async function removeMember(orgSlug: string, orgId: string, memberId: string, transferirPara?: string | null) {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
-  const { error } = await supabase.rpc('remove_member', {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('remove_member', {
     p_user_id: user.id,
     p_org_id: orgId,
     p_member_id: memberId,
+    p_transferir_para: transferirPara || null,
   })
 
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/settings/membros`)
+  return { resultado: data as { transferidas: number; soltas: number } }
 }
 
 // ── CONVITES ──────────────────────────────────────

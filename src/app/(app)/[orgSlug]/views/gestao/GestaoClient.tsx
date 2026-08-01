@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { cn } from '@/lib/utils'
+import { cn, SEM_RESPONSAVEL } from '@/lib/utils'
 import { Avatar } from '@/components/ui/Avatar'
 import { MultiSelect, Select } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
@@ -157,7 +157,8 @@ function Operacao({ orgSlug, gestao }: { orgSlug: string; gestao: GestaoData | n
     const p = new URLSearchParams()
     // resp=etapa: aqui "quem acumula atraso" é o dono da ETAPA (cargo × status).
     // Sem avisar a Lista, ela filtraria por responsável atribuído e abriria vazia.
-    if (person && person !== 'none') { p.set('persons', person); p.set('resp', 'etapa') }
+    if (person === 'none') p.set('persons', SEM_RESPONSAVEL)
+    else if (person) { p.set('persons', person); p.set('resp', 'etapa') }
     if (q.status) p.set('statuses', q.status)
     if (q.ws) p.set('ws', q.ws)
     if (q.overdue) p.set('date', 'overdue')

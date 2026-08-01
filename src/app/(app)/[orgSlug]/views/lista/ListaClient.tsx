@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useTransition, type ReactNode, type ComponentType } from 'react'
 import Link from 'next/link'
-import { cn, isOverdue, daysUntil, dueLabel } from '@/lib/utils'
+import { cn, isOverdue, daysUntil, dueLabel, SEM_RESPONSAVEL } from '@/lib/utils'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority } from '@/types'
 import { ChecklistChip } from '@/components/ui/ChecklistChip'
 import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search, Flag, SignalLow, SignalMedium, SignalHigh, Copy, Archive, ArchiveRestore, X, Calendar, UserPlus, Minus, Circle, User, Bookmark, Loader2 } from 'lucide-react'
@@ -85,6 +85,9 @@ function matchesDateFilter(due: string | null, f: string, today: string): boolea
 
 interface Assignee { full_name: string | null; avatar_url: string | null }
 interface Member { userId: string; fullName: string | null; email: string; avatarUrl: string | null; allowedStatuses?: string[] }
+/** Opção sintética do filtro de pessoas: atividade sem NENHUM responsável atribuído
+ *  (é a fila que o card "Sem responsável" da Gestão aponta). */
+const SEM_RESP = SEM_RESPONSAVEL
 interface LastComment { content: string; at: string; author: string | null }
 interface Activity {
   id: string; title: string; status: string; priority: string
@@ -389,7 +392,10 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
     .map(a => overrides[a.id] ? { ...a, status: overrides[a.id] } : a)
     .filter(a => !onlyMine || (!!me && a.assignedIds.includes(me)))
     .filter(a => filterWorkspaces.length === 0 || filterWorkspaces.includes(campMap[a.campaign_id]?.workspaceId ?? ''))
-    .filter(a => filterPersons.length === 0 || (respEtapa ? ehDonoDaEtapa(a) : a.assignedIds.some(id => filterPersons.includes(id))))
+    .filter(a => filterPersons.length === 0 || (respEtapa ? ehDonoDaEtapa(a) : (
+      (filterPersons.includes(SEM_RESP) && a.assignedIds.length === 0)
+      || a.assignedIds.some(id => filterPersons.includes(id))
+    )))
     .filter(a => filterStatuses.length === 0 || filterStatuses.includes(a.status))
     .filter(a => filterPriorities.length === 0 || filterPriorities.includes(a.priority))
     .filter(a => matchesDateFilter(a.due_date, filterDate, todayYMD))
@@ -566,7 +572,8 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
           onChange={setFilterPersons}
           className="w-44"
           allLabel="Todas as pessoas"
-          options={members.map(m => ({ value: m.userId, label: m.fullName ?? m.email }))}
+          options={[{ value: SEM_RESP, label: 'Sem responsável' },
+            ...members.map(m => ({ value: m.userId, label: m.fullName ?? m.email }))]}
         />
         {/* O recorte por pessoa mudou de significado (veio da Gestão): sem dizer
             isso, a lista parece filtrada errado. Clicar volta ao responsável. */}
