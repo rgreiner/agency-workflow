@@ -4,6 +4,7 @@ import { useState, useMemo, useRef, useEffect, useCallback, useTransition } from
 import { useRouter } from 'next/navigation'
 import { Wallet, Upload, Loader2, Check, X, Users, Landmark, Link2, Plus, AlertTriangle, Ban } from 'lucide-react'
 import { toast } from 'sonner'
+import { Select } from '@/components/ui/Select'
 import { formatBRL, parseMoney } from '@/lib/midia'
 import { importarFolha, carregarPlanoFolha, aplicarFolhaFinanceiro, type PlanoPessoa, type PlanoGuia, type AplicarSalario } from '@/app/actions/rh'
 
@@ -11,12 +12,19 @@ export interface FolhaRow {
   competencia: string; nome: string | null; liquido: number | string | null
   vencimentos: number | string | null; descontos: number | string | null
   inss: number | string | null; fgts: number | string | null; colaborador_id: string | null
+  cpf: string | null; tratamento: string | null
 }
 interface LinhaExtraida {
   matricula?: string; nome?: string; cpf?: string; cargo?: string; categoria?: string; data_admissao?: string
   salario_base?: number; vencimentos?: number; descontos?: number; inss?: number; irrf?: number
   fgts?: number; vale_refeicao?: number; faltas?: number; liquido?: number
+  tratamento?: Tratamento
 }
+
+/** Como a linha entra no Financeiro: salário (gera remuneração) ou sócio (só guias). */
+type Tratamento = 'salario' | 'socio'
+const soDigitos = (s?: string | null) => (s ?? '').replace(/\D/g, '')
+const ehSocioCategoria = (cat?: string) => /722|individual/i.test(cat ?? '')
 
 const n = (v: number | string | null | undefined) => Number(v ?? 0)
 const compLabel = (c: string) => { const [y, m] = c.split('-'); return `${m}/${y}` }
@@ -106,7 +114,7 @@ export function FolhaClient({ orgSlug, linhas }: { orgSlug: string; linhas: Folh
         </div>
       )}
 
-      {preview && <PreviewModal orgSlug={orgSlug} data={preview} onClose={() => setPreview(null)} />}
+      {preview && <PreviewModal orgSlug={orgSlug} data={preview} existentes={linhas} onClose={() => setPreview(null)} />}
       {reconc && <ReconcModal orgSlug={orgSlug} comp={reconc} onClose={() => setReconc(null)} />}
     </div>
   )
@@ -329,18 +337,38 @@ function ReconcModal({ orgSlug, comp, onClose }: { orgSlug: string; comp: CompAg
   )
 }
 
-function PreviewModal({ orgSlug, data, onClose }: { orgSlug: string; data: { competencia: string; linhas: LinhaExtraida[] }; onClose: () => void }) {
+function PreviewModal({ orgSlug, data, existentes, onClose }: {
+  orgSlug: string; data: { competencia: string; linhas: LinhaExtraida[] }
+  existentes: FolhaRow[]; onClose: () => void
+}) {
   const router = useRouter()
   const [competencia, setCompetencia] = useState(data.competencia)
   const [autoCriar, setAutoCriar] = useState(true)
   const [saving, start] = useTransition()
+  // Salário × sócio por linha: herda a escolha já gravada da mesma competência
+  // (reimportação preserva); linha nova cai na heurística da categoria (722).
+  const [tratamentos, setTratamentos] = useState<Record<number, Tratamento>>(() => {
+    const comp = data.competencia ? `${data.competencia}-01` : ''
+    const porCpf = new Map(existentes
+      .filter(e => e.competencia === comp && soDigitos(e.cpf))
+      .map(e => [soDigitos(e.cpf), e.tratamento]))
+    const ini: Record<number, Tratamento> = {}
+    data.linhas.forEach((l, i) => {
+      const gravado = porCpf.get(soDigitos(l.cpf))
+      ini[i] = gravado === 'salario' || gravado === 'socio' ? gravado
+        : ehSocioCategoria(l.categoria) ? 'socio' : 'salario'
+    })
+    return ini
+  })
 
   const totalLiq = data.linhas.reduce((s, l) => s + n(l.liquido), 0)
+  const nSocios = Object.values(tratamentos).filter(t => t === 'socio').length
 
   function importar() {
     if (!/^\d{4}-\d{2}$/.test(competencia)) { toast.error('Informe a competência (AAAA-MM).'); return }
     start(async () => {
-      const r = await importarFolha(orgSlug, competencia, data.linhas, autoCriar)
+      const linhas = data.linhas.map((l, i) => ({ ...l, tratamento: tratamentos[i] ?? 'salario' }))
+      const r = await importarFolha(orgSlug, competencia, linhas, autoCriar)
       if (r?.error) { toast.error(r.error); return }
       const res = r.resultado
       toast.success(`Folha importada: ${res?.linhas} linhas · ${res?.criados} criados · ${res?.casados} casados.`)
@@ -366,7 +394,10 @@ function PreviewModal({ orgSlug, data, onClose }: { orgSlug: string; data: { com
             <input type="checkbox" checked={autoCriar} onChange={e => setAutoCriar(e.target.checked)} className="rounded text-orange-600 focus:ring-orange-500" />
             Criar ficha de quem ainda não existe (casa por CPF)
           </label>
-          <div className="ml-auto text-sm text-gray-500">{data.linhas.length} pessoas · líquido <b className="text-gray-900 tabular-nums">{formatBRL(totalLiq)}</b></div>
+          <div className="ml-auto text-sm text-gray-500">
+            {data.linhas.length} pessoas · líquido <b className="text-gray-900 tabular-nums">{formatBRL(totalLiq)}</b>
+            {nSocios > 0 && <span className="text-gray-400"> · {nSocios} sócio{nSocios > 1 ? 's' : ''} fora do salário</span>}
+          </div>
         </div>
 
         <div className="overflow-y-auto flex-1">
@@ -376,18 +407,32 @@ function PreviewModal({ orgSlug, data, onClose }: { orgSlug: string; data: { com
               <th className="text-left px-3 py-2 font-medium">Cargo</th>
               <th className="text-right px-3 py-2 font-medium">Salário</th>
               <th className="text-right px-3 py-2 font-medium">INSS</th>
-              <th className="text-right px-6 py-2 font-medium">Líquido</th>
+              <th className="text-right px-3 py-2 font-medium">Líquido</th>
+              <th className="text-left px-6 py-2 font-medium" title="Como entra no Financeiro: salário gera a remuneração; sócio entra só nas guias">Financeiro</th>
             </tr></thead>
             <tbody>
-              {data.linhas.map((l, i) => (
-                <tr key={i} className="border-b border-gray-50 last:border-0">
-                  <td className="px-6 py-2 text-gray-900">{l.nome || '—'}</td>
-                  <td className="px-3 py-2 text-gray-500">{l.cargo || '—'}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-gray-600">{formatBRL(n(l.salario_base))}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-gray-500">{formatBRL(n(l.inss))}</td>
-                  <td className="px-6 py-2 text-right tabular-nums font-medium text-gray-900">{formatBRL(n(l.liquido))}</td>
-                </tr>
-              ))}
+              {data.linhas.map((l, i) => {
+                const socio = (tratamentos[i] ?? 'salario') === 'socio'
+                return (
+                  <tr key={i} className="border-b border-gray-50 last:border-0">
+                    <td className="px-6 py-2 text-gray-900">{l.nome || '—'}</td>
+                    <td className="px-3 py-2 text-gray-500">{l.cargo || '—'}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-600">{formatBRL(n(l.salario_base))}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-500">{formatBRL(n(l.inss))}</td>
+                    <td className={`px-3 py-2 text-right tabular-nums font-medium ${socio ? 'text-gray-400 line-through decoration-gray-300' : 'text-gray-900'}`}>{formatBRL(n(l.liquido))}</td>
+                    <td className="px-6 py-2">
+                      <div className="w-44">
+                        <Select value={tratamentos[i] ?? 'salario'} size="sm"
+                          onChange={v => setTratamentos(p => ({ ...p, [i]: v as Tratamento }))}
+                          options={[
+                            { value: 'salario', label: 'Salário' },
+                            { value: 'socio', label: 'Sócio (pró-labore)' },
+                          ]} />
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

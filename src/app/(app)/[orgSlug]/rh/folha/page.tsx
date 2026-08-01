@@ -11,7 +11,7 @@ export default async function FolhaPage({ params }: { params: Promise<{ orgSlug:
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const linhas = unwrap<FolhaRow>(await (supabase as any)
     .from('rh_folha')
-    .select('competencia, nome, liquido, vencimentos, descontos, inss, fgts, colaborador_id')
+    .select('competencia, nome, liquido, vencimentos, descontos, inss, fgts, colaborador_id, cpf, tratamento')
     .eq('org_id', orgId)
     .order('competencia', { ascending: false }), 'folha')
 
