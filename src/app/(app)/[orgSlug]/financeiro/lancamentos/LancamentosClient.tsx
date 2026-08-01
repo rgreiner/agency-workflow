@@ -138,6 +138,10 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
     return merged.filter(l => {
       if (tipoFilter !== 'todos' && l.tipo !== tipoFilter) return false
       if (contaFilter && l.conta_id !== contaFilter) return false
+      // Pendência é o que dá pra corrigir AQUI: a linha do Conta Azul é histórico
+      // read-only (só fica editável depois de promovida), então fica de fora do
+      // filtro — e da contagem, que precisa bater com a lista.
+      if (faltando && l.source === 'importado') return false
       if (faltando === 'categoria' && (l.categoria ?? '').trim()) return false
       if (faltando === 'centro' && (l.centro_custo ?? '').trim()) return false
       if (faltando === 'conta' && l.conta_id) return false
@@ -151,6 +155,10 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
   // Data efetiva: liquidação (se pago) ou vencimento (se em aberto).
   const effDate = (l: Lancamento) => (isPago(l.situacao) ? (l.data_liquidacao ?? l.vencimento) : l.vencimento)
   const inPeriodo = (l: Lancamento) => { const d = effDate(l); return !!d && d >= perStart && d <= perEnd }
+  // Com um filtro de pendência ativo, o período sai de cena: procurar o que falta
+  // classificar só faz sentido olhando tudo. Lista e cards usam a MESMA régua —
+  // senão o total do topo contradiz a lista logo abaixo dele.
+  const noRecorte = (l: Lancamento) => (faltando ? true : inPeriodo(l))
 
   // Tabela única (estilo extrato): só os itens do período selecionado, ordenados por data.
   const rows = useMemo(() => {
@@ -162,7 +170,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
         if (cardFilter === 'desp_aberto' && !(l.tipo === 'saida'   && !p)) return false
         if (cardFilter === 'desp_real'   && !(l.tipo === 'saida'   &&  p)) return false
       }
-      return inPeriodo(l)
+      return noRecorte(l)
     })
     inView.sort((a, b) => {
       const da = effDate(a) ?? '9999-12-31', db = effDate(b) ?? '9999-12-31'
@@ -170,7 +178,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
     })
     return inView
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered, perStart, perEnd, cardFilter])
+  }, [filtered, perStart, perEnd, cardFilter, faltando])
 
   // ── Seleção para edição em lote ──────────────────────────────────────────
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
@@ -213,7 +221,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
   // aberto". Antes o valor cheio ficava em "em aberto" e a parte recebida não
   // aparecia em lugar nenhum — os dois cards mentiam ao mesmo tempo.
   const resumo = useMemo(() => {
-    const noMes = filtered.filter(inPeriodo)
+    const noMes = filtered.filter(noRecorte)
     const sum = (arr: Lancamento[], fn: (l: Lancamento) => number) => arr.reduce((t, l) => t + fn(l), 0)
     const baixado = (l: Lancamento) => Math.min(val(l), Number(l.valor_realizado ?? 0))
     const falta   = (l: Lancamento) => Math.max(0, val(l) - Number(l.valor_realizado ?? 0))
@@ -234,20 +242,30 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       total: r.real + r.aberto - d.real - d.aberto,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered, perStart, perEnd])
+  }, [filtered, perStart, perEnd, faltando])
 
   const revisarCount = lancamentos.filter(l => l.revisar).length
   const contaMap = useMemo(() => Object.fromEntries(contas.map(c => [c.id, c])), [contas])
+  // Pendências de classificação contam em TODOS os períodos, não só no que está na
+  // tela. O que falta classificar quase nunca está no mês que a pessoa está olhando
+  // (as parcelas de Fee sem centro vencem em 2027): contar só o período fazia o
+  // botão sumir justamente quando ele era necessário. `fora` alimenta o aviso.
   const pendencias = useMemo(() => {
     const base = merged.filter(l => {
+      if (l.source === 'importado') return false
       if (tipoFilter !== 'todos' && l.tipo !== tipoFilter) return false
       if (contaFilter && l.conta_id !== contaFilter) return false
-      return inPeriodo(l)
+      return true
     })
+    const conta = (falta: (l: Lancamento) => boolean) => {
+      const todos = base.filter(falta)
+      const dentro = todos.filter(inPeriodo).length
+      return { total: todos.length, fora: todos.length - dentro }
+    }
     return {
-      categoria: base.filter(l => !(l.categoria ?? '').trim()).length,
-      centro: base.filter(l => !(l.centro_custo ?? '').trim()).length,
-      conta: base.filter(l => !l.conta_id).length,
+      categoria: conta(l => !(l.categoria ?? '').trim()),
+      centro: conta(l => !(l.centro_custo ?? '').trim()),
+      conta: conta(l => !l.conta_id),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [merged, tipoFilter, contaFilter, perStart, perEnd])
@@ -304,20 +322,22 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar por contato, descrição ou categoria"
             className="w-full pl-9 pr-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent" />
         </div>
-        {/* Pendências de classificação: contam sobre o período/tipo já filtrados,
-            e o botão some quando não há nenhuma — não vale ocupar a barra à toa. */}
+        {/* Pendências de classificação: o botão some só quando não existe NENHUMA em
+            período algum. Ligado, ele mostra tudo — inclusive o que vence fora do
+            período da tela (era o caso das parcelas de Fee de 2027). */}
         {(['categoria', 'centro', 'conta'] as const).map(k => {
-          const n = pendencias[k]
-          if (!n && faltando !== k) return null
+          const p = pendencias[k]
+          if (!p.total && faltando !== k) return null
           const rotulo = k === 'categoria' ? 'Sem categoria' : k === 'centro' ? 'Sem centro de custo' : 'Sem conta'
           return (
             <button key={k} onClick={() => setFaltando(f => (f === k ? null : k))} aria-pressed={faltando === k}
+              title={p.fora > 0 ? `${p.total} no total — ${p.fora} vence(m) fora de ${periodoLabel(periodo)}` : `${p.total} em ${periodoLabel(periodo)}`}
               className={cn('inline-flex items-center gap-1.5 px-2.5 py-2 text-sm rounded-xl border transition-colors',
                 faltando === k
                   ? 'border-amber-300 bg-amber-50 text-amber-800'
                   : 'border-gray-200 text-gray-500 hover:bg-gray-50')}>
               <AlertTriangle className="w-3.5 h-3.5" /> {rotulo}
-              <span className="tabular-nums font-medium">{n}</span>
+              <span className="tabular-nums font-medium">{p.total}</span>
             </button>
           )
         })}
@@ -328,13 +348,19 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
         )}
       </div>
 
+      {faltando && (
+        <p className="-mt-2 mb-4 text-xs text-amber-700">
+          Mostrando todos os períodos enquanto o filtro de pendência está ligado — {periodoLabel(periodo)} fica de fora da conta.
+        </p>
+      )}
+
       {/* Resumo do mês */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
         <Card label="Receitas em aberto" value={resumo.receitaAberto} tone="emerald-soft" active={cardFilter === 'rec_aberto'} onClick={() => toggleCard('rec_aberto')} />
         <Card label="Receitas realizadas" value={resumo.receitaReal} tone="emerald" active={cardFilter === 'rec_real'} onClick={() => toggleCard('rec_real')} />
         <Card label="Despesas em aberto" value={resumo.despesaAberto} tone="red-soft" active={cardFilter === 'desp_aberto'} onClick={() => toggleCard('desp_aberto')} />
         <Card label="Despesas realizadas" value={resumo.despesaReal} tone="red" active={cardFilter === 'desp_real'} onClick={() => toggleCard('desp_real')} />
-        <Card label={`Resultado de ${periodoLabel(periodo)}`} value={resumo.total} tone="total" highlight active={!cardFilter} onClick={() => setCardFilter(null)} />
+        <Card label={faltando ? 'Resultado do filtro' : `Resultado de ${periodoLabel(periodo)}`} value={resumo.total} tone="total" highlight active={!cardFilter} onClick={() => setCardFilter(null)} />
       </div>
 
       {revisarCount > 0 && (
@@ -346,10 +372,14 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
 
       <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[920px]">
+          {/* table-fixed: sem ele a coluna do resumo cresce junto com o conteúdo (o
+              `truncate` nunca chega a agir, porque a célula sempre cabe) e a tabela
+              inteira empurra a página pro lado. Com largura definida em cada coluna
+              de dado, o resumo fica com a sobra e é ele que trunca. */}
+          <table className="w-full min-w-[960px] table-fixed">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/60 text-xs font-medium text-gray-400">
-                <th className="pl-4 pr-1 py-2.5 w-8">
+                <th className="pl-4 pr-1 py-2.5 w-10">
                   {/* Marca só o que é selecionável e está VISÍVEL — respeita o filtro
                       ativo, senão "todos" pegaria coisa que a pessoa não está vendo. */}
                   <input type="checkbox"
@@ -359,13 +389,13 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
                     title={selecionaveis.length ? 'Selecionar os visíveis' : 'Nada selecionável nesta lista'}
                     className="w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500 disabled:opacity-30 cursor-pointer" />
                 </th>
-                <th className="text-left px-4 py-2.5 font-medium">Vencimento</th>
-                <th className="text-left px-4 py-2.5 font-medium">Resumo do lançamento</th>
-                <th className="text-left px-3 py-2.5 font-medium">Situação</th>
-                <th className="text-right px-4 py-2.5 font-medium">Valor</th>
-                <th className="text-center px-3 py-2.5 font-medium">NF</th>
-                <th className="text-center px-3 py-2.5 font-medium">Boleto</th>
-                <th className="w-44" />
+                <th className="text-left px-3 py-2.5 font-medium w-28">Vencimento</th>
+                <th className="text-left px-3 py-2.5 font-medium">Resumo do lançamento</th>
+                <th className="text-left px-3 py-2.5 font-medium w-32">Situação</th>
+                <th className="text-right px-3 py-2.5 font-medium w-36">Valor</th>
+                <th className="text-center px-2 py-2.5 font-medium w-12">NF</th>
+                <th className="text-center px-2 py-2.5 font-medium w-16">Boleto</th>
+                <th className="w-[196px]" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -539,11 +569,11 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
           onChange={() => onToggleSel(l.id)} title={sel.motivo ?? 'Selecionar'}
           className="w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer" />
       </td>
-      <td className={cn('px-4 py-2.5 text-sm whitespace-nowrap', overdue ? 'text-red-600 font-medium' : 'text-gray-600')}>
+      <td className={cn('px-3 py-2.5 text-sm whitespace-nowrap', overdue ? 'text-red-600 font-medium' : 'text-gray-600')}>
         <div>{formatDateBR(l.vencimento)}</div>
         {pagoEm && <div className="text-[11px] text-emerald-600 mt-0.5">{isSaida ? 'pago' : 'receb.'} {formatDateBR(pagoEm)}</div>}
       </td>
-      <td className="px-4 py-2.5 text-sm">
+      <td className="px-3 py-2.5 text-sm">
         <div className="flex items-start gap-2">
           {isSaida ? <ArrowUpCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" /> : <ArrowDownCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />}
           <div className="min-w-0">
@@ -613,14 +643,14 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
         </div>
       </td>
       <td className="px-3 py-2.5">
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap', status.cls)}>
             {paid && <Check className="w-3 h-3" />}{status.label}
           </span>
           {l.revisar && <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 text-[10px] font-medium px-1.5 py-0.5" title="Documento alterado depois de lançado"><AlertTriangle className="w-2.5 h-2.5" /> alterado</span>}
         </div>
       </td>
-      <td className={cn('px-4 py-2.5 text-sm font-medium text-right whitespace-nowrap', isSaida ? 'text-red-600' : 'text-gray-900')}>
+      <td className={cn('px-3 py-2.5 text-sm font-medium text-right whitespace-nowrap', isSaida ? 'text-red-600' : 'text-gray-900')}>
         {isSaida ? '− ' : ''}{formatBRL(val(l))}
         {/* O valor cheio é o do documento; o que importa pra cobrança é o que falta. */}
         {parcial && (
@@ -630,17 +660,20 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
           </span>
         )}
       </td>
-      <td className="px-3 py-2.5 text-center">
+      <td className="px-2 py-2.5 text-center">
         {imported
           ? (l.nf_emitida ? <FileText className="w-4 h-4 text-gray-300 inline" /> : <span className="text-gray-300">—</span>)
           : <Flag on={l.nf_emitida || temAnexoNf} viaAnexo={temAnexoNf} onClick={toggleNf} label="NF" />}
       </td>
-      <td className="px-3 py-2.5 text-center">
+      <td className="px-2 py-2.5 text-center">
         {imported ? <span className="text-gray-300">—</span>
           : <Flag on={l.boleto_gerado || temAnexoBoleto} viaAnexo={temAnexoBoleto} onClick={toggleBoleto} label="Boleto" />}
       </td>
       <td className="px-3 py-2.5">
-        <div className="flex items-center justify-end gap-1">
+        {/* flex-wrap: com a coluna de largura fixa, a linha rara que acumula ações
+            (vencida E com documento alterado) quebra em duas em vez de vazar por
+            cima do vizinho. */}
+        <div className="flex flex-wrap items-center justify-end gap-1">
           {imported ? (
             <>
               <button onClick={() => onEdit(l)} title="Editar — vira lançamento do Flow"
@@ -679,8 +712,8 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
               {overdue && (
                 <button onClick={() => onEdit(l, 'vencimento')} disabled={isPending}
                   title="Renegociar o prazo de pagamento"
-                  className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition disabled:opacity-50">
-                  <CalendarClock className="w-3.5 h-3.5" /> Renegociar
+                  className="p-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition disabled:opacity-50">
+                  <CalendarClock className="w-3.5 h-3.5" />
                 </button>
               )}
               <button onClick={() => onEdit(l)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar"><Pencil className="w-3.5 h-3.5" /></button>
