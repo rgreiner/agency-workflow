@@ -24,7 +24,7 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   afastado:  { label: 'Afastado',  cls: 'bg-amber-50 text-amber-700' },
   desligado: { label: 'Desligado', cls: 'bg-gray-100 text-gray-500' },
 }
-const VINCULO: Record<string, string> = { clt: 'CLT', pj: 'PJ', estagio: 'Estágio', outro: 'Outro' }
+const VINCULO: Record<string, string> = { clt: 'CLT', socio: 'Sócio(a)', pj: 'PJ', estagio: 'Estágio', outro: 'Outro' }
 
 // ── Tempo de casa / contrato de experiência (45d + 45d → efetivação em 90d) ──
 const dd = (iso: string) => { const [, m, d] = iso.split('-'); return `${d}/${m}` }
@@ -49,7 +49,7 @@ function periodo(c: ColaboradorRow, hoje: string): { txt: string; sub?: string; 
   if (!c.data_admissao) return null
   if (c.status === 'desligado') return { txt: `durou ${tempoDeCasa(c.data_admissao, c.data_demissao || hoje)}` }
   const days = diffDays(c.data_admissao, hoje)
-  const temExperiencia = c.tipo_vinculo !== 'estagio' && c.tipo_vinculo !== 'pj'
+  const temExperiencia = c.tipo_vinculo !== 'estagio' && c.tipo_vinculo !== 'pj' && c.tipo_vinculo !== 'socio'
   if (temExperiencia && days >= 0 && days <= 90) {
     if (days <= 45) return { exp: true, txt: 'Experiência 1º', sub: `${days}/45 d · vence ${dd(addDays(c.data_admissao, 45))}` }
     return { exp: true, txt: 'Experiência 2º', sub: `${days}/90 d · efetiva ${dd(addDays(c.data_admissao, 90))}` }

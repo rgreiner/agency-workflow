@@ -19,7 +19,7 @@ export interface Colaborador {
 export interface GestorRef { id: string; nome: string }
 export interface MembroRef { user_id: string; profiles: { full_name: string | null; email: string } | null }
 
-const VINCULOS = [{ value: 'clt', label: 'CLT' }, { value: 'pj', label: 'PJ' }, { value: 'estagio', label: 'Estágio' }, { value: 'outro', label: 'Outro' }]
+const VINCULOS = [{ value: 'clt', label: 'CLT' }, { value: 'socio', label: 'Sócio(a)' }, { value: 'pj', label: 'PJ' }, { value: 'estagio', label: 'Estágio' }, { value: 'outro', label: 'Outro' }]
 const STATUS = [{ value: 'ativo', label: 'Ativo' }, { value: 'afastado', label: 'Afastado' }, { value: 'desligado', label: 'Desligado' }]
 const inputCls = 'w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 const labelCls = 'block text-sm font-medium text-gray-700 mb-1.5'
