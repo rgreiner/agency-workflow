@@ -9,9 +9,14 @@ import { setCustoConfig } from '@/app/actions/org-custo'
 
 export interface CamadaPessoa {
   user_id: string; nome: string | null; clt: boolean
+  fonte: 'folha' | 'ficha'
   bruto: number; fgts: number; encargos: number; provisoes: number; beneficios: number
   horas_uteis: number; custo_direto_h: number | null; overhead_h: number | null; custo_hora: number | null
 }
+
+/** Custo mensal cheio da pessoa (o "Sub Total" do controle anual): tudo que ela
+ *  custa no mês, provisões e estrutura incluídas. Anual = ×12. */
+const custoMes = (c: CamadaPessoa) => (c.custo_hora ?? 0) * (c.horas_uteis ?? 0)
 export interface PrecoVenda {
   comp: string | null
   custo_hora_medio: number | null
@@ -70,8 +75,9 @@ export function CustoHora({ orgSlug, orgId, camadas, preco, canConfig }: {
         {preco?.comp && <span className="text-gray-400 font-normal">· folha de {compLabel(preco.comp)}</span>}
       </h2>
       <p className="text-xs text-gray-400 mb-3">
-        Bruto + FGTS + encargos da guia + provisões (13º/férias, só CLT) + benefícios, ÷ horas úteis,
-        + estrutura rateada. O relatório acima já usa este custo cheio.
+        Bruto + FGTS + encargos da guia + provisões (13º/férias/aviso, só CLT) + benefícios, ÷ horas úteis,
+        + estrutura rateada. Custo/mês é o proporcional mensal do custo global anual (Custo/ano = ×12).
+        O relatório acima já usa este custo cheio.
       </p>
 
       {/* Preço de venda */}
@@ -119,15 +125,19 @@ export function CustoHora({ orgSlug, orgId, camadas, preco, canConfig }: {
               <th className="px-3 py-2.5 font-medium text-right">Benefícios</th>
               <th className="px-3 py-2.5 font-medium text-right">Direto/h</th>
               <th className="px-3 py-2.5 font-medium text-right">Estrutura/h</th>
-              <th className="px-4 py-2.5 font-medium text-right">Custo/h cheio</th>
+              <th className="px-3 py-2.5 font-medium text-right">Custo/h cheio</th>
+              <th className="px-3 py-2.5 font-medium text-right">Custo/mês</th>
+              <th className="px-4 py-2.5 font-medium text-right">Custo/ano</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {camadas.map(c => (
               <tr key={c.user_id}>
-                <td className="px-4 py-2.5 text-gray-800">
+                <td className="px-4 py-2.5 text-gray-800 whitespace-nowrap">
                   {c.nome ?? '—'}
-                  {!c.clt && <span className="ml-1.5 text-[10px] text-gray-400 bg-gray-100 rounded-full px-1.5 py-0.5">sócio</span>}
+                  {c.fonte === 'ficha'
+                    ? <span className="ml-1.5 text-[10px] text-sky-600 bg-sky-50 rounded-full px-1.5 py-0.5" title="Fora da folha da contabilidade — custo vem da ficha (bolsa/valor mensal + benefícios)">ficha</span>
+                    : !c.clt && <span className="ml-1.5 text-[10px] text-gray-400 bg-gray-100 rounded-full px-1.5 py-0.5">sócio</span>}
                 </td>
                 <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{brl(c.bruto)}</td>
                 <td className="px-3 py-2.5 text-right tabular-nums text-gray-500">{brl(c.fgts)}</td>
@@ -136,10 +146,27 @@ export function CustoHora({ orgSlug, orgId, camadas, preco, canConfig }: {
                 <td className="px-3 py-2.5 text-right tabular-nums text-gray-500">{brl(c.beneficios)}</td>
                 <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{brl(c.custo_direto_h)}</td>
                 <td className="px-3 py-2.5 text-right tabular-nums text-gray-500">{brl(c.overhead_h)}</td>
-                <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-gray-900">{brl(c.custo_hora)}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-gray-900">{brl(c.custo_hora)}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-gray-900">{brl(custoMes(c))}</td>
+                <td className="px-4 py-2.5 text-right tabular-nums text-gray-500">{brl(custoMes(c) * 12)}</td>
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr className="border-t border-gray-200 bg-gray-50/60 text-gray-900 font-semibold">
+              <td className="px-4 py-2.5">Total do time</td>
+              <td className="px-3 py-2.5 text-right tabular-nums">{brl(camadas.reduce((s, c) => s + c.bruto, 0))}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{brl(camadas.reduce((s, c) => s + c.fgts, 0))}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{brl(camadas.reduce((s, c) => s + c.encargos, 0))}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{brl(camadas.reduce((s, c) => s + c.provisoes, 0))}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{brl(camadas.reduce((s, c) => s + c.beneficios, 0))}</td>
+              <td className="px-3 py-2.5" />
+              <td className="px-3 py-2.5" />
+              <td className="px-3 py-2.5" />
+              <td className="px-3 py-2.5 text-right tabular-nums">{brl(camadas.reduce((s, c) => s + custoMes(c), 0))}</td>
+              <td className="px-4 py-2.5 text-right tabular-nums">{brl(camadas.reduce((s, c) => s + custoMes(c), 0) * 12)}</td>
+            </tr>
+          </tfoot>
         </table>
       </div>
 
@@ -147,8 +174,11 @@ export function CustoHora({ orgSlug, orgId, camadas, preco, canConfig }: {
         <Info className="w-3 h-3 mt-0.5 shrink-0" />
         <span>
           Encargos vêm da guia INSS lançada pela Folha → Financeiro (no Simples a CPP está dentro do DAS,
-          então tendem a zero). Provisões = 21% do bruto (13º + férias+⅓ + FGTS sobre ambos), só CLT.
-          Benefícios saem da ficha de cada pessoa (RH → Pessoas).
+          então tendem a zero — o peso tributário entra no preço da hora, não aqui). Provisões = 22% do
+          bruto (13º 8,33% + férias+⅓ 11,11% + FGTS sobre ambos ~1,6% + aviso indenizado 1%), só CLT.
+          Benefícios (VR/VT/plano a custo-empresa) saem da ficha de cada pessoa (RH → Pessoas). Quem não
+          vem na folha da contabilidade (estágio/terceiro) entra com a etiqueta “ficha”: bolsa + benefícios
+          da ficha, sem encargos. Custo/mês × 12 = custo global anual provisionado.
         </span>
       </p>
 
