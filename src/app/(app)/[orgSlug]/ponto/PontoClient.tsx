@@ -125,22 +125,48 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
   )
 }
 
+/** Tipos que podem cobrir mais de um dia. "Esqueci de bater" e "Consulta médica"
+ *  são sempre de UM dia — e é justamente neles que o horário correto é pedido. */
+const TIPOS_MULTIDIA = new Set(['atestado', 'falta', 'outro'])
+
 function JustificarModal({ orgSlug, colaboradorId, onClose }: { orgSlug: string; colaboradorId: string; onClose: () => void }) {
   const router = useRouter()
   const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
   const [tipo, setTipo] = useState('esqueci')
-  const [dataIni, setDataIni] = useState(hoje)
+  const [dia, setDia] = useState(hoje)
+  // Período (N dias) é exceção, não o padrão: o normal é justificar UM dia.
+  const [varios, setVarios] = useState(false)
   const [dataFim, setDataFim] = useState(hoje)
   const [descricao, setDescricao] = useState('')
+  // As 4 marcações do dia — cada uma opcional. Dá pra corrigir só um horário
+  // que saiu errado, um período do dia (manhã ou tarde) ou o dia inteiro.
   const [hEnt, setHEnt] = useState('')
+  const [hIntIni, setHIntIni] = useState('')
+  const [hIntFim, setHIntFim] = useState('')
   const [hSai, setHSai] = useState('')
   const [saving, start] = useTransition()
 
+  const podeMultidia = TIPOS_MULTIDIA.has(tipo)
+  // Período e correção de horário não convivem: a aprovação aplica as MESMAS
+  // horas em cada dia do intervalo, o que seria errado em qualquer dia além do
+  // primeiro. Com vários dias, o RH abona/dá falta ao dia inteiro.
+  const periodo = podeMultidia && varios
+
+  function trocarTipo(t: string) {
+    setTipo(t)
+    if (!TIPOS_MULTIDIA.has(t)) { setVarios(false); setDataFim(dia) }
+  }
+
   function enviar() {
+    const fim = periodo ? dataFim : dia
+    if (fim < dia) { toast.error('O último dia não pode ser antes do primeiro.'); return }
     start(async () => {
       const r = await criarJustificativa(orgSlug, colaboradorId, {
-        tipo, data_ini: dataIni, data_fim: dataFim, descricao,
-        hora_entrada: hEnt || null, hora_saida: hSai || null,
+        tipo, data_ini: dia, data_fim: fim, descricao,
+        hora_entrada: periodo ? null : (hEnt || null),
+        hora_intervalo_ini: periodo ? null : (hIntIni || null),
+        hora_intervalo_fim: periodo ? null : (hIntFim || null),
+        hora_saida: periodo ? null : (hSai || null),
       })
       if (r?.error) toast.error(r.error)
       else { toast.success('Justificativa enviada ao RH.'); onClose(); router.refresh() }
@@ -148,30 +174,72 @@ function JustificarModal({ orgSlug, colaboradorId, onClose }: { orgSlug: string;
   }
 
   const inputCls = 'w-full px-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500'
+  const horaCls = 'w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500'
+  const subCls = 'block text-[11px] text-gray-500 mb-1'
 
   return (
     <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="modal-card w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-200">
+      <div className="modal-card w-full max-w-md max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-xl border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-100"><h2 className="text-base font-semibold text-gray-900">Justificar ocorrência</h2>
           <p className="text-xs text-gray-500 mt-0.5">Vai para o RH decidir (aprovar, abonar ou dar falta).</p></div>
         <div className="px-6 py-5 space-y-3">
           <div><label className="block text-sm text-gray-600 mb-1.5">Tipo</label>
-            <Select value={tipo} onChange={setTipo} options={[
+            <Select value={tipo} onChange={trocarTipo} options={[
               { value: 'esqueci', label: 'Esqueci de bater' }, { value: 'atestado', label: 'Atestado médico' },
               { value: 'medico', label: 'Consulta médica' }, { value: 'falta', label: 'Falta' }, { value: 'outro', label: 'Outro' },
             ]} /></div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="block text-sm text-gray-600 mb-1.5">De</label><input type="date" value={dataIni} onChange={e => setDataIni(e.target.value)} className={inputCls} /></div>
-            <div><label className="block text-sm text-gray-600 mb-1.5">Até</label><input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} className={inputCls} /></div>
-          </div>
-          <div className="rounded-xl bg-gray-50 p-3 space-y-2">
-            <div className="text-xs font-medium text-gray-600">Horário correto <span className="font-normal text-gray-400">(opcional)</span></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-[11px] text-gray-500 mb-1">Entrada</label><input type="time" value={hEnt} onChange={e => setHEnt(e.target.value)} className={inputCls} /></div>
-              <div><label className="block text-[11px] text-gray-500 mb-1">Saída</label><input type="time" value={hSai} onChange={e => setHSai(e.target.value)} className={inputCls} /></div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-sm text-gray-600">{periodo ? 'Primeiro dia' : 'Dia'}</label>
+              {podeMultidia && (
+                <label className="inline-flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                  <input type="checkbox" checked={varios}
+                    onChange={e => { setVarios(e.target.checked); if (e.target.checked && dataFim < dia) setDataFim(dia) }}
+                    className="w-3.5 h-3.5 rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
+                  Mais de um dia
+                </label>
+              )}
             </div>
-            <p className="text-[11px] text-gray-400">Preencha se bateu no horário errado (ex.: chegou 8h39 e só bateu 9h37). Ao aprovar, o RH corrige a marcação — a original fica no histórico.</p>
+            <div className={periodo ? 'grid grid-cols-2 gap-3' : ''}>
+              <input type="date" value={dia} onChange={e => setDia(e.target.value)} className={inputCls} />
+              {periodo && (
+                <div>
+                  <input type="date" value={dataFim} min={dia} onChange={e => setDataFim(e.target.value)} className={inputCls} />
+                  <p className="text-[11px] text-gray-400 mt-1">último dia</p>
+                </div>
+              )}
+            </div>
           </div>
+
+          {periodo ? (
+            <p className="text-[11px] text-amber-700 bg-amber-50 rounded-xl px-3 py-2">
+              Justificativa de vários dias cobre os dias inteiros. Para corrigir horário de marcação, envie uma justificativa por dia.
+            </p>
+          ) : (
+            <div className="rounded-xl bg-gray-50 p-3 space-y-3">
+              <div>
+                <div className="text-xs font-medium text-gray-600">Horário correto <span className="font-normal text-gray-400">(opcional)</span></div>
+                <p className="text-[11px] text-gray-400 mt-0.5">Preencha só o que precisa corrigir: um horário, um período do dia ou os quatro.</p>
+              </div>
+              <div>
+                <div className="text-[11px] font-medium text-gray-500 mb-1.5">Manhã</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className={subCls}>Entrada</label><input type="time" value={hEnt} onChange={e => setHEnt(e.target.value)} className={horaCls} /></div>
+                  <div><label className={subCls}>Saída p/ intervalo</label><input type="time" value={hIntIni} onChange={e => setHIntIni(e.target.value)} className={horaCls} /></div>
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] font-medium text-gray-500 mb-1.5">Tarde</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className={subCls}>Volta do intervalo</label><input type="time" value={hIntFim} onChange={e => setHIntFim(e.target.value)} className={horaCls} /></div>
+                  <div><label className={subCls}>Saída</label><input type="time" value={hSai} onChange={e => setHSai(e.target.value)} className={horaCls} /></div>
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-400">Ex.: chegou 8h39 e só bateu 9h37 → preencha a Entrada. Ao aprovar, o RH corrige a marcação — a original fica no histórico.</p>
+            </div>
+          )}
+
           <div><label className="block text-sm text-gray-600 mb-1.5">Descrição</label><textarea value={descricao} onChange={e => setDescricao(e.target.value)} rows={2} className={inputCls} placeholder="Opcional" /></div>
           <p className="text-[11px] text-gray-400">Atestado: envie o PDF depois na sua ficha (o RH anexa à justificativa).</p>
         </div>

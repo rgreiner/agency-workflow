@@ -12,7 +12,8 @@ interface Colab { nome: string | null }
 export interface ExtraPend { id: string; data: string; minutos: number; saldo_min: number; acima_10h: boolean; rh_colaborador: Colab | null }
 export interface JustPend {
   id: string; data_ini: string; data_fim: string; tipo: string; descricao: string | null; status: string
-  hora_entrada: string | null; hora_saida: string | null
+  hora_entrada: string | null; hora_intervalo_ini: string | null
+  hora_intervalo_fim: string | null; hora_saida: string | null
   rh_colaborador: Colab | null
 }
 
@@ -22,14 +23,22 @@ const TIPO: Record<string, string> = { esqueci: 'Esqueceu de bater', atestado: '
 
 const hhmm = (t: string | null) => (t ?? '').slice(0, 5)
 
+interface MarcHoras { ent: string; intIni: string; intFim: string; sai: string }
+const VAZIO: MarcHoras = { ent: '', intIni: '', intFim: '', sai: '' }
+
 export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadrao }: { orgSlug: string; extras: ExtraPend[]; justificativas: JustPend[]; jornadaPadrao: Partial<JornadaVals> | null }) {
   const router = useRouter()
   const [pending, start] = useTransition()
-  // Horário que o RH vai gravar ao aprovar (pré-carregado com o que a pessoa pediu).
-  const [horas, setHoras] = useState<Record<string, { ent: string; sai: string }>>(() =>
-    Object.fromEntries(justificativas.map(j => [j.id, { ent: hhmm(j.hora_entrada), sai: hhmm(j.hora_saida) }])))
-  const setHora = (id: string, k: 'ent' | 'sai', v: string) =>
-    setHoras(p => ({ ...p, [id]: { ...(p[id] ?? { ent: '', sai: '' }), [k]: v } }))
+  // As 4 marcações que o RH vai gravar ao aprovar, pré-carregadas com o que a
+  // pessoa pediu. Precisam ser as QUATRO: a action regrava as quatro colunas, e
+  // mandar só entrada/saída apagaria o intervalo que a pessoa tinha informado.
+  const [horas, setHoras] = useState<Record<string, MarcHoras>>(() =>
+    Object.fromEntries(justificativas.map(j => [j.id, {
+      ent: hhmm(j.hora_entrada), intIni: hhmm(j.hora_intervalo_ini),
+      intFim: hhmm(j.hora_intervalo_fim), sai: hhmm(j.hora_saida),
+    }])))
+  const setHora = (id: string, k: keyof MarcHoras, v: string) =>
+    setHoras(p => ({ ...p, [id]: { ...(p[id] ?? VAZIO), [k]: v } }))
 
   function extra(id: string, status: string) {
     start(async () => {
@@ -40,7 +49,10 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
   function just(id: string, status: string) {
     const h = horas[id]
     start(async () => {
-      const r = await decidirJustificativa(orgSlug, id, status, { hora_entrada: h?.ent || null, hora_saida: h?.sai || null })
+      const r = await decidirJustificativa(orgSlug, id, status, {
+        hora_entrada: h?.ent || null, hora_intervalo_ini: h?.intIni || null,
+        hora_intervalo_fim: h?.intFim || null, hora_saida: h?.sai || null,
+      })
       if (r?.error) toast.error(r.error)
       else {
         toast.success(r.ajustados ? `Aprovada — marcação ajustada (${r.ajustados} dia(s)).` : 'Justificativa decidida.')
@@ -106,16 +118,24 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
                     <div className="text-xs text-gray-500 tabular-nums">{dataBR(j.data_ini)}{j.data_fim !== j.data_ini && ` – ${dataBR(j.data_fim)}`}{j.descricao && <span className="text-gray-400"> · {j.descricao}</span>}</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 mb-2 rounded-lg bg-gray-50 px-2.5 py-2 w-fit">
-                  <span className="text-[11px] text-gray-500">Corrigir marcação:</span>
-                  <label className="text-[11px] text-gray-400">entrada</label>
-                  <input type="time" value={horas[j.id]?.ent ?? ''} onChange={e => setHora(j.id, 'ent', e.target.value)}
-                    className="px-2 py-1 text-xs bg-white border border-gray-200 rounded-md text-gray-800" />
-                  <label className="text-[11px] text-gray-400">saída</label>
-                  <input type="time" value={horas[j.id]?.sai ?? ''} onChange={e => setHora(j.id, 'sai', e.target.value)}
-                    className="px-2 py-1 text-xs bg-white border border-gray-200 rounded-md text-gray-800" />
-                  <span className="text-[11px] text-gray-400">— em branco = só decide, não altera o ponto</span>
-                </div>
+                {/* Corrigir marcação só existe em justificativa de UM dia: aprovar
+                    aplica as mesmas horas a cada dia do intervalo, o que estaria
+                    errado em qualquer dia além do primeiro. */}
+                {j.data_ini === j.data_fim ? (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 mb-2 rounded-lg bg-gray-50 px-2.5 py-2">
+                    <span className="text-[11px] text-gray-500">Corrigir marcação:</span>
+                    {([['ent', 'entrada'], ['intIni', 'saída p/ intervalo'], ['intFim', 'volta'], ['sai', 'saída']] as const).map(([k, rotulo]) => (
+                      <span key={k} className="inline-flex items-center gap-1">
+                        <label className="text-[11px] text-gray-400">{rotulo}</label>
+                        <input type="time" value={horas[j.id]?.[k] ?? ''} onChange={e => setHora(j.id, k, e.target.value)}
+                          className="px-2 py-1 text-xs bg-white border border-gray-200 rounded-md text-gray-800" />
+                      </span>
+                    ))}
+                    <span className="text-[11px] text-gray-400">— tudo em branco = só decide, não altera o ponto</span>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-gray-400 mb-2">Vários dias — a decisão vale para os dias inteiros, sem alterar marcação.</p>
+                )}
                 <div className="flex items-center gap-2">
                   <button onClick={() => just(j.id, 'aprovado')} disabled={pending} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 text-[#fff] hover:bg-emerald-700 disabled:opacity-50 transition"><Check className="w-3.5 h-3.5" /> Aprovar</button>
                   <button onClick={() => just(j.id, 'abonado')} disabled={pending} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-sky-600 text-[#fff] hover:bg-sky-700 disabled:opacity-50 transition"><Check className="w-3.5 h-3.5" /> Abonar</button>
