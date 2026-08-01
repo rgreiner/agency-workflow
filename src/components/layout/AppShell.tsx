@@ -33,6 +33,7 @@ interface Props {
   canRh?: boolean
   /** Permissão de gestão (owner) — mostra o item "Gestão". */
   canManage?: boolean
+  onboardingPendente?: number
   children: React.ReactNode
 }
 
@@ -42,7 +43,7 @@ interface Props {
  * a própria Sidebar mostra um botão flutuante para reabrir.
  */
 export function AppShell({
-  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, canMidias, canProducao, canFinance, canCadastros, canRh, canManage, children,
+  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, canMidias, canProducao, canFinance, canCadastros, canRh, canManage, onboardingPendente, children,
 }: Props) {
   const [collapsed, setCollapsedState] = useState(false)
 
@@ -73,6 +74,7 @@ export function AppShell({
         canCadastros={canCadastros}
         canRh={canRh}
         canManage={canManage}
+        onboardingPendente={onboardingPendente}
         collapsed={collapsed}
         onCollapse={() => setCollapsed(true)}
         onExpand={() => setCollapsed(false)}

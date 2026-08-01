@@ -26,6 +26,7 @@ import {
   Megaphone,
   ClipboardList,
   Clock,
+  Compass,
   UserCog,
   Wallet,
   Users,
@@ -74,6 +75,8 @@ interface SidebarProps {
   canRh?: boolean
   /** Permissão de gestão (owner) — mostra o item "Gestão". */
   canManage?: boolean
+  /** Etapas de onboarding ainda não concluídas — 0 esconde o item. */
+  onboardingPendente?: number
   collapsed: boolean
   onCollapse: () => void
   onExpand?: () => void
@@ -190,7 +193,8 @@ const MODE_TABS: { m: SidebarMode; Icon: LucideIcon; label: string }[] = [
 
 export function Sidebar({
   orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#f97316', canManage,
-  positionName, canMidias = false, canProducao = false, canFinance = false, canCadastros = false, canRh = false, collapsed, onCollapse, onExpand,
+  positionName, canMidias = false, canProducao = false, canFinance = false, canCadastros = false, canRh = false,
+  onboardingPendente = 0, collapsed, onCollapse, onExpand,
 }: SidebarProps) {
   const pathname = usePathname()
   const base = `/${orgSlug}`
@@ -603,6 +607,22 @@ export function Sidebar({
 
       {/* ── Bottom ───────────────────────────────────── */}
       <div className="border-t border-gray-800">
+        {/* Primeiros passos: some sozinho quando a trilha termina (ou não existe). */}
+        {onboardingPendente > 0 && (
+          <Link
+            href={`${base}/onboarding`}
+            className={cn(
+              'flex items-center gap-2.5 px-5 py-2.5 text-sm transition-colors',
+              pathname.startsWith(`${base}/onboarding`) ? 'text-white' : 'text-gray-500 hover:text-gray-200'
+            )}
+          >
+            <Compass className="w-4 h-4 shrink-0" />
+            Primeiros passos
+            <span className="ml-auto text-[10px] font-semibold text-orange-400 bg-orange-500/15 rounded-full px-1.5 py-0.5 tabular-nums">
+              {onboardingPendente}
+            </span>
+          </Link>
+        )}
         {/* Meu ponto: pessoal, todos batem o próprio ponto. */}
         <Link
           href={`${base}/ponto`}

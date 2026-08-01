@@ -76,6 +76,12 @@ export default async function OrgLayout({
     .eq('org_id', org.id)
     .single() as { data: { logo_url: string | null; accent_color: string; status_overrides: unknown[] } | null }
 
+  // Trilha de primeiros passos: o item na sidebar só existe enquanto houver
+  // etapa pendente — quem já entendeu não fica olhando pra ele.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: trilhaRaw } = await (supabase as any).rpc('onboarding_trilha', { p_org_id: org.id })
+  const onboardingPendente = ((trilhaRaw ?? []) as { concluido: boolean }[]).filter(e => !e.concluido).length
+
   // Membros da org (p/ o chat) — exceto eu mesmo.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: membersRaw } = await (supabase as any)
@@ -133,6 +139,7 @@ export default async function OrgLayout({
         canCadastros={access.cadastros}
         canRh={access.rh}
         canManage={access.isOwner}
+        onboardingPendente={onboardingPendente}
       >
         {children}
       </AppShell>

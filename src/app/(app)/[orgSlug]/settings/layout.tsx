@@ -62,6 +62,7 @@ export default async function SettingsLayout({
           { href: `/${orgSlug}/settings/membros`,   label: 'Membros',          badge: 0 },
           ...(isAdmin ? [
             { href: `/${orgSlug}/settings/cargos`,    label: 'Cargos',           badge: 0 },
+            { href: `/${orgSlug}/settings/onboarding`,label: 'Onboarding',       badge: 0 },
             { href: `/${orgSlug}/settings/aparencia`, label: 'Aparência',        badge: 0 },
             { href: `/${orgSlug}/settings/documentos`,label: 'Documentos',       badge: 0 },
             { href: `/${orgSlug}/settings/revisao`,   label: 'Revisão IA',       badge: 0 },
