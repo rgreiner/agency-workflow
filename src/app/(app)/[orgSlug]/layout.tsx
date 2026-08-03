@@ -7,6 +7,7 @@ import { UserPrefsProvider } from '@/components/providers/UserPrefsProvider'
 import { UsuarioProvider } from '@/components/providers/UsuarioProvider'
 import { ChatDock } from '@/components/chat/ChatDock'
 import { PontoPrompt } from '@/components/ponto/PontoPrompt'
+import { PontoGate } from '@/components/ponto/PontoGate'
 import { TabUnreadBadge } from '@/components/layout/TabUnreadBadge'
 import { computeAccess, ACCESS_SELECT, type MembershipRow } from '@/lib/auth/access'
 import { porNome } from '@/lib/utils'
@@ -157,6 +158,7 @@ export default async function OrgLayout({
       {/* Lembrete de ponto: card no canto perto dos horários da jornada +
           preventivo (trabalhando sem ponto aberto). Sem ficha vinculada, nada. */}
       <PontoPrompt orgSlug={orgSlug} />
+      <PontoGate orgSlug={orgSlug} />
 
       {/* Total de não-lidas (inbox + chat) no título da aba */}
       <TabUnreadBadge />

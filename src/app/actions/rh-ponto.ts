@@ -128,6 +128,33 @@ export async function pontoEstado() {
   }
 }
 
+/** Trava do ponto (migration 199): a org exige e a pessoa ainda não bateu hoje?
+ *  Desligada na org, devolve sempre `exige: false` — é o default. */
+export async function pontoGate() {
+  try {
+    const supabase = await createClient()
+    const user = await getUsuario()
+    if (!user) return { exige: false }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase as any).rpc('rh_ponto_gate')
+    return (data ?? { exige: false }) as { exige: boolean; colaborador_id?: string; dia?: string }
+  } catch {
+    // Falha aqui NUNCA pode trancar ninguém fora do sistema.
+    return { exige: false }
+  }
+}
+
+/** Liga/desliga a exigência de ponto para usar o Flow (RH → Ponto). */
+export async function setPontoObrigatorio(orgSlug: string, ativo: boolean) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (c.supabase as any).rpc('rh_set_ponto_obrigatorio', { p_org: c.orgId, p_ativo: ativo })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/rh/ponto`)
+  return { ok: true }
+}
+
 /** Entrada retroativa confirmada: registra a 1ª marcação do dia na hora do
  *  primeiro foco (travado no servidor — sem foco, sem retro). */
 export async function baterEntradaRetro(orgSlug: string) {

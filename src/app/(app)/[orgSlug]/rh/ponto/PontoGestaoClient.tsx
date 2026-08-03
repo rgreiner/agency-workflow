@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Clock, FileText, Check, X, Ban, CalendarX, CalendarClock } from 'lucide-react'
 import { toast } from 'sonner'
-import { decidirExtra, decidirJustificativa } from '@/app/actions/rh-ponto'
+import { decidirExtra, decidirJustificativa, setPontoObrigatorio } from '@/app/actions/rh-ponto'
 import { JornadaEditor, type JornadaVals } from '../JornadaEditor'
 import { ImportarPontomais } from './ImportarPontomais'
 
@@ -26,9 +26,25 @@ const hhmm = (t: string | null) => (t ?? '').slice(0, 5)
 interface MarcHoras { ent: string; intIni: string; intFim: string; sai: string }
 const VAZIO: MarcHoras = { ent: '', intIni: '', intFim: '', sai: '' }
 
-export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadrao }: { orgSlug: string; extras: ExtraPend[]; justificativas: JustPend[]; jornadaPadrao: Partial<JornadaVals> | null }) {
+export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadrao, pontoObrigatorio = false }: {
+  orgSlug: string; extras: ExtraPend[]; justificativas: JustPend[]
+  jornadaPadrao: Partial<JornadaVals> | null
+  /** Trava do Flow sem ponto batido (migration 199). */
+  pontoObrigatorio?: boolean
+}) {
   const router = useRouter()
   const [pending, start] = useTransition()
+  const [obrig, setObrig] = useState(pontoObrigatorio)
+
+  function trocarObrigatorio(v: boolean) {
+    setObrig(v)
+    start(async () => {
+      const r = await setPontoObrigatorio(orgSlug, v)
+      if (r?.error) { toast.error(r.error); setObrig(!v); return }
+      toast.success(v ? 'A partir de agora o Flow exige ponto batido.' : 'Trava desligada.')
+      router.refresh()
+    })
+  }
   // As 4 marcações que o RH vai gravar ao aprovar, pré-carregadas com o que a
   // pessoa pediu. Precisam ser as QUATRO: a action regrava as quatro colunas, e
   // mandar só entrada/saída apagaria o intervalo que a pessoa tinha informado.
@@ -78,6 +94,25 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
         </div>
         <ImportarPontomais orgSlug={orgSlug} />
       </div>
+
+      {/* Trava do ponto — para ligar no dia da virada do Pontomais */}
+      <section className="mb-8">
+        <div className="rounded-2xl border border-gray-200 bg-white p-5">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" checked={obrig} disabled={pending}
+              onChange={e => trocarObrigatorio(e.target.checked)}
+              className="mt-0.5 w-4 h-4 accent-orange-600" />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-gray-900">Exigir ponto batido para usar o Flow</span>
+              <span className="block text-xs text-gray-500 mt-0.5">
+                Ligada, quem tem ficha e jornada no dia vê uma tela de “bata o ponto para começar” — com o
+                botão que resolve ali mesmo. Não vale em feriado que abona, em dia fora da escala, nem para
+                quem não tem ficha. Ligue no dia em que o time sair do Pontomais de vez.
+              </span>
+            </span>
+          </label>
+        </div>
+      </section>
 
       {/* Jornada padrão da empresa */}
       <section className="mb-8">

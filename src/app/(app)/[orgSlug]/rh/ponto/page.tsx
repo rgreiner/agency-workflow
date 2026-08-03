@@ -30,5 +30,10 @@ export default async function PontoGestaoPage({ params }: { params: Promise<{ or
     .select('entrada, intervalo_ini, intervalo_fim, saida, flex_min, tolerancia_min, dias_semana')
     .eq('org_id', orgId).is('colaborador_id', null).maybeSingle(), 'jornada padrão')
 
-  return <PontoGestaoClient orgSlug={orgSlug} extras={extras} justificativas={justs} jornadaPadrao={jornadaPadrao} />
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: cfg } = await (supabase as any)
+    .from('org_settings').select('ponto_obrigatorio').eq('org_id', orgId).maybeSingle()
+
+  return <PontoGestaoClient
+    pontoObrigatorio={!!cfg?.ponto_obrigatorio} orgSlug={orgSlug} extras={extras} justificativas={justs} jornadaPadrao={jornadaPadrao} />
 }
