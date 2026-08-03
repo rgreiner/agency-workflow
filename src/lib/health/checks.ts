@@ -59,6 +59,74 @@ async function campanhasComDrive(supabase: SupabaseClient<Database>, orgId: stri
  * pasta vinculada — tipicamente uma provisão de 2º plano que falhou. Corrigível
  * gerando a pasta na hora.
  */
+
+/**
+ * Campanhas ATIVAS sem pasta vinculada. Não há correção automática — ninguém
+ * pode inventar o link da pasta —, então o item leva para a campanha, onde se
+ * cola o link.
+ *
+ * Vale como verificação porque a consequência é silenciosa: a campanha funciona
+ * normalmente, as tarefas nascem, e só quando alguém vai procurar o arquivo
+ * descobre que pasta nenhuma foi criada. O sublabel conta quantas tarefas ativas
+ * já estão nessa situação, para separar "campanha vazia recém-criada" de
+ * "campanha rodando sem pasta".
+ */
+async function checkCampanhasSemDrive(supabase: SupabaseClient<Database>, orgId: string, orgSlug: string): Promise<HealthCheck> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any
+  const items: HealthItem[] = []
+
+  const { data: ws } = await sb.from('workspaces').select('id, name').eq('org_id', orgId).eq('archived', false)
+  const wsRows = (ws ?? []) as { id: string; name: string }[]
+  const wsNome = new Map(wsRows.map(w => [w.id, w.name]))
+
+  if (wsRows.length > 0) {
+    const { data: camps } = await sb
+      .from('campaigns')
+      .select('id, name, workspace_id, drive_folder_id')
+      .in('workspace_id', wsRows.map(w => w.id))
+      .eq('archived', false)
+      .order('created_at', { ascending: false })
+      .limit(200)
+
+    type Camp = { id: string; name: string; workspace_id: string; drive_folder_id: string | null }
+    const semPasta = ((camps ?? []) as Camp[]).filter(c => !(c.drive_folder_id ?? '').trim())
+
+    if (semPasta.length > 0) {
+      // Quantas tarefas ativas cada uma já tem — é o que mede o estrago.
+      const { data: tarefas } = await sb
+        .from('activities')
+        .select('campaign_id')
+        .in('campaign_id', semPasta.map(c => c.id))
+        .eq('archived', false)
+        .neq('status', CONCLUIDO)
+      const porCampanha = new Map<string, number>()
+      for (const t of ((tarefas ?? []) as { campaign_id: string }[])) {
+        porCampanha.set(t.campaign_id, (porCampanha.get(t.campaign_id) ?? 0) + 1)
+      }
+
+      for (const c of semPasta) {
+        const n = porCampanha.get(c.id) ?? 0
+        items.push({
+          id: c.id,
+          label: c.name,
+          sublabel: `${wsNome.get(c.workspace_id) ?? 'Cliente'} · ${
+            n === 0 ? 'sem tarefas ainda' : `${n} tarefa(s) ativa(s) sem pasta`}`,
+          href: `/${orgSlug}/workspaces/${c.workspace_id}/campaigns/${c.id}`,
+        })
+      }
+      // Primeiro as que já têm tarefa rodando: são as que doem.
+    }
+  }
+
+  return {
+    id: 'campanhas-sem-drive',
+    label: 'Campanhas sem pasta vinculada',
+    description: 'Campanhas ativas sem pasta vinculada: as tarefas delas não geram pasta nenhuma, e isso só aparece quando alguém vai procurar o arquivo. Abra a campanha e cole o link — ou ignore, se for campanha interna que não precisa de pasta.',
+    items,
+  }
+}
+
 async function checkAtividadesSemDrive(supabase: SupabaseClient<Database>, orgId: string): Promise<HealthCheck> {
   const camps = await campanhasComDrive(supabase, orgId)
   const items: HealthItem[] = []
@@ -232,8 +300,9 @@ async function checkCronParado(supabase: SupabaseClient<Database>): Promise<Heal
 }
 
 /** Roda todas as verificações e devolve os checks (mesmo os zerados, p/ dar o “tudo certo”). */
-export async function runHealthChecks(supabase: SupabaseClient<Database>, orgId: string): Promise<HealthCheck[]> {
+export async function runHealthChecks(supabase: SupabaseClient<Database>, orgId: string, orgSlug: string): Promise<HealthCheck[]> {
   return Promise.all([
+    checkCampanhasSemDrive(supabase, orgId, orgSlug),
     checkAtividadesSemDrive(supabase, orgId),
     checkVinculoErrado(supabase, orgId),
     checkCamposSemLink(supabase, orgId),

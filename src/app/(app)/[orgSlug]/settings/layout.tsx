@@ -45,7 +45,7 @@ export default async function SettingsLayout({
         .eq('resolved', false)
       errosPendentes = count ?? 0
 
-      const checks = await runHealthChecks(supabase, org.id)
+      const checks = await runHealthChecks(supabase, org.id, orgSlug)
       verificacoesPendentes = checks.reduce((n, c) => n + c.items.length, 0)
     }
   }

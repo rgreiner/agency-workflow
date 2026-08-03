@@ -23,7 +23,7 @@ export default async function SaudePage({ params }: { params: Promise<{ orgSlug:
     .from('organization_members').select('role').eq('org_id', org.id).eq('user_id', user.id).single() as { data: { role: string } | null }
   if (!m || !['owner', 'admin'].includes(m.role)) redirect(`/${orgSlug}/settings/membros`)
 
-  const checks = await runHealthChecks(supabase, org.id)
+  const checks = await runHealthChecks(supabase, org.id, orgSlug)
 
   return <SaudeClient orgSlug={orgSlug} checks={checks} />
 }
