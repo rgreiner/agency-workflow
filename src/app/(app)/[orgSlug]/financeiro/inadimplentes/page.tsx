@@ -1,11 +1,16 @@
 import { assertFinanceAccess } from '@/lib/finance'
 import { unwrap } from '@/lib/supabase/unwrap'
 import { isRealizado, isIgnorado } from '@/lib/extrato'
-import { InadimplentesClient, type AbertoItem } from './InadimplentesClient'
+import {
+  InadimplentesClient,
+  type AbertoItem, type ClienteInfo, type ReguaInfo,
+} from './InadimplentesClient'
 
 // Busca da própria API — o builder não alcança o IP público do VPS.
 export const dynamic = 'force-dynamic'
 const PAGE = 1000
+
+const REGUA_DEFAULT = [-3, 0, 3, 7, 15, 30, 60, 90]
 
 export default async function InadimplentesPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params
@@ -15,16 +20,28 @@ export default async function InadimplentesPage({ params }: { params: Promise<{ 
 
   // Flow: lançamentos em aberto (a receber / a pagar não liquidados).
   const resLanc = await sb.from('lancamentos')
-    .select('id, tipo, contato_nome, descricao, categoria, vencimento, valor, situacao, origem_tipo, origem_ref')
+    .select('id, tipo, contato_nome, descricao, categoria, vencimento, valor, valor_realizado, situacao, origem_tipo, origem_ref, workspace_id, promessa_data, promessa_obs')
     .eq('org_id', orgId).eq('situacao', 'em_aberto')
 
-  // Extrato importado (Conta Azul) em aberto e ainda não promovido (mesma dedup do Lançamentos).
+  const [resClientes, resAvisos, resCfg] = await Promise.all([
+    sb.from('workspaces').select('id, name, finance_email, cobranca_auto')
+      .eq('org_id', orgId).eq('archived', false).order('name'),
+    sb.from('cobranca_avisos').select('lancamento_id, bucket, canal, sent_at, email').eq('org_id', orgId),
+    sb.from('org_settings').select('payment_info, cobranca_ativa, cobranca_regua').eq('org_id', orgId).maybeSingle(),
+  ])
+
+  // Extrato importado (Conta Azul) em aberto e ainda não promovido (mesma dedup do
+  // Lançamentos). O filtro de situação é feito NO BANCO: das ~6,9 mil linhas, só as
+  // 'Em aberto'/'Atrasado' podem ser inadimplência — o resto era baixado e jogado
+  // fora no cliente (auditoria 02/08, Financeiro #5). Mesma régua de lib/extrato:
+  // realizado = Conciliado/Quitado/Transferido, ignorado = Perdido/nulo.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const importadasRaw: any[] = []
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await sb.from('extrato_importado')
       .select('import_ref, contato, descricao, categoria, tipo, valor, valor_original, situacao, venc_original, data_prevista, data_mov')
-      .eq('org_id', orgId).range(from, from + PAGE - 1)
+      .eq('org_id', orgId).in('situacao', ['Em aberto', 'Atrasado'])
+      .range(from, from + PAGE - 1)
     if (error || !data || data.length === 0) break
     importadasRaw.push(...data)
     if (data.length < PAGE) break
@@ -34,7 +51,9 @@ export default async function InadimplentesPage({ params }: { params: Promise<{ 
   interface LancRaw {
     id: string; tipo: string; contato_nome: string | null; descricao: string | null
     categoria: string | null; vencimento: string | null; valor: number | string
+    valor_realizado: number | string | null
     situacao: string; origem_tipo: string | null; origem_ref: string | null
+    workspace_id: string | null; promessa_data: string | null; promessa_obs: string | null
   }
   const lanc = unwrap<LancRaw>(resLanc, 'lançamentos')
 
@@ -53,16 +72,38 @@ export default async function InadimplentesPage({ params }: { params: Promise<{ 
       .filter((r): r is string => !!r),
   )
 
+  // Último aviso por título — a tela precisa responder "já cobramos isso?".
+  interface AvisoRaw { lancamento_id: string; bucket: string; canal: string; sent_at: string; email: string | null }
+  const ultimoAviso = new Map<string, AbertoItem['ultimoAviso']>()
+  for (const a of ((resAvisos?.data ?? []) as AvisoRaw[])) {
+    const atual = ultimoAviso.get(a.lancamento_id)
+    if (atual && atual.data >= a.sent_at) continue
+    ultimoAviso.set(a.lancamento_id, { data: a.sent_at, canal: a.canal, bucket: a.bucket })
+  }
+
   const itens: AbertoItem[] = []
   for (const l of lanc) {
+    // Baixa parcial: o que ainda falta é o valor cheio MENOS o já realizado. A
+    // Lista trata isso desde julho; aqui e no Painel o total vinha inflado.
+    const cheio = Math.abs(Number(l.valor ?? 0))
+    const realizado = Math.abs(Number(l.valor_realizado ?? 0))
+    const falta = Math.round(Math.max(cheio - realizado, 0) * 100) / 100
+    if (falta <= 0) continue
     itens.push({
       id: l.id,
+      lancamentoId: l.id,
       tipo: l.tipo === 'saida' ? 'saida' : 'entrada',
       contato: (l.contato_nome as string)?.trim() || 'Sem contato',
+      workspaceId: l.workspace_id,
       descricao: l.descricao ?? null,
       categoria: l.categoria ?? null,
       vencimento: l.vencimento ?? null,
-      valor: Math.abs(Number(l.valor ?? 0)),
+      valor: falta,
+      valorCheio: cheio,
+      parcial: realizado > 0,
+      promessaData: l.promessa_data ?? null,
+      promessaObs: l.promessa_obs ?? null,
+      ultimoAviso: ultimoAviso.get(l.id) ?? null,
     })
   }
   for (const e of importadasRaw) {
@@ -71,18 +112,47 @@ export default async function InadimplentesPage({ params }: { params: Promise<{ 
     const valorNum = Number(e.valor ?? 0)
     const tipo: 'entrada' | 'saida' =
       e.tipo === 'despesa' ? 'saida' : e.tipo === 'receita' ? 'entrada' : (valorNum < 0 ? 'saida' : 'entrada')
+    const cheio = Math.abs(valorNum || Number(e.valor_original ?? 0))
     itens.push({
       id: `imp:${e.import_ref}`,
+      // Linha do extrato ainda não promovida: aparece no total (é dinheiro
+      // devido de verdade), mas não dá pra cobrar — não existe título no Flow.
+      lancamentoId: null,
       tipo,
       contato: (e.contato as string)?.trim() || 'Sem contato',
+      workspaceId: null,
       descricao: e.descricao ?? null,
       categoria: e.categoria ?? null,
       // data_prevista = data real/repactuada (ver page.tsx do Lançamentos).
       vencimento: e.data_prevista ?? e.venc_original ?? e.data_mov ?? null,
-      valor: Math.abs(valorNum || Number(e.valor_original ?? 0)),
+      valor: cheio,
+      valorCheio: cheio,
+      parcial: false,
+      promessaData: null,
+      promessaObs: null,
+      ultimoAviso: null,
     })
   }
 
+  interface ClienteRaw { id: string; name: string; finance_email: string | null; cobranca_auto: boolean }
+  const clientes: ClienteInfo[] = ((resClientes?.data ?? []) as ClienteRaw[]).map(c => ({
+    id: c.id, nome: c.name, financeEmail: c.finance_email, cobrancaAuto: !!c.cobranca_auto,
+  }))
+
+  const cfg = resCfg?.data ?? null
+  const regua: ReguaInfo = {
+    ativa: !!cfg?.cobranca_ativa,
+    degraus: Array.isArray(cfg?.cobranca_regua) && cfg.cobranca_regua.length
+      ? (cfg.cobranca_regua as number[])
+      : REGUA_DEFAULT,
+    temPaymentInfo: !!(cfg?.payment_info ?? '').trim(),
+    clientesLigados: clientes.filter(c => c.cobrancaAuto && (c.financeEmail ?? '').trim()).length,
+  }
+
   const today = new Date().toISOString().slice(0, 10)
-  return <InadimplentesClient itens={itens} today={today} />
+  return (
+    <InadimplentesClient
+      orgSlug={orgSlug} itens={itens} today={today} clientes={clientes} regua={regua}
+    />
+  )
 }
