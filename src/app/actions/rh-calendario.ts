@@ -112,3 +112,70 @@ export async function carregarFechamento(orgSlug: string, competencia: string) {
   if (error) return { error: error.message }
   return { fechamento: data as Fechamento }
 }
+
+// ── Espelho de ponto (validação dia a dia) ──
+
+export interface EspelhoLinha {
+  id: string; nome: string; cargo: string | null; tem_login: boolean
+  dias_com_ponto: number; extras_pendentes: number; intervalo_curto: number
+  ajustados: number; saldo_min: number
+}
+export interface EspelhoLista { ini: string; fim: string; competencia: string; colaboradores: EspelhoLinha[] }
+
+/** Lista de colaboradores com o resumo do ciclo (tela 1). */
+export async function carregarEspelhoLista(orgSlug: string, competencia: string) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  const comp = /^\d{4}-\d{2}$/.test(competencia) ? `${competencia}-01` : null
+  if (!comp) return { error: 'Competência inválida' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (c.supabase as any).rpc('rh_espelho_lista', { p_org_id: c.orgId, p_competencia: comp })
+  if (error) return { error: error.message }
+  return { lista: data as EspelhoLista }
+}
+
+export interface EspelhoDia {
+  data: string; dow: number; esperado_min: number; marcacoes: string[]
+  minutos: number; saldo_min: number; intervalo_maior_min: number | null; intervalo_ok: boolean | null
+  extra_status: string | null; origem: string | null; motivo: string | null
+  feriado: { nome: string | null; tipo: string; carga_min: number | null } | null
+  justificativa: { tipo: string; descricao: string | null; status: string; decidido_por: string | null; decidido_em: string | null } | null
+  ajuste: { de: { marcacoes?: string[]; entrada?: string; saida?: string } | null; por: string | null; em: string } | null
+  log: { acao: string; antes: string[]; depois: string[]; motivo: string | null; em: string; por: string | null }[]
+}
+export interface Espelho {
+  colaborador: { id: string; nome: string; cargo: string | null; cpf: string | null }
+  jornada: { carga_min: number; entrada: string; saida: string; intervalo_min: number; dias_semana: number[] }
+  ini: string; fim: string; competencia: string
+  resumo: { hn_min: number; faltas_min: number; extra_min: number; saldo_min: number }
+  dias: EspelhoDia[]
+}
+
+/** Espelho de um colaborador: todos os dias do ciclo com o que aconteceu (tela 2). */
+export async function carregarEspelho(orgSlug: string, colaboradorId: string, competencia: string) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  const comp = /^\d{4}-\d{2}$/.test(competencia) ? `${competencia}-01` : null
+  if (!comp) return { error: 'Competência inválida' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (c.supabase as any).rpc('rh_espelho', {
+    p_org_id: c.orgId, p_colaborador_id: colaboradorId, p_competencia: comp,
+  })
+  if (error) return { error: error.message }
+  return { espelho: data as Espelho }
+}
+
+/** RH corrige as marcações de um dia (exige motivo; fica na trilha de auditoria). */
+export async function editarPonto(orgSlug: string, colaboradorId: string, data: string, horas: string[], motivo: string) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (c.supabase as any).rpc('rh_editar_ponto', {
+    p_org_id: c.orgId, p_colaborador_id: colaboradorId, p_data: data,
+    p_horas: horas, p_motivo: motivo,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/rh/espelho/${colaboradorId}`)
+  revalidatePath(`/${orgSlug}/rh/fechamento`)
+  return { ok: true }
+}
