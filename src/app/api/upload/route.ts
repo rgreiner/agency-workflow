@@ -11,7 +11,12 @@ import { getUsuario } from '@/lib/auth/server'
 export const runtime = 'nodejs'
 
 const ALLOWED_BUCKETS = new Set(['avatars', 'org-logos', 'orcamentos', 'boards', 'midia-kits', 'comments', 'briefings', 'lancamentos', 'ofx'])
-const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml', 'application/pdf'])
+// SVG NÃO entra: é documento executável (pode carregar <script>) e sairia pela
+// mesma origem do app — quem abrisse o link entregaria a sessão. Imagem já vem
+// convertida pra WebP no client, então nada legítimo depende de SVG aqui.
+const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'application/pdf'])
+const EXT_PERMITIDA = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'pdf'])
+const EXT_EXECUTAVEL = new Set(['svg', 'svgz', 'html', 'htm', 'xhtml', 'xml', 'js', 'mjs'])
 // OFX chega com type vazio ou octet-stream conforme o banco — o bucket 'ofx' aceita
 // qualquer coisa pequena, porque é o arquivo original do banco que a contabilidade pede.
 const MAX_BYTES_OFX = 5 * 1024 * 1024
@@ -33,6 +38,13 @@ export async function POST(request: Request) {
 
   if (!ALLOWED_BUCKETS.has(bucket)) return NextResponse.json({ error: 'Bucket inválido' }, { status: 400 })
   if (!(file instanceof File)) return NextResponse.json({ error: 'Arquivo ausente' }, { status: 400 })
+  const ext = (rel.split('.').pop() || '').toLowerCase()
+  if (EXT_EXECUTAVEL.has(ext)) {
+    return NextResponse.json({ error: 'SVG e arquivos de página (HTML/JS) não são aceitos — converta a imagem para PNG ou WebP.' }, { status: 400 })
+  }
+  // `file.type` vazio não libera nada: fora do bucket 'ofx' a extensão precisa
+  // estar na lista (browser nem sempre manda o MIME).
+  if (bucket !== 'ofx' && !EXT_PERMITIDA.has(ext)) return NextResponse.json({ error: 'Tipo de arquivo não permitido' }, { status: 400 })
   if (bucket !== 'ofx' && file.type && !ALLOWED_TYPES.has(file.type)) return NextResponse.json({ error: 'Tipo de arquivo não permitido' }, { status: 400 })
   const maxBytes = bucket === 'ofx' ? MAX_BYTES_OFX : file.type === 'application/pdf' ? MAX_BYTES_PDF : MAX_BYTES_IMAGE
   if (file.size > maxBytes) return NextResponse.json({ error: `Arquivo muito grande (máx ${Math.round(maxBytes / 1024 / 1024)}MB)` }, { status: 400 })

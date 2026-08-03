@@ -39,10 +39,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const ext = rel.split('.').pop()?.toLowerCase() ?? ''
     const type = TYPES[ext] ?? 'application/octet-stream'
     const nome = encodeURIComponent(String(doc.nome || 'documento'))
+    // Fora da lista (PDF/imagem) desce como download — nada renderiza inline.
+    const inline = ext in TYPES
     return new Response(new Uint8Array(buf), {
       headers: {
         'Content-Type': type,
-        'Content-Disposition': `inline; filename*=UTF-8''${nome}`,
+        'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${nome}`,
+        'X-Content-Type-Options': 'nosniff',
         'Cache-Control': 'private, no-store',
       },
     })

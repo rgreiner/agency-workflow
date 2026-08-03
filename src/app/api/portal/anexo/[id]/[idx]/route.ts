@@ -16,6 +16,7 @@ const TYPES: Record<string, string> = {
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 }
+const INLINE = new Set(['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif'])
 
 function uploadRoot(): string {
   return process.env.UPLOAD_DIR || '/app/uploads'
@@ -46,10 +47,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const ext = rel.split('.').pop()?.toLowerCase() ?? ''
     const type = TYPES[ext] ?? 'application/octet-stream'
     const nome = encodeURIComponent(String(anexo.nome || 'anexo'))
+    // Só imagem e PDF abrem na tela; docx/xlsx/txt (e qualquer coisa fora da
+    // lista) descem como download, pra nada renderizar na origem do app.
+    const inline = INLINE.has(ext)
     return new Response(new Uint8Array(buf), {
       headers: {
         'Content-Type': type,
-        'Content-Disposition': `inline; filename*=UTF-8''${nome}`,
+        'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${nome}`,
+        'X-Content-Type-Options': 'nosniff',
         'Cache-Control': 'private, no-store',
       },
     })
