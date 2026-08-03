@@ -2,7 +2,7 @@ import 'server-only'
 import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
-import { createTaskFolders, moveTaskFolder, inspectTaskFolder, completarSubpastas, folderConfigured, resolvePathPrefix, backendForRef } from '@/lib/task-folders'
+import { createTaskFolders, moveTaskFolder, inspectTaskFolder, completarSubpastas, folderConfigured, resolvePathPrefix, backendForRef, refIncompativel } from '@/lib/task-folders'
 import { logSystemError } from '@/lib/system-error'
 
 function joinLocalPath(prefix: string, drivePath: string): string {
@@ -93,6 +93,10 @@ export async function regenerateActivityDrive(
   if (!folderConfigured()) return { ok: false, error: 'Integração de pastas não está configurada.' }
   const cfg = await resolve(supabase, params.campaignId)
   if (!cfg) return { ok: false, error: 'A campanha desta tarefa não tem pasta vinculada.' }
+  // A referência da CAMPANHA é que manda aqui — pasta de campanha do backend
+  // errado é o que faz a criação da tarefa estourar lá dentro.
+  const refCampanha = refIncompativel(cfg.folderId)
+  if (refCampanha) return { ok: false, error: refCampanha }
   try {
     const r = await createTaskFolders(cfg.folderId, taskFolderName(params.title, params.date), { forceNew: true })
     await supabase.rpc('set_activity_drive', {
@@ -122,6 +126,10 @@ export async function relinkActivityDrive(
   params: { campaignId: string; userId: string; activityId: string; folderId: string },
 ): Promise<{ ok: boolean; error?: string; faltando?: string[]; criadas?: string[] }> {
   if (!folderConfigured()) return { ok: false, error: 'Integração de pastas não está configurada.' }
+  // Re-vincular com uma referência do backend errado é o caminho mais comum pro
+  // "Storage S3 não configurado": a pessoa cola o caminho antigo do disco.
+  const incompativel = refIncompativel(params.folderId)
+  if (incompativel) return { ok: false, error: incompativel }
   const cfg = await resolve(supabase, params.campaignId)
   const prefix = cfg?.prefix ?? resolvePathPrefix(null, backendForRef(params.folderId))
   try {

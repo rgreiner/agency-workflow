@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createCampaign } from '@/app/actions/workspace'
+import { estadoDasPastas, type EstadoPastas } from '@/app/actions/pastas'
 import { ArrowLeft } from 'lucide-react'
 import { DatePicker } from '@/components/ui/DatePicker'
 
@@ -10,6 +11,10 @@ export default function NewCampaignPage() {
   const { orgSlug, workspaceId } = useParams<{ orgSlug: string; workspaceId: string }>()
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  // O formato aceito depende do backend ATIVO. Sugerir o formato errado foi o que
+  // gerou o "Storage S3 não configurado": o campo pedia F:\… com o R2 já encerrado.
+  const [pastas, setPastas] = useState<EstadoPastas | null>(null)
+  useEffect(() => { estadoDasPastas().then(setPastas) }, [])
   const [error, setError] = useState('')
   const [form, setForm] = useState({
     name: '',
@@ -95,10 +100,24 @@ export default function NewCampaignPage() {
             name="drive_folder"
             value={form.drive_folder}
             onChange={(e) => set('drive_folder', e.target.value)}
-            placeholder={'F:\\Cliente\\2026\\Projeto ou link do Drive'}
+            placeholder={pastas?.exemplo ?? 'Link da pasta'}
             className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
           />
-          <p className="text-xs text-gray-400 mt-1">As tarefas desta campanha criarão pastas dentro dela automaticamente.</p>
+          {/* Sem pasta, nada é criado — e o time descobre isso só quando abre a
+              tarefa e não acha a pasta. Melhor dizer antes. */}
+          {form.drive_folder.trim() === '' ? (
+            <p className="text-xs text-amber-700 mt-1">
+              Deixando em branco, <strong>as tarefas desta campanha não vão gerar pastas</strong>. Dá para
+              vincular depois, na tela da campanha.
+            </p>
+          ) : (
+            <p className="text-xs text-gray-400 mt-1">As tarefas desta campanha criarão pastas dentro dela automaticamente.</p>
+          )}
+          {pastas?.provider === null && (
+            <p className="text-xs text-red-600 mt-1">
+              Nenhum backend de pastas está configurado neste ambiente — nada será criado, mesmo com o link preenchido.
+            </p>
+          )}
         </div>
 
         {error && <p className="text-sm text-red-600">{error}</p>}

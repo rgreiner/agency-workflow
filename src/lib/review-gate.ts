@@ -188,7 +188,10 @@ export function scheduleReview(params: {
       try {
         await setReview('failed', null, null)
         await logSystemError(supabase, { userId, context: `review:${kind}`, error: e, activityId })
-        await comment(`⚠️ A revisão de ${label} não pôde ser concluída automaticamente. A tarefa seguiu — confira manualmente.`)
+        // O 529 "Overloaded" da API costuma passar em minutos. O comentário
+        // precisa dizer que dá pra tentar de novo num clique — sem isso, quem lê
+        // acha que só resta conferir tudo na mão (foi o que aconteceu em 03/08).
+        await comment(`⚠️ A revisão de ${label} não pôde ser concluída automaticamente — em geral é sobrecarga momentânea da IA. A tarefa seguiu. Use **Tentar de novo** no aviso da revisão, ou confira manualmente.`)
       } catch (e2) {
         console.error(`[review:${kind}] falha ao registrar o erro da revisão`, e2)
       }

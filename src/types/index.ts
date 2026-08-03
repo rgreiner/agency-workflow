@@ -121,11 +121,14 @@ export function buildStatusConfig(rows: OrgStatusRow[] = []): StatusConfig[] {
   })
 }
 
+// `preenchido` = bandeira sólida. A Lista já usava essa régua (urgente/alta
+// cheias, média/baixa vazadas); trazer para a config faz as outras telas
+// mostrarem a MESMA coisa em vez de reinventar por tela.
 export const PRIORITY_CONFIG = {
-  low: { label: 'Baixa', color: 'text-gray-600', bgColor: 'bg-gray-100' },
-  medium: { label: 'Média', color: 'text-blue-600 dark:text-blue-300', bgColor: 'bg-blue-100 dark:bg-blue-500/15' },
-  high: { label: 'Alta', color: 'text-orange-600 dark:text-orange-300', bgColor: 'bg-orange-100 dark:bg-orange-500/15' },
-  urgent: { label: 'Urgente', color: 'text-red-600 dark:text-red-300', bgColor: 'bg-red-100 dark:bg-red-500/15' },
+  low: { label: 'Baixa', color: 'text-gray-600', bgColor: 'bg-gray-100', preenchido: false },
+  medium: { label: 'Média', color: 'text-blue-600 dark:text-blue-300', bgColor: 'bg-blue-100 dark:bg-blue-500/15', preenchido: false },
+  high: { label: 'Alta', color: 'text-orange-600 dark:text-orange-300', bgColor: 'bg-orange-100 dark:bg-orange-500/15', preenchido: true },
+  urgent: { label: 'Urgente', color: 'text-red-600 dark:text-red-300', bgColor: 'bg-red-100 dark:bg-red-500/15', preenchido: true },
 }
 
 export const COMPLEXITY_CONFIG = {

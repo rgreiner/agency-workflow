@@ -1668,7 +1668,7 @@ function PriorityCell({ activityId, current, path }: { activityId: string; curre
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(o => !o) }}
         className="hover:scale-110 transition"
       >
-        <Flag className={cn('w-4 h-4', p.color, (value === 'urgent' || value === 'high') && 'fill-current')} />
+        <Flag className={cn('w-4 h-4', p.color, p.preenchido && 'fill-current')} />
       </button>
       {open && (
         <div className="pop-in absolute left-0 top-7 z-30 w-44 bg-white rounded-xl border border-gray-200 shadow-lg py-1.5">
@@ -1681,7 +1681,7 @@ function PriorityCell({ activityId, current, path }: { activityId: string; curre
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); set(pk) }}
                 className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition text-left"
               >
-                <Flag className={cn('w-4 h-4', cfg.color, (pk === 'urgent' || pk === 'high') && 'fill-current')} />
+                <Flag className={cn('w-4 h-4', cfg.color, cfg.preenchido && 'fill-current')} />
                 <span className="text-sm text-gray-700">{cfg.label}</span>
                 {pk === value && <Check className="w-3 h-3 text-gray-400 ml-auto" />}
               </button>

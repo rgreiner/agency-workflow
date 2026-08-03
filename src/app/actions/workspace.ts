@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
-import { extractCampaignFolderRef } from '@/lib/task-folders'
+import { extractCampaignFolderRef, refIncompativel } from '@/lib/task-folders'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
@@ -78,6 +78,8 @@ export async function createWorkspace(orgSlug: string, formData: FormData) {
   redirect(`/${orgSlug}/workspaces`)
 }
 
+
+
 export async function createCampaign(
   orgSlug: string,
   workspaceId: string,
@@ -94,6 +96,8 @@ export async function createCampaign(
   const driveFolderId = extractCampaignFolderRef(formData.get('drive_folder') as string)
 
   if (!name) return { error: 'Nome obrigatório' }
+  const incompativel = refIncompativel(driveFolderId)
+  if (incompativel) return { error: incompativel }
 
   const { data: campaignId, error } = await supabase.rpc('create_campaign', {
     p_user_id: user.id,
@@ -121,6 +125,8 @@ export async function setCampaignDrive(orgSlug: string, workspaceId: string, cam
   if (!user) return { error: 'Não autenticado' }
 
   const folderId = extractCampaignFolderRef(driveLink)
+  const incompativel = refIncompativel(folderId)
+  if (incompativel) return { error: incompativel }
   const { error } = await supabase.rpc('set_campaign_drive', {
     p_user_id: user.id, p_campaign_id: campaignId, p_drive_folder_id: folderId,
   })

@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity, type StatusOverride } from '@/types'
 import { getStatusConfig } from '@/lib/status'
 import { cn, formatDate, isOverdue } from '@/lib/utils'
-import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink, X, Target } from 'lucide-react'
+import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink, X, Target, Flag } from 'lucide-react'
 import Link from 'next/link'
 import { DriveProvisioningNotice } from './DriveProvisioningNotice'
 import { StatusChanger } from './StatusChanger'
@@ -470,7 +470,8 @@ export default async function ActivityPage({
                       { value: 'urgent', label: 'Urgente' },
                     ]}
                     display={
-                      <span className={cn('text-xs font-medium px-2.5 py-1 rounded-lg border', priorityCfg.bgColor, priorityCfg.color, 'border-transparent')}>
+                      <span className={cn('inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg border', priorityCfg.bgColor, priorityCfg.color, 'border-transparent')}>
+                        <Flag className={cn('w-3.5 h-3.5', priorityCfg.preenchido && 'fill-current')} />
                         {priorityCfg.label}
                       </span>
                     }

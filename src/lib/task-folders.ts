@@ -58,6 +58,30 @@ export function backendForRef(ref: string): FolderProvider {
 }
 
 /**
+ * A referência serve neste ambiente? Devolve a explicação quando não serve.
+ *
+ * `backendForRef` roteia pelo FORMATO, de propósito (é o que permite a transição
+ * gradual). Mas formato não é disponibilidade: um caminho de bucket com o R2 já
+ * encerrado só falha lá na frente, com "Storage S3 não configurado" surgindo na
+ * criação da primeira tarefa — longe de onde o texto foi digitado. Foi o erro que
+ * o Rafael pegou em 03/08. Conferir na entrada é o único lugar onde dá para
+ * dizer o que fazer.
+ */
+export function refIncompativel(ref: string | null | undefined): string | null {
+  const r = (ref ?? '').trim()
+  if (!r) return null
+  const alvo = backendForRef(r)
+  const ativo = folderProvider()
+  if (alvo === ativo) return null
+  if (alvo === 's3') {
+    return 'Esse formato é caminho de disco (F:\\…), e o storage S3 não está ativo neste ambiente. '
+      + 'Cole o LINK da pasta do Google Drive (drive.google.com/drive/folders/…).'
+  }
+  return 'Isso é um link/ID do Google Drive, e o Drive não está ativo neste ambiente. '
+    + 'Use o caminho do disco (F:\\Cliente\\Ano\\Projeto).'
+}
+
+/**
  * Normaliza o que a pessoa colou no campo "pasta" da campanha — por CONTEÚDO,
  * aceitando os dois formatos ao mesmo tempo (durante a transição o time pode
  * colar link do Drive OU caminho F:\ do disco novo):
