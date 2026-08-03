@@ -1,0 +1,88 @@
+name: CI
+
+# Auditoria 02/08, Engenharia #1: "Deploy sem rede de proteção".
+#
+# ⚠️ Isto NÃO barra o deploy: o Coolify puxa da mesma push, em paralelo. Quem
+# barra é o `next build` do próprio Coolify, que voltou a checar tipos quando o
+# `ignoreBuildErrors: true` saiu do next.config.ts — erro de tipo agora derruba o
+# build lá e a produção fica na versão anterior. Este workflow é o aviso rápido
+# (~2 min) com o log legível, e a rede para quando alguém abrir PR.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Push seguido cancela a execução anterior — só interessa o estado do topo.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # o passo das migrations compara com o commit anterior
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: typecheck
+        run: npm run typecheck
+
+      # Não bloqueia POR ENQUANTO: são 19 erros e 14 avisos pré-existentes,
+      # quase todos das regras novas de React (setState em efeito, ref no
+      # render). Deixar vermelho desde o 1º dia treina a ignorar o vermelho.
+      # Quando a limpeza for feita, tirar o continue-on-error.
+      - name: lint (informativo enquanto houver dívida antiga)
+        run: npm run lint
+        continue-on-error: true
+
+      # Mesmas variáveis que o build precisa em tempo de compilação. Valores de
+      # fachada de propósito: o build não deve falar com banco nem com API
+      # nenhuma — se um dia precisar, é sinal de conexão feita no import.
+      - name: build
+        run: npm run build
+        env:
+          DATABASE_URL: postgres://ci:ci@127.0.0.1:5432/ci
+          NEXT_PUBLIC_SUPABASE_URL: https://ci.invalid
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci
+          NEXT_PUBLIC_SITE_URL: https://ci.invalid
+          JWT_SECRET: ci-secret-ci-secret-ci-secret-ci-secret
+
+      # Migration commitada ≠ migration aplicada: o SQL do repo é rodado à mão em
+      # produção, então o build nunca esbarra nele. Duas conferências baratas —
+      # a de `$$` vale para tudo (é erro de sintaxe garantido); as convenções só
+      # para o que MUDOU neste push, senão 18 migrations de junho gritariam para
+      # sempre e ninguém mais olharia o amarelo.
+      - name: sanidade das migrations
+        run: |
+          falhou=0
+          for f in supabase/migrations/*.sql; do
+            n=$(grep -o '\$\$' "$f" | wc -l)
+            if [ $((n % 2)) -ne 0 ]; then echo "::error file=$f::número ímpar de \$\$"; falhou=1; fi
+          done
+
+          base='${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}'
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "sem commit-base para comparar — pulando as convenções"; exit $falhou
+          fi
+
+          for f in $(git diff --name-only --diff-filter=AM "$base" HEAD -- 'supabase/migrations/*.sql'); do
+            grep -qi "notify pgrst" "$f" \
+              || echo "::warning file=$f::não termina com notify pgrst, 'reload schema'"
+            # A armadilha que causou o P0 de 02/08: recriar view sem repetir o
+            # WITH zera as reloptions e a RLS deixa de ser avaliada.
+            if grep -qiE 'create (or replace )?view' "$f" && ! grep -qi 'security_invoker' "$f"; then
+              echo "::error file=$f::cria view sem security_invoker = true (foi assim que o livro-caixa vazou)"
+              falhou=1
+            fi
+          done
+          exit $falhou
