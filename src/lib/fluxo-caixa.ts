@@ -1,27 +1,36 @@
-// Agregações do Fluxo de Caixa a partir do extrato importado (extrato_importado).
-// Reproduz as duas telas da Conta Azul: diário (dia a dia do mês) e mensal
-// (previsto × realizado do ano). Tudo puro — recebe as linhas e devolve séries.
-
-import { isRealizado, isPrevisto, isTransferencia } from './extrato'
+// Agregações do Fluxo de Caixa: diário (dia a dia do mês) e mensal (previsto ×
+// realizado do ano). Tudo puro — recebe as linhas e devolve séries.
+//
+// A fonte é a view `fin_movimentos` (migration 185), não mais `extrato_importado`
+// direto: o extrato parou no corte de 16/07/2026 e a tela mostrava um retrato
+// envelhecendo. A view junta o histórico do extrato com o livro-caixa vivo
+// (`lancamentos`) sem contar nada duas vezes, e já chega normalizada — por isso
+// aqui não há mais tradução de rótulo da Conta Azul ('Conciliado', 'Em aberto'…).
 
 export interface FluxoRow {
+  /** Data em que o dinheiro andou. Preenchida só no realizado. */
   data_mov: string | null
+  /** Vencimento/previsão. Sempre preenchida. */
   data_prevista: string | null
-  venc_original: string | null
-  tipo: string | null
-  valor: number | null
-  situacao: string | null
+  tipo: string | null            // 'receita' | 'despesa'
+  valor: number | null           // sempre positivo; o sinal vem do tipo
+  situacao: string | null        // 'realizado' | 'previsto'
   conta: string | null
-  origem: string | null
   categoria: string | null
+  /** Transferência entre contas: entra no saldo, fica fora de receita/despesa. */
+  transferencia: boolean | null
 }
+
+const isRealizado = (r: FluxoRow) => r.situacao === 'realizado'
+const isPrevisto = (r: FluxoRow) => r.situacao === 'previsto'
+const isTransferencia = (r: FluxoRow) => r.transferencia === true
 
 const abs = (v: number | null) => Math.abs(v ?? 0)
 // Sinal p/ saldo: receita soma, despesa subtrai (transferências incluídas — afetam
 // o saldo de cada conta; em "todas as contas" se anulam).
 const signed = (r: FluxoRow) => (r.tipo === 'receita' ? abs(r.valor) : r.tipo === 'despesa' ? -abs(r.valor) : 0)
 // Data de previsão de um lançamento em aberto.
-const dataPrev = (r: FluxoRow) => r.data_prevista || r.venc_original || r.data_mov
+const dataPrev = (r: FluxoRow) => r.data_prevista || r.data_mov
 
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 
@@ -73,7 +82,7 @@ export function fluxoDiario(rows: FluxoRow[], ym: string, contas: string[] | nul
   // saldo de abertura do mês: acumulado realizado antes do mês
   let saldoStart = 0
   for (const r of sel) {
-    if (isRealizado(r.situacao) && r.data_mov && r.data_mov < monthStart) saldoStart += signed(r)
+    if (isRealizado(r) && r.data_mov && r.data_mov < monthStart) saldoStart += signed(r)
   }
 
   const receb = new Array(diasNoMes + 1).fill(0)
@@ -85,20 +94,20 @@ export function fluxoDiario(rows: FluxoRow[], ym: string, contas: string[] | nul
   const mov = new Array(diasNoMes + 1).fill(0)  // movimento realizado do dia (com transferências)
   const movP = new Array(diasNoMes + 1).fill(0) // movimento previsto do dia
   for (const r of sel) {
-    if (isRealizado(r.situacao) && r.data_mov && r.data_mov.slice(0, 7) === ym) {
+    if (isRealizado(r) && r.data_mov && r.data_mov.slice(0, 7) === ym) {
       const d = Number(r.data_mov.slice(8, 10))
       if (d < 1 || d > diasNoMes) continue
       mov[d] += signed(r)
-      if (isTransferencia(r.origem, r.categoria)) continue
+      if (isTransferencia(r)) continue
       if (r.tipo === 'receita') receb[d] += abs(r.valor)
       else if (r.tipo === 'despesa') pag[d] += abs(r.valor)
-    } else if (isPrevisto(r.situacao)) {
+    } else if (isPrevisto(r)) {
       const dp = dataPrev(r)
       if (!dp || dp.slice(0, 7) !== ym) continue
       const d = Number(dp.slice(8, 10))
       if (d < 1 || d > diasNoMes) continue
       movP[d] += signed(r)
-      if (isTransferencia(r.origem, r.categoria)) continue
+      if (isTransferencia(r)) continue
       const atrasado = hojeYmd != null && dp < hojeYmd
       if (r.tipo === 'receita') { if (atrasado) recebA[d] += abs(r.valor); else recebP[d] += abs(r.valor) }
       else if (r.tipo === 'despesa') { if (atrasado) pagA[d] += abs(r.valor); else pagP[d] += abs(r.valor) }
@@ -147,15 +156,15 @@ export function fluxoMensal(rows: FluxoRow[], ano: number, contas: string[] | nu
   const mesVencido = (mi: number) => hoje != null && (ano < hoje.ano || (ano === hoje.ano && mi < hoje.mes))
 
   for (const r of sel) {
-    if (isRealizado(r.situacao) && r.data_mov && Number(r.data_mov.slice(0, 4)) === ano) {
-      if (!isTransferencia(r.origem, r.categoria)) {
+    if (isRealizado(r) && r.data_mov && Number(r.data_mov.slice(0, 4)) === ano) {
+      if (!isTransferencia(r)) {
         const mi = Number(r.data_mov.slice(5, 7)) - 1
         if (r.tipo === 'receita') recR[mi] += abs(r.valor)
         else if (r.tipo === 'despesa') pagR[mi] += abs(r.valor)
       }
-    } else if (isPrevisto(r.situacao)) {
+    } else if (isPrevisto(r)) {
       const dp = dataPrev(r)
-      if (dp && Number(dp.slice(0, 4)) === ano && !isTransferencia(r.origem, r.categoria)) {
+      if (dp && Number(dp.slice(0, 4)) === ano && !isTransferencia(r)) {
         const mi = Number(dp.slice(5, 7)) - 1
         const atrasado = mesVencido(mi)
         if (r.tipo === 'receita') { if (atrasado) recA[mi] += abs(r.valor); else recP[mi] += abs(r.valor) }
@@ -170,9 +179,9 @@ export function fluxoMensal(rows: FluxoRow[], ano: number, contas: string[] | nu
     const fimMes = `${ano}-${String(mi + 1).padStart(2, '0')}-31`
     let sR = 0, sP = 0
     for (const r of sel) {
-      const isReal = isRealizado(r.situacao) && r.data_mov && r.data_mov <= fimMes
+      const isReal = isRealizado(r) && r.data_mov && r.data_mov <= fimMes
       if (isReal) { sR += signed(r); sP += signed(r); continue }
-      if (isPrevisto(r.situacao)) {
+      if (isPrevisto(r)) {
         const dp = dataPrev(r)
         if (dp && dp <= fimMes) sP += signed(r)
       }
