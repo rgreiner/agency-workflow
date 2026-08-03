@@ -1242,8 +1242,12 @@ function LoteModal({ orgSlug, ids, contas, categorias, centros, direcao, onClose
   const [val, setVal] = useState<Record<string, string>>({})
 
   const contaOptions = useMemo(() => [{ value: '', label: '—' }, ...contas.map(c => ({ value: c.id, label: c.nome }))], [contas])
-  const centroOptions = useMemo(() => [{ value: '', label: '—' },
-    ...centros.filter(c => !c.arquivado).map(c => ({ value: c.nome, label: c.nome }))], [centros])
+  // Centro de custo NÃO tem opção vazia aqui: ele é obrigatório no lançamento
+  // (é a dimensão "de qual cliente vem o dinheiro"), e o "—" era um jeito de
+  // apagar o centro de 40 lançamentos de uma vez — pelo lote passava, pelo form
+  // não. Para tirar o centro de um lançamento, edite ele individualmente.
+  const centroOptions = useMemo(() =>
+    centros.filter(c => !c.arquivado).map(c => ({ value: c.nome, label: c.nome })), [centros])
   // Receita não pode receber categoria de custo (e vice-versa) — só as marcadas
   // como 'ambos' servem aos dois. Antes o lote oferecia TODAS, e classificar uma
   // receita como "Aluguel" corromperia justamente os gráficos de receita x custo.
@@ -1267,6 +1271,10 @@ function LoteModal({ orgSlug, ids, contas, categorias, centros, direcao, onClose
 
   function salvar() {
     setErro('')
+    if (aplicar.centro_custo && !(val.centro_custo ?? '').trim()) {
+      setErro('Escolha o centro de custo — ele não pode ser apagado em lote.')
+      return
+    }
     const data: Record<string, unknown> = {}
     for (const c of marcados) {
       const v = val[c.key] ?? ''

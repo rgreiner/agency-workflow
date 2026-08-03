@@ -644,6 +644,12 @@ export async function updateLancamentosLote(
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
   if (!ids.length) return { error: 'Nenhum lançamento selecionado' }
+  // O lote era o caminho que furava a obrigatoriedade do centro de custo: mandar
+  // 'centro_custo' vazio apagava o centro de N lançamentos de uma vez, coisa que
+  // o formulário nunca deixou fazer. (A RPC também ignora vazio, migration 187.)
+  if ('centro_custo' in data && !String(data.centro_custo ?? '').trim()) {
+    return { error: 'O centro de custo não pode ser apagado em lote — escolha um, ou desmarque o campo.' }
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: res, error } = await (supabase as any).rpc('update_lancamentos_lote', {
