@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useTransition } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Loader2, Check, Pencil, AlertTriangle, History, X, Plus, Trash2, Lock } from 'lucide-react'
+import { ArrowLeft, Loader2, Check, Pencil, AlertTriangle, History, X, Plus, Trash2, Lock, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import { carregarEspelho, editarPonto, type Espelho, type EspelhoDia } from '@/app/actions/rh-calendario'
 import { AssinaturaPanel } from '../AssinaturaPanel'
@@ -43,8 +43,14 @@ export function EspelhoClient({ orgSlug, colaboradorId, compInicial }: { orgSlug
             {esp && <> · ciclo <b className="text-gray-700">{dataBR(esp.ini)} – {dataBR(esp.fim)}</b></>}
           </p>
         </div>
-        <input type="month" value={comp} onChange={e => setComp(e.target.value)}
-          className="px-3 py-2 text-sm bg-gray-100 border border-transparent rounded-xl text-gray-800" />
+        <div className="flex items-center gap-2">
+          <input type="month" value={comp} onChange={e => setComp(e.target.value)}
+            className="px-3 py-2 text-sm bg-gray-100 border border-transparent rounded-xl text-gray-800" />
+          <a href={`/api/rh/espelho/pdf?org=${orgSlug}&colaborador=${colaboradorId}&comp=${comp}`} download
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
+            <Download className="w-4 h-4" /> PDF
+          </a>
+        </div>
       </div>
 
       {esp && (
