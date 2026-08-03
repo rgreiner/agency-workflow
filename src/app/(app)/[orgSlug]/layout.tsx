@@ -4,6 +4,7 @@ import { getUsuario } from '@/lib/auth/server'
 import { AppShell } from '@/components/layout/AppShell'
 import { OrgSettingsProvider } from '@/components/providers/OrgSettingsProvider'
 import { UserPrefsProvider } from '@/components/providers/UserPrefsProvider'
+import { UsuarioProvider } from '@/components/providers/UsuarioProvider'
 import { ChatDock } from '@/components/chat/ChatDock'
 import { PontoPrompt } from '@/components/ponto/PontoPrompt'
 import { TabUnreadBadge } from '@/components/layout/TabUnreadBadge'
@@ -114,6 +115,9 @@ export default async function OrgLayout({
 
   return (
     <OrgSettingsProvider settings={orgSettings}>
+      {/* Quem está logado, para os client components. Vem daqui porque o token
+          virou httpOnly — o browser não decodifica mais o JWT pra se descobrir. */}
+      <UsuarioProvider value={{ id: user.id, email: user.email ?? '' }}>
       <UserPrefsProvider value={{
         orgSlug: org.slug,
         driveMacUser: (profile as { drive_mac_user?: string | null } | null)?.drive_mac_user ?? null,
@@ -156,6 +160,7 @@ export default async function OrgLayout({
       {/* Total de não-lidas (inbox + chat) no título da aba */}
       <TabUnreadBadge />
       </UserPrefsProvider>
+      </UsuarioProvider>
     </OrgSettingsProvider>
   )
 }

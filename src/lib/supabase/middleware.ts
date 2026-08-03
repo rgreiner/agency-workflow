@@ -19,7 +19,11 @@ export async function updateSession(request: NextRequest) {
   // nunca exigir o flow-jwt de membro aqui. /api/portal/* faz a própria auth
   // (sessão do portal no upload; sessão de membro na leitura de anexo).
   const isPortal = path === '/portal' || path.startsWith('/portal/') || path.startsWith('/api/portal/')
-  const isPublic = isAuthPage || isConvite || isCron || isPortal
+  // /api/rest é o proxy do PostgREST pro browser: sem sessão ele responde 401 em
+  // JSON, que é o que o supabase-js sabe tratar. Redirecionar pro /login devolveria
+  // HTML no lugar da resposta da API.
+  const isRest = path.startsWith('/api/rest/')
+  const isPublic = isAuthPage || isConvite || isCron || isPortal || isRest
 
   if (!claims && !isPublic) {
     const url = request.nextUrl.clone()

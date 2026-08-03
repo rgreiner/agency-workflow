@@ -16,7 +16,7 @@ import { MultiSelect, Select } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { updateActivityStatus, updateActivityField, setActivityArchived, bulkUpdateStatus, bulkUpdateField, bulkToggleAssignee, bulkSetArchived, createActivityInline } from '@/app/actions/activity'
 import { createClient } from '@/lib/supabase/client'
-import { getUsuarioClient } from '@/lib/auth/client'
+import { useUsuario } from '@/components/providers/UsuarioProvider'
 import { setViewPrefs } from '@/app/actions/prefs'
 import { toast } from 'sonner'
 
@@ -169,7 +169,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
   // a Gestão aponta o Atendimento e a atividade está atribuída ao designer.
   const [respEtapa, setRespEtapa] = useState(!!initialRespEtapa)
   const [onlyMine, setOnlyMine] = useState(false)
-  const me = getUsuarioClient()?.id ?? null
+  const me = useUsuario()?.id ?? null
   const pickerRef = useRef<HTMLDivElement>(null)
 
   // Filtros salvos (presets por org)
@@ -1568,6 +1568,7 @@ function AssigneeCell({ activityId, assignedIds, members }: {
   const [selected, setSelected] = useState<string[]>(assignedIds)
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const usuario = useUsuario()
 
   useEffect(() => {
     if (!open) return
@@ -1577,12 +1578,11 @@ function AssigneeCell({ activityId, assignedIds, members }: {
   }, [open])
 
   async function toggle(userId: string) {
-    const u = getUsuarioClient()
-    if (!u) return
+    if (!usuario) return
     const was = selected.includes(userId)
     setSelected(prev => was ? prev.filter(id => id !== userId) : [...prev, userId]) // otimista
     const { error } = await createClient().rpc('toggle_activity_assignee', {
-      p_user_id: u.id, p_activity_id: activityId, p_assignee_id: userId,
+      p_user_id: usuario.id, p_activity_id: activityId, p_assignee_id: userId,
     })
     if (error) {
       setSelected(prev => was ? [...prev, userId] : prev.filter(id => id !== userId))

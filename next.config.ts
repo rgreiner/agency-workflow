@@ -3,20 +3,6 @@ import type { NextConfig } from "next";
 const isDev = process.env.NODE_ENV === "development";
 
 /**
- * Origem do PostgREST — o browser fala DIRETO com ele (supabase-js como cliente
- * HTTP), então ela precisa estar no connect-src ou o app inteiro para de
- * carregar dado. Vem do env; sem env, cai pro `https:` genérico de propósito:
- * CSP quebrada derruba a aplicação, e um connect-src frouxo é menos pior.
- */
-function apiOrigin(): string {
-  try {
-    return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).origin;
-  } catch {
-    return "https:";
-  }
-}
-
-/**
  * CSP sem nonce (a versão com nonce obriga TODA página a ser dinâmica — ver
  * node_modules/next/dist/docs/01-app/02-guides/content-security-policy.md).
  * Mesmo com 'unsafe-inline' ela já barra script de origem externa, embed de
@@ -32,7 +18,10 @@ const csp = [
   "img-src 'self' data: blob: https:",
   "media-src 'self' blob: https:",
   "font-src 'self' data:",
-  `connect-src 'self' ${apiOrigin()}${isDev ? " ws: http://localhost:*" : ""}`,
+  // Só a própria origem: desde que o supabase-js do browser passou pelo proxy
+  // /api/rest, nada no client fala com host externo. Isso fecha o caminho mais
+  // simples de exfiltração num XSS — mandar o dado pra fora.
+  `connect-src 'self'${isDev ? " ws: http://localhost:*" : ""}`,
   "object-src 'self'",
   "frame-src 'self' blob:",
   "worker-src 'self' blob:",

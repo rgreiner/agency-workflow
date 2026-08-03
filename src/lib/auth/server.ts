@@ -24,9 +24,11 @@ export async function getUsuario(): Promise<SessionUser | null> {
 export async function iniciarSessao(user: SessionUser): Promise<void> {
   const jar = await cookies();
   jar.set(COOKIE_TOKEN, await mintToken({ sub: user.id, email: user.email }), {
-    // NÃO httpOnly de propósito: o supabase-js no browser precisa ler este
-    // token p/ enviá-lo ao PostgREST (mesma postura do access token do Supabase).
-    httpOnly: false,
+    // httpOnly desde 03/08: o supabase-js do browser não lê mais este token —
+    // ele fala com `/api/rest`, na nossa origem, e o servidor é que anexa o
+    // Authorization. Antes o cookie era legível por JS de propósito, e um XSS
+    // levava embora uma credencial de 7 dias sem revogação.
+    httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
