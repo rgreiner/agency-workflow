@@ -2,7 +2,7 @@
 
 import { Fragment, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { ChevronRight, ExternalLink } from 'lucide-react'
+import { AlertTriangle, ChevronRight, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
 import { docNumero } from '@/lib/doc-series'
@@ -26,6 +26,8 @@ export interface MidiaView {
   titulo: string
   cliente: string
   veiculo: string
+  /** Mídia sem veículo: o lançamento não nasce, então não dá pra faturar. */
+  semVeiculo: boolean
   contatos: ContatoCard[]
   valorDoc: number
   comissao: number
@@ -97,7 +99,11 @@ function MidiaRow({ orgSlug, midia, cat }: { orgSlug: string; midia: MidiaView; 
           </button>
         </td>
         <td className="px-4 py-3 text-sm text-gray-600">{midia.cliente}</td>
-        <td className="px-4 py-3 text-sm text-gray-600">{midia.veiculo}</td>
+        <td className="px-4 py-3 text-sm text-gray-600">
+          {midia.semVeiculo
+            ? <span className="inline-flex items-center gap-1 text-amber-700" title="Sem veículo a comissão não tem de quem ser cobrada — informe o veículo na mídia."><AlertTriangle className="w-3.5 h-3.5" /> sem veículo</span>
+            : midia.veiculo}
+        </td>
         <td className="px-4 py-3 text-sm text-gray-600 text-right tabular-nums">{formatBRL(midia.valorDoc)}</td>
         <td className="px-4 py-3 text-sm font-medium text-emerald-600 text-right tabular-nums">
           {formatBRL(midia.comissao + midia.comissaoProducao)}
@@ -114,6 +120,7 @@ function MidiaRow({ orgSlug, midia, cat }: { orgSlug: string; midia: MidiaView; 
             <ContatosButton contatos={midia.contatos} titulo={`${docNumero(midia.serie, midia.numero)} · ${midia.titulo}`} />
             <FaturarButton
               missing={faltando(anexos)}
+              blocked={midia.semVeiculo ? 'Informe o veículo na mídia — sem ele a comissão não vira lançamento.' : undefined}
               okToast="Comissão lançada no financeiro."
               action={() => lancarMidia(orgSlug, midia.id, {
                 conta_id: cls.conta, categoria: cls.categoria, centro_custo: cls.centro, forma_pagamento: cls.forma,

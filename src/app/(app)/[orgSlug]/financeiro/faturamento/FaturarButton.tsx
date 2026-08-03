@@ -12,18 +12,31 @@ import { toast } from 'sonner'
  *    ao cliente com os documentos anexados. NUNCA automático: o financeiro
  *    escolhe, confirma o destinatário e envia.
  * Se faltar NF/Boleto, avisa mas não trava (decisão: só avisar).
+ *
+ * `blocked` é outra coisa: é o caso em que faturar NÃO geraria lançamento — hoje,
+ * mídia sem veículo. Aí o botão some e fica o motivo no lugar dele, porque deixar
+ * clicar só pra receber erro do banco é pior do que não deixar clicar.
  */
-export function FaturarButton({ action, missing, okToast, enviar, destinatarioPadrao }: {
+export function FaturarButton({ action, missing, okToast, enviar, destinatarioPadrao, blocked }: {
   action: () => Promise<{ error?: string } | void>
   missing: string[]
   okToast: string
   enviar?: (destinatario: string) => Promise<{ error?: string }>
   destinatarioPadrao?: string
+  blocked?: string
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [mode, setMode] = useState<null | 'faturar' | 'enviar'>(null)
   const [dest, setDest] = useState(destinatarioPadrao ?? '')
+
+  if (blocked) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-amber-700 text-right leading-tight" title={blocked}>
+        <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {blocked}
+      </span>
+    )
+  }
 
   const avisoMissing = missing.length > 0 && (
     <span className="inline-flex items-center gap-1 text-amber-600" title={`Faltam: ${missing.join(', ')}`}>

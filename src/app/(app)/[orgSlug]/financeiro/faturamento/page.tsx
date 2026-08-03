@@ -143,6 +143,9 @@ export default async function FaturamentoPage({
     titulo: (d.titulo as string) || '—',
     cliente: d.workspaces?.name ?? '—',
     veiculo: d.veiculos?.name ?? '—',
+    // Sem veículo não nasce lançamento (o banco recusa desde a migration 186) —
+    // a tela precisa dizer isso ANTES do clique, não depois do erro.
+    semVeiculo: !d.veiculos,
     contatos: [contatoCard(d.workspaces, 'Cliente', true), contatoCard(d.veiculos, 'Veículo')].filter(Boolean) as ContatoCard[],
     valorDoc: Number(d.valor ?? 0),
     comissao: Math.round(Number(d.valor ?? 0) * Number(d.desconto_pct ?? 0)) / 100,
