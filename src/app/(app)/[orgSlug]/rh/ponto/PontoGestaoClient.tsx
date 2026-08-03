@@ -55,7 +55,15 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
       })
       if (r?.error) toast.error(r.error)
       else {
-        toast.success(r.ajustados ? `Aprovada — marcação ajustada (${r.ajustados} dia(s)).` : 'Justificativa decidida.')
+        // Decidir e ajustar são dois atos. Quando o ajuste não passa (competência
+        // assinada, dia importado), o aviso é de ERRO — dizer "aprovada" e deixar
+        // o saldo errado é o bug que a migration 193 fechou.
+        const falhou = r.naoAplicados ?? []
+        if (falhou.length) {
+          toast.error(`Decidida, mas a marcação NÃO foi ajustada: ${falhou[0].motivo}`, { duration: 10_000 })
+        } else {
+          toast.success(r.ajustados ? `Aprovada — marcação ajustada (${r.ajustados} dia(s)).` : 'Justificativa decidida.')
+        }
         router.refresh()
       }
     })

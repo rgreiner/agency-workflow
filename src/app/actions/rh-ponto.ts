@@ -82,7 +82,15 @@ export async function decidirJustificativa(orgSlug: string, id: string, status: 
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/rh/ponto`)
   revalidatePath(`/${orgSlug}/ponto`)
-  return { ok: true, ajustados: (data as { pontos_ajustados: number })?.pontos_ajustados ?? 0 }
+  // `nao_aplicados` (migration 193) diz quando a decisão valeu mas o ajuste não
+  // pôde ser gravado — competência assinada, dia importado. A tela TEM que dizer:
+  // era exatamente esse silêncio que fazia o RH achar que tinha corrigido.
+  const r = data as { pontos_ajustados?: number; nao_aplicados?: { data: string; motivo: string }[] }
+  return {
+    ok: true,
+    ajustados: r?.pontos_ajustados ?? 0,
+    naoAplicados: r?.nao_aplicados ?? [],
+  }
 }
 
 /** Gestor decide a hora extra do dia: aprovado | rejeitado (opcionalmente aloca em projeto). */
