@@ -125,6 +125,7 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Ponto',   href: 'rh/ponto' },
     { label: 'Espelho', href: 'rh/espelho' },
     { label: 'Horas',   href: 'rh/horas' },
+    { label: 'Férias e 13º', href: 'rh/ferias' },
     { label: 'Calendário', href: 'rh/calendario' },
     { label: 'Fechamento', href: 'rh/fechamento' },
   ] },
