@@ -44,9 +44,11 @@ const compLabel = (c: string | null) => {
  * Simples Nacional em regime de caixa: a CPP mora no DAS, então "encargos" tende
  * a zero e o peso tributário entra como % sobre o recebido, na fórmula do preço.
  */
-export function CustoHora({ orgSlug, orgId, camadas, preco, canConfig }: {
+export function CustoHora({ orgSlug, orgId, camadas, preco, canConfig, estimadas = [] }: {
   orgSlug: string; orgId: string
   camadas: CamadaPessoa[]; preco: PrecoVenda | null; canConfig: boolean
+  /** Competências sem folha importada — o custo delas vem da ficha (migration 196). */
+  estimadas?: { comp: string; pessoas: number }[]
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -79,6 +81,18 @@ export function CustoHora({ orgSlug, orgId, camadas, preco, canConfig }: {
         + estrutura rateada. Custo/mês é o proporcional mensal do custo global anual (Custo/ano = ×12).
         O relatório acima já usa este custo cheio.
       </p>
+
+      {/* Mês sem folha não zera mais o custo — mas estimativa tem que se
+          anunciar como estimativa, senão vira número de precificação. */}
+      {estimadas.length > 0 && (
+        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mb-3">
+          <strong className="font-semibold">
+            {estimadas.length === 1 ? 'Mês estimado' : `${estimadas.length} meses estimados`}:
+          </strong>{' '}
+          {estimadas.map(e => compLabel(e.comp)).join(', ')} — sem folha importada, o custo veio do salário da ficha
+          (mais FGTS de 8% e as provisões). Importe a folha para o número virar o real.
+        </p>
+      )}
 
       {/* Preço de venda */}
       {preco && (

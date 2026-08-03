@@ -46,13 +46,17 @@ export default async function HorasPage({
 
   const user = await getUsuario()
 
-  const [tarefasRes, pessoasRes, camadasRes, precoRes, membroRes] = await Promise.all([
+  const [tarefasRes, pessoasRes, camadasRes, precoRes, estimadasRes, membroRes] = await Promise.all([
     sb.rpc('horas_por_atividade', { p_org: orgId, p_ini: de, p_fim: ate }),
     sb.rpc('horas_por_pessoa', { p_org: orgId, p_ini: de, p_fim: ate }),
     // Composição do custo: exige can_rh de verdade (expõe salário) — pode negar
     // para owner de horas sem RH; nesse caso a seção simplesmente não aparece.
     sb.rpc('horas_custo_camadas', { p_org: orgId }),
     sb.rpc('horas_preco_venda', { p_org: orgId }),
+    // Meses sem folha importada: o custo desses meses vem do salário da ficha
+    // (migration 196). A tela precisa dizer isso — antes eles simplesmente
+    // sumiam do cálculo e o relatório mostrava custo vazio sem explicar.
+    sb.rpc('horas_competencias_estimadas', { p_org: orgId }),
     user ? sb.from('organization_members').select('role').eq('org_id', orgId).eq('user_id', user.id).single() : Promise.resolve({ data: null }),
   ])
 
@@ -62,6 +66,7 @@ export default async function HorasPage({
   const camadas = (camadasRes.data ?? []) as CamadaPessoa[]
   const preco = (precoRes.data ?? null) as PrecoVenda | null
   const canConfig = ['owner', 'admin'].includes((membroRes.data as { role?: string } | null)?.role ?? '')
+  const estimadas = (estimadasRes?.data ?? []) as { comp: string; pessoas: number }[]
 
   return (
     <>
@@ -71,7 +76,7 @@ export default async function HorasPage({
         tarefas={tarefas} pessoas={pessoas} erro={erro}
       />
       <div className="px-6 pb-10 max-w-6xl -mt-2">
-        <CustoHora orgSlug={orgSlug} orgId={orgId} camadas={camadas} preco={preco} canConfig={canConfig} />
+        <CustoHora orgSlug={orgSlug} orgId={orgId} camadas={camadas} preco={preco} canConfig={canConfig} estimadas={estimadas} />
       </div>
     </>
   )
