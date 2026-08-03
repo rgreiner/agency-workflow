@@ -17,14 +17,16 @@ export default async function FluxoCaixaPage({ params }: { params: Promise<{ org
   // duas vezes, mais o previsto. Antes esta tela lia só `extrato_importado`, que
   // parou no corte de 16/07/2026 — mostrava um retrato envelhecendo há semanas.
   //
+  // AGREGADO no banco (migration 192): a tela não usa a linha, usa a soma por
+  // (dia, conta, natureza) — e o filtro de conta e a troca de mês/ano seguem no
+  // cliente porque a agregação preserva essas dimensões. 6.859 linhas em 7
+  // requisições viraram 1.875 em 2. A soma bate ao centavo com a view.
+  //
   // PostgREST limita o nº de linhas por request — pagina até esgotar.
   const rows: FluxoRow[] = []
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await sb
-      .from('fin_movimentos')
-      .select('data_mov, data_prevista, tipo, valor, situacao, conta, categoria, transferencia')
-      .eq('org_id', orgId)
-      .order('data_mov', { ascending: true })
+      .rpc('fin_fluxo_agregado', { p_org: orgId })
       .range(from, from + PAGE - 1)
     // Falha de query não pode virar "tela vazia" num painel de caixa: sem dado
     // nenhum a leitura é "não tem nada a receber", que é uma decisão errada.

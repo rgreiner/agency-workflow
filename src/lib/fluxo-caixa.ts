@@ -16,10 +16,11 @@ export interface FluxoRow {
   valor: number | null           // sempre positivo; o sinal vem do tipo
   situacao: string | null        // 'realizado' | 'previsto'
   conta: string | null
-  categoria: string | null
   /** Transferência entre contas: entra no saldo, fica fora de receita/despesa. */
   transferencia: boolean | null
 }
+// `categoria` saiu daqui na migration 192: nenhuma das agregações abaixo lê, e
+// mantê-la na chave de grupo multiplicava as linhas que trafegam por request.
 
 const isRealizado = (r: FluxoRow) => r.situacao === 'realizado'
 const isPrevisto = (r: FluxoRow) => r.situacao === 'previsto'
