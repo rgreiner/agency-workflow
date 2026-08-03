@@ -35,13 +35,13 @@ export default async function ColaboradorPage({ params }: { params: Promise<{ or
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const jornadaOverride = unwrapOne<Partial<JornadaVals>>(await (supabase as any)
     .from('rh_jornada')
-    .select('entrada, intervalo_ini, intervalo_fim, saida, flex_min, dias_semana')
+    .select('entrada, intervalo_ini, intervalo_fim, saida, flex_min, tolerancia_min, dias_semana')
     .eq('colaborador_id', colaboradorId).maybeSingle(), 'jornada pessoa')
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const jornadaPadrao = unwrapOne<Partial<JornadaVals>>(await (supabase as any)
     .from('rh_jornada')
-    .select('entrada, intervalo_ini, intervalo_fim, saida, flex_min, dias_semana')
+    .select('entrada, intervalo_ini, intervalo_fim, saida, flex_min, tolerancia_min, dias_semana')
     .eq('org_id', orgId).is('colaborador_id', null).maybeSingle(), 'jornada padrão')
 
   return <ColaboradorClient orgSlug={orgSlug} colab={colab} gestores={gestores} membros={membros}

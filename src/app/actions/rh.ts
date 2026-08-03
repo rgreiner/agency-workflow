@@ -56,7 +56,7 @@ export async function setColaboradorArquivado(orgSlug: string, id: string, arqui
 
 export interface JornadaInput {
   entrada?: string; intervalo_ini?: string; intervalo_fim?: string; saida?: string
-  flex_min?: number; dias_semana?: number[]
+  flex_min?: number; tolerancia_min?: number; dias_semana?: number[]
 }
 
 /** Salva a jornada: padrão da org (colaboradorId null) ou override por pessoa. */

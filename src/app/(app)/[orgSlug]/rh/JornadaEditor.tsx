@@ -8,14 +8,14 @@ import { salvarJornada, resetarJornada } from '@/app/actions/rh'
 
 export interface JornadaVals {
   entrada: string; intervalo_ini: string; intervalo_fim: string; saida: string
-  flex_min: number; dias_semana: number[]
+  flex_min: number; tolerancia_min: number; dias_semana: number[]
 }
 
 const DIAS: { dow: number; label: string }[] = [
   { dow: 1, label: 'Seg' }, { dow: 2, label: 'Ter' }, { dow: 3, label: 'Qua' },
   { dow: 4, label: 'Qui' }, { dow: 5, label: 'Sex' }, { dow: 6, label: 'Sáb' }, { dow: 7, label: 'Dom' },
 ]
-const PADRAO: JornadaVals = { entrada: '08:30', intervalo_ini: '12:00', intervalo_fim: '13:30', saida: '18:00', flex_min: 30, dias_semana: [1, 2, 3, 4, 5] }
+const PADRAO: JornadaVals = { entrada: '08:30', intervalo_ini: '12:00', intervalo_fim: '13:30', saida: '18:00', flex_min: 30, tolerancia_min: 10, dias_semana: [1, 2, 3, 4, 5] }
 
 const hhmm = (t: string | null | undefined) => (t ?? '').slice(0, 5)
 function toMin(t: string): number { const [h, m] = t.split(':').map(Number); return (h || 0) * 60 + (m || 0) }
@@ -25,6 +25,13 @@ function cargaLabel(v: JornadaVals): string {
   const h = Math.floor(min / 60), m = min % 60
   return m === 0 ? `${h}h/dia` : `${h}h${String(m).padStart(2, '0')}/dia`
 }
+/** Janela de entrada permitida pela flexibilidade (ex.: 08:00 – 09:00). */
+function janela(v: JornadaVals): string {
+  const t = toMin(v.entrada)
+  const f = (m: number) => `${String(Math.floor(((m % 1440) + 1440) % 1440 / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+  return `${f(t - v.flex_min)} – ${f(t + v.flex_min)}`
+}
+
 export function normalizar(j: Partial<JornadaVals> | null | undefined): JornadaVals {
   if (!j) return { ...PADRAO }
   return {
@@ -33,6 +40,7 @@ export function normalizar(j: Partial<JornadaVals> | null | undefined): JornadaV
     intervalo_fim: hhmm(j.intervalo_fim) || PADRAO.intervalo_fim,
     saida: hhmm(j.saida) || PADRAO.saida,
     flex_min: j.flex_min ?? PADRAO.flex_min,
+    tolerancia_min: j.tolerancia_min ?? PADRAO.tolerancia_min,
     dias_semana: j.dias_semana?.length ? [...j.dias_semana] : PADRAO.dias_semana,
   }
 }
@@ -117,13 +125,19 @@ export function JornadaEditor({ orgSlug, colaboradorId, inicial, temOverride = f
         </div>
       </div>
 
-      <div className="flex items-end gap-3">
-        <div className="w-40">
-          <label className={labelCls}>Flexibilidade (± min)</label>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={labelCls}>Flexibilidade de horário (± min)</label>
           <input type="number" min={0} max={120} value={v.flex_min} onChange={e => set('flex_min', Math.max(0, Number(e.target.value) || 0))} className={inputCls} />
+          <p className="text-[11px] text-gray-400 mt-1">Janela em que pode entrar: {janela(v)}. Não muda a conta de horas.</p>
         </div>
-        <div className="text-xs text-gray-400 pb-2 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Carga derivada: <b className="text-gray-600">{cargaLabel(v)}</b></div>
+        <div>
+          <label className={labelCls}>Tolerância diária (± min)</label>
+          <input type="number" min={0} max={60} value={v.tolerancia_min} onChange={e => set('tolerancia_min', Math.max(0, Number(e.target.value) || 0))} className={inputCls} />
+          <p className="text-[11px] text-gray-400 mt-1">Variação no total do dia que não vira extra nem débito. CLT: 10 min.</p>
+        </div>
       </div>
+      <div className="text-xs text-gray-400 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Carga derivada: <b className="text-gray-600">{cargaLabel(v)}</b></div>
 
       <div className="flex items-center justify-between pt-1">
         {!modoOrg && temOverride
