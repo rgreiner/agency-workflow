@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useRef, useEffect, useTransition, useCallback } from 'react'
-import { Paperclip, FileText, Trash2, Plus, Loader2, X } from 'lucide-react'
+import { Paperclip, FileText, Trash2, Plus, Loader2, X, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { Select } from '@/components/ui/Select'
-import { listarDocumentos, adicionarDocumento, excluirDocumento } from '@/app/actions/rh'
+import { listarDocumentos, adicionarDocumento, excluirDocumento, enviarDocumentoPorEmail } from '@/app/actions/rh'
 
 export interface Documento { id: string; tipo: string; nome: string | null; competencia: string | null; created_at: string }
 
@@ -36,6 +36,14 @@ export function DocumentosModal({ orgSlug, colaboradorId, nome, onClose }: {
 
   // setDocs roda só após o await (não é render em cascata); o linter é estático.
   useEffect(() => { recarregar() }, [recarregar]) // eslint-disable-line react-hooks/set-state-in-effect
+
+  function enviar(id: string) {
+    startAction(async () => {
+      const r = await enviarDocumentoPorEmail(orgSlug, colaboradorId, id)
+      if (r?.error) { toast.error(r.error, { duration: 8000 }); return }
+      toast.success(`Enviado para ${r?.destino}.`)
+    })
+  }
 
   async function onPick(file: File) {
     setUploading(true)
@@ -99,7 +107,12 @@ export function DocumentosModal({ orgSlug, colaboradorId, nome, onClose }: {
                   <a href={`/api/rh/documento/${d.id}`} target="_blank" rel="noopener noreferrer"
                     className="text-sm text-gray-700 hover:text-orange-600 transition truncate flex-1">{d.nome || 'documento'}</a>
                   {d.competencia && <span className="text-xs text-gray-400 tabular-nums shrink-0">{d.competencia.slice(0, 7).split('-').reverse().join('/')}</span>}
-                  <button onClick={() => excluir(d.id)} disabled={pending} title="Remover"
+                  {/* Só o e-mail PESSOAL verificado recebe (migration 200) — o
+                      corporativo é administrado pelo admin, então não é canal
+                      privado. Se não houver, a action diz o que falta. */}
+                  <button onClick={() => enviar(d.id)} disabled={pending} title="Enviar para o e-mail pessoal"
+                    className="p-1 text-gray-400 hover:text-orange-600 transition disabled:opacity-50 shrink-0"><Send className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => excluir(d.id)} disabled={pending} title="Remover — apaga o arquivo do servidor"
                     className="p-1 text-gray-400 hover:text-red-500 transition disabled:opacity-50 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
                 </li>
               ))}

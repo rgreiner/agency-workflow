@@ -3,7 +3,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { revalidatePath } from 'next/cache'
-import { apagarArquivoDocumento } from '@/lib/rh/documento-arquivo'
+import { apagarArquivoDocumento, lerArquivoDocumento } from '@/lib/rh/documento-arquivo'
+import { sendMail, remetenteDominio } from '@/lib/email/send'
+import { htmlDocumentoRh, rotuloDocumento } from '@/lib/email/documento-rh'
 
 export interface ColaboradorInput {
   nome: string
@@ -132,6 +134,63 @@ export async function excluirDocumento(orgSlug: string, colaboradorId: string, d
   const { error } = await (c.supabase as any).rpc('rh_expurgar_documento', { p_id: docId, p_motivo: 'manual' })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/rh/${colaboradorId}`)
+}
+
+/**
+ * Manda o documento para o e-mail PESSOAL verificado da pessoa (migration 200).
+ * Não existe caminho para o corporativo: ele está sob controle do admin, que
+ * reseta senha e administra a caixa — a mesma razão pela qual o OTP da
+ * assinatura também vai para o pessoal.
+ */
+export async function enviarDocumentoPorEmail(orgSlug: string, colaboradorId: string, docId: string) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  const user = await getUsuario()
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: info, error: e1 } = await (c.supabase as any).rpc('rh_documento_para_envio', { p_id: docId })
+  if (e1) return { error: e1.message }
+  const d = info as {
+    tipo: string | null; nome: string | null; chave: string | null; competencia: string | null
+    pessoa: string; email_pessoal: string | null; verificado: boolean
+  }
+
+  if (!d.email_pessoal) {
+    return { error: `${d.pessoa} ainda não cadastrou o e-mail pessoal. Ela faz isso na tela do próprio ponto.` }
+  }
+  if (!d.verificado) {
+    return { error: `O e-mail pessoal de ${d.pessoa} ainda não foi verificado — sem isso não dá para afirmar que a caixa é dela.` }
+  }
+
+  const arquivo = await lerArquivoDocumento(d.chave)
+  if (!arquivo.ok) return { error: `Não consegui ler o arquivo: ${arquivo.erro}` }
+
+  const { data: org } = await c.supabase.from('organizations').select('name').eq('id', c.orgId).single()
+  const dominio = remetenteDominio()
+  const nomeArquivo = d.nome || `${d.tipo ?? 'documento'}.pdf`
+
+  const { error: erroEnvio } = await sendMail({
+    to: d.email_pessoal,
+    from: dominio ? `${org?.name ?? 'RH'} <rh@${dominio}>` : undefined,
+    replyTo: user?.email || undefined,
+    subject: `${rotuloDocumento(d.tipo)}${d.competencia ? ` — ${d.competencia.slice(5, 7)}/${d.competencia.slice(0, 4)}` : ''}`,
+    html: htmlDocumentoRh({
+      orgName: org?.name ?? 'RH', pessoa: d.pessoa, tipo: d.tipo,
+      competencia: d.competencia, arquivo: nomeArquivo,
+    }),
+    attachments: [{ filename: nomeArquivo, content: arquivo.conteudo! }],
+  })
+
+  // O envio fica registrado mesmo quando falha: "mandei e não chegou" e "nunca
+  // mandei" são problemas diferentes, e a tela precisa saber qual é.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (c.supabase as any).rpc('rh_registrar_envio_documento', {
+    p_documento_id: docId, p_destino: d.email_pessoal, p_erro: erroEnvio ?? null,
+  })
+  if (erroEnvio) return { error: `Não enviou: ${erroEnvio}` }
+
+  revalidatePath(`/${orgSlug}/rh/${colaboradorId}`)
+  return { ok: true, destino: d.email_pessoal }
 }
 
 /** Importa uma competência de folha (linhas já extraídas e conferidas na tela).

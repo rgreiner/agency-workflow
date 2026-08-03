@@ -1,5 +1,5 @@
 import 'server-only'
-import { unlink } from 'node:fs/promises'
+import { readFile, unlink } from 'node:fs/promises'
 import path from 'node:path'
 
 /**
@@ -39,5 +39,19 @@ export async function apagarArquivoDocumento(chave: string | null | undefined): 
     const err = e as NodeJS.ErrnoException
     if (err?.code === 'ENOENT') return { ok: true }
     return { ok: false, erro: err?.message ?? 'falha ao apagar' }
+  }
+}
+
+/** Lê o arquivo para anexar num e-mail. Mesmo guard de caminho da exclusão. */
+export async function lerArquivoDocumento(
+  chave: string | null | undefined,
+): Promise<{ ok: boolean; conteudo?: Buffer; erro?: string }> {
+  if (!chave) return { ok: false, erro: 'documento sem arquivo' }
+  const alvo = caminhoSeguro(chave)
+  if (!alvo) return { ok: false, erro: `chave fora do volume de RH: ${chave}` }
+  try {
+    return { ok: true, conteudo: await readFile(alvo) }
+  } catch (e) {
+    return { ok: false, erro: (e as Error)?.message ?? 'falha ao ler' }
   }
 }
