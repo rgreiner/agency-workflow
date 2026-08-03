@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { cn, isOverdue, daysUntil, dueLabel, SEM_RESPONSAVEL } from '@/lib/utils'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority } from '@/types'
 import { ChecklistChip } from '@/components/ui/ChecklistChip'
+import { AutoRefresh } from '@/components/ui/AutoRefresh'
 import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search, Flag, SignalLow, SignalMedium, SignalHigh, Copy, Archive, ArchiveRestore, X, Calendar, UserPlus, Minus, Circle, User, Bookmark, Loader2 } from 'lucide-react'
 
 // Complexidade → ícone (1/2/3 barras)
@@ -498,6 +499,10 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
 
   return (
     <div className="p-6">
+      {/* A Lista fica aberta o dia inteiro; sem isto ela só mudava quando quem
+          estava olhando agia — o trabalho dos outros não aparecia. Pausa sozinho
+          com a aba em segundo plano. */}
+      <AutoRefresh intervalMs={30000} />
 
       {/* Page header */}
       <div className="flex items-center justify-between gap-3 mb-5">

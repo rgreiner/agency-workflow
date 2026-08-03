@@ -135,24 +135,22 @@ export async function loadActivityList(
     return acc
   }, {} as Record<string, string[]>)
 
-  // Último comentário por atividade (coluna opcional na Lista). Ordena desc e
-  // fica com o primeiro visto de cada atividade = o mais recente.
+  // Último comentário por atividade (coluna opcional na Lista).
+  // Antes isto baixava TODOS os comentários de TODAS as tarefas e jogava fora
+  // tudo menos o primeiro de cada — 490 linhas pra usar 111, crescendo sem teto,
+  // e o custo era pago mesmo com a coluna desligada. A RPC faz
+  // `distinct on (activity_id)` e devolve uma linha por tarefa (migration 188).
   const { data: commentsRaw } = actIds.length
-    ? await supabase.from('activity_comments')
-        .select('activity_id, content, created_at, profiles(full_name)')
-        .in('activity_id', actIds)
-        .order('created_at', { ascending: false })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ? await (supabase as any).rpc('activity_last_comments', { p_ids: actIds })
     : { data: [] }
 
   const lastCommentMap: Record<string, LastComment> = {}
-  for (const c of commentsRaw ?? []) {
-    const cid = (c as { activity_id: string }).activity_id
-    if (lastCommentMap[cid]) continue
-    const p = (c as { profiles: unknown }).profiles as { full_name: string | null } | null
-    lastCommentMap[cid] = {
-      content: commentPreview((c as { content: string }).content),
-      at: (c as { created_at: string }).created_at,
-      author: p?.full_name ?? null,
+  for (const c of (commentsRaw ?? []) as { activity_id: string; content: string; created_at: string; author: string | null }[]) {
+    lastCommentMap[c.activity_id] = {
+      content: commentPreview(c.content),
+      at: c.created_at,
+      author: c.author ?? null,
     }
   }
 

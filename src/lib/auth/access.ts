@@ -11,6 +11,9 @@ import { getUsuario } from '@/lib/auth/server'
  */
 export interface OperacionalAccess {
   verTudo: boolean
+  /** Lista global (todos os clientes e status). Quem executa usa o Atendimento,
+   *  que já filtra pelos status do cargo — a Lista é ferramenta de quem coordena. */
+  listaGlobal: boolean
   midias: boolean
   producao: boolean
   financeiro: boolean
@@ -47,6 +50,7 @@ export function computeAccess(m: MembershipRow): OperacionalAccess {
   const rh = verTudo || !!m.can_rh
   return {
     verTudo, midias, producao, financeiro, cadastros, rh,
+    listaGlobal: isAdmin || m.role === 'manager' || verTudo,
     operacional: midias || producao || financeiro || cadastros || rh,
     isOwner: m.role === 'owner',
     positionName: pos?.name ?? null,

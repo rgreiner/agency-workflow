@@ -143,6 +143,7 @@ export default async function OrgLayout({
         canCadastros={access.cadastros}
         canRh={access.rh}
         canManage={access.isOwner}
+        canListaGlobal={access.listaGlobal}
         onboardingPendente={onboardingPendente}
       >
         {children}

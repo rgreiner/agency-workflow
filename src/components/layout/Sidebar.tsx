@@ -75,6 +75,8 @@ interface SidebarProps {
   canRh?: boolean
   /** Permissão de gestão (owner) — mostra o item "Gestão". */
   canManage?: boolean
+  /** Vê a Lista global (owner/admin/manager). Quem executa usa o Atendimento. */
+  canListaGlobal?: boolean
   /** Etapas de onboarding ainda não concluídas — 0 esconde o item. */
   onboardingPendente?: number
   collapsed: boolean
@@ -195,6 +197,7 @@ const MODE_TABS: { m: SidebarMode; Icon: LucideIcon; label: string }[] = [
 export function Sidebar({
   orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#f97316', canManage,
   positionName, canMidias = false, canProducao = false, canFinance = false, canCadastros = false, canRh = false,
+  canListaGlobal = false,
   onboardingPendente = 0, collapsed, onCollapse, onExpand,
 }: SidebarProps) {
   const pathname = usePathname()
@@ -449,8 +452,9 @@ export function Sidebar({
               <span className="flex-1 truncate">{positionName ?? 'Trabalhar'}</span>
             </Link>
 
-            {/* Visões da org — Lista (todos os clientes/status), Gantt, Documentos, Quadros */}
-            {VIEWS.map(({ id, label, icon: Icon, href }) => (
+            {/* Visões da org — Gantt, Documentos, Quadros para todos; a Lista
+                (todos os clientes e status) só para quem coordena. */}
+            {VIEWS.filter(v => v.id !== 'lista' || canListaGlobal).map(({ id, label, icon: Icon, href }) => (
               <Link
                 key={id}
                 href={`${base}/${href}`}
