@@ -137,7 +137,28 @@ export async function importarFolha(orgSlug: string, competencia: string, linhas
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/rh/folha`)
   revalidatePath(`/${orgSlug}/rh`)
-  return { resultado: data as { linhas: number; criados: number; casados: number } }
+  return {
+    resultado: data as {
+      linhas: number; criados: number; casados: number
+      // Linhas que não casaram com ninguém (migration 197). Antes viravam ficha
+      // nova em silêncio — e no reimport, mais uma.
+      pendentes?: { folha_id: string; nome: string | null; cpf: string | null; cargo: string | null; liquido: number | null }[]
+    },
+  }
+}
+
+/** "A quem pertence este registro?" — liga a linha da folha a uma ficha existente
+ *  e aproveita para completar CPF e salário que faltavam no cadastro. */
+export async function vincularLinhaFolha(orgSlug: string, folhaId: string, colaboradorId: string) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (c.supabase as any).rpc('rh_folha_vincular', {
+    p_folha_id: folhaId, p_colaborador_id: colaboradorId,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/rh/folha`)
+  return { resultado: data as { ok: boolean; colaborador: string; cpf_preenchido: boolean } }
 }
 
 export interface PlanoPessoa {

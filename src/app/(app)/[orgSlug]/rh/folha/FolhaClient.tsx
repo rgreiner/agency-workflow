@@ -6,7 +6,7 @@ import { Wallet, Upload, Loader2, Check, X, Users, Landmark, Link2, Plus, AlertT
 import { toast } from 'sonner'
 import { Select } from '@/components/ui/Select'
 import { formatBRL, parseMoney } from '@/lib/midia'
-import { importarFolha, carregarPlanoFolha, aplicarFolhaFinanceiro, type PlanoPessoa, type PlanoGuia, type AplicarSalario } from '@/app/actions/rh'
+import { importarFolha, vincularLinhaFolha, carregarPlanoFolha, aplicarFolhaFinanceiro, type PlanoPessoa, type PlanoGuia, type AplicarSalario } from '@/app/actions/rh'
 
 export interface FolhaRow {
   competencia: string; nome: string | null; liquido: number | string | null
@@ -31,7 +31,14 @@ const compLabel = (c: string) => { const [y, m] = c.split('-'); return `${m}/${y
 
 interface CompAgg { competencia: string; liquido: number; vencimentos: number; fgts: number; pessoas: number }
 
-export function FolhaClient({ orgSlug, linhas }: { orgSlug: string; linhas: FolhaRow[] }) {
+export interface PessoaRef { id: string; nome: string; cpf: string | null }
+export interface PendenteFolha {
+  folha_id: string; nome: string | null; cpf: string | null; cargo: string | null; liquido: number | null
+}
+
+export function FolhaClient({ orgSlug, linhas, pessoas = [] }: {
+  orgSlug: string; linhas: FolhaRow[]; pessoas?: PessoaRef[]
+}) {
   const [preview, setPreview] = useState<{ competencia: string; linhas: LinhaExtraida[] } | null>(null)
   const [reconc, setReconc] = useState<CompAgg | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -114,7 +121,7 @@ export function FolhaClient({ orgSlug, linhas }: { orgSlug: string; linhas: Folh
         </div>
       )}
 
-      {preview && <PreviewModal orgSlug={orgSlug} data={preview} existentes={linhas} onClose={() => setPreview(null)} />}
+      {preview && <PreviewModal orgSlug={orgSlug} data={preview} existentes={linhas} pessoas={pessoas} onClose={() => setPreview(null)} />}
       {reconc && <ReconcModal orgSlug={orgSlug} comp={reconc} onClose={() => setReconc(null)} />}
     </div>
   )
@@ -337,14 +344,15 @@ function ReconcModal({ orgSlug, comp, onClose }: { orgSlug: string; comp: CompAg
   )
 }
 
-function PreviewModal({ orgSlug, data, existentes, onClose }: {
+function PreviewModal({ orgSlug, data, existentes, pessoas, onClose }: {
   orgSlug: string; data: { competencia: string; linhas: LinhaExtraida[] }
-  existentes: FolhaRow[]; onClose: () => void
+  existentes: FolhaRow[]; pessoas: PessoaRef[]; onClose: () => void
 }) {
   const router = useRouter()
   const [competencia, setCompetencia] = useState(data.competencia)
   const [autoCriar, setAutoCriar] = useState(true)
   const [saving, start] = useTransition()
+  const [pendentes, setPendentes] = useState<PendenteFolha[] | null>(null)
   // Salário × sócio por linha: herda a escolha já gravada da mesma competência
   // (reimportação preserva); linha nova cai na heurística da categoria (722).
   const [tratamentos, setTratamentos] = useState<Record<number, Tratamento>>(() => {
@@ -371,7 +379,11 @@ function PreviewModal({ orgSlug, data, existentes, onClose }: {
       const r = await importarFolha(orgSlug, competencia, linhas, autoCriar)
       if (r?.error) { toast.error(r.error); return }
       const res = r.resultado
+      const pend = res?.pendentes ?? []
       toast.success(`Folha importada: ${res?.linhas} linhas · ${res?.criados} criados · ${res?.casados} casados.`)
+      // Linha que não casou com ninguém não vira ficha nova em silêncio: fica
+      // aqui para alguém dizer de quem é (migration 197).
+      if (pend.length) { setPendentes(pend); return }
       onClose(); router.refresh()
     })
   }
@@ -383,6 +395,47 @@ function PreviewModal({ orgSlug, data, existentes, onClose }: {
           <h2 className="text-base font-semibold text-gray-900">Conferir folha extraída</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
         </div>
+
+        {pendentes && pendentes.length > 0 && (
+          <div className="px-6 py-4 border-b border-amber-100 bg-amber-50/60">
+            <p className="text-sm font-medium text-amber-900">
+              {pendentes.length} linha(s) sem correspondência
+            </p>
+            <p className="text-xs text-amber-800 mt-0.5 mb-3">
+              Não achei essa gente pelo CPF nem pelo nome. Diga de quem é cada uma — sem isso o valor
+              entra na folha mas fica fora do custo por pessoa. (Criar ficha nova aqui geraria uma
+              segunda pessoa igual no próximo import.)
+            </p>
+            <div className="space-y-2">
+              {pendentes.map(pd => (
+                <div key={pd.folha_id} className="flex items-center gap-2 flex-wrap bg-white rounded-xl border border-amber-200 px-3 py-2">
+                  <span className="text-sm text-gray-900 font-medium min-w-0 flex-1 truncate">
+                    {pd.nome || 'Sem nome'}
+                    {pd.cargo && <span className="text-gray-400 font-normal"> · {pd.cargo}</span>}
+                  </span>
+                  <div className="w-56">
+                    <Select size="sm" value="" placeholder="É quem?"
+                      options={pessoas.map(x => ({ value: x.id, label: x.nome }))}
+                      onChange={v => {
+                        if (!v) return
+                        start(async () => {
+                          const r = await vincularLinhaFolha(orgSlug, pd.folha_id, v)
+                          if (r?.error) { toast.error(r.error); return }
+                          toast.success(`Vinculado a ${r.resultado?.colaborador}.`)
+                          setPendentes(ps => (ps ?? []).filter(x => x.folha_id !== pd.folha_id))
+                          router.refresh()
+                        })
+                      }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => { onClose(); router.refresh() }}
+              className="mt-3 text-xs text-amber-900 underline underline-offset-2 hover:text-amber-950">
+              Resolver depois
+            </button>
+          </div>
+        )}
 
         <div className="px-6 py-4 flex items-center gap-4 border-b border-gray-100 flex-wrap">
           <div className="flex items-center gap-2">

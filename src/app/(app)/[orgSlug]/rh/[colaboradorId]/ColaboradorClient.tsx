@@ -55,6 +55,9 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
 
   function salvar() {
     if (!f.nome.trim()) { toast.error('Nome é obrigatório.'); return }
+    // CPF é a chave que casa a folha com a pessoa: sem ele o reimport criava uma
+    // segunda ficha da mesma pessoa (decisão do Rafael, 03/08).
+    if (f.cpf.replace(/\D/g, '').length !== 11) { toast.error('Informe o CPF completo — é ele que casa a folha com a pessoa.'); return }
     startSave(async () => {
       const r = await salvarColaborador(orgSlug, colab.id, {
         ...f,
@@ -99,7 +102,15 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
         <div className="grid grid-cols-2 gap-4">
           <div><label className={labelCls}>Nome *</label><input value={f.nome} onChange={e => set('nome', e.target.value)} className={inputCls} /></div>
           <div><label className={labelCls}>Cargo</label><input value={f.cargo} onChange={e => set('cargo', e.target.value)} className={inputCls} /></div>
-          <div><label className={labelCls}>CPF</label><input value={f.cpf} onChange={e => set('cpf', maskCPF(e.target.value))} className={inputCls} placeholder="000.000.000-00" inputMode="numeric" /></div>
+          <div>
+            <label className={labelCls}>CPF <span className="text-orange-500">*</span></label>
+            <input value={f.cpf} onChange={e => set('cpf', maskCPF(e.target.value))} className={inputCls} placeholder="000.000.000-00" inputMode="numeric" />
+            {/* É o CPF que casa a folha com a pessoa. Sem ele, o reimport criava
+                uma segunda ficha da mesma pessoa (migration 197). */}
+            {f.cpf.replace(/\D/g, '').length !== 11 && (
+              <p className="text-[11px] text-amber-700 mt-1">Sem CPF a folha não casa com esta pessoa no import.</p>
+            )}
+          </div>
           <div><label className={labelCls}>Vínculo</label><Select value={f.tipo_vinculo} onChange={v => set('tipo_vinculo', v)} options={VINCULOS} placeholder="—" /></div>
           <div><label className={labelCls}>E-mail</label><input value={f.email} onChange={e => set('email', e.target.value)} className={inputCls} /></div>
           <div><label className={labelCls}>Telefone</label><input value={f.telefone} onChange={e => set('telefone', maskPhone(e.target.value))} className={inputCls} placeholder="(00) 00000-0000" inputMode="tel" /></div>
