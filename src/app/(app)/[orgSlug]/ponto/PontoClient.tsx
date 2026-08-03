@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Clock, LogIn, Coffee, Undo2, Loader2, FileText, Check } from 'lucide-react'
+import { Clock, LogIn, Coffee, Undo2, Loader2, FileText, Check, FileSignature } from 'lucide-react'
 import { toast } from 'sonner'
 import { Select } from '@/components/ui/Select'
 import { baterPonto, criarJustificativa } from '@/app/actions/rh-ponto'
@@ -58,6 +58,10 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
         <button onClick={() => setJust(true)} className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition">
           <FileText className="w-4 h-4" /> Justificar
         </button>
+        <a href={`/${orgSlug}/ponto/espelho`}
+          className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
+          <FileSignature className="w-4 h-4" /> Meu espelho
+        </a>
       </div>
 
       {/* Marcações de hoje */}

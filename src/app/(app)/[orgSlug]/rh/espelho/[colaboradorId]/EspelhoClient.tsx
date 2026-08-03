@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, Loader2, Check, Pencil, AlertTriangle, History, X, Plus, Trash2, Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import { carregarEspelho, editarPonto, type Espelho, type EspelhoDia } from '@/app/actions/rh-calendario'
+import { AssinaturaPanel } from '../AssinaturaPanel'
 
 const hm = (m: number) => `${m < 0 ? '-' : ''}${Math.floor(Math.abs(m) / 60)}:${String(Math.abs(m) % 60).padStart(2, '0')}`
 const dataBR = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
@@ -61,6 +62,8 @@ export function EspelhoClient({ orgSlug, colaboradorId, compInicial }: { orgSlug
           ))}
         </div>
       )}
+
+      <AssinaturaPanel orgSlug={orgSlug} colaboradorId={colaboradorId} competencia={comp} papel="empresa" onMudou={carregar} />
 
       {loading ? (
         <div className="text-center py-16 text-gray-400 text-sm">Carregando…</div>
