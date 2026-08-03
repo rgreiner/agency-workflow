@@ -23,6 +23,7 @@ import { EMITENTES, EMITENTE_LABEL, chipDocumento, numeroDoNome, textoBuscavel }
 import { uploadFile } from '@/lib/storage/upload-client'
 import { Paperclip, ExternalLink, CalendarClock, Landmark } from 'lucide-react'
 import { GuiaImportModal } from './GuiaImportModal'
+import { Modal } from '@/components/ui/Modal'
 
 export interface Lancamento {
   id: string
@@ -1002,224 +1003,222 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
   }
 
   return (
-    <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="modal-card w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-xl border border-gray-200">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white">
-          <h2 className="text-base font-semibold text-gray-900">{imported ? 'Editar (Conta Azul → Flow)' : lancamento ? 'Editar lançamento' : 'Novo lançamento'}</h2>
-          <button aria-label="Fechar" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X className="w-5 h-5" /></button>
+    <Modal open onClose={onClose} size="lg" dismissOnBackdrop={false}>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white">
+        <h2 className="text-base font-semibold text-gray-900">{imported ? 'Editar (Conta Azul → Flow)' : lancamento ? 'Editar lançamento' : 'Novo lançamento'}</h2>
+        <button aria-label="Fechar" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X className="w-5 h-5" /></button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+        {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+        {isTransferencia && <p className="text-xs text-gray-600 bg-gray-100 rounded-lg px-3 py-2">Transferência entre contas (os dois lados são ligados). Não é editável — para corrigir, <strong>exclua e refaça</strong>.</p>}
+        {imported && <p className="text-xs text-sky-800 bg-sky-50 rounded-lg px-3 py-2">Linha importada da <strong>Conta Azul</strong>. Ao salvar, ela vira um lançamento do Flow (editável) e passa a ser a versão oficial — a linha importada some, mesmo após reimportar o extrato.</p>}
+        {readonly && (
+          <div className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2 space-y-1.5">
+            {lancamento?.doc_numero && (
+              <div className="flex items-center gap-2">
+                <span>Origem:</span>
+                <DocChip orgSlug={orgSlug} size="md" doc={{ id: lancamento.origem_id ?? null, serie: lancamento.doc_serie ?? null, numero: lancamento.doc_numero ?? null, origem: lancamento.doc_origem ?? null, producaoTipo: lancamento.doc_producao_tipo }} />
+              </div>
+            )}
+            <p>Lançamento gerado por documento ({lancamento?.origem_tipo}). Valor e contato vêm do documento; aqui você ajusta os campos do financeiro.</p>
+          </div>
+        )}
+
+        {!readonly && (
+          <div>
+            <label className={labelCls}>Tipo</label>
+            <Select value={form.tipo} onChange={v => setForm(f => ({ ...f, tipo: v, categoria: '' }))} options={TIPO_OPTIONS} />
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Contato</label>
+            <input type="text" value={form.contato_nome} disabled={readonly}
+              onChange={e => setForm(f => ({ ...f, contato_nome: e.target.value }))}
+              placeholder="Cliente / fornecedor" className={cn(inputCls, readonly && 'opacity-60')} />
+          </div>
+          <div>
+            <label className={labelCls}>Valor (R$)</label>
+            <input type="text" inputMode="decimal" value={form.valor} disabled={readonly}
+              onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} placeholder="0,00" className={cn(inputCls, readonly && 'opacity-60')} />
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-          {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
-          {isTransferencia && <p className="text-xs text-gray-600 bg-gray-100 rounded-lg px-3 py-2">Transferência entre contas (os dois lados são ligados). Não é editável — para corrigir, <strong>exclua e refaça</strong>.</p>}
-          {imported && <p className="text-xs text-sky-800 bg-sky-50 rounded-lg px-3 py-2">Linha importada da <strong>Conta Azul</strong>. Ao salvar, ela vira um lançamento do Flow (editável) e passa a ser a versão oficial — a linha importada some, mesmo após reimportar o extrato.</p>}
-          {readonly && (
-            <div className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2 space-y-1.5">
-              {lancamento?.doc_numero && (
-                <div className="flex items-center gap-2">
-                  <span>Origem:</span>
-                  <DocChip orgSlug={orgSlug} size="md" doc={{ id: lancamento.origem_id ?? null, serie: lancamento.doc_serie ?? null, numero: lancamento.doc_numero ?? null, origem: lancamento.doc_origem ?? null, producaoTipo: lancamento.doc_producao_tipo }} />
-                </div>
-              )}
-              <p>Lançamento gerado por documento ({lancamento?.origem_tipo}). Valor e contato vêm do documento; aqui você ajusta os campos do financeiro.</p>
-            </div>
-          )}
+        <div>
+          <label className={labelCls}>Descrição</label>
+          <input type="text" value={form.descricao} disabled={readonly}
+            onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
+            placeholder="Ex.: Honorários contábeis" className={cn(inputCls, readonly && 'opacity-60')} />
+        </div>
 
-          {!readonly && (
-            <div>
-              <label className={labelCls}>Tipo</label>
-              <Select value={form.tipo} onChange={v => setForm(f => ({ ...f, tipo: v, categoria: '' }))} options={TIPO_OPTIONS} />
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>Contato</label>
-              <input type="text" value={form.contato_nome} disabled={readonly}
-                onChange={e => setForm(f => ({ ...f, contato_nome: e.target.value }))}
-                placeholder="Cliente / fornecedor" className={cn(inputCls, readonly && 'opacity-60')} />
-            </div>
-            <div>
-              <label className={labelCls}>Valor (R$)</label>
-              <input type="text" inputMode="decimal" value={form.valor} disabled={readonly}
-                onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} placeholder="0,00" className={cn(inputCls, readonly && 'opacity-60')} />
-            </div>
-          </div>
-
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={labelCls}>Descrição</label>
-            <input type="text" value={form.descricao} disabled={readonly}
-              onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
-              placeholder="Ex.: Honorários contábeis" className={cn(inputCls, readonly && 'opacity-60')} />
+            <label className={labelCls}>Vencimento{foco === 'vencimento' && <span className="ml-1 text-orange-600 font-normal">— renegociando</span>}</label>
+            <input ref={vencRef} type="date" value={form.vencimento} onChange={e => setForm(f => ({ ...f, vencimento: e.target.value }))}
+              className={cn(inputCls, foco === 'vencimento' && 'ring-2 ring-orange-400 border-transparent')} />
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>Vencimento{foco === 'vencimento' && <span className="ml-1 text-orange-600 font-normal">— renegociando</span>}</label>
-              <input ref={vencRef} type="date" value={form.vencimento} onChange={e => setForm(f => ({ ...f, vencimento: e.target.value }))}
-                className={cn(inputCls, foco === 'vencimento' && 'ring-2 ring-orange-400 border-transparent')} />
-            </div>
-            <div>
-              <label className={labelCls}>Competência</label>
-              <input type="date" value={form.competencia} onChange={e => setForm(f => ({ ...f, competencia: e.target.value }))} className={inputCls} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>Categoria</label>
-              <Select value={form.categoria} onChange={v => setForm(f => ({ ...f, categoria: v }))} options={catOptions} placeholder="—" />
-            </div>
-            <div>
-              <label className={labelCls}>Centro de custo <span className="text-orange-500">*</span></label>
-              <Select value={form.centro_custo} onChange={v => setForm(f => ({ ...f, centro_custo: v }))} options={centroOptions} placeholder="—" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>Conta</label>
-              <Select value={form.conta_id} onChange={v => setForm(f => ({ ...f, conta_id: v }))} options={contaOptions} placeholder="—" />
-            </div>
-            <div>
-              <label className={labelCls}>Forma</label>
-              <Select value={form.forma_pagamento} onChange={v => setForm(f => ({ ...f, forma_pagamento: v }))} options={FORMA_OPTIONS} placeholder="—" />
-            </div>
-          </div>
-
           <div>
-            <label className={labelCls}>Observação</label>
-            <textarea rows={2} value={form.observacao} onChange={e => setForm(f => ({ ...f, observacao: e.target.value }))} className={cn(inputCls, 'resize-none')} />
+            <label className={labelCls}>Competência</label>
+            <input type="date" value={form.competencia} onChange={e => setForm(f => ({ ...f, competencia: e.target.value }))} className={inputCls} />
           </div>
+        </div>
 
-          {!lancamento && (
-            <div className="border-t border-gray-100 pt-4 space-y-3">
-              <div>
-                <label className={labelCls}>Repetição</label>
-                <Select value={modo} onChange={setModo} options={[
-                  { value: 'unico', label: 'Único' },
-                  { value: 'parcelado', label: 'Parcelado (divide o valor)' },
-                  { value: 'recorrente', label: 'Recorrente (repete o valor)' },
-                ]} />
-              </div>
-              {modo !== 'unico' && (
-                <div className="grid grid-cols-2 gap-3 items-start">
-                  <div>
-                    <label className={labelCls}>{modo === 'parcelado' ? 'Nº de parcelas' : 'Nº de meses'}</label>
-                    <input type="text" inputMode="numeric" value={parcelas}
-                      onChange={e => setParcelas(e.target.value.replace(/\D/g, ''))} className={inputCls} />
-                  </div>
-                  <p className="text-[11px] text-gray-400 pt-6">
-                    {modo === 'parcelado'
-                      ? 'Divide o valor em parcelas mensais a partir do vencimento (a última leva o resto).'
-                      : 'Repete o valor cheio todo mês a partir do vencimento.'}
-                  </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Categoria</label>
+            <Select value={form.categoria} onChange={v => setForm(f => ({ ...f, categoria: v }))} options={catOptions} placeholder="—" />
+          </div>
+          <div>
+            <label className={labelCls}>Centro de custo <span className="text-orange-500">*</span></label>
+            <Select value={form.centro_custo} onChange={v => setForm(f => ({ ...f, centro_custo: v }))} options={centroOptions} placeholder="—" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Conta</label>
+            <Select value={form.conta_id} onChange={v => setForm(f => ({ ...f, conta_id: v }))} options={contaOptions} placeholder="—" />
+          </div>
+          <div>
+            <label className={labelCls}>Forma</label>
+            <Select value={form.forma_pagamento} onChange={v => setForm(f => ({ ...f, forma_pagamento: v }))} options={FORMA_OPTIONS} placeholder="—" />
+          </div>
+        </div>
+
+        <div>
+          <label className={labelCls}>Observação</label>
+          <textarea rows={2} value={form.observacao} onChange={e => setForm(f => ({ ...f, observacao: e.target.value }))} className={cn(inputCls, 'resize-none')} />
+        </div>
+
+        {!lancamento && (
+          <div className="border-t border-gray-100 pt-4 space-y-3">
+            <div>
+              <label className={labelCls}>Repetição</label>
+              <Select value={modo} onChange={setModo} options={[
+                { value: 'unico', label: 'Único' },
+                { value: 'parcelado', label: 'Parcelado (divide o valor)' },
+                { value: 'recorrente', label: 'Recorrente (repete o valor)' },
+              ]} />
+            </div>
+            {modo !== 'unico' && (
+              <div className="grid grid-cols-2 gap-3 items-start">
+                <div>
+                  <label className={labelCls}>{modo === 'parcelado' ? 'Nº de parcelas' : 'Nº de meses'}</label>
+                  <input type="text" inputMode="numeric" value={parcelas}
+                    onChange={e => setParcelas(e.target.value.replace(/\D/g, ''))} className={inputCls} />
                 </div>
-              )}
-            </div>
-          )}
-
-          {liquidado && lancamento && (
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3.5">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-emerald-700">{lancamento.tipo === 'saida' ? 'Pago' : 'Recebido'}</span>
-                {!isTransferencia && (
-                  <button type="button" onClick={reabrir} disabled={isPending}
-                    className="text-xs text-gray-500 hover:text-gray-700 inline-flex items-center gap-1 disabled:opacity-50"><RotateCcw className="w-3 h-3" /> Reabrir</button>
-                )}
+                <p className="text-[11px] text-gray-400 pt-6">
+                  {modo === 'parcelado'
+                    ? 'Divide o valor em parcelas mensais a partir do vencimento (a última leva o resto).'
+                    : 'Repete o valor cheio todo mês a partir do vencimento.'}
+                </p>
               </div>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
-                <Info label="Data" value={formatDateBR(lancamento.data_liquidacao)} />
-                <Info label="Valor realizado" value={formatBRL(Number(lancamento.valor_realizado ?? lancamento.valor ?? 0))} strong />
-                {contaNome && <Info label="Conta" value={contaNome} />}
-                {lancamento.forma_pagamento && <Info label="Forma" value={lancamento.forma_pagamento} />}
-                {Number(lancamento.juros ?? 0) > 0 && <Info label="Juros" value={formatBRL(Number(lancamento.juros))} />}
-                {Number(lancamento.multa ?? 0) > 0 && <Info label="Multa" value={formatBRL(Number(lancamento.multa))} />}
-                {Number(lancamento.desconto ?? 0) > 0 && <Info label="Desconto" value={formatBRL(Number(lancamento.desconto))} />}
-                {Number(lancamento.tarifa ?? 0) > 0 && <Info label="Tarifa" value={formatBRL(Number(lancamento.tarifa))} />}
-              </dl>
-            </div>
-          )}
-
-          {(lancamento || modo === 'unico') && (
-            <div className="border-t border-gray-100 pt-4">
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-medium text-gray-600 inline-flex items-center gap-1.5"><Paperclip className="w-3.5 h-3.5" /> Anexos <span className="font-normal text-gray-400">(NF, boleto, nota)</span></label>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-28"><Select value={anexoTipo} onChange={setAnexoTipo} size="sm" options={[{ value: 'NF', label: 'NF' }, { value: 'Boleto', label: 'Boleto' }, { value: 'Guia', label: 'Guia' }, { value: 'Outro', label: 'Outro' }]} /></div>
-                  <input ref={fileRef} type="file" accept=".pdf,image/*" className="hidden"
-                    onChange={e => { const f = e.target.files?.[0]; if (f) onPickFile(f); e.target.value = '' }} />
-                  <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition disabled:opacity-50">
-                    {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Anexar
-                  </button>
-                  {/* O número da NF costuma chegar antes do PDF — dá pra registrar
-                      só ele e anexar o arquivo na mesma linha quando chegar. */}
-                  <button type="button" onClick={() => persistAnexos([...anexos, { url: '', nome: '', tipo: anexoTipo }])}
-                    title="Registrar o número agora e anexar o arquivo depois"
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
-                    <Plus className="w-3.5 h-3.5" /> Só o número
-                  </button>
-                </div>
-              </div>
-              {anexos.length === 0 ? (
-                <p className="text-xs text-gray-400 py-1">Nenhum documento. Anexe a NF, o boleto ou registre só o número.</p>
-              ) : (
-                <ul className="space-y-1.5">
-                  {anexos.map((a, i) => {
-                    const patch = (p: Partial<Anexo>) => persistAnexos(anexos.map((x, j) => (j === i ? { ...x, ...p } : x)))
-                    const semArquivo = !a.url
-                    return (
-                      <li key={i} className={cn('rounded-lg px-3 py-2', semArquivo ? 'bg-white border border-dashed border-gray-300' : 'bg-gray-50')}>
-                        <div className="flex items-center gap-2">
-                          <FileText className={cn('w-4 h-4 shrink-0', semArquivo ? 'text-gray-300' : 'text-orange-600')} />
-                          <span className="text-[10px] font-medium text-gray-500 bg-gray-200 rounded px-1.5 py-0.5 shrink-0">{a.tipo}</span>
-                          {semArquivo ? (
-                            <>
-                              <span className="flex-1 min-w-0 text-sm text-gray-400 italic truncate">aguardando o arquivo</span>
-                              <button type="button" onClick={() => { anexoAlvo.current = i; fileRef.current?.click() }} disabled={uploading}
-                                className="text-xs font-medium text-orange-600 hover:text-orange-700 shrink-0 disabled:opacity-50">anexar</button>
-                            </>
-                          ) : (
-                            <a href={a.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 text-sm text-gray-700 truncate hover:text-orange-600 inline-flex items-center gap-1">
-                              <span className="truncate">{a.nome}</span><ExternalLink className="w-3 h-3 opacity-50 shrink-0" />
-                            </a>
-                          )}
-                          <button type="button" onClick={() => persistAnexos(anexos.filter((_, j) => j !== i))} aria-label="Remover"
-                            className="text-gray-400 hover:text-red-500 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
-                        </div>
-                        {/* Número e emitente: é por eles que se procura o documento depois. */}
-                        <div className="flex items-center gap-2 mt-1.5 pl-6">
-                          <input value={a.numero ?? ''} onChange={e => patch({ numero: e.target.value })}
-                            placeholder="nº do documento" inputMode="numeric"
-                            className="w-32 h-7 px-2 text-xs bg-white border border-gray-200 rounded-md focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none" />
-                          <div className="w-36"><Select size="sm" value={a.emitente ?? ''} onChange={v => patch({ emitente: v })} options={[...EMITENTES]} /></div>
-                        </div>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2 pt-2">
-            {isTransferencia ? (
-              <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition">Fechar</button>
-            ) : (
-              <>
-                <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
-                <button type="submit" disabled={isPending}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
-                  {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                  Salvar
-                </button>
-              </>
             )}
           </div>
-        </form>
-      </div>
-    </div>
+        )}
+
+        {liquidado && lancamento && (
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3.5">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-emerald-700">{lancamento.tipo === 'saida' ? 'Pago' : 'Recebido'}</span>
+              {!isTransferencia && (
+                <button type="button" onClick={reabrir} disabled={isPending}
+                  className="text-xs text-gray-500 hover:text-gray-700 inline-flex items-center gap-1 disabled:opacity-50"><RotateCcw className="w-3 h-3" /> Reabrir</button>
+              )}
+            </div>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+              <Info label="Data" value={formatDateBR(lancamento.data_liquidacao)} />
+              <Info label="Valor realizado" value={formatBRL(Number(lancamento.valor_realizado ?? lancamento.valor ?? 0))} strong />
+              {contaNome && <Info label="Conta" value={contaNome} />}
+              {lancamento.forma_pagamento && <Info label="Forma" value={lancamento.forma_pagamento} />}
+              {Number(lancamento.juros ?? 0) > 0 && <Info label="Juros" value={formatBRL(Number(lancamento.juros))} />}
+              {Number(lancamento.multa ?? 0) > 0 && <Info label="Multa" value={formatBRL(Number(lancamento.multa))} />}
+              {Number(lancamento.desconto ?? 0) > 0 && <Info label="Desconto" value={formatBRL(Number(lancamento.desconto))} />}
+              {Number(lancamento.tarifa ?? 0) > 0 && <Info label="Tarifa" value={formatBRL(Number(lancamento.tarifa))} />}
+            </dl>
+          </div>
+        )}
+
+        {(lancamento || modo === 'unico') && (
+          <div className="border-t border-gray-100 pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-medium text-gray-600 inline-flex items-center gap-1.5"><Paperclip className="w-3.5 h-3.5" /> Anexos <span className="font-normal text-gray-400">(NF, boleto, nota)</span></label>
+              <div className="flex items-center gap-1.5">
+                <div className="w-28"><Select value={anexoTipo} onChange={setAnexoTipo} size="sm" options={[{ value: 'NF', label: 'NF' }, { value: 'Boleto', label: 'Boleto' }, { value: 'Guia', label: 'Guia' }, { value: 'Outro', label: 'Outro' }]} /></div>
+                <input ref={fileRef} type="file" accept=".pdf,image/*" className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) onPickFile(f); e.target.value = '' }} />
+                <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition disabled:opacity-50">
+                  {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Anexar
+                </button>
+                {/* O número da NF costuma chegar antes do PDF — dá pra registrar
+                    só ele e anexar o arquivo na mesma linha quando chegar. */}
+                <button type="button" onClick={() => persistAnexos([...anexos, { url: '', nome: '', tipo: anexoTipo }])}
+                  title="Registrar o número agora e anexar o arquivo depois"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
+                  <Plus className="w-3.5 h-3.5" /> Só o número
+                </button>
+              </div>
+            </div>
+            {anexos.length === 0 ? (
+              <p className="text-xs text-gray-400 py-1">Nenhum documento. Anexe a NF, o boleto ou registre só o número.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {anexos.map((a, i) => {
+                  const patch = (p: Partial<Anexo>) => persistAnexos(anexos.map((x, j) => (j === i ? { ...x, ...p } : x)))
+                  const semArquivo = !a.url
+                  return (
+                    <li key={i} className={cn('rounded-lg px-3 py-2', semArquivo ? 'bg-white border border-dashed border-gray-300' : 'bg-gray-50')}>
+                      <div className="flex items-center gap-2">
+                        <FileText className={cn('w-4 h-4 shrink-0', semArquivo ? 'text-gray-300' : 'text-orange-600')} />
+                        <span className="text-[10px] font-medium text-gray-500 bg-gray-200 rounded px-1.5 py-0.5 shrink-0">{a.tipo}</span>
+                        {semArquivo ? (
+                          <>
+                            <span className="flex-1 min-w-0 text-sm text-gray-400 italic truncate">aguardando o arquivo</span>
+                            <button type="button" onClick={() => { anexoAlvo.current = i; fileRef.current?.click() }} disabled={uploading}
+                              className="text-xs font-medium text-orange-600 hover:text-orange-700 shrink-0 disabled:opacity-50">anexar</button>
+                          </>
+                        ) : (
+                          <a href={a.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 text-sm text-gray-700 truncate hover:text-orange-600 inline-flex items-center gap-1">
+                            <span className="truncate">{a.nome}</span><ExternalLink className="w-3 h-3 opacity-50 shrink-0" />
+                          </a>
+                        )}
+                        <button type="button" onClick={() => persistAnexos(anexos.filter((_, j) => j !== i))} aria-label="Remover"
+                          className="text-gray-400 hover:text-red-500 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                      {/* Número e emitente: é por eles que se procura o documento depois. */}
+                      <div className="flex items-center gap-2 mt-1.5 pl-6">
+                        <input value={a.numero ?? ''} onChange={e => patch({ numero: e.target.value })}
+                          placeholder="nº do documento" inputMode="numeric"
+                          className="w-32 h-7 px-2 text-xs bg-white border border-gray-200 rounded-md focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none" />
+                        <div className="w-36"><Select size="sm" value={a.emitente ?? ''} onChange={v => patch({ emitente: v })} options={[...EMITENTES]} /></div>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 pt-2">
+          {isTransferencia ? (
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition">Fechar</button>
+          ) : (
+            <>
+              <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
+              <button type="submit" disabled={isPending}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
+                {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                Salvar
+              </button>
+            </>
+          )}
+        </div>
+      </form>
+    </Modal>
   )
 }
 
@@ -1294,48 +1293,46 @@ function LoteModal({ orgSlug, ids, contas, categorias, centros, direcao, onClose
   }
 
   return (
-    <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="modal-card w-full max-w-lg bg-white rounded-2xl shadow-xl border border-gray-200">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">Editar {ids.length} lançamento{ids.length > 1 ? 's' : ''}</h2>
-          <button aria-label="Fechar" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X className="w-5 h-5" /></button>
-        </div>
-        <div className="px-6 py-5">
-      <p className="text-xs text-gray-500 mb-4">
-        Marque só o que quer alterar. O que ficar desmarcado permanece como está em cada lançamento.
-        Vencimento, valor e contato não entram em lote — são únicos por linha.
-      </p>
+    <Modal open onClose={onClose} size="lg" dismissOnBackdrop={false}>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <h2 className="text-base font-semibold text-gray-900">Editar {ids.length} lançamento{ids.length > 1 ? 's' : ''}</h2>
+        <button aria-label="Fechar" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X className="w-5 h-5" /></button>
+      </div>
+      <div className="px-6 py-5">
+    <p className="text-xs text-gray-500 mb-4">
+      Marque só o que quer alterar. O que ficar desmarcado permanece como está em cada lançamento.
+      Vencimento, valor e contato não entram em lote — são únicos por linha.
+    </p>
 
-      <div className="space-y-3">
-        {campos.map(c => (
-          <div key={c.key} className="flex items-center gap-3">
-            <input type="checkbox" checked={!!aplicar[c.key]}
-              onChange={() => setAplicar(a => ({ ...a, [c.key]: !a[c.key] }))}
-              className="w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer shrink-0" />
-            <span className={cn('text-sm w-40 shrink-0', aplicar[c.key] ? 'text-gray-900' : 'text-gray-400')}>{c.label}</span>
-            {/* Select não tem prop disabled — o wrapper corta o ponteiro e esmaece,
-                deixando claro que o campo só vale se estiver marcado. */}
-            <div className={cn('flex-1', !aplicar[c.key] && 'opacity-40 pointer-events-none')}>
-              <Select value={val[c.key] ?? ''} onChange={v => setVal(s => ({ ...s, [c.key]: v }))}
-                options={c.options} placeholder="—" />
-            </div>
+    <div className="space-y-3">
+      {campos.map(c => (
+        <div key={c.key} className="flex items-center gap-3">
+          <input type="checkbox" checked={!!aplicar[c.key]}
+            onChange={() => setAplicar(a => ({ ...a, [c.key]: !a[c.key] }))}
+            className="w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer shrink-0" />
+          <span className={cn('text-sm w-40 shrink-0', aplicar[c.key] ? 'text-gray-900' : 'text-gray-400')}>{c.label}</span>
+          {/* Select não tem prop disabled — o wrapper corta o ponteiro e esmaece,
+              deixando claro que o campo só vale se estiver marcado. */}
+          <div className={cn('flex-1', !aplicar[c.key] && 'opacity-40 pointer-events-none')}>
+            <Select value={val[c.key] ?? ''} onChange={v => setVal(s => ({ ...s, [c.key]: v }))}
+              options={c.options} placeholder="—" />
           </div>
-        ))}
-      </div>
-
-      {erro && <p className="text-sm text-red-600 mt-4">{erro}</p>}
-
-      <div className="flex items-center justify-end gap-2 mt-6">
-        <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition">Cancelar</button>
-        <button onClick={salvar} disabled={isPending || marcados.length === 0}
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
-          {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-          Aplicar a {ids.length}
-        </button>
-      </div>
         </div>
-      </div>
+      ))}
     </div>
+
+    {erro && <p className="text-sm text-red-600 mt-4">{erro}</p>}
+
+    <div className="flex items-center justify-end gap-2 mt-6">
+      <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition">Cancelar</button>
+      <button onClick={salvar} disabled={isPending || marcados.length === 0}
+        className="inline-flex items-center gap-1.5 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
+        {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+        Aplicar a {ids.length}
+      </button>
+    </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -1377,63 +1374,61 @@ function BaixaModal({ orgSlug, lancamento, contas, onClose }: {
   }
 
   return (
-    <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="modal-card w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-200">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">{isSaida ? 'Pagar' : 'Receber'} — {formatBRL(base)}</h2>
-          <button aria-label="Fechar" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X className="w-5 h-5" /></button>
+    <Modal open onClose={onClose} size="md">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <h2 className="text-base font-semibold text-gray-900">{isSaida ? 'Pagar' : 'Receber'} — {formatBRL(base)}</h2>
+        <button aria-label="Fechar" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X className="w-5 h-5" /></button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+        {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+        {lancamento.descricao && <p className="text-sm text-gray-500">{lancamento.contato_nome ? `${lancamento.contato_nome} · ` : ''}{lancamento.descricao}</p>}
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Data {isSaida ? 'do pagamento' : 'do recebimento'}</label>
+            <input type="date" value={form.data_liquidacao} onChange={e => setForm(f => ({ ...f, data_liquidacao: e.target.value }))} className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>Conta</label>
+            <Select value={form.conta_id} onChange={v => setForm(f => ({ ...f, conta_id: v }))} options={contaOptions} placeholder="—" />
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-          {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
-          {lancamento.descricao && <p className="text-sm text-gray-500">{lancamento.contato_nome ? `${lancamento.contato_nome} · ` : ''}{lancamento.descricao}</p>}
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>Data {isSaida ? 'do pagamento' : 'do recebimento'}</label>
-              <input type="date" value={form.data_liquidacao} onChange={e => setForm(f => ({ ...f, data_liquidacao: e.target.value }))} className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Conta</label>
-              <Select value={form.conta_id} onChange={v => setForm(f => ({ ...f, conta_id: v }))} options={contaOptions} placeholder="—" />
-            </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Juros</label>
+            <input type="text" inputMode="decimal" value={form.juros} onChange={e => setForm(f => ({ ...f, juros: e.target.value }))} placeholder="0,00" className={inputCls} />
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>Juros</label>
-              <input type="text" inputMode="decimal" value={form.juros} onChange={e => setForm(f => ({ ...f, juros: e.target.value }))} placeholder="0,00" className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Multa</label>
-              <input type="text" inputMode="decimal" value={form.multa} onChange={e => setForm(f => ({ ...f, multa: e.target.value }))} placeholder="0,00" className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Desconto</label>
-              <input type="text" inputMode="decimal" value={form.desconto} onChange={e => setForm(f => ({ ...f, desconto: e.target.value }))} placeholder="0,00" className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Tarifa</label>
-              <input type="text" inputMode="decimal" value={form.tarifa} onChange={e => setForm(f => ({ ...f, tarifa: e.target.value }))} placeholder="0,00" className={inputCls} />
-            </div>
+          <div>
+            <label className={labelCls}>Multa</label>
+            <input type="text" inputMode="decimal" value={form.multa} onChange={e => setForm(f => ({ ...f, multa: e.target.value }))} placeholder="0,00" className={inputCls} />
           </div>
-
-          <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-            <span className="text-sm text-gray-500">Total {isSaida ? 'pago' : 'recebido'}</span>
-            <span className="text-base font-semibold text-gray-900">{formatBRL(total)}</span>
+          <div>
+            <label className={labelCls}>Desconto</label>
+            <input type="text" inputMode="decimal" value={form.desconto} onChange={e => setForm(f => ({ ...f, desconto: e.target.value }))} placeholder="0,00" className={inputCls} />
           </div>
-
-          <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
-            <button type="submit" disabled={isPending}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition">
-              {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              Confirmar
-            </button>
+          <div>
+            <label className={labelCls}>Tarifa</label>
+            <input type="text" inputMode="decimal" value={form.tarifa} onChange={e => setForm(f => ({ ...f, tarifa: e.target.value }))} placeholder="0,00" className={inputCls} />
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+
+        <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+          <span className="text-sm text-gray-500">Total {isSaida ? 'pago' : 'recebido'}</span>
+          <span className="text-base font-semibold text-gray-900">{formatBRL(total)}</span>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
+          <button type="submit" disabled={isPending}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition">
+            {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Confirmar
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 
@@ -1471,60 +1466,58 @@ function TransferenciaModal({ orgSlug, contas, today, onClose }: {
   }
 
   return (
-    <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="modal-card w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-200">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900 inline-flex items-center gap-2">
-            <ArrowLeftRight className="w-4 h-4 text-gray-400" /> Nova transferência
-          </h2>
-          <button aria-label="Fechar" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X className="w-5 h-5" /></button>
+    <Modal open onClose={onClose} size="md">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <h2 className="text-base font-semibold text-gray-900 inline-flex items-center gap-2">
+          <ArrowLeftRight className="w-4 h-4 text-gray-400" /> Nova transferência
+        </h2>
+        <button aria-label="Fechar" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X className="w-5 h-5" /></button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+        {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+
+        <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">De (origem)</label>
+            <Select value={form.origem} onChange={v => setForm(f => ({ ...f, origem: v }))} options={opcoes} placeholder="Conta" />
+          </div>
+          <ArrowLeftRight className="w-4 h-4 text-gray-300 mb-2.5" />
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Para (destino)</label>
+            <Select value={form.destino} onChange={v => setForm(f => ({ ...f, destino: v }))} options={opcoes} placeholder="Conta" />
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-          {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
-
-          <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">De (origem)</label>
-              <Select value={form.origem} onChange={v => setForm(f => ({ ...f, origem: v }))} options={opcoes} placeholder="Conta" />
-            </div>
-            <ArrowLeftRight className="w-4 h-4 text-gray-300 mb-2.5" />
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Para (destino)</label>
-              <Select value={form.destino} onChange={v => setForm(f => ({ ...f, destino: v }))} options={opcoes} placeholder="Conta" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Valor (R$)</label>
-              <input type="text" inputMode="decimal" value={form.valor} autoFocus
-                onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} placeholder="0,00" className={inputCls} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Data</label>
-              <input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))} className={inputCls} />
-            </div>
-          </div>
-
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Descrição <span className="text-gray-400 font-normal">(opcional)</span></label>
-            <input type="text" value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
-              placeholder="Ex.: Aporte para pagamento de fornecedores" className={inputCls} />
+            <label className="block text-xs font-medium text-gray-600 mb-1">Valor (R$)</label>
+            <input type="text" inputMode="decimal" value={form.valor} autoFocus
+              onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} placeholder="0,00" className={inputCls} />
           </div>
-
-          <p className="text-[11px] text-gray-400">Cria 2 lançamentos ligados (saída na origem, entrada no destino). Não entra em receita nem despesa.</p>
-
-          <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
-            <button type="submit" disabled={isPending || !podeSalvar}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
-              {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              Transferir
-            </button>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Data</label>
+            <input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))} className={inputCls} />
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Descrição <span className="text-gray-400 font-normal">(opcional)</span></label>
+          <input type="text" value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
+            placeholder="Ex.: Aporte para pagamento de fornecedores" className={inputCls} />
+        </div>
+
+        <p className="text-[11px] text-gray-400">Cria 2 lançamentos ligados (saída na origem, entrada no destino). Não entra em receita nem despesa.</p>
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
+          <button type="submit" disabled={isPending || !podeSalvar}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
+            {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Transferir
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }

@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { formatBRL } from '@/lib/midia'
 import { Select } from '@/components/ui/Select'
 import { createConta, updateConta, setContaFavorita } from '@/app/actions/financeiro'
+import { Modal } from '@/components/ui/Modal'
 
 export interface Conta {
   id: string
@@ -289,59 +290,57 @@ function ContaModal({ orgSlug, conta, onClose }: { orgSlug: string; conta: Conta
   }
 
   return (
-    <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="modal-card w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-200">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">{conta ? 'Editar conta' : 'Nova conta'}</h2>
-          <button aria-label="Fechar" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X className="w-5 h-5" /></button>
+    <Modal open onClose={onClose} size="md">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <h2 className="text-base font-semibold text-gray-900">{conta ? 'Editar conta' : 'Nova conta'}</h2>
+        <button aria-label="Fechar" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X className="w-5 h-5" /></button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+        {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+
+        <div>
+          <label className={labelCls}>Nome <span className="text-red-500">*</span></label>
+          <input type="text" value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
+            placeholder="Ex.: BTG Pactual, Caixinha" className={inputCls} required />
         </div>
 
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-          {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
-
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={labelCls}>Nome <span className="text-red-500">*</span></label>
-            <input type="text" value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
-              placeholder="Ex.: BTG Pactual, Caixinha" className={inputCls} required />
+            <label className={labelCls}>Tipo</label>
+            <Select value={form.tipo} onChange={v => setForm(f => ({ ...f, tipo: v }))} options={TIPO_OPTIONS} />
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>Tipo</label>
-              <Select value={form.tipo} onChange={v => setForm(f => ({ ...f, tipo: v }))} options={TIPO_OPTIONS} />
-            </div>
-            <div>
-              <label className={labelCls}>Saldo inicial (R$)</label>
-              <input type="text" inputMode="decimal" value={form.saldo_inicial}
-                onChange={e => setForm(f => ({ ...f, saldo_inicial: e.target.value }))} className={inputCls} />
-            </div>
-          </div>
-
           <div>
-            <label className={labelCls}>Cor</label>
-            <div className="flex items-center gap-2 flex-wrap">
-              {COR_PRESETS.map(c => (
-                <button key={c} type="button" onClick={() => setForm(f => ({ ...f, cor: c }))}
-                  className="w-7 h-7 rounded-full border-2 transition-transform hover:scale-110"
-                  style={{ backgroundColor: c, borderColor: form.cor === c ? c : 'transparent', outline: form.cor === c ? `2px solid ${c}` : 'none', outlineOffset: 2 }} />
-              ))}
-              <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
-                <input type="color" value={form.cor} onChange={e => setForm(f => ({ ...f, cor: e.target.value }))}
-                  className="w-7 h-7 rounded cursor-pointer border border-gray-200" />
-              </label>
-            </div>
+            <label className={labelCls}>Saldo inicial (R$)</label>
+            <input type="text" inputMode="decimal" value={form.saldo_inicial}
+              onChange={e => setForm(f => ({ ...f, saldo_inicial: e.target.value }))} className={inputCls} />
           </div>
+        </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
-            <button type="submit" disabled={isPending}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
-              {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              Salvar
-            </button>
+        <div>
+          <label className={labelCls}>Cor</label>
+          <div className="flex items-center gap-2 flex-wrap">
+            {COR_PRESETS.map(c => (
+              <button key={c} type="button" onClick={() => setForm(f => ({ ...f, cor: c }))}
+                className="w-7 h-7 rounded-full border-2 transition-transform hover:scale-110"
+                style={{ backgroundColor: c, borderColor: form.cor === c ? c : 'transparent', outline: form.cor === c ? `2px solid ${c}` : 'none', outlineOffset: 2 }} />
+            ))}
+            <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+              <input type="color" value={form.cor} onChange={e => setForm(f => ({ ...f, cor: e.target.value }))}
+                className="w-7 h-7 rounded cursor-pointer border border-gray-200" />
+            </label>
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
+          <button type="submit" disabled={isPending}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
+            {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Salvar
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }
