@@ -69,7 +69,9 @@ export default async function LoginPage({
 
           {erro && (
             <p className="text-sm text-red-600">
-              {erro === 'campos' ? 'Preencha e-mail e senha.' : 'E-mail ou senha inválidos.'}
+              {erro === 'campos' ? 'Preencha e-mail e senha.'
+                : erro === 'bloqueado' ? 'Muitas tentativas. Espere alguns minutos e tente de novo.'
+                : 'E-mail ou senha inválidos.'}
             </p>
           )}
 

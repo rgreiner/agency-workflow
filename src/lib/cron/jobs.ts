@@ -5,6 +5,7 @@ import { digestJob } from './digest'
 import { cobrancaJob } from './cobranca'
 import { btgSyncJob } from './btg-sync'
 import { fechamentoContabilJob } from './fechamento-contabil'
+import { limparTentativasAntigas } from '@/lib/auth/rate-limit'
 
 /**
  * Executor de tarefas agendadas. A rota /api/cron (batida pelo crontab do VPS)
@@ -52,6 +53,16 @@ export const JOBS: CronJob[] = [
       const { data, error } = await (supabase as any).rpc('notify_due_soon')
       if (error) throw new Error(error.message)
       return `${data ?? 0} lembrete(s) criado(s)`
+    },
+  },
+  {
+    // Higiene do log de tentativas de login (auth.login_attempts): 30 dias é o
+    // bastante pra investigar um ataque e pouco o bastante pra não virar acervo.
+    name: 'limpeza-tentativas',
+    dailyAfterHour: 4,
+    run: async ({ dry }) => {
+      if (dry) return 'apagaria tentativas com mais de 30 dias'
+      return `${await limparTentativasAntigas(30)} tentativa(s) apagada(s)`
     },
   },
   btgSyncJob,  // extrato do BTG 7h (BRT), antes do digest — só orgs conectadas

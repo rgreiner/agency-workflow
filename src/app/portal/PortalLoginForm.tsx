@@ -59,6 +59,9 @@ export function PortalLoginForm({ erro }: { erro?: string }) {
         </div>
         {erro === 'campos' && <p className="text-sm text-red-600">Preencha e-mail e senha.</p>}
         {erro === 'senha' && <p className="text-sm text-red-600">E-mail ou senha inválidos.</p>}
+        {erro === 'bloqueado' && (
+          <p className="text-sm text-red-600">Muitas tentativas. Espere alguns minutos e tente de novo.</p>
+        )}
         <button type="submit" className={btnCls}>Entrar</button>
       </form>
       <button

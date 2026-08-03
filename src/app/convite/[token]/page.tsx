@@ -22,10 +22,13 @@ const ROLE_COLORS: Record<string, string> = {
 
 export default async function ConvitePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string }>
+  searchParams: Promise<{ erro?: string }>
 }) {
   const { token } = await params
+  const { erro } = await searchParams
   const supabase = await createClient()
 
   const user = await getUsuario()
@@ -143,7 +146,7 @@ export default async function ConvitePage({
           </div>
 
           {/* Login button */}
-          <ConviteLoginButton token={token} />
+          <ConviteLoginButton token={token} erro={erro} />
 
           <p className="text-center text-xs text-gray-400 mt-4">
             Ao entrar, você concorda em fazer parte desta organização como {roleLabel.toLowerCase()}.

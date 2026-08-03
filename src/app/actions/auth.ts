@@ -9,6 +9,7 @@ import { redirect } from 'next/navigation'
 import { buscarUsuarioPorEmail, criarUsuario } from '@/lib/auth/usuarios'
 import { verificarSenha } from '@/lib/auth/password'
 import { criarTokenReset, consumirTokenReset, redefinirSenhaUsuario } from '@/lib/auth/reset'
+import { limiteEstourado, registrarTentativa } from '@/lib/auth/rate-limit'
 import { sendPasswordResetEmail } from '@/app/actions/email'
 import { iniciarSessao, encerrarSessao, getUsuario } from '@/lib/auth/server'
 import { createClient } from '@/lib/supabase/server'
@@ -21,10 +22,15 @@ export async function login(formData: FormData): Promise<void> {
   const senha = String(formData.get('senha') || '')
   const next = String(formData.get('next') || '')
   if (!email || !senha) redirect('/login?erro=campos')
+  if (await limiteEstourado('login', email)) redirect('/login?erro=bloqueado')
 
   const usuario = await buscarUsuarioPorEmail(email)
   const ok = usuario?.senha_hash ? await verificarSenha(senha, usuario.senha_hash) : false
-  if (!usuario || !ok) redirect('/login?erro=credenciais')
+  if (!usuario || !ok) {
+    await registrarTentativa('login', email, false)
+    redirect('/login?erro=credenciais')
+  }
+  await registrarTentativa('login', email, true)
 
   await iniciarSessao({ id: usuario.id, email: usuario.email })
   redirect(next.startsWith('/') ? next : '/')
@@ -42,6 +48,10 @@ export async function logout(): Promise<void> {
 export async function solicitarReset(formData: FormData): Promise<void> {
   const email = String(formData.get('email') || '').trim()
   if (!email) redirect('/recuperar-senha?erro=campos')
+  // Estourou o limite? Segue a mesma resposta genérica de sempre — dizer
+  // "bloqueado" já entregaria que o e-mail existe (ou não).
+  if (await limiteEstourado('reset', email)) redirect('/recuperar-senha?enviado=1')
+  await registrarTentativa('reset', email, true)
 
   const usuario = await buscarUsuarioPorEmail(email)
   if (usuario) {
@@ -141,11 +151,18 @@ export async function entrarConvite(token: string, formData: FormData): Promise<
   const senha = String(formData.get('senha') || '')
   const nome = String(formData.get('nome') || '').trim()
   if (!email || !senha) redirect(`/convite/${token}?erro=campos`)
+  // Mesmo balcão de senha do login — sem isto, o convite era o caminho aberto
+  // pra forçar a senha de quem já tem conta.
+  if (await limiteEstourado('login', email)) redirect(`/convite/${token}?erro=bloqueado`)
 
   const existente = await buscarUsuarioPorEmail(email)
   if (existente) {
     const ok = existente.senha_hash ? await verificarSenha(senha, existente.senha_hash) : false
-    if (!ok) redirect(`/convite/${token}?erro=credenciais`)
+    if (!ok) {
+      await registrarTentativa('login', email, false)
+      redirect(`/convite/${token}?erro=credenciais`)
+    }
+    await registrarTentativa('login', email, true)
     await iniciarSessao({ id: existente.id, email: existente.email })
   } else {
     const id = await criarUsuario(email, senha, nome || email.split('@')[0])
