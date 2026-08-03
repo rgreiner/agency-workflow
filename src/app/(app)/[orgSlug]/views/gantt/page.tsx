@@ -32,14 +32,30 @@ export default async function GanttPage({
     : { data: [] }
   const campIds = campaigns?.map(c => c.id) ?? []
 
+  const SELECT_GANTT = 'id, title, status, priority, start_date, due_date, campaign_id, checklist, activity_assignees(profiles(id, full_name, avatar_url))'
+
   const { data: activities } = campIds.length
     ? await supabase.from('activities')
-        .select('id, title, status, priority, start_date, due_date, campaign_id, checklist, activity_assignees(profiles(id, full_name, avatar_url))')
+        .select(SELECT_GANTT)
         .in('campaign_id', campIds)
         .eq('archived', false)
         .neq('status', 'concluido')
         .not('due_date', 'is', null)
         .order('start_date', { ascending: true, nullsFirst: false })
+    : { data: [] }
+
+  // Tarefas SEM prazo. A Gestão conta "sem prazo" como problema, mas a tela onde
+  // se dá o prazo era justamente a que não mostrava essas tarefas — elas caíam no
+  // filtro `due_date not null` e sumiam. Vêm numa bandeja à parte, pra serem
+  // arrastadas até a régua.
+  const { data: semPrazo } = campIds.length
+    ? await supabase.from('activities')
+        .select(SELECT_GANTT)
+        .in('campaign_id', campIds)
+        .eq('archived', false)
+        .neq('status', 'concluido')
+        .is('due_date', null)
+        .order('created_at', { ascending: false })
     : { data: [] }
 
   const campMap = Object.fromEntries(
@@ -61,6 +77,7 @@ export default async function GanttPage({
   return (
     <GanttClient
       activities={(activities ?? []) as unknown as Parameters<typeof GanttClient>[0]['activities']}
+      semPrazo={(semPrazo ?? []) as unknown as Parameters<typeof GanttClient>[0]['activities']}
       campMap={campMap}
       profiles={profiles}
       workspaces={workspaceList}

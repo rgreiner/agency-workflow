@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { Avatar, AvatarGroup } from '@/components/ui/Avatar'
 import { MultiSelect, Select } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
-import { ChevronLeft, ChevronRight, Bookmark, X, CheckSquare } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Bookmark, X, CheckSquare, GripVertical, Calendar, CalendarOff } from 'lucide-react'
 import { PRIORITY_CONFIG } from '@/types'
 import { setViewPrefs } from '@/app/actions/prefs'
 import { updateActivityDates } from '@/app/actions/activity'
@@ -75,8 +75,10 @@ const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => (
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug, initialWorkspace, dbPrefs }: {
+export function GanttClient({ activities, semPrazo = [], campMap, profiles, workspaces, orgSlug, initialWorkspace, dbPrefs }: {
   activities: Activity[]
+  /** Tarefas sem due_date — não cabem na régua, ficam na bandeja. */
+  semPrazo?: Activity[]
   campMap: CampMap
   profiles: Profile[]
   workspaces: Workspace[]
@@ -153,6 +155,13 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
   // The state triggers re-renders to update bar positions.
   const dragRef = useRef<DragState | null>(null)
   const [drag,   setDrag] = useState<DragState | null>(null)
+
+  // ── Bandeja "sem prazo": arrastar a pílula até a régua dá a data ───────
+  // Guarda o retângulo da linha no pointerdown: o dia é o índice da coluna sob o
+  // cursor, e a linha não muda de lugar durante o arrasto.
+  const agendarRef = useRef<{ id: string; rect: DOMRect; dia: number | null } | null>(null)
+  const [agendar, setAgendar] = useState<{ id: string; dia: number | null } | null>(null)
+  const [bandejaAberta, setBandejaAberta] = useState(true)
 
   // Calendar scrub — same dual approach
   const calRef = useRef<CalState | null>(null)
@@ -388,7 +397,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
     try { localStorage.setItem(GROUPBY_KEY, g) } catch { /* ignore */ }
   }
 
-  const filtered = activities.filter(a => {
+  function passaNosFiltros(a: Activity) {
     if (filterStatuses.length && !filterStatuses.includes(a.status)) return false
     const camp = campMap[a.campaign_id]
     if (filterWorkspaces.length && !(camp && filterWorkspaces.includes(camp.workspaceId))) return false
@@ -398,7 +407,11 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
     }
     if (filterPriorities.length && !filterPriorities.includes(a.priority)) return false
     return true
-  })
+  }
+  const filtered = activities.filter(passaNosFiltros)
+  // A bandeja obedece aos mesmos filtros da régua: filtrar por cliente e ver
+  // pendência de outro cliente na bandeja seria mentira do mesmo tipo.
+  const semPrazoFiltradas = semPrazo.filter(passaNosFiltros)
 
   const groupMap: Record<string, { profile: Profile; activities: Activity[] }> = {}
   const unassigned: Activity[] = []
@@ -533,6 +546,99 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
 
   // ── Render row ────────────────────────────────────────────────────────
 
+  /** Grava a data escolhida na bandeja. Só o PRAZO: o início segue nulo (a barra
+   *  vira um dia), a não ser que a tarefa já tivesse início anterior. */
+  function darPrazo(a: Activity, ymd: string) {
+    const inicio = a.start_date?.slice(0, 10) ?? null
+    startTransition(async () => {
+      const r = await updateActivityDates(a.id, inicio && inicio <= ymd ? inicio : null, ymd)
+      if (r?.error) toast.error(r.error)
+      else { toast.success('Prazo definido.'); router.refresh() }
+    })
+  }
+
+  function onPilulaDown(e: React.PointerEvent, a: Activity) {
+    if (e.button !== 0) return
+    e.preventDefault(); e.stopPropagation()
+    const linha = (e.currentTarget as Element).closest('[data-linha-sem-prazo]')
+    if (!linha) return
+    ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
+    agendarRef.current = { id: a.id, rect: linha.getBoundingClientRect(), dia: null }
+    setAgendar({ id: a.id, dia: null })
+  }
+
+  function onPilulaMove(e: React.PointerEvent, a: Activity) {
+    const st = agendarRef.current
+    if (!st || st.id !== a.id) return
+    const i = Math.floor((e.clientX - st.rect.left) / DAY_W)
+    const dia = i >= 0 && i < DAYS ? i : null
+    if (dia === st.dia) return
+    st.dia = dia
+    setAgendar({ id: a.id, dia })
+  }
+
+  function onPilulaUp(e: React.PointerEvent, a: Activity) {
+    const st = agendarRef.current
+    if (!st || st.id !== a.id) return
+    ;(e.currentTarget as Element).releasePointerCapture(e.pointerId)
+    const dia = st.dia
+    agendarRef.current = null
+    setAgendar(null)
+    if (dia == null) return                       // soltou fora da régua: nada acontece
+    darPrazo(a, toYMD(days[dia]))
+  }
+
+  function renderLinhaSemPrazo(a: Activity) {
+    const st = agendar?.id === a.id ? agendar : null
+    const camp = campMap[a.campaign_id]
+    return (
+      <div key={a.id} data-linha-sem-prazo
+        className="relative border-b border-gray-50 last:border-0"
+        style={{ height: ROW_H, width: gridW }}>
+        {showWeekend && days.map((day, i) => isWeekend(day) && (
+          <div key={i} className="absolute inset-y-0 bg-gray-50/60 pointer-events-none"
+               style={{ left: i * DAY_W, width: DAY_W }} />
+        ))}
+        {todayIdx >= 0 && (
+          <div className="absolute inset-y-0 w-px bg-red-400 pointer-events-none z-20"
+               style={{ left: todayIdx * DAY_W + DAY_W / 2 }} />
+        )}
+
+        {/* Prévia do dia sob o cursor */}
+        {st?.dia != null && (
+          <div className="absolute z-10 rounded-md border-2 border-dashed border-amber-500 bg-amber-100/70 pointer-events-none"
+               style={{ left: st.dia * DAY_W, width: DAY_W, top: 6, bottom: 6 }} />
+        )}
+
+        {/* A pílula fica colada na esquerda (sticky) mesmo com a régua rolando */}
+        <div className="sticky left-0 z-30 flex items-center gap-1.5 h-full pl-3 pr-2 w-max max-w-[340px]">
+          <span
+            onPointerDown={e => onPilulaDown(e, a)}
+            onPointerMove={e => onPilulaMove(e, a)}
+            onPointerUp={e => onPilulaUp(e, a)}
+            onPointerCancel={() => { agendarRef.current = null; setAgendar(null) }}
+            title="Arraste até o dia do prazo"
+            className={cn(
+              'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium truncate select-none',
+              'bg-amber-50 text-amber-800 border border-amber-300 shadow-sm',
+              st ? 'cursor-grabbing ring-2 ring-amber-400' : 'cursor-grab hover:bg-amber-100'
+            )}
+            style={{ touchAction: 'none' }}>
+            <GripVertical className="w-3 h-3 shrink-0 opacity-60" />
+            <span className="truncate">{a.title}</span>
+          </span>
+          {camp && <span className="text-[10px] text-gray-400 truncate hidden sm:inline">{camp.client}</span>}
+          {/* Quem não quiser arrastar escolhe pelo calendário */}
+          <label className="shrink-0 cursor-pointer text-gray-400 hover:text-orange-600 transition-colors" title="Escolher a data">
+            <Calendar className="w-3.5 h-3.5" />
+            <input type="date" className="sr-only"
+              onChange={e => { if (e.target.value) darPrazo(a, e.target.value) }} />
+          </label>
+        </div>
+      </div>
+    )
+  }
+
   function renderRow(a: Activity) {
     return (
       <div key={a.id} className="relative border-b border-gray-50 last:border-0" style={{ height: ROW_H, width: gridW }}>
@@ -560,7 +666,12 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
           <h1 className="text-lg font-semibold text-gray-900">
             Gantt por {groupBy === 'campanha' ? 'campanha' : 'responsável'}
           </h1>
-          <p className="text-gray-500 text-sm">{filtered.length} atividade{filtered.length !== 1 ? 's' : ''}</p>
+          <p className="text-gray-500 text-sm">
+            {filtered.length} atividade{filtered.length !== 1 ? 's' : ''}
+            {semPrazoFiltradas.length > 0 && (
+              <span className="text-amber-700"> · {semPrazoFiltradas.length} sem prazo</span>
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Select
@@ -732,6 +843,24 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
           </div>
         </div>
 
+        {/* Bandeja "sem prazo" — no topo, porque é fila a resolver, não resultado.
+            Some sozinha quando esvazia. */}
+        {semPrazoFiltradas.length > 0 && (
+          <div className="border-b-2 border-amber-200 bg-amber-50/30">
+            <button type="button" onClick={() => setBandejaAberta(o => !o)}
+              className="sticky left-0 z-30 flex items-center gap-2.5 px-4 py-2 w-max text-left">
+              <CalendarOff className="w-4 h-4 text-amber-600 shrink-0" />
+              <span className="text-sm font-semibold text-amber-800">Sem prazo</span>
+              <span className="text-xs text-amber-700">{semPrazoFiltradas.length}</span>
+              <span className="text-[11px] text-amber-600/80 hidden sm:inline">
+                {bandejaAberta ? '— arraste até o dia do prazo' : '— clique para abrir'}
+              </span>
+              <ChevronRight className={cn('w-3.5 h-3.5 text-amber-600 transition-transform', bandejaAberta && 'rotate-90')} />
+            </button>
+            {bandejaAberta && semPrazoFiltradas.map(a => renderLinhaSemPrazo(a))}
+          </div>
+        )}
+
         {groupBy === 'campanha' ? (
           /* Groups by campaign — a pauta do cliente, sem duplicar por responsável */
           campGroups.map(g => (
@@ -772,7 +901,7 @@ export function GanttClient({ activities, campMap, profiles, workspaces, orgSlug
           </>
         )}
 
-        {filtered.length === 0 && (
+        {filtered.length === 0 && semPrazoFiltradas.length === 0 && (
           <div className="text-center py-20 text-gray-400 text-sm">Nenhuma atividade encontrada.</div>
         )}
       </div>
