@@ -25,19 +25,27 @@
    Fora de @layer de propósito: o `@theme` do Tailwind vive na layer `theme`, e
    qualquer regra sem layer ganha dela — independente de ordem ou especificidade.
    O 500 é o accent puro; o resto sai dele por mistura em oklab, que mantém o
-   matiz ao clarear e escurecer (misturar em sRGB "suja" a cor). */
-:root {
-  --color-orange-50:  color-mix(in oklab, var(--accent)  7%, #fff);
-  --color-orange-100: color-mix(in oklab, var(--accent) 14%, #fff);
-  --color-orange-200: color-mix(in oklab, var(--accent) 28%, #fff);
-  --color-orange-300: color-mix(in oklab, var(--accent) 45%, #fff);
-  --color-orange-400: color-mix(in oklab, var(--accent) 70%, #fff);
-  --color-orange-500: var(--accent);
-  --color-orange-600: color-mix(in oklab, var(--accent) 88%, #000);
-  --color-orange-700: color-mix(in oklab, var(--accent) 74%, #000);
-  --color-orange-800: color-mix(in oklab, var(--accent) 60%, #000);
-  --color-orange-900: color-mix(in oklab, var(--accent) 48%, #000);
-  --color-orange-950: color-mix(in oklab, var(--accent) 32%, #000);
+   matiz ao clarear e escurecer (misturar em sRGB "suja" a cor).
+
+   O @supports é deliberado, não decoração. Sem ele o Lightning CSS gera como
+   fallback `--color-orange-50: var(--accent)` — e num browser sem color-mix os
+   ONZE tons virariam a mesma cor, deixando texto claro sobre fundo da mesma cor.
+   Dentro do @supports, quem não suporta simplesmente fica com a escala padrão do
+   Tailwind: não fica com a marca, mas fica legível. */
+@supports (color: color-mix(in oklab, red, red)) {
+  :root {
+    --color-orange-50:  color-mix(in oklab, var(--accent)  7%, #fff);
+    --color-orange-100: color-mix(in oklab, var(--accent) 14%, #fff);
+    --color-orange-200: color-mix(in oklab, var(--accent) 28%, #fff);
+    --color-orange-300: color-mix(in oklab, var(--accent) 45%, #fff);
+    --color-orange-400: color-mix(in oklab, var(--accent) 70%, #fff);
+    --color-orange-500: var(--accent);
+    --color-orange-600: color-mix(in oklab, var(--accent) 88%, #000);
+    --color-orange-700: color-mix(in oklab, var(--accent) 74%, #000);
+    --color-orange-800: color-mix(in oklab, var(--accent) 60%, #000);
+    --color-orange-900: color-mix(in oklab, var(--accent) 48%, #000);
+    --color-orange-950: color-mix(in oklab, var(--accent) 32%, #000);
+  }
 }
 
 @theme inline {
