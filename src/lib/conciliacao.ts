@@ -53,15 +53,26 @@ export async function loadConciliacao(sb: any, orgId: string, contaId?: string):
     .eq('org_id', orgId).order('data_mov', { ascending: false })
   if (contaId) movQ = movQ.eq('conta_id', contaId)
 
-  const [{ data: movsRaw }, { data: abertosRaw }, { data: itensRaw }, { data: contasRaw }, { data: settings }] =
+  // Título BAIXADO NA MÃO também é candidato (auditoria 02/08, Financeiro #2):
+  // quem dá a baixa em Lançamentos antes de importar o OFX deixava o movimento
+  // do banco órfão pra sempre, porque a lista só trazia 'em_aberto'. Janela de
+  // 180 dias — extrato importado é sempre recente, e sem corte a lista viraria
+  // o livro-caixa inteiro.
+  const desde = new Date(Date.now() - 180 * 86_400_000).toISOString().slice(0, 10)
+
+  const [{ data: movsRaw }, { data: abertosRaw }, { data: baixadosRaw }, { data: itensRaw }, { data: contasRaw }, { data: settings }] =
     await Promise.all([
       movQ,
       sb.from('lancamentos')
         .select('id, tipo, contato_nome, descricao, valor, valor_realizado, vencimento')
         .eq('org_id', orgId).eq('situacao', 'em_aberto').order('vencimento', { ascending: true }),
+      sb.from('lancamentos')
+        .select('id, tipo, contato_nome, descricao, valor, valor_realizado, vencimento, data_liquidacao')
+        .eq('org_id', orgId).in('situacao', ['pago', 'recebido'])
+        .gte('data_liquidacao', desde).order('data_liquidacao', { ascending: false }),
       sb.from('btg_conciliacao_itens')
         // doc_serie/doc_numero NÃO existem aqui — são da view lancamentos_doc, não da tabela.
-        .select('movement_id, valor, lancamentos(id, contato_nome, descricao, vencimento)')
+        .select('movement_id, valor, lancamento_id, lancamentos(id, contato_nome, descricao, vencimento)')
         .eq('org_id', orgId),
       sb.from('contas_financeiras')
         .select('id, nome').eq('org_id', orgId).eq('ativo', true).order('ordem', { ascending: true }),
@@ -81,6 +92,30 @@ export async function loadConciliacao(sb: any, orgId: string, contaId?: string):
       vencimento: (l.vencimento as string | null) ?? null,
     }
   }).filter(l => l.saldo > 0.005)
+
+  // Já vinculado a algum movimento = não é candidato (senão o mesmo recebimento
+  // seria conciliado duas vezes e o saldo da conta contaria em dobro).
+  const jaVinculados = new Set(
+    ((itensRaw ?? []) as Record<string, unknown>[]).map(i => i.lancamento_id as string).filter(Boolean),
+  )
+  for (const l of ((baixadosRaw ?? []) as Record<string, unknown>[])) {
+    const id = l.id as string
+    if (jaVinculados.has(id)) continue
+    // O que passou no banco foi o valor_realizado (já com juros/desconto aplicados).
+    const movido = Math.round(Number(l.valor_realizado ?? l.valor ?? 0) * 100) / 100
+    if (movido <= 0.005) continue
+    abertos.push({
+      id,
+      tipo: l.tipo as string,
+      contatoNome: (l.contato_nome as string | null) ?? null,
+      descricao: (l.descricao as string | null) ?? null,
+      valor: Number(l.valor ?? 0),
+      saldo: movido,
+      vencimento: (l.vencimento as string | null) ?? null,
+      jaBaixado: true,
+      dataLiquidacao: (l.data_liquidacao as string | null) ?? null,
+    })
+  }
 
   const itensPorMov = new Map<string, { nome: string; descricao: string | null; vencimento: string | null; valor: number }[]>()
   for (const it of (itensRaw ?? []) as Record<string, unknown>[]) {

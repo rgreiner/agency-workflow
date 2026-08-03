@@ -48,11 +48,23 @@ export async function sincronizarBtg(orgSlug: string) {
   }
 }
 
-export interface ConciliacaoItem { lancamentoId: string; valor: number }
+export interface ConciliacaoItem {
+  lancamentoId: string
+  /** Dinheiro que passou no banco para este título (a soma tem que dar o movimento). */
+  valor: number
+  /** Encargos que explicam a diferença entre esse dinheiro e a face do título
+   *  (migration 190). Ausentes = não mexe no que o lançamento já tem. */
+  juros?: number
+  multa?: number
+  desconto?: number
+  tarifa?: number
+}
 
 /**
  * Concilia um movimento com N lançamentos (1 Pix = 2 notas, 5 compras = 1 débito,
- * baixa parcial). O servidor valida que a soma dos itens bate 100% com o movimento.
+ * baixa parcial). O servidor valida que a soma dos itens bate 100% com o movimento;
+ * a diferença para a face do título vai declarada como juros/multa (entrou a mais)
+ * ou desconto/tarifa (entrou a menos).
  */
 export async function conciliarMovimentoMulti(
   orgSlug: string, movementId: string, itens: ConciliacaoItem[],
@@ -63,7 +75,12 @@ export async function conciliarMovimentoMulti(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any).rpc('conciliar_btg_multi', {
     p_user_id: userId, p_movement_id: movementId,
-    p_itens: itens.map(i => ({ lancamento_id: i.lancamentoId, valor: i.valor })),
+    p_itens: itens.map(i => ({
+      lancamento_id: i.lancamentoId, valor: i.valor,
+      ...(i.juros != null || i.multa != null || i.desconto != null || i.tarifa != null
+        ? { juros: i.juros ?? 0, multa: i.multa ?? 0, desconto: i.desconto ?? 0, tarifa: i.tarifa ?? 0 }
+        : {}),
+    })),
     p_modo: modo,
   })
   if (error) return { error: error.message }

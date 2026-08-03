@@ -18,6 +18,10 @@ import {
 export interface LancOption {
   id: string; tipo: string; contatoNome: string | null; descricao: string | null
   valor: number; saldo: number; vencimento: string | null
+  /** Título já baixado na mão em Lançamentos e ainda sem movimento bancário
+   *  vinculado — continua sendo candidato, senão o movimento fica órfão. */
+  jaBaixado?: boolean
+  dataLiquidacao?: string | null
 }
 export interface ContaOpt { id: string; nome: string }
 export interface ConcItem {
@@ -232,10 +236,27 @@ function PendingRow({ orgSlug, movement, candidatos, contas, categorias }: {
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
 
+  // Diferença de encargo: o banco quase nunca move exatamente a face do título
+  // (juros de boleto atrasado, tarifa descontada, desconto concedido na hora).
+  // Antes qualquer centavo obrigava a sair da tela — agora se declara aqui.
+  const [encargoTipo, setEncargoTipo] = useState<'' | 'juros' | 'multa' | 'desconto' | 'tarifa'>('')
+  const [encargoLanc, setEncargoLanc] = useState('')
+
   const selIds = Object.keys(sel)
   const sum = round2(selIds.reduce((a, id) => a + (parseMoney(sel[id]) || 0), 0))
   const diff = round2(movement.valor - sum)
   const exact = Math.abs(diff) < 0.005 && selIds.length > 0
+
+  // diff > 0: entrou mais dinheiro do que os títulos pedem → acréscimo.
+  // diff < 0: entrou menos → abatimento.
+  const encargoOpts = diff > 0
+    ? [{ value: 'juros', label: 'Juros' }, { value: 'multa', label: 'Multa' }]
+    : [{ value: 'desconto', label: 'Desconto concedido' }, { value: 'tarifa', label: 'Tarifa bancária' }]
+  const encargoValido = !!encargoTipo && encargoOpts.some(o => o.value === encargoTipo)
+  const alvoEncargo = selIds.includes(encargoLanc) ? encargoLanc : selIds[0]
+  const podeEncargo = !exact && selIds.length > 0 && Math.abs(diff) >= 0.005
+    && round2((parseMoney(sel[alvoEncargo] ?? '') || 0) + diff) > 0.005
+  const fecha = exact || (podeEncargo && encargoValido)
 
   const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
   const movT = new Date(movement.dataMov).getTime()
@@ -269,10 +290,20 @@ function PendingRow({ orgSlug, movement, candidatos, contas, categorias }: {
   }
 
   function conciliar() {
-    if (!exact) { toast.error('A soma dos lançamentos precisa bater com o valor do movimento.'); return }
+    if (!fecha) { toast.error('A soma dos lançamentos precisa bater com o movimento — ou declare a diferença como encargo.'); return }
     const itens: ConciliacaoItem[] = selIds
       .map(id => ({ lancamentoId: id, valor: parseMoney(sel[id]) || 0 }))
       .filter(i => i.valor > 0)
+    // O encargo entra somando a diferença no título escolhido: o dinheiro do
+    // banco fica 100% distribuído e o que sobrou vira juros/multa (a mais) ou
+    // desconto/tarifa (a menos) — mesma convenção do liquidar_lancamento.
+    if (!exact && encargoValido) {
+      const alvo = itens.find(i => i.lancamentoId === alvoEncargo)
+      if (!alvo) { toast.error('Escolha em qual título lançar a diferença.'); return }
+      alvo.valor = round2(alvo.valor + diff)
+      alvo.juros = 0; alvo.multa = 0; alvo.desconto = 0; alvo.tarifa = 0
+      alvo[encargoTipo as 'juros' | 'multa' | 'desconto' | 'tarifa'] = round2(Math.abs(diff))
+    }
     startTransition(async () => {
       const r = await conciliarMovimentoMulti(orgSlug, movement.id, itens)
       if (r?.error) { toast.error(r.error); return }
@@ -358,10 +389,19 @@ function PendingRow({ orgSlug, movement, candidatos, contas, categorias }: {
                       {on && <Check className="w-3 h-3" />}
                     </button>
                     <button onClick={() => toggle(l)} className="flex-1 min-w-0 text-left">
-                      <p className="text-sm text-gray-800 truncate">{l.contatoNome || l.descricao || 'Sem descrição'}</p>
+                      <p className="text-sm text-gray-800 truncate">
+                        {l.contatoNome || l.descricao || 'Sem descrição'}
+                        {l.jaBaixado && (
+                          <span className="ml-1.5 inline-flex items-center text-[10px] font-medium text-violet-700 bg-violet-50 rounded-full px-1.5 py-0.5 align-middle"
+                            title="Já baixado em Lançamentos — conciliar só amarra o movimento do banco a ele">
+                            já baixado
+                          </span>
+                        )}
+                      </p>
                       <p className="text-xs text-gray-400">
                         venc. {l.vencimento ? formatDateBR(l.vencimento) : '—'}
-                        {l.saldo < l.valor && <span className="text-blue-500"> · saldo de {formatBRL(l.valor)}</span>}
+                        {l.jaBaixado && l.dataLiquidacao && <span> · baixa em {formatDateBR(l.dataLiquidacao)}</span>}
+                        {!l.jaBaixado && l.saldo < l.valor && <span className="text-blue-500"> · saldo de {formatBRL(l.valor)}</span>}
                       </p>
                     </button>
                     {on ? (
@@ -380,14 +420,44 @@ function PendingRow({ orgSlug, movement, candidatos, contas, categorias }: {
           </>
         )}
 
+        {/* Diferença declarada como encargo — o caminho que evitava sair da tela
+            pra baixar o título na mão só por causa de R$ 2 de tarifa. */}
+        {podeEncargo && (
+          <div className="flex items-center gap-2 flex-wrap mt-3 px-3 py-2.5 rounded-lg bg-blue-50/70 border border-blue-100">
+            <span className="text-xs text-blue-900">
+              O movimento é {formatBRL(Math.abs(diff))} {diff > 0 ? 'maior' : 'menor'} que os títulos. Lançar como
+            </span>
+            <div className="w-44">
+              <Select size="sm" value={encargoTipo} onChange={v => setEncargoTipo(v as typeof encargoTipo)}
+                options={[{ value: '', label: 'não lançar' }, ...encargoOpts]} />
+            </div>
+            {selIds.length > 1 && (
+              <>
+                <span className="text-xs text-blue-900">em</span>
+                <div className="w-52">
+                  <Select size="sm" value={alvoEncargo} onChange={setEncargoLanc}
+                    options={selIds.map(id => {
+                      const l = all.find(c => c.id === id)
+                      return { value: id, label: l?.contatoNome || l?.descricao || 'Lançamento' }
+                    })} />
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         <div className={cn('flex items-center justify-between gap-3 mt-3 px-3 py-2.5 rounded-lg',
-          exact ? 'bg-emerald-50' : selIds.length ? 'bg-amber-50' : 'bg-gray-50')}>
+          fecha ? 'bg-emerald-50' : selIds.length ? 'bg-amber-50' : 'bg-gray-50')}>
           <div className="flex items-center gap-2 text-sm min-w-0">
-            <Scale className={cn('w-4 h-4 shrink-0', exact ? 'text-emerald-600' : 'text-gray-400')} />
+            <Scale className={cn('w-4 h-4 shrink-0', fecha ? 'text-emerald-600' : 'text-gray-400')} />
             {selIds.length === 0 ? (
               <span className="text-gray-500">Selecione os lançamentos que somam {formatBRL(movement.valor)}</span>
             ) : exact ? (
               <span className="text-emerald-700 font-medium">Bate 100% — {formatBRL(sum)} de {formatBRL(movement.valor)}</span>
+            ) : encargoValido ? (
+              <span className="text-emerald-700 font-medium">
+                Fecha com {formatBRL(Math.abs(diff))} de {encargoOpts.find(o => o.value === encargoTipo)?.label.toLowerCase()}
+              </span>
             ) : (
               <span className="text-amber-700">
                 {formatBRL(sum)} de {formatBRL(movement.valor)} — {diff > 0 ? `faltam ${formatBRL(diff)}` : `excede ${formatBRL(-diff)}`}
@@ -404,7 +474,7 @@ function PendingRow({ orgSlug, movement, candidatos, contas, categorias }: {
               className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-500 hover:bg-white disabled:opacity-40 transition">
               <X className="w-3.5 h-3.5" /> Ignorar
             </button>
-            <button onClick={conciliar} disabled={isPending || !exact}
+            <button onClick={conciliar} disabled={isPending || !fecha}
               className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 text-[#fff] hover:bg-emerald-700 disabled:opacity-40 transition">
               {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
               Conciliar{selIds.length > 1 ? ` ${selIds.length}` : ''}
