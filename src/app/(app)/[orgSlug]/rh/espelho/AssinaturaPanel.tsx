@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useTransition } from 'react'
 import { ShieldCheck, Loader2, Check, X, FileSignature, Unlock, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { assinarTermo, assinarEspelho, reabrirCiclo, carregarAssinaturas, TERMO_TEXTO, type Assinaturas } from '@/app/actions/rh-assinatura'
+import { enviarCodigo } from '@/app/actions/rh-otp'
 
 const dt = (s: string) => new Date(s).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
@@ -16,6 +17,8 @@ export function AssinaturaPanel({ orgSlug, colaboradorId, competencia, papel, on
   const [a, setA] = useState<Assinaturas | null>(null)
   const [modal, setModal] = useState<null | 'termo' | 'assinar' | 'reabrir'>(null)
   const [senha, setSenha] = useState('')
+  const [codigo, setCodigo] = useState('')
+  const [enviadoPara, setEnviadoPara] = useState<string | null>(null)
   const [motivo, setMotivo] = useState('')
   const [pending, start] = useTransition()
 
@@ -31,18 +34,28 @@ export function AssinaturaPanel({ orgSlug, colaboradorId, competencia, papel, on
   const minha = papel === 'colaborador' ? daColab : daEmpresa
   const precisaTermo = papel === 'colaborador' && !a?.termo
 
-  function fechar() { setModal(null); setSenha(''); setMotivo('') }
+  function fechar() { setModal(null); setSenha(''); setCodigo(''); setEnviadoPara(null); setMotivo('') }
+
+  // OTP só para o colaborador: a empresa contra-assina apenas com senha.
+  const precisaCodigo = papel === 'colaborador'
+  function pedirCodigo(finalidade: 'assinar_termo' | 'assinar_espelho') {
+    start(async () => {
+      const r = await enviarCodigo(orgSlug, colaboradorId, finalidade)
+      if (r?.error) toast.error(r.error)
+      else { setEnviadoPara(r.destino ?? null); toast.success('Código enviado ao seu e-mail pessoal.') }
+    })
+  }
 
   function assinarT() {
     start(async () => {
-      const r = await assinarTermo(orgSlug, colaboradorId, senha)
+      const r = await assinarTermo(orgSlug, colaboradorId, senha, codigo)
       if (r?.error) toast.error(r.error)
       else { toast.success('Termo assinado.'); fechar(); carregar() }
     })
   }
   function assinarE() {
     start(async () => {
-      const r = await assinarEspelho(orgSlug, colaboradorId, competencia, papel, senha)
+      const r = await assinarEspelho(orgSlug, colaboradorId, competencia, papel, senha, codigo)
       if (r?.error) toast.error(r.error)
       else { toast.success('Espelho assinado.'); fechar(); carregar(); onMudou?.() }
     })
@@ -149,13 +162,32 @@ export function AssinaturaPanel({ orgSlug, colaboradorId, competencia, papel, on
               )}
 
               {modal !== 'reabrir' && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Confirme sua senha *</label>
-                  <input type="password" value={senha} onChange={e => setSenha(e.target.value)} className={inputCls} autoComplete="current-password" placeholder="sua senha do Flow" />
-                  <p className="text-[11px] text-gray-400 mt-1.5">
-                    A senha confirma que é você — só estar logado não basta. Ficam registrados data/hora do servidor, seu IP e um código de verificação (hash) do conteúdo assinado.
+                <>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Confirme sua senha *</label>
+                    <input type="password" value={senha} onChange={e => setSenha(e.target.value)} className={inputCls} autoComplete="current-password" placeholder="sua senha do Flow" />
+                  </div>
+                  {precisaCodigo && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Código do e-mail pessoal *</label>
+                      <div className="flex gap-2">
+                        <input value={codigo} onChange={e => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          className={`${inputCls} font-mono tracking-widest`} inputMode="numeric" placeholder="000000" />
+                        <button type="button" onClick={() => pedirCodigo(modal === 'termo' ? 'assinar_termo' : 'assinar_espelho')} disabled={pending}
+                          className="px-3 py-2 text-xs font-medium rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition whitespace-nowrap disabled:opacity-50">
+                          {enviadoPara ? 'Reenviar' : 'Enviar código'}
+                        </button>
+                      </div>
+                      {enviadoPara && <p className="text-[11px] text-emerald-700 mt-1.5">Código enviado para {enviadoPara} — vale 10 minutos.</p>}
+                    </div>
+                  )}
+                  <p className="text-[11px] text-gray-400">
+                    {precisaCodigo
+                      ? 'Senha + código no seu e-mail pessoal. O e-mail é pessoal de propósito: o corporativo é administrado pela empresa, então não serviria como segunda prova de que foi você.'
+                      : 'A senha confirma que é você — só estar logado não basta.'}
+                    {' '}Ficam registrados data/hora do servidor, seu IP e um hash do conteúdo assinado.
                   </p>
-                </div>
+                </>
               )}
             </div>
 

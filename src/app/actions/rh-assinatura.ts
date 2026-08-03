@@ -67,10 +67,17 @@ async function origem() {
 }
 
 /** Assina o termo de adesão (uma vez por pessoa). */
-export async function assinarTermo(orgSlug: string, colaboradorId: string, senha: string) {
+export async function assinarTermo(orgSlug: string, colaboradorId: string, senha: string, codigo: string) {
   const c = await ctx(orgSlug)
   if ('error' in c) return { error: c.error }
   if (!await reautenticar(c.user.email, senha)) return { error: 'Senha incorreta.' }
+  // 2º fator: código enviado ao e-mail PESSOAL (fora do alcance do empregador).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: okOtp, error: eOtp } = await (c.supabase as any).rpc('rh_otp_validar', {
+    p_colaborador_id: colaboradorId, p_finalidade: 'assinar_termo', p_codigo: codigo,
+  })
+  if (eOtp) return { error: eOtp.message }
+  if (!okOtp) return { error: 'Código incorreto.' }
 
   const { ip, ua } = await origem()
   const hash = await hashDe({ termo: TERMO_TEXTO })
@@ -86,13 +93,32 @@ export async function assinarTermo(orgSlug: string, colaboradorId: string, senha
 /** Assina o espelho de uma competência. papel: 'colaborador' (exige senha) | 'empresa'. */
 export async function assinarEspelho(
   orgSlug: string, colaboradorId: string, competencia: string,
-  papel: 'colaborador' | 'empresa', senha: string,
+  papel: 'colaborador' | 'empresa', senha: string, codigo?: string,
 ) {
   const c = await ctx(orgSlug)
   if ('error' in c) return { error: c.error }
   if (!await reautenticar(c.user.email, senha)) return { error: 'Senha incorreta.' }
   const comp = /^\d{4}-\d{2}$/.test(competencia) ? `${competencia}-01` : null
   if (!comp) return { error: 'Competência inválida' }
+
+  if (papel === 'colaborador') {
+    // Toda divergência do ciclo precisa de ciência, e nenhum pedido de explicação
+    // pode estar em aberto — senão "conferi e concordo" não significaria nada.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: pend } = await (c.supabase as any).rpc('rh_ciencia_pendente', {
+      p_colaborador_id: colaboradorId, p_competencia: comp,
+    })
+    const p = pend as { pendentes: unknown[]; explicacoes_abertas: number } | null
+    if (p?.pendentes?.length) return { error: `Dê ciência das ${p.pendentes.length} divergência(s) do período antes de assinar.` }
+    if (p?.explicacoes_abertas) return { error: `Você pediu ${p.explicacoes_abertas} explicação(ões) ainda sem resposta do RH.` }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: okOtp, error: eOtp } = await (c.supabase as any).rpc('rh_otp_validar', {
+      p_colaborador_id: colaboradorId, p_finalidade: 'assinar_espelho', p_codigo: codigo ?? '',
+    })
+    if (eOtp) return { error: eOtp.message }
+    if (!okOtp) return { error: 'Código incorreto.' }
+  }
 
   // O snapshot vem do SERVIDOR no momento da assinatura — nunca do cliente,
   // senão daria para assinar um conteúdo diferente do que está no banco.
