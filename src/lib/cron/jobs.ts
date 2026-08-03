@@ -5,6 +5,7 @@ import { digestJob } from './digest'
 import { cobrancaJob } from './cobranca'
 import { btgSyncJob } from './btg-sync'
 import { fechamentoContabilJob } from './fechamento-contabil'
+import { rhExpurgoJob } from './rh-expurgo'
 import { limparTentativasAntigas } from '@/lib/auth/rate-limit'
 
 /**
@@ -69,6 +70,7 @@ export const JOBS: CronJob[] = [
   digestJob,   // resumo diário 8h30 (BRT)
   cobrancaJob, // lembrete de vencimento ao cliente 9h (BRT), opt-in por cliente
   fechamentoContabilJob, // abre o fechamento do mes anterior e avisa o Financeiro (nao envia)
+  rhExpurgoJob, // retencao de documentos de RH: dia 1, 3h (unico job que APAGA arquivo)
   // Futuro (onda 4): 'contratos'.
 ]
 

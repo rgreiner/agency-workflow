@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { revalidatePath } from 'next/cache'
+import { apagarArquivoDocumento } from '@/lib/rh/documento-arquivo'
 
 export interface ColaboradorInput {
   nome: string
@@ -116,8 +117,19 @@ export async function adicionarDocumento(
 export async function excluirDocumento(orgSlug: string, colaboradorId: string, docId: string) {
   const c = await ctx(orgSlug)
   if ('error' in c) return { error: c.error }
+
+  // Apaga o ARQUIVO antes da linha (migration 198). Ao contrário, um unlink que
+  // falha deixaria exatamente o órfão que isto veio resolver — e sem rastro de
+  // que ele existe. A RPC devolve a chave e registra o expurgo.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (c.supabase as any).rpc('rh_delete_documento', { p_id: docId })
+  const { data: doc } = await (c.supabase as any)
+    .from('rh_documento').select('chave').eq('id', docId).maybeSingle()
+
+  const r = await apagarArquivoDocumento(doc?.chave as string | undefined)
+  if (!r.ok) return { error: `Não consegui apagar o arquivo: ${r.erro}` }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (c.supabase as any).rpc('rh_expurgar_documento', { p_id: docId, p_motivo: 'manual' })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/rh/${colaboradorId}`)
 }
