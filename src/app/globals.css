@@ -9,6 +9,35 @@
   /* Curvas custom (mais "punch" que as nativas) — Emil/Ionic */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  /* Accent da marca. O layout da org sobrescreve com a cor escolhida em
+     Aparência; fora dela (login, portal) vale este padrão. */
+  --accent: #f97316;
+}
+
+/* ── A escala "orange" É o accent da organização ────────────────────────────
+   O app tem ~1.036 classes `*-orange-*` escritas à mão. Trocar uma a uma por
+   `var(--accent)` seria um mutirão sem fim e quebraria o hover/opacidade que as
+   utilities dão de graça. Como no Tailwind 4 `bg-orange-600` compila para
+   `var(--color-orange-600)`, basta redefinir a escala a partir do accent: as
+   1.036 classes passam a respeitar a cor configurada sem tocar em nenhuma.
+   É o mesmo truque que o dark mode já usa com `--color-gray-*` logo abaixo.
+
+   Fora de @layer de propósito: o `@theme` do Tailwind vive na layer `theme`, e
+   qualquer regra sem layer ganha dela — independente de ordem ou especificidade.
+   O 500 é o accent puro; o resto sai dele por mistura em oklab, que mantém o
+   matiz ao clarear e escurecer (misturar em sRGB "suja" a cor). */
+:root {
+  --color-orange-50:  color-mix(in oklab, var(--accent)  7%, #fff);
+  --color-orange-100: color-mix(in oklab, var(--accent) 14%, #fff);
+  --color-orange-200: color-mix(in oklab, var(--accent) 28%, #fff);
+  --color-orange-300: color-mix(in oklab, var(--accent) 45%, #fff);
+  --color-orange-400: color-mix(in oklab, var(--accent) 70%, #fff);
+  --color-orange-500: var(--accent);
+  --color-orange-600: color-mix(in oklab, var(--accent) 88%, #000);
+  --color-orange-700: color-mix(in oklab, var(--accent) 74%, #000);
+  --color-orange-800: color-mix(in oklab, var(--accent) 60%, #000);
+  --color-orange-900: color-mix(in oklab, var(--accent) 48%, #000);
+  --color-orange-950: color-mix(in oklab, var(--accent) 32%, #000);
 }
 
 @theme inline {

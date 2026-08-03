@@ -226,7 +226,7 @@ function CanvasEl({
         position: 'absolute',
         left: el.x, top: el.y, width: el.w, height: el.h,
         outline: selected
-          ? '2px solid #f97316'
+          ? '2px solid var(--accent)'
           : isHovered && !editing
           ? '2px dashed #818cf8'
           : 'none',
@@ -273,7 +273,7 @@ function CanvasEl({
           style={{
             position: 'absolute', right: -5, bottom: -5,
             width: 12, height: 12,
-            backgroundColor: '#f97316', borderRadius: 3,
+            backgroundColor: 'var(--accent)', borderRadius: 3,
             cursor: 'se-resize', zIndex: 200,
             border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
           }}
@@ -316,7 +316,7 @@ function CanvasToolbar({ tool, onTool }: { tool: Tool; onTool: (t: Tool) => void
             width: 36, height: 36,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             borderRadius: 8,
-            backgroundColor: tool === id ? '#ea580c' : 'transparent',
+            backgroundColor: tool === id ? 'var(--color-orange-600)' : 'transparent',
             border: 'none', cursor: 'pointer', transition: 'background-color 0.1s',
           }}
         >
@@ -792,7 +792,7 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData, viewe
                 onChange={e => setTitleDraft(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') { setTitleDraft(title); setEditingTitle(false) } }}
                 onBlur={saveTitle}
-                style={{ fontSize: 14, fontWeight: 600, color: '#111827', border: '1.5px solid #f97316', borderRadius: 7, padding: '3px 8px', outline: 'none', backgroundColor: '#fafafa', fontFamily: 'inherit', maxWidth: 400 }}
+                style={{ fontSize: 14, fontWeight: 600, color: '#111827', border: '1.5px solid var(--accent)', borderRadius: 7, padding: '3px 8px', outline: 'none', backgroundColor: '#fafafa', fontFamily: 'inherit', maxWidth: 400 }}
               />
               <button onClick={saveTitle} style={iconBtnStyle}><Check size={16} /></button>
               <button aria-label="Fechar" onClick={() => { setTitleDraft(title); setEditingTitle(false) }} style={iconBtnStyle}><X size={16} /></button>
@@ -1080,7 +1080,7 @@ export function BoardCanvas({ boardId, orgSlug, initialTitle, initialData, viewe
         @keyframes board-dash-march { to { stroke-dashoffset: -22; } }
         @keyframes board-arrow-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
         .board-richtext:empty:before { content: attr(data-placeholder); color: #94a3b8; font-style: italic; pointer-events: none; }
-        .board-richtext { caret-color: #f97316; }
+        .board-richtext { caret-color: var(--accent); }
       `}</style>
     </div>
   )
@@ -1097,5 +1097,5 @@ const zoomBtnStyle: React.CSSProperties = {
 
 const iconBtnStyle: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer',
-  color: '#f97316', display: 'flex', alignItems: 'center',
+  color: 'var(--accent)', display: 'flex', alignItems: 'center',
 }

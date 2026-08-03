@@ -222,7 +222,7 @@ function Operacao({ orgSlug, gestao }: { orgSlug: string; gestao: GestaoData | n
           <Bars rows={etapaRows.map(r => ({ label: r.cfg.label, n: r.n, bg: r.cfg.bg, fg: r.cfg.text, href: href({ status: r.cfg.value, overdue: true }) }))} empty="Nada atrasado nesse recorte." />
         </Panel>
         <Panel title="Atrasadas por cliente" hint="qual conta escorrega">
-          <Bars rows={cliRows.map(r => ({ label: r.name, n: r.n, bg: '#f97316', fg: '#fff', href: href({ ws: r.ws_id, overdue: true }) }))} empty="Nada atrasado nesse recorte." />
+          <Bars rows={cliRows.map(r => ({ label: r.name, n: r.n, bg: 'var(--accent)', fg: '#fff', href: href({ ws: r.ws_id, overdue: true }) }))} empty="Nada atrasado nesse recorte." />
         </Panel>
         <Panel title="Severidade do atraso" hint="o quão grave">
           <div className="grid grid-cols-4 gap-2">
@@ -242,7 +242,7 @@ function Operacao({ orgSlug, gestao }: { orgSlug: string; gestao: GestaoData | n
       {/* Carga total + funil (contexto) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Panel title="Carga por pessoa" hint="quem está sobrecarregado (tarefas ativas)">
-          <Bars rows={gestao.carga.map(c => ({ label: c.full_name ?? '—', n: c.ativas, bg: '#f97316', fg: '#fff', suffix: Number(c.horas) > 0 ? fmtHoras(c.horas) : undefined }))} empty="Ninguém com atividade ativa." />
+          <Bars rows={gestao.carga.map(c => ({ label: c.full_name ?? '—', n: c.ativas, bg: 'var(--accent)', fg: '#fff', suffix: Number(c.horas) > 0 ? fmtHoras(c.horas) : undefined }))} empty="Ninguém com atividade ativa." />
         </Panel>
         <Panel title="Funil por status" hint="distribuição da pauta ativa">
           <Bars rows={funilOrdered.map(({ cfg, row }) => ({ label: cfg.label, n: row.n, bg: cfg.bg, fg: cfg.text, href: href({ status: cfg.value }) }))} empty="Sem atividades." />
@@ -395,7 +395,7 @@ function Financeiro({ orgSlug, fin }: { orgSlug: string; fin: FinanceiroData | n
         </div>
         {fin.midia_por_tipo.length > 0 && <>
           <p className="text-[11px] text-gray-400 mb-1.5">Mídia pendente por tipo (valor bruto)</p>
-          <Bars empty="—" rows={fin.midia_por_tipo.map(t => ({ label: TIPO_MIDIA[t.tipo] ?? t.tipo, n: Number(t.total), bg: '#f97316', fg: '#fff', text: formatBRL(t.total), suffix: `${t.n} un` }))} />
+          <Bars empty="—" rows={fin.midia_por_tipo.map(t => ({ label: TIPO_MIDIA[t.tipo] ?? t.tipo, n: Number(t.total), bg: 'var(--accent)', fg: '#fff', text: formatBRL(t.total), suffix: `${t.n} un` }))} />
         </>}
       </Panel>
 

@@ -218,7 +218,7 @@ function Btn({
         borderRadius: 9,
         border: 'none',
         cursor: 'pointer',
-        backgroundColor: active ? '#f97316' : '#f3f4f6',
+        backgroundColor: active ? 'var(--accent)' : '#f3f4f6',
         color: active ? '#ffffff' : '#4b5563',
       }}
       data-inline={inline ? '' : undefined}
@@ -249,7 +249,7 @@ function Swatch({
         height: inline ? 22 : 18,
         flex: inline ? 1 : undefined,
         backgroundColor: color,
-        border: active ? '2px solid #f97316' : `1.5px solid ${border}`,
+        border: active ? '2px solid var(--accent)' : `1.5px solid ${border}`,
         borderRadius: inline ? 7 : 6,
         cursor: 'pointer',
         padding: 0,
