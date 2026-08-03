@@ -64,6 +64,29 @@ export async function mintToken({ sub, email }: Claims): Promise<string> {
   return `${data}.${await assinar(data)}`;
 }
 
+// ── Cron ──────────────────────────────────────────────────────────────────────
+// As tarefas agendadas rodavam como `anon`, e era por isso que as RPCs que elas
+// chamam (sync do extrato, abrir fechamento) não podiam exigir autorização —
+// deixando essas portas abertas pra internet inteira. Agora a rota /api/cron
+// assina um token curto com o claim `flow_cron`, que o SQL reconhece por
+// is_cron() (migration 183). SEM `sub` de propósito: o cron não é uma pessoa, e
+// auth.uid() null garante que ele não passe por nenhuma checagem de membro.
+
+const CRON_MAX_AGE_SEG = 10 * 60;
+
+export async function mintCronToken(): Promise<string> {
+  const agora = Math.floor(Date.now() / 1000);
+  const header = b64urlJson({ alg: "HS256", typ: "JWT" });
+  const payload = b64urlJson({
+    role: "authenticated",
+    flow_cron: true,
+    iat: agora,
+    exp: agora + CRON_MAX_AGE_SEG,
+  });
+  const data = `${header}.${payload}`;
+  return `${data}.${await assinar(data)}`;
+}
+
 // ── Portal do cliente ─────────────────────────────────────────────────────────
 // Cookie SEPARADO do flow-jwt: o cliente não é membro. O claim role='portal'
 // faz o PostgREST trocar pra role `portal`, que só executa as RPCs portal_*

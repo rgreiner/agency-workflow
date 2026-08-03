@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createCronClient } from '@/lib/supabase/cron'
 import { runCron } from '@/lib/cron/jobs'
 
 export const dynamic = 'force-dynamic'
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   const dry = request.nextUrl.searchParams.get('dry') === '1'
   const only = request.nextUrl.searchParams.get('only') || undefined
   try {
-    const supabase = await createClient()
+    const supabase = await createCronClient()
     const results = await runCron(supabase, onlyJob, dry, only)
     return NextResponse.json({ ok: true, results })
   } catch (e) {

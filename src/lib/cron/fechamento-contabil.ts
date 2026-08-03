@@ -18,10 +18,10 @@ export const fechamentoContabilJob: CronJob = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sb = supabase as any
 
-    const { data: cfgs, error } = await sb
-      .from('org_settings')
-      .select('org_id, contabil_dia, contabil_ativo, contabil_emails')
-      .eq('contabil_ativo', true)
+    // Por RPC, não por .from(): org_settings só é legível por membro da org, e o
+    // cron não é membro de nenhuma — era exatamente isso que derrubava este job
+    // ("permission denied for table org_settings") desde que ele existe.
+    const { data: cfgs, error } = await sb.rpc('cron_contabil_orgs')
     if (error) throw new Error(error.message)
     if (!cfgs?.length) return 'nenhuma org com envio contábil ativo'
 
