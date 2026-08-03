@@ -179,3 +179,66 @@ export async function editarPonto(orgSlug: string, colaboradorId: string, data: 
   revalidatePath(`/${orgSlug}/rh/fechamento`)
   return { ok: true }
 }
+
+// ── Ciência das divergências (pré-requisito da assinatura) ──
+
+export interface Ciencia {
+  data: string; divergencia: string; decisao: 'ciente' | 'explicacao'
+  texto: string | null; resposta: string | null; respondido_em: string | null
+}
+
+/** A pessoa dá ciência de um dia divergente, ou pede explicação ao RH. */
+export async function darCiencia(
+  orgSlug: string, colaboradorId: string, competencia: string,
+  data: string, divergencia: string, decisao: 'ciente' | 'explicacao', texto?: string,
+) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  const comp = /^\d{4}-\d{2}$/.test(competencia) ? `${competencia}-01` : null
+  if (!comp) return { error: 'Competência inválida' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (c.supabase as any).rpc('rh_dar_ciencia', {
+    p_colaborador_id: colaboradorId, p_competencia: comp, p_data: data,
+    p_divergencia: divergencia, p_decisao: decisao, p_texto: texto ?? null,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/ponto/espelho`)
+  revalidatePath(`/${orgSlug}/rh/espelho/${colaboradorId}`)
+  return { ok: true }
+}
+
+/** Ciências já registradas no ciclo + o que ainda falta. */
+export async function carregarCiencias(orgSlug: string, colaboradorId: string, competencia: string) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  const comp = /^\d{4}-\d{2}$/.test(competencia) ? `${competencia}-01` : null
+  if (!comp) return { error: 'Competência inválida' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: dadas } = await (c.supabase as any)
+    .from('rh_ciencia').select('data, divergencia, decisao, texto, resposta, respondido_em')
+    .eq('colaborador_id', colaboradorId).eq('competencia', comp)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: pend, error } = await (c.supabase as any).rpc('rh_ciencia_pendente', {
+    p_colaborador_id: colaboradorId, p_competencia: comp,
+  })
+  if (error) return { error: error.message }
+  return {
+    ciencias: (dadas ?? []) as Ciencia[],
+    pendentes: (pend as { pendentes: { data: string; divergencia: string }[] })?.pendentes ?? [],
+  }
+}
+
+/** RH responde um pedido de explicação. */
+export async function responderExplicacao(orgSlug: string, colaboradorId: string, data: string, divergencia: string, resposta: string) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  if (!resposta.trim()) return { error: 'Escreva a resposta.' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (c.supabase as any).from('rh_ciencia')
+    .update({ resposta: resposta.trim(), respondido_em: new Date().toISOString() })
+    .eq('colaborador_id', colaboradorId).eq('data', data).eq('divergencia', divergencia)
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/rh/espelho/${colaboradorId}`)
+  return { ok: true }
+}

@@ -107,3 +107,22 @@ export async function confirmarEmailPessoal(orgSlug: string, colaboradorId: stri
   revalidatePath(`/${orgSlug}/ponto/espelho`)
   return { ok: true }
 }
+
+export interface StatusEmailPessoal { email_pessoal: string | null; verificado_em: string | null }
+
+/** Status do e-mail pessoal da própria ficha (para a tela de assinatura). */
+export async function statusEmailPessoal(orgSlug: string, colaboradorId: string) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (c.supabase as any)
+    .from('rh_colaborador').select('email_pessoal, email_pessoal_verificado_em')
+    .eq('id', colaboradorId).maybeSingle()
+  if (error) return { error: error.message }
+  return {
+    status: {
+      email_pessoal: data?.email_pessoal ?? null,
+      verificado_em: data?.email_pessoal_verificado_em ?? null,
+    } as StatusEmailPessoal,
+  }
+}

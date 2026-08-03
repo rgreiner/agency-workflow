@@ -6,6 +6,8 @@ import { ArrowLeft, AlertTriangle, Pencil, Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import { carregarEspelho, type Espelho } from '@/app/actions/rh-calendario'
 import { AssinaturaPanel } from '../../rh/espelho/AssinaturaPanel'
+import { EmailPessoalCard } from './EmailPessoalCard'
+import { CienciaCard } from './CienciaCard'
 
 const hm = (m: number) => `${m < 0 ? '-' : ''}${Math.floor(Math.abs(m) / 60)}:${String(Math.abs(m) % 60).padStart(2, '0')}`
 const dataBR = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
@@ -19,6 +21,8 @@ export function MeuEspelhoClient({ orgSlug, colaboradorId, compInicial }: {
   const [comp, setComp] = useState(compInicial)
   const [esp, setEsp] = useState<Espelho | null>(null)
   const [loading, setLoading] = useState(true)
+  // Muda para forçar o painel de assinatura a reler (e-mail/ciência liberam a assinatura).
+  const [v, setV] = useState(0)
 
   const carregar = useCallback(async () => {
     setLoading(true)
@@ -63,7 +67,10 @@ export function MeuEspelhoClient({ orgSlug, colaboradorId, compInicial }: {
         </div>
       )}
 
-      <AssinaturaPanel orgSlug={orgSlug} colaboradorId={colaboradorId} competencia={comp} papel="colaborador" onMudou={carregar} />
+      {/* Ordem intencional: e-mail pessoal (2º fator) → ciência das divergências → assinatura. */}
+      <EmailPessoalCard orgSlug={orgSlug} colaboradorId={colaboradorId} onPronto={() => setV(v => v + 1)} />
+      <CienciaCard orgSlug={orgSlug} colaboradorId={colaboradorId} competencia={comp} onMudou={() => setV(v => v + 1)} />
+      <AssinaturaPanel key={v} orgSlug={orgSlug} colaboradorId={colaboradorId} competencia={comp} papel="colaborador" onMudou={carregar} />
 
       {loading ? (
         <div className="text-center py-16 text-gray-400 text-sm">Carregando…</div>
