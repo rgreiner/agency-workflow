@@ -18,14 +18,40 @@ export default async function ContasPage({
   if (!org) return null
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const resContas = await (supabase as any)
+  const sb = supabase as any
+  const resContas = await sb
     .from('contas_saldo')
     .select('id, nome, tipo, saldo_inicial, saldo_atual, cor, ativo, ordem, favorita')
     .eq('org_id', org.id)
     .order('ordem', { ascending: true })
     .order('nome', { ascending: true })
 
-  const contas = unwrap<Conta>(resContas, 'contas')
+  // Ciclo do cartão e faturas abertas vêm de fora da view `contas_saldo`: recriar
+  // uma view é onde já nasceu o P0 da 181 (o `create or replace` zera o
+  // security_invoker). Duas leituras baratas custam menos que esse risco.
+  const [resCiclo, resFaturas] = await Promise.all([
+    sb.from('contas_financeiras').select('id, fechamento_dia, vencimento_dia, limite').eq('org_id', org.id),
+    sb.from('cartao_faturas').select('conta_id, vence, total, compras').eq('org_id', org.id).order('vence'),
+  ])
+
+  interface CicloRow { id: string; fechamento_dia: number | null; vencimento_dia: number | null; limite: number | string | null }
+  const ciclo = new Map<string, CicloRow>(((resCiclo?.data ?? []) as CicloRow[]).map(c => [c.id, c]))
+
+  interface FaturaRow { conta_id: string; vence: string; total: number | string; compras: number }
+  const faturas = new Map<string, Conta['faturas']>()
+  for (const f of ((resFaturas?.data ?? []) as FaturaRow[])) {
+    const arr = faturas.get(f.conta_id) ?? []
+    arr.push({ vence: f.vence, total: Number(f.total ?? 0), compras: f.compras })
+    faturas.set(f.conta_id, arr)
+  }
+
+  const contas = unwrap<Conta>(resContas, 'contas').map(c => ({
+    ...c,
+    fechamentoDia: ciclo.get(c.id)?.fechamento_dia ?? null,
+    vencimentoDia: ciclo.get(c.id)?.vencimento_dia ?? null,
+    limite: ciclo.get(c.id)?.limite != null ? Number(ciclo.get(c.id)!.limite) : null,
+    faturas: faturas.get(c.id) ?? [],
+  }))
 
   const conn = await getBtgConnection(org.id)
   const btg = {

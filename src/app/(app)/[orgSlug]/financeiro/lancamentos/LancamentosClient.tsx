@@ -64,7 +64,7 @@ export interface Lancamento {
   import_ref?: string | null        // (source=importado) chave estável no extrato
 }
 
-export interface ContaRef { id: string; nome: string; cor: string | null; ativo: boolean; favorita?: boolean }
+export interface ContaRef { id: string; nome: string; tipo?: string | null; cor: string | null; ativo: boolean; favorita?: boolean }
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
@@ -886,6 +886,9 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
     return [{ value: '', label: '—' }, ...[...nomes, ...extra].map(n => ({ value: n, label: n }))]
   }, [categorias, form.tipo, lancamento?.categoria])
   const contaOptions = useMemo(() => [{ value: '', label: '—' }, ...contas.map(c => ({ value: c.id, label: c.nome }))], [contas])
+  // Compra no cartão: a data que se digita é a da COMPRA, e o vencimento vira o
+  // da fatura do ciclo (migration 191). Só troca o rótulo — o cálculo é do banco.
+  const ehCartao = form.tipo === 'saida' && contas.find(c => c.id === form.conta_id)?.tipo === 'cartao'
   const centroOptions = useMemo(() => {
     const ativos = centros.filter(c => !c.arquivado)
     const atual = lancamento?.centro_custo
@@ -1055,9 +1058,15 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={labelCls}>Vencimento{foco === 'vencimento' && <span className="ml-1 text-orange-600 font-normal">— renegociando</span>}</label>
+            <label className={labelCls}>
+              {ehCartao ? 'Data da compra' : 'Vencimento'}
+              {foco === 'vencimento' && <span className="ml-1 text-orange-600 font-normal">— renegociando</span>}
+            </label>
             <input ref={vencRef} type="date" value={form.vencimento} onChange={e => setForm(f => ({ ...f, vencimento: e.target.value }))}
               className={cn(inputCls, foco === 'vencimento' && 'ring-2 ring-orange-400 border-transparent')} />
+            {/* No cartão o vencimento não é escolha: é o da fatura em que a
+                compra cai. O servidor calcula pelo ciclo da conta (migration 191). */}
+            {ehCartao && <p className="text-[11px] text-gray-400 mt-1">Vai para a fatura do ciclo — o vencimento é calculado sozinho.</p>}
           </div>
           <div>
             <label className={labelCls}>Competência</label>

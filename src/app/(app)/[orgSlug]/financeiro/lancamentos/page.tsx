@@ -70,7 +70,7 @@ export default async function LancamentosPage({
       .eq('org_id', orgId)
       .order('vencimento', { ascending: true, nullsFirst: false }),
     sb.from('contas_financeiras')
-      .select('id, nome, cor, ativo, favorita')
+      .select('id, nome, tipo, cor, ativo, favorita')
       .eq('org_id', orgId)
       .order('ordem', { ascending: true }),
     sb.from('org_settings')

@@ -18,10 +18,14 @@ interface LancRow {
   centro_custo: string | null
   competencia: string | null
 }
-interface ContaRow { id: string; nome: string; cor: string | null; saldo_atual: number | string; ativo: boolean }
+interface ContaRow { id: string; nome: string; tipo: string | null; cor: string | null; saldo_atual: number | string; ativo: boolean }
 
 const isPago = (s: string) => s === 'pago' || s === 'recebido'
-const val = (l: LancRow) => Number(l.valor ?? 0)
+/** O que ainda FALTA num título em aberto. Nota com baixa parcial continua
+ *  'em_aberto' com `valor_realizado` preenchido — somar o valor cheio inflava
+ *  "a receber/a pagar" pela parte já liquidada. A Lista trata assim desde
+ *  julho (auditoria 02/08, Financeiro #3); o Painel tinha ficado para trás. */
+const falta = (l: LancRow) => Math.max(Number(l.valor ?? 0) - Number(l.valor_realizado ?? 0), 0)
 const realVal = (l: LancRow) => Number(l.valor_realizado ?? l.valor ?? 0)
 const monthOf = (d: string | null) => (d ? d.slice(0, 7) : null)
 const MESES_ABREV = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
@@ -47,7 +51,7 @@ export default async function PainelPage({ params }: { params: Promise<{ orgSlug
       .select('tipo, situacao, valor, valor_realizado, vencimento, data_liquidacao, conta_id, categoria, centro_custo, competencia')
       .eq('org_id', orgId),
     sb.from('contas_saldo')
-      .select('id, nome, cor, saldo_atual, ativo')
+      .select('id, nome, tipo, cor, saldo_atual, ativo')
       .eq('org_id', orgId).order('ordem', { ascending: true }),
     sb.from('org_settings').select('finance_categorias, finance_centros_custo').eq('org_id', orgId).maybeSingle(),
   ])
@@ -60,8 +64,8 @@ export default async function PainelPage({ params }: { params: Promise<{ orgSlug
   const today = new Date().toISOString().slice(0, 10)
   const mes = today.slice(0, 7)
 
-  const aberto = lanc.filter(l => !isPago(l.situacao) && l.vencimento)
-  const sum = (arr: LancRow[]) => arr.reduce((s, l) => s + val(l), 0)
+  const aberto = lanc.filter(l => !isPago(l.situacao) && l.vencimento && falta(l) > 0)
+  const sum = (arr: LancRow[]) => arr.reduce((s, l) => s + falta(l), 0)
   const grp = (tipo: string) => {
     const t = aberto.filter(l => l.tipo === tipo)
     return {
@@ -85,7 +89,12 @@ export default async function PainelPage({ params }: { params: Promise<{ orgSlug
 
   // Posição das contas: vem pronta da view contas_saldo (extrato + baixas do Flow),
   // a mesma fonte da lista de contas e da tela da conta.
-  const contasComSaldo = contas.map(c => ({ ...c, saldo: Number(c.saldo_atual ?? 0) }))
+  // Cartão de crédito fica FORA do saldo (migration 191): dívida de fatura não é
+  // caixa, e o saldo dele é ~0 até a fatura ser paga. As compras já aparecem em
+  // "A pagar" com o vencimento da fatura.
+  const contasComSaldo = contas
+    .filter(c => c.tipo !== 'cartao')
+    .map(c => ({ ...c, saldo: Number(c.saldo_atual ?? 0) }))
   const saldoTotal = contasComSaldo.reduce((s, c) => s + c.saldo, 0)
 
   // Faturamento (recebido) — últimos 6 meses por mês de liquidação.

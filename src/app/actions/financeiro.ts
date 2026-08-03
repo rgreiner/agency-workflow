@@ -470,6 +470,34 @@ export interface ContaInput {
   cor: string | null
   ativo: boolean
   ordem?: number
+  /** Só para tipo 'cartao' (migration 191). Vazio = não é cartão / não mexe. */
+  fechamento_dia?: string
+  vencimento_dia?: string
+  limite?: string
+}
+
+/**
+ * Paga a fatura do cartão: liquida as compras do ciclo e move o dinheiro do banco
+ * pro cartão numa transferência (zero-soma). É o único ponto em que N compras
+ * viram uma saída de caixa só.
+ */
+export async function pagarFaturaCartao(
+  orgSlug: string, contaId: string, vence: string, contaPagamentoId: string, data: string,
+) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: res, error } = await (supabase as any).rpc('pagar_fatura_cartao', {
+    p_user_id: user.id, p_conta_id: contaId, p_vence: vence,
+    p_conta_pagamento_id: contaPagamentoId, p_data: data,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/contas`)
+  revalidatePath(`/${orgSlug}/financeiro/contas/${contaId}`)
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+  return { result: res as { compras: number; total: number } }
 }
 
 export async function createConta(orgSlug: string, data: ContaInput) {
