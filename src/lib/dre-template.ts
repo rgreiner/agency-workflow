@@ -71,3 +71,34 @@ export const DRE_TEMPLATE: DreLine[] = [
 
 // Categorias-folha conhecidas (p/ detectar lançamentos fora do template).
 export const DRE_CATEGORIAS = new Set(DRE_TEMPLATE.filter(l => l.kind === 'folha').map(l => (l as { categoria: string }).categoria))
+
+/** Código do grupo que recolhe o que não está na estrutura contábil. */
+export const GRUPO_FORA = '99'
+
+/**
+ * Template + as categorias que APARECERAM no período e não estão na estrutura.
+ *
+ * O template é uma lista fixa; até aqui, lançamento com categoria fora dela não
+ * entrava em nenhuma linha e simplesmente sumia do resultado, sem aviso. E não é
+ * pouca coisa: medido em produção, 21 categorias ficavam de fora, entre elas
+ * "Empréstimos de Bancos" (R$ 141,7 mil em 6 meses) e "Rendimentos" — que a
+ * própria importação de OFX cria, enquanto o template só conhece "Rendimentos de
+ * Aplicações". Agora elas aparecem num grupo próprio, e o resultado final passa
+ * a incluir tudo. O erro fica visível em vez de desaparecer.
+ *
+ * `categorias` = todas as que vieram do banco (realizado + previsto).
+ */
+export function templateComExtras(categorias: Iterable<string>): DreLine[] {
+  const extras = [...new Set(categorias)]
+    .filter(c => c && !DRE_CATEGORIAS.has(c))
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  if (extras.length === 0) return DRE_TEMPLATE
+
+  return [
+    ...DRE_TEMPLATE,
+    { kind: 'grupo', code: GRUPO_FORA, label: 'Fora da estrutura contábil' },
+    { kind: 'sub', code: '99.1', label: 'Categorias ainda não mapeadas na DRE', grupo: GRUPO_FORA },
+    ...extras.map((categoria): DreLine => ({ kind: 'folha', categoria, grupo: GRUPO_FORA, sub: '99.1' })),
+    { kind: 'total', code: '99T', label: 'Resultado final (com os não mapeados)' },
+  ]
+}

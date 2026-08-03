@@ -9,7 +9,7 @@ import { MultiSelect, Select } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { AlertTriangle, UserX, CalendarOff, PauseCircle, Loader2, Activity as ActivityIcon, X, ExternalLink, ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import { formatBRL } from '@/lib/midia'
-import { DRE_TEMPLATE, type DreLine } from '@/lib/dre-template'
+import { templateComExtras, GRUPO_FORA, type DreLine } from '@/lib/dre-template'
 
 export interface ProblemTask { status: string; ws_id: string; ws_name: string; assignees: string[]; dias: number }
 export interface CargaRow { user_id: string; full_name: string | null; avatar_url: string | null; ativas: number; horas: number }
@@ -323,19 +323,23 @@ function Financeiro({ orgSlug, fin }: { orgSlug: string; fin: FinanceiroData | n
   const resultado = Number(fin.recebido) - Number(fin.pago)
   const margem = Number(fin.recebido) > 0 ? (resultado / Number(fin.recebido)) * 100 : 0
 
-  // ── DRE mensal pela estrutura contábil (DRE_TEMPLATE) ──
+  // ── DRE mensal pela estrutura contábil ──
+  // O template é fixo; categoria que não está nele não entrava em nenhuma linha e
+  // sumia do resultado sem aviso. `templateComExtras` acrescenta um grupo com o
+  // que apareceu no período e ainda não foi mapeado, para o erro ficar visível.
   const meses = fin.dre_meses
   const realMap = catMesMap(fin.dre_real)
   const prevMap = catMesMap(fin.dre_prev)
+  const template = templateComExtras([...realMap.keys(), ...prevMap.keys()])
   const gv = (map: Map<string, Map<string, number>>, cat: string, m: string) => map.get(cat)?.get(m) ?? 0
   const folhasDe = (pred: (l: Extract<DreLine, { kind: 'folha' }>) => boolean) =>
-    DRE_TEMPLATE.filter((l): l is Extract<DreLine, { kind: 'folha' }> => l.kind === 'folha' && pred(l))
+    template.filter((l): l is Extract<DreLine, { kind: 'folha' }> => l.kind === 'folha' && pred(l))
 
   // Percorre o template acumulando as folhas; totais (NNT) = soma corrida.
   const accR: Record<string, number> = {}, accP: Record<string, number> = {}
   for (const m of meses) { accR[m] = 0; accP[m] = 0 }
   const linhas: { line: DreLine; vr: Record<string, number>; vp: Record<string, number> }[] = []
-  for (const line of DRE_TEMPLATE) {
+  for (const line of template) {
     const vr: Record<string, number> = {}, vp: Record<string, number> = {}
     if (line.kind === 'folha') {
       for (const m of meses) { vr[m] = gv(realMap, line.categoria, m); vp[m] = gv(prevMap, line.categoria, m); accR[m] += vr[m]; accP[m] += vp[m] }
@@ -350,6 +354,12 @@ function Financeiro({ orgSlug, fin }: { orgSlug: string; fin: FinanceiroData | n
     }
     linhas.push({ line, vr, vp })
   }
+  const foraDaEstrutura = (l: DreLine) =>
+    l.kind === 'grupo' ? l.code === GRUPO_FORA
+      : l.kind === 'total' ? l.code === '99T'
+      : l.grupo === GRUPO_FORA
+  const nFora = linhas.filter(r => r.line.kind === 'folha' && foraDaEstrutura(r.line)).length
+
   const visivel = linhas.filter(r =>
     r.line.kind === 'grupo' || r.line.kind === 'total' || meses.some(m => r.vr[m] !== 0 || r.vp[m] !== 0))
 
@@ -395,7 +405,14 @@ function Financeiro({ orgSlug, fin }: { orgSlug: string; fin: FinanceiroData | n
           <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">DRE mensal</h3>
           <button onClick={exportarCsv} className="inline-flex items-center gap-1 text-xs font-medium text-orange-600 hover:text-orange-700"><Download className="w-3.5 h-3.5" /> CSV</button>
         </div>
-        <p className="text-[11px] text-gray-400 mb-4">Realizado (topo) × previsto (cinza), em milhares (k). Últimos 6 meses.</p>
+        <p className="text-[11px] text-gray-400 mb-4">
+          Realizado (topo) × previsto (cinza), em milhares (k). Últimos 6 meses.
+          {nFora > 0 && (
+            <span className="text-amber-600">
+              {' '}· {nFora} categoria{nFora > 1 ? 's' : ''} ainda fora da estrutura contábil, no fim da tabela — some{nFora > 1 ? 'm' : ''} do resultado até serem mapeadas.
+            </span>
+          )}
+        </p>
         {meses.length === 0 ? <p className="text-sm text-gray-400">Sem dados no período.</p> : (
           <div className="overflow-x-auto -mx-1">
             <table className="w-full min-w-[680px] text-sm border-collapse">
@@ -409,11 +426,17 @@ function Financeiro({ orgSlug, fin }: { orgSlug: string; fin: FinanceiroData | n
                 {visivel.map(({ line, vr, vp }, i) => {
                   const isTotal = line.kind === 'total', isGrupo = line.kind === 'grupo', isSub = line.kind === 'sub'
                   const strong = isTotal || isGrupo
+                  // Âmbar = fora da estrutura contábil: precisa ser mapeado, não é erro de valor.
+                  const fora = foraDaEstrutura(line)
                   return (
-                    <tr key={i} className={cn('border-t', isTotal ? 'border-gray-300' : 'border-gray-50', isGrupo && 'bg-gray-50/60')}>
-                      <td className={cn('text-left py-1.5 px-2 sticky left-0 bg-white truncate max-w-[220px]',
+                    <tr key={i} className={cn('border-t', isTotal ? 'border-gray-300' : 'border-gray-50',
+                      isGrupo && (fora ? 'bg-amber-50/70' : 'bg-gray-50/60'))}>
+                      <td className={cn('text-left py-1.5 px-2 sticky left-0 truncate max-w-[220px]',
+                        isGrupo && fora ? 'bg-amber-50/70' : 'bg-white',
                         isSub && 'pl-5 text-gray-500 text-[13px]', line.kind === 'folha' && 'pl-7 text-gray-600',
-                        strong ? 'font-semibold text-gray-800' : '')} title={lbl(line)}>{lbl(line)}</td>
+                        fora && !strong && 'text-amber-700',
+                        strong ? (fora ? 'font-semibold text-amber-800' : 'font-semibold text-gray-800') : '')}
+                        title={fora && line.kind === 'folha' ? `${lbl(line)} — categoria ainda não mapeada na estrutura da DRE` : lbl(line)}>{lbl(line)}</td>
                       {meses.map(m => {
                         const r = vr[m], p = vp[m]
                         const color = line.kind === 'total' ? (r >= 0 ? 'text-gray-900' : 'text-red-600') : r < 0 ? 'text-red-600' : 'text-gray-700'
