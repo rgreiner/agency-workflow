@@ -10,6 +10,7 @@ import { PontoPrompt } from '@/components/ponto/PontoPrompt'
 import { PontoGate } from '@/components/ponto/PontoGate'
 import { TabUnreadBadge } from '@/components/layout/TabUnreadBadge'
 import { computeAccess, ACCESS_SELECT, type MembershipRow } from '@/lib/auth/access'
+import { membrosAtivos } from '@/lib/membros'
 import { porNome } from '@/lib/utils'
 
 export default async function OrgLayout({
@@ -41,7 +42,8 @@ export default async function OrgLayout({
     .select(ACCESS_SELECT)
     .eq('org_id', org.id)
     .eq('user_id', user.id)
-    .single() as { data: MembershipRow | null }
+    .eq('arquivado', false)
+    .maybeSingle() as { data: MembershipRow | null }
 
   if (!membership) redirect('/')
 
@@ -84,12 +86,9 @@ export default async function OrgLayout({
   const { data: trilhaRaw } = await (supabase as any).rpc('onboarding_trilha', { p_org_id: org.id })
   const onboardingPendente = ((trilhaRaw ?? []) as { concluido: boolean }[]).filter(e => !e.concluido).length
 
-  // Membros da org (p/ o chat) — exceto eu mesmo.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: membersRaw } = await (supabase as any)
-    .from('organization_members')
-    .select('user_id, profiles!user_id(id, full_name, avatar_url)')
-    .eq('org_id', org.id)
+  // Membros da org (p/ o chat) — exceto eu mesmo e quem foi arquivado: não se abre
+  // conversa nova com quem saiu da agência.
+  const { data: membersRaw } = await membrosAtivos(supabase, org.id, 'user_id, profiles!user_id(id, full_name, avatar_url)')
   const chatMembers = ((membersRaw ?? []) as { profiles: { id: string; full_name: string | null; avatar_url: string | null } | { id: string; full_name: string | null; avatar_url: string | null }[] | null }[])
     .map(m => (Array.isArray(m.profiles) ? m.profiles[0] : m.profiles))
     .filter((p): p is { id: string; full_name: string | null; avatar_url: string | null } => !!p && p.id !== user.id)

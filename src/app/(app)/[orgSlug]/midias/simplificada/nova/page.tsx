@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { createMidia } from '@/app/actions/midia'
 import { midiaTextoLegalPadrao } from '@/lib/agency'
+import { membrosAtivos } from '@/lib/membros'
 import { MidiaForm, type ClienteOpt, type VeiculoOpt, type MemberOpt } from '../MidiaForm'
 
 export default async function NovaMidiaPage({
@@ -40,12 +41,8 @@ export default async function NovaMidiaPage({
     .eq('org_id', org.id).eq('archived', false).order('name')
   const veiculos = (veicRaw ?? []) as VeiculoOpt[]
 
-  // Membros (para Responsável)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: memRaw } = await (supabase as any)
-    .from('organization_members')
-    .select('profiles!user_id(id, full_name, email)')
-    .eq('org_id', org.id)
+  // Membros (para Responsável) — sem os arquivados.
+  const { data: memRaw } = await membrosAtivos(supabase, org.id, 'profiles!user_id(id, full_name, email)')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const members: MemberOpt[] = (memRaw ?? []).map((m: any) => ({
     id: m.profiles?.id, name: m.profiles?.full_name ?? m.profiles?.email ?? '—',

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import type { ClienteOpt, VeiculoOpt, MemberOpt } from '@/app/(app)/[orgSlug]/midias/simplificada/MidiaForm'
+import { membrosAtivos } from '@/lib/membros'
 
 /** Carrega os seletores (clientes+campanhas, veículos, membros) usados nos forms de mídia. */
 export async function loadMidiaSelectors(orgSlug: string) {
@@ -33,9 +34,8 @@ export async function loadMidiaSelectors(orgSlug: string) {
     .from('fornecedores').select('id, name').eq('org_id', org.id).eq('archived', false).order('name')
   const fornecedores = (fornRaw ?? []) as FornecedorOpt[]
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: memRaw } = await (supabase as any)
-    .from('organization_members').select('profiles!user_id(id, full_name, email)').eq('org_id', org.id)
+  // Sem arquivados: quem saiu não é opção de responsável.
+  const { data: memRaw } = await membrosAtivos(supabase, org.id, 'profiles!user_id(id, full_name, email)')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const members: MemberOpt[] = (memRaw ?? []).map((m: any) => ({
     id: m.profiles?.id, name: m.profiles?.full_name ?? m.profiles?.email ?? '—',
@@ -70,9 +70,8 @@ export async function loadProducaoSelectors(orgSlug: string) {
     .from('fornecedores').select('id, name').eq('org_id', org.id).eq('archived', false).order('name')
   const fornecedores = (fornRaw ?? []) as FornecedorOpt[]
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: memRaw } = await (supabase as any)
-    .from('organization_members').select('profiles!user_id(id, full_name, email)').eq('org_id', org.id)
+  // Sem arquivados: quem saiu não é opção de responsável.
+  const { data: memRaw } = await membrosAtivos(supabase, org.id, 'profiles!user_id(id, full_name, email)')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const members: MemberOpt[] = (memRaw ?? []).map((m: any) => ({
     id: m.profiles?.id, name: m.profiles?.full_name ?? m.profiles?.email ?? '—',

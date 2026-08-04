@@ -3,6 +3,7 @@ import { getUsuario } from '@/lib/auth/server'
 import { notFound } from 'next/navigation'
 import { DocumentEditor } from '@/components/docs/DocumentEditor'
 import { DocsSidebar } from '../DocsSidebar'
+import { membrosAtivos } from '@/lib/membros'
 
 export default async function DocPage({
   params,
@@ -41,10 +42,8 @@ export default async function DocPage({
     .eq('user_id', user.id)
     .single()
 
-  const { data: membersRaw } = await supabase
-    .from('organization_members')
-    .select('user_id, profiles!user_id(full_name, email)')
-    .eq('org_id', org.id)
+  // Quem foi arquivado não entra: esta lista alimenta o compartilhar e a @menção.
+  const { data: membersRaw } = await membrosAtivos(supabase, org.id, 'user_id, profiles!user_id(full_name, email)')
 
   const members = (membersRaw ?? []).map(m => {
     const p = m.profiles as unknown as { full_name: string | null; email: string } | null

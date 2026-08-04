@@ -5,6 +5,7 @@ import { getUsuario } from '@/lib/auth/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { porNome } from '@/lib/utils'
+import { membrosAtivos } from '@/lib/membros'
 
 export async function createDocument(
   orgId: string,
@@ -90,7 +91,7 @@ export async function getDocShareInfo(orgId: string, docId: string) {
   const [{ data: doc }, { data: dm }, { data: mem }] = await Promise.all([
     sb.from('documents').select('visibility').eq('id', docId).single(),
     sb.from('document_members').select('user_id').eq('document_id', docId),
-    sb.from('organization_members').select('user_id, profiles!user_id(full_name, email)').eq('org_id', orgId),
+    membrosAtivos(sb, orgId, 'user_id, profiles!user_id(full_name, email)'),
   ])
   if (!doc) return { error: 'Documento não encontrado' as const }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

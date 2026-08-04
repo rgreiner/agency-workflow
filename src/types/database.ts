@@ -445,6 +445,12 @@ export type Database = {
           position_id: string | null
           role: Database["public"]["Enums"]["member_role"]
           user_id: string
+          can_finance: boolean
+          can_vendas: boolean
+          can_rh: boolean
+          arquivado: boolean
+          arquivado_em: string | null
+          arquivado_por: string | null
         }
         Insert: {
           id?: string
@@ -454,6 +460,12 @@ export type Database = {
           position_id?: string | null
           role?: Database["public"]["Enums"]["member_role"]
           user_id: string
+          can_finance?: boolean
+          can_vendas?: boolean
+          can_rh?: boolean
+          arquivado?: boolean
+          arquivado_em?: string | null
+          arquivado_por?: string | null
         }
         Update: {
           id?: string
@@ -463,6 +475,12 @@ export type Database = {
           position_id?: string | null
           role?: Database["public"]["Enums"]["member_role"]
           user_id?: string
+          can_finance?: boolean
+          can_vendas?: boolean
+          can_rh?: boolean
+          arquivado?: boolean
+          arquivado_em?: string | null
+          arquivado_por?: string | null
         }
         Relationships: [
           { foreignKeyName: "organization_members_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },

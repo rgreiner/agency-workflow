@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { assertRhAccess } from '@/lib/rh'
 import { unwrap, unwrapOne } from '@/lib/supabase/unwrap'
 import { ColaboradorClient, type Colaborador, type GestorRef, type MembroRef } from './ColaboradorClient'
+import { membrosAtivos } from '@/lib/membros'
 import type { JornadaVals } from '../JornadaEditor'
 
 export const dynamic = 'force-dynamic'
@@ -17,11 +18,19 @@ export default async function ColaboradorPage({ params }: { params: Promise<{ or
     .eq('id', colaboradorId).eq('org_id', orgId).maybeSingle(), 'colaborador')
   if (!colab) notFound()
 
-  // Membros da org (p/ vincular a ficha ao login → habilita o ponto).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const membros = unwrap<MembroRef>(await (supabase as any)
-    .from('organization_members').select('user_id, profiles!user_id(full_name, email)')
-    .eq('org_id', orgId), 'membros')
+  // Membros da org (p/ vincular a ficha ao login → habilita o ponto). Só ativos: não se
+  // vincula uma ficha a um login que já perdeu o acesso. Exceção: o vínculo que JÁ existe
+  // continua na lista, senão o seletor mostraria vazio numa ficha vinculada e o próximo
+  // salvamento apagaria o vínculo sem ninguém pedir.
+  const membros = unwrap<MembroRef>(
+    await membrosAtivos(supabase, orgId, 'user_id, profiles!user_id(full_name, email)'), 'membros')
+  if (colab.membro_user_id && !membros.some(m => m.user_id === colab.membro_user_id)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: vinculado } = await (supabase as any)
+      .from('organization_members').select('user_id, profiles!user_id(full_name, email)')
+      .eq('org_id', orgId).eq('user_id', colab.membro_user_id).maybeSingle()
+    if (vinculado) membros.push(vinculado as MembroRef)
+  }
 
   // Possíveis gestores: os outros colaboradores ativos da org.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

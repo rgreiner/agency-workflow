@@ -120,7 +120,10 @@ export default async function ActivityPage({
   ] = await Promise.all([
     orgId ? supabase.from('workspaces').select('id, name, campaigns(id, name)').eq('org_id', orgId).eq('archived', false).eq('campaigns.archived', false).order('name').order('name', { referencedTable: 'campaigns' }) : Promise.resolve({ data: [] }),
     (user && orgId) ? supabase.from('organization_members').select('role, org_positions(allowed_statuses)').eq('org_id', orgId).eq('user_id', user.id).single() : Promise.resolve({ data: null }),
-    orgId ? supabase.from('organization_members').select('user_id, profiles!user_id(id, full_name, email, avatar_url)').eq('org_id', orgId) : Promise.resolve({ data: [] }),
+    // Aqui a lista vem COM os arquivados (e a marca `arquivado`): o nome de quem saiu
+    // precisa continuar resolvendo nas tarefas concluídas em que ele está atribuído.
+    // Quem filtra é o seletor (não recebe tarefa nova) e a @menção logo abaixo.
+    orgId ? supabase.from('organization_members').select('user_id, arquivado, profiles!user_id(id, full_name, email, avatar_url)').eq('org_id', orgId) : Promise.resolve({ data: [] }),
     commentIds.length ? sb.from('activity_comment_reactions').select('comment_id, user_id, emoji').in('comment_id', commentIds) : Promise.resolve({ data: [] }),
     orgRow?.id ? sb.from('org_settings').select('status_overrides').eq('org_id', orgRow.id).single() : Promise.resolve({ data: null }),
     user ? sb.from('activity_mutes').select('activity_id').eq('activity_id', activityId).eq('user_id', user.id).maybeSingle() : Promise.resolve({ data: null }),
@@ -163,10 +166,16 @@ export default async function ActivityPage({
     })))
   const isOrgMember = !!membership
   const isOwner = (membership as { role?: string } | null)?.role === 'owner'
-  const members = (membersRaw ?? []).map((m: { user_id: string; profiles: unknown }) => {
+  const members = (membersRaw ?? []).map((m: { user_id: string; arquivado?: boolean; profiles: unknown }) => {
     const p = m.profiles as unknown as { id: string; full_name: string | null; email: string; avatar_url: string | null } | null
-    return { userId: m.user_id, fullName: p?.full_name ?? null, email: p?.email ?? '', avatarUrl: p?.avatar_url ?? null }
+    return {
+      userId: m.user_id, fullName: p?.full_name ?? null, email: p?.email ?? '',
+      avatarUrl: p?.avatar_url ?? null, arquivado: !!m.arquivado,
+    }
   })
+  // @menção só sugere quem está ativo — mencionar quem saiu manda notificação para
+  // uma conta sem acesso.
+  const membersAtivos = members.filter(m => !m.arquivado)
 
   const reactionsByComment = new Map<string, { emoji: string; userId: string }[]>()
   for (const r of (reactionsRaw ?? []) as { comment_id: string; user_id: string; emoji: string }[]) {
@@ -686,7 +695,7 @@ export default async function ActivityPage({
           <div className="border-t border-gray-200 p-4 bg-white shrink-0">
             <CommentBox
               activityId={activityId}
-              members={members.map(m => ({ id: m.userId, name: m.fullName ?? m.email }))}
+              members={membersAtivos.map(m => ({ id: m.userId, name: m.fullName ?? m.email }))}
               assignedIds={assignedIds}
             />
           </div>

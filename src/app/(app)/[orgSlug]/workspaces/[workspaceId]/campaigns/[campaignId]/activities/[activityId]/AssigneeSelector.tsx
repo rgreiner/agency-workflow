@@ -12,6 +12,9 @@ interface Member {
   fullName: string | null
   email: string
   avatarUrl: string | null
+  /** Saiu da agência: continua no chip de quem já estava atribuído (é o histórico
+      da tarefa), mas some da lista de adicionar. */
+  arquivado?: boolean
 }
 
 interface Props {
@@ -73,7 +76,10 @@ export function AssigneeSelector({ activityId, assignedIds, members, path, compa
   }
 
   const assignedMembers = members.filter(m => selected.includes(m.userId))
-  const unassigned = members.filter(m => !selected.includes(m.userId))
+  // Arquivado nunca entra em "adicionar" — quem saiu não recebe tarefa nova. A lista
+  // chega COM ele de propósito: sem isso o nome sumiria da tarefa concluída em que ele
+  // trabalhou (arquivar solta só as ativas).
+  const unassigned = members.filter(m => !selected.includes(m.userId) && !m.arquivado)
 
   const inner = (
     <div ref={ref} className="relative">
@@ -82,7 +88,8 @@ export function AssigneeSelector({ activityId, assignedIds, members, path, compa
           <div key={m.userId}
             className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-full pl-1 pr-2 py-0.5">
             <MemberAvatar member={m} size="sm" />
-            <span className="text-xs text-gray-700 font-medium max-w-[80px] truncate">
+            <span className={cn('text-xs font-medium max-w-[80px] truncate', m.arquivado ? 'text-gray-400' : 'text-gray-700')}
+              title={m.arquivado ? `${m.fullName ?? m.email} — saiu da agência` : undefined}>
               {m.fullName ?? m.email.split('@')[0]}
             </span>
             <button

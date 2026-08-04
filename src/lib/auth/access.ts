@@ -68,10 +68,14 @@ export async function getAccess(orgSlug: string): Promise<
   const { data: org } = await supabase.from('organizations').select('id').eq('slug', orgSlug).single()
   if (!org) return null
 
+  // Arquivado = sem acesso (mesma régua de is_org_member, migration 178). Sem isto a
+  // pessoa desligada ainda abria as telas — vazias, porque a RLS barra o dado, mas
+  // abria.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: m } = await (supabase as any)
     .from('organization_members').select(ACCESS_SELECT)
-    .eq('org_id', org.id).eq('user_id', user.id).single() as { data: MembershipRow | null }
+    .eq('org_id', org.id).eq('user_id', user.id).eq('arquivado', false)
+    .maybeSingle() as { data: MembershipRow | null }
   if (!m) return null
 
   return { supabase, orgId: org.id as string, userId: user.id as string, access: computeAccess(m) }

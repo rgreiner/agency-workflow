@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { loadViewPrefs } from '@/app/actions/prefs'
 import { GanttClient } from './GanttClient'
+import { membrosAtivos } from '@/lib/membros'
 import { porNome } from '@/lib/utils'
 
 export default async function GanttPage({
@@ -18,10 +19,9 @@ export default async function GanttPage({
     .from('organizations').select('id').eq('slug', orgSlug).single()
   if (!org) return null
 
-  const { data: members } = await supabase
-    .from('organization_members')
-    .select('profiles!user_id(id, full_name, avatar_url)')
-    .eq('org_id', org.id)
+  // Só ativos: esta lista é o filtro "por pessoa". O avatar de quem já saiu continua
+  // aparecendo na barra da tarefa — vem do embed de activity_assignees, não daqui.
+  const { data: members } = await membrosAtivos(supabase, org.id, 'profiles!user_id(id, full_name, avatar_url)')
 
   const { data: workspaces } = await supabase
     .from('workspaces').select('id, name').eq('org_id', org.id).neq('archived', true).order('name')

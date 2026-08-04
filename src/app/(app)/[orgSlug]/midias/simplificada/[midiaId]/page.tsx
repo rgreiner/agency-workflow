@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { updateMidia } from '@/app/actions/midia'
 import { midiaTextoLegalPadrao } from '@/lib/agency'
+import { membrosAtivos } from '@/lib/membros'
 import { MidiaForm, type ClienteOpt, type VeiculoOpt, type MemberOpt, type MidiaValues } from '../MidiaForm'
 import { LockableFormShell } from '@/components/ui/LockableFormShell'
 
@@ -55,11 +56,8 @@ export default async function EditarMidiaPage({
     .eq('org_id', org.id).eq('archived', false).order('name')
   const veiculos = (veicRaw ?? []) as VeiculoOpt[]
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: memRaw } = await (supabase as any)
-    .from('organization_members')
-    .select('profiles!user_id(id, full_name, email)')
-    .eq('org_id', org.id)
+  // Membros (para Responsável) — sem os arquivados.
+  const { data: memRaw } = await membrosAtivos(supabase, org.id, 'profiles!user_id(id, full_name, email)')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const members: MemberOpt[] = (memRaw ?? []).map((mm: any) => ({
     id: mm.profiles?.id, name: mm.profiles?.full_name ?? mm.profiles?.email ?? '—',
