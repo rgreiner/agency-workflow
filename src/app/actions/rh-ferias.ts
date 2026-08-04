@@ -52,3 +52,86 @@ export async function mudarStatusFerias(orgSlug: string, id: string, status: str
   revalidatePath(`/${orgSlug}/rh/ferias`)
   return { ok: true }
 }
+
+/* ── Saldo do ano: a régua da casa (migration 204) ─────────────────────────
+ * 2,5 dias por mês do ano civil; emenda de feriado custa 1 dia; o resto é
+ * gozado no recesso, com volta = início + saldo. Convive com o painel da CLT
+ * acima — são duas contabilidades da mesma coisa, e o RH opera esta.        */
+
+export interface SaldoAno {
+  colaborador_id: string; pessoa: string; data_admissao: string
+  meses_ate_hoje: number; dias_ate_hoje: number
+  meses_ano: number; dias_ano: number
+  dias_pontes: number; dias_lancamentos: number
+  saldo_atual: number; saldo_projetado: number
+  recesso_inicio: string | null; recesso_retorno: string | null; retorno_ajustado: boolean
+}
+
+/** Uma linha por (emenda × pessoa elegível), com a adesão já resolvida. */
+export interface PonteLinha {
+  ponte_id: string; nome: string; inicio: string; fim: string; custo_dias: number
+  observacao: string | null; colaborador_id: string; pessoa: string; aderiu: boolean
+}
+
+export interface LancamentoFerias {
+  id: string; colaborador_id: string; inicio: string; fim: string
+  dias: number; tipo: 'avulso' | 'ferias'; motivo: string | null
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function chamar(orgSlug: string, rpc: string, args: any) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (c.supabase as any).rpc(rpc, args)
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/rh/ferias`)
+  return { data }
+}
+
+export async function salvarPonte(orgSlug: string, dados: {
+  id?: string | null; inicio: string; fim?: string | null; nome: string
+  custo_dias?: number; observacao?: string | null
+}) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  return chamar(orgSlug, 'rh_ponte_salvar', { p_dados: { ...dados, org_id: c.orgId } })
+}
+
+export async function excluirPonte(orgSlug: string, id: string) {
+  return chamar(orgSlug, 'rh_ponte_excluir', { p_id: id })
+}
+
+export async function marcarAdesao(orgSlug: string, ponteId: string, colaboradorId: string, aderiu: boolean) {
+  return chamar(orgSlug, 'rh_ponte_adesao', {
+    p_ponte: ponteId, p_colaborador: colaboradorId, p_aderiu: aderiu,
+  })
+}
+
+export async function lancarDia(orgSlug: string, dados: {
+  id?: string | null; colaborador_id: string; inicio: string; fim?: string | null
+  dias?: number | null; tipo?: string; motivo?: string | null
+}) {
+  return chamar(orgSlug, 'rh_ferias_lancar', { p_dados: dados })
+}
+
+export async function excluirLancamento(orgSlug: string, id: string) {
+  return chamar(orgSlug, 'rh_ferias_lancamento_excluir', { p_id: id })
+}
+
+export async function salvarRecesso(orgSlug: string, ano: number, inicio: string, observacao?: string | null) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  return chamar(orgSlug, 'rh_recesso_salvar', {
+    p_org: c.orgId, p_ano: ano, p_inicio: inicio, p_observacao: observacao ?? null,
+  })
+}
+
+/** Retorno nulo devolve a data ao cálculo automático. */
+export async function ajustarRetorno(orgSlug: string, ano: number, colaboradorId: string, retorno: string | null) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  return chamar(orgSlug, 'rh_recesso_ajustar', {
+    p_org: c.orgId, p_ano: ano, p_colaborador: colaboradorId, p_retorno: retorno,
+  })
+}

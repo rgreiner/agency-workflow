@@ -8,7 +8,12 @@ import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
 import { formatBRL } from '@/lib/midia'
-import { programarFerias, mudarStatusFerias, type PeriodoFerias, type LinhaDecimo } from '@/app/actions/rh-ferias'
+import {
+  programarFerias, mudarStatusFerias,
+  type PeriodoFerias, type LinhaDecimo, type SaldoAno, type PonteLinha, type LancamentoFerias,
+} from '@/app/actions/rh-ferias'
+import { SaldoAnoView } from './SaldoAnoView'
+import { PontesView } from './PontesView'
 
 export interface FeriasGozo {
   id: string; colaborador_id: string; periodo_inicio: string
@@ -26,13 +31,25 @@ const SITUACAO: Record<PeriodoFerias['situacao'], { rotulo: string; cls: string 
   quitado:        { rotulo: 'quitado',        cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
 }
 
-export function FeriasClient({ orgSlug, periodos, decimo, gozos, ano, erro }: {
+type Aba = 'saldo' | 'emendas' | 'clt'
+
+export function FeriasClient({
+  orgSlug, periodos, decimo, gozos, saldos, pontes, lancamentos, ano, anoAtual, erro,
+}: {
   orgSlug: string; periodos: PeriodoFerias[]; decimo: LinhaDecimo[]
-  gozos: FeriasGozo[]; ano: number; erro: string | null
+  gozos: FeriasGozo[]; saldos: SaldoAno[]; pontes: PonteLinha[]; lancamentos: LancamentoFerias[]
+  ano: number; anoAtual: number; erro: string | null
 }) {
+  const [aba, setAba] = useState<Aba>('saldo')
   const [programando, setProgramando] = useState<PeriodoFerias | null>(null)
   const [pending, start] = useTransition()
   const router = useRouter()
+
+  const anos = useMemo(
+    () => Array.from({ length: 4 }, (_, i) => anoAtual + 1 - i),
+    [anoAtual],
+  )
+  const nPontes = useMemo(() => new Set(pontes.map(p => p.ponte_id)).size, [pontes])
 
   const vencidos = useMemo(() => periodos.filter(p => p.situacao === 'vencido'), [periodos])
   const proximos = useMemo(() => periodos.filter(p => p.situacao === 'vence_em_breve'), [periodos])
@@ -60,19 +77,48 @@ export function FeriasClient({ orgSlug, periodos, decimo, gozos, ano, erro }: {
     })
   }
 
+  const ABAS: { id: Aba; rotulo: string }[] = [
+    { id: 'saldo',   rotulo: `Saldo do ano · ${saldos.length}` },
+    { id: 'emendas', rotulo: `Emendas · ${nPontes}` },
+    { id: 'clt',     rotulo: vencidos.length > 0 ? `CLT e 13º · ${vencidos.length} vencido(s)` : 'CLT e 13º' },
+  ]
+
   return (
     <div className="p-6 max-w-5xl">
-      <div className="mb-6">
+      <div className="mb-4">
         <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-1">
           <Palmtree className="w-5 h-5 text-orange-600" /> Férias e 13º
         </h1>
         <p className="text-gray-500 text-sm">
-          Período aquisitivo é calculado da data de admissão — o que se registra aqui é o gozo. Só CLT.
+          O saldo do ano é a régua da casa; os períodos aquisitivos são a régua da CLT. Só CLT entra.
         </p>
+      </div>
+
+      <div className="flex items-center gap-2 mb-5 flex-wrap">
+        <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 text-sm">
+          {ABAS.map(a => (
+            <button key={a.id} onClick={() => setAba(a.id)}
+              className={cn('px-4 py-1.5 rounded-md transition-colors',
+                aba === a.id ? 'bg-gray-900 text-[#fff]' : 'text-gray-500 hover:text-gray-700')}>
+              {a.rotulo}
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto w-28">
+          <Select value={String(ano)}
+            onChange={v => router.push(`/${orgSlug}/rh/ferias?ano=${v}`)}
+            options={anos.map(a => ({ value: String(a), label: String(a) }))} />
+        </div>
       </div>
 
       {erro && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3 mb-5">{erro}</p>}
 
+      {aba === 'saldo' && (
+        <SaldoAnoView orgSlug={orgSlug} saldos={saldos} lancamentos={lancamentos} ano={ano} />
+      )}
+      {aba === 'emendas' && <PontesView orgSlug={orgSlug} pontes={pontes} ano={ano} />}
+
+      {aba === 'clt' && <>
       {/* O aviso que justifica a tela existir: passar do concessivo é dobro. */}
       {vencidos.length > 0 && (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4 mb-5">
@@ -220,6 +266,7 @@ export function FeriasClient({ orgSlug, periodos, decimo, gozos, ano, erro }: {
           </div>
         )}
       </section>
+      </>}
 
       {programando && (
         <ProgramarModal orgSlug={orgSlug} periodo={programando} onClose={() => setProgramando(null)} />
