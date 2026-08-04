@@ -95,12 +95,16 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Eletrônica',   href: 'midias/eletronica' },
     { label: 'Externas',     href: 'midias/externas' },
     { label: 'Digitais',     href: 'midias/digitais' },
+    // Repetido no grupo de Produção de propósito: o relatório é dos dois, e
+    // quem enxerga só um dos grupos precisa achar o item mesmo assim.
+    { label: 'Relatório de autorização', href: 'relatorios/autorizacao' },
   ] },
   { id: 'producao', label: 'Liberação de Produção', icon: ClipboardList, items: [
     { label: 'Orçamento',          href: 'producao/orcamento' },
     { label: 'Pedido de produção', href: 'producao/pedido' },
     { label: 'FEE',                href: 'producao/fee' },
     { label: 'Proposta',           href: 'producao/proposta' },
+    { label: 'Relatório de autorização', href: 'relatorios/autorizacao' },
   ] },
   { id: 'financeiro', label: 'Financeiro', icon: Wallet, finance: true, items: [
     { label: 'Painel',         href: 'financeiro/painel' },
@@ -186,7 +190,7 @@ const VIEWS = [
 type SidebarMode = 'trabalho' | 'operacional'
 // Em que modo cada rota se encaixa (null = neutra, não troca o modo).
 function modeForPath(path: string, base: string): SidebarMode | null {
-  if (['financeiro', 'midias', 'producao', 'cadastros', 'rh'].some(p => path.startsWith(`${base}/${p}`))) return 'operacional'
+  if (['financeiro', 'midias', 'producao', 'cadastros', 'rh', 'relatorios'].some(p => path.startsWith(`${base}/${p}`))) return 'operacional'
   if (['dashboard', 'views', 'docs', 'boards', 'workspaces'].some(p => path.startsWith(`${base}/${p}`))) return 'trabalho'
   return null
 }
