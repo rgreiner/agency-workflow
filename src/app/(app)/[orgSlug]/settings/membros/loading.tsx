@@ -1,6 +1,8 @@
 export default function MembrosLoading() {
   return (
-    <div className="animate-pulse">
+    // Mesma largura da tela real (max-w-6xl): sem isso o esqueleto ocupa a janela
+    // inteira e a tabela "encolhe" quando os dados chegam.
+    <div className="animate-pulse max-w-6xl">
       <div className="flex items-center justify-between mb-6">
         <div className="h-4 bg-gray-100 rounded w-28" />
         <div className="h-9 bg-gray-100 rounded-lg w-36" />

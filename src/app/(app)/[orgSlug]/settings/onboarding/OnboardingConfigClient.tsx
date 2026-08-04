@@ -75,7 +75,7 @@ export function OnboardingConfigClient({ orgSlug, etapas, cargos }: {
   const nomeCargo = (id: string) => cargos.find(c => c.id === id)?.name ?? '—'
 
   return (
-    <div>
+    <div className="max-w-4xl">
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
           <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">

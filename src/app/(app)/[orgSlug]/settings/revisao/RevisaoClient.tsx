@@ -47,7 +47,7 @@ export function RevisaoClient({ orgSlug, orgId, initial }: { orgSlug: string; or
   }
 
   return (
-    <div>
+    <div className="max-w-3xl">
       <div className="mb-4">
         <h2 className="text-base font-semibold text-gray-900 inline-flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-orange-500" /> Revisão por IA

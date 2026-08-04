@@ -50,14 +50,21 @@ export default async function SettingsLayout({
     }
   }
 
+  // Sem teto de largura AQUI. O `max-w-4xl` que ficava neste div valia pra todas as
+  // abas: dava 848px úteis e a tabela de Membros precisa de ~980 (pessoa + 2 seletores
+  // + 3 chaves + ação), então ela vivia com barra de rolagem horizontal e as abas
+  // quebravam o rótulo em duas linhas. Cada seção declara a largura que o SEU conteúdo
+  // pede — tabela larga, formulário estreito —, que é o que já acontecia em Aparência
+  // (2xl) e Documentos (3xl).
   return (
-    <div className="p-6 max-w-4xl">
+    <div className="p-6">
       <div className="mb-5">
         <h1 className="text-lg font-semibold text-gray-900">Configurações</h1>
         <p className="text-gray-500 text-sm mt-0.5">{orgName}</p>
       </div>
 
-      <div className="flex gap-1 mb-5 border-b border-gray-200">
+      {/* Em janela estreita as abas rolam na horizontal em vez de quebrar o rótulo. */}
+      <div className="flex gap-1 mb-5 border-b border-gray-200 overflow-x-auto">
         {[
           { href: `/${orgSlug}/settings/membros`,   label: 'Membros',          badge: 0 },
           ...(isAdmin ? [
@@ -73,7 +80,7 @@ export default async function SettingsLayout({
           <Link
             key={href}
             href={href}
-            className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-900 border-b-2 border-transparent hover:border-gray-300 transition -mb-px inline-flex items-center gap-2"
+            className="shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-900 border-b-2 border-transparent hover:border-gray-300 transition -mb-px inline-flex items-center gap-2"
           >
             {label}
             {badge > 0 && (

@@ -68,7 +68,9 @@ export default function AparenciaPage() {
   }
 
   return (
-    <div className="space-y-8 max-w-2xl">
+    // 3xl e não 2xl: a grade de status é 52+150+190+36 fixos, e a 672px sobrava menos
+    // de 170px para o nome do status.
+    <div className="space-y-8 max-w-3xl">
 
       {/* ── Identidade ── */}
       <section>

@@ -75,7 +75,9 @@ export default async function MembrosPage({
     .order('name')
 
   return (
-    <div>
+    // 6xl (1152px) porque a linha do membro pede ~980: pessoa + cargo + papel + as três
+    // chaves + a ação. Abaixo disso a tabela rola na horizontal.
+    <div className="max-w-6xl">
       <div className="flex items-center justify-between mb-6">
         <p className="text-sm text-gray-500">
           {members?.length ?? 0} de {org.max_members} membros

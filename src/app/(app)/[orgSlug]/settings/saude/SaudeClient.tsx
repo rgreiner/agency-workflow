@@ -14,7 +14,7 @@ export function SaudeClient({ orgSlug, checks }: { orgSlug: string; checks: Heal
   const totalPendencias = checks.reduce((n, c) => n + c.items.length, 0)
 
   return (
-    <div>
+    <div className="max-w-5xl">
       <div className="flex items-center justify-between gap-3 mb-4">
         <div>
           <h2 className="text-base font-semibold text-gray-900">Verificações de consistência</h2>

@@ -33,7 +33,7 @@ export default async function CargosPage({
     .order('name') as { data: { id: string; name: string; color: string; allowed_statuses: string[]; op_ver_tudo: boolean; op_midias: boolean; op_producao: boolean }[] | null }
 
   return (
-    <div>
+    <div className="max-w-5xl">
       <div className="flex items-center justify-between mb-6">
         <p className="text-sm text-gray-500">
           {positions?.length ?? 0} cargo{positions?.length !== 1 ? 's' : ''} configurado{positions?.length !== 1 ? 's' : ''}
