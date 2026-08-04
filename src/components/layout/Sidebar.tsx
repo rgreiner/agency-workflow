@@ -111,6 +111,7 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Contas',         href: 'financeiro/contas' },
     { label: 'Fechamento',     href: 'financeiro/fechamento' },
     { label: 'Categorias',     href: 'financeiro/categorias' },
+    { label: 'Lixeira',        href: 'financeiro/lixeira' },
   ] },
   { id: 'cadastros', label: 'Cadastros', icon: Users, items: [
     { label: 'Clientes',     href: 'workspaces' },

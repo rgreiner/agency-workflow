@@ -538,7 +538,7 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
     startTransition(async () => {
       const r = await descartarExtrato(orgSlug, l.import_ref ?? '')
       if (r?.error) toast.error(r.error)
-      else { toast.success('Linha descartada.'); router.refresh() }
+      else { toast.success('Linha descartada — está na Lixeira do extrato.'); router.refresh() }
     })
   }
   function pedirExclusao() {
@@ -689,7 +689,7 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
               <ConfirmDialog
                 open={confirmDescarte} loading={isPending}
                 title="Descartar linha da Conta Azul"
-                description="Ela some da lista e continua fora mesmo depois de reimportar o extrato. O registro na Conta Azul não é alterado."
+                description="Ela some da lista e continua fora mesmo depois de reimportar o extrato. O registro na Conta Azul não é alterado, e a linha fica guardada na Lixeira do extrato — dá para restaurar."
                 confirmLabel="Descartar"
                 onConfirm={descartar}
                 onCancel={() => setConfirmDescarte(false)}

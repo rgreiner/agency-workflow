@@ -710,6 +710,36 @@ export async function descartarExtrato(orgSlug: string, importRef: string, motiv
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
   revalidatePath(`/${orgSlug}/financeiro/inadimplentes`)
+  revalidatePath(`/${orgSlug}/financeiro/lixeira`)
+}
+
+/**
+ * Desfaz o descarte — a linha volta a aparecer em Lançamentos e Inadimplentes. Em
+ * lote porque o descarte costuma ser feito em bloco (as 12 parcelas de um Fee de uma
+ * vez), e desfazer uma a uma seria uma ida ao servidor por linha. Devolve quantas
+ * voltaram: se vier 0, o descarte já tinha sido desfeito em outra aba.
+ */
+export async function restaurarExtrato(orgSlug: string, importRefs: string[]) {
+  const refs = importRefs.filter(r => !!r)
+  if (refs.length === 0) return { error: 'Nada selecionado' }
+
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { data: org } = await supabase
+    .from('organizations').select('id').eq('slug', orgSlug).single()
+  if (!org) return { error: 'Organização não encontrada' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('restaurar_extrato_lote', {
+    p_user_id: user.id, p_org_id: org.id, p_import_refs: refs,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/lixeira`)
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+  revalidatePath(`/${orgSlug}/financeiro/inadimplentes`)
+  return { restauradas: Number(data ?? 0) }
 }
 
 // ── Envio do faturamento por e-mail ao cliente (não automático) ─────────────────
