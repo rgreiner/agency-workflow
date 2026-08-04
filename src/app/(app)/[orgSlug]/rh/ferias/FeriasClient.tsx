@@ -23,12 +23,18 @@ export interface FeriasGozo {
 
 const dataBR = (d: string) => { const [y, m, dd] = d.split('-'); return `${dd}/${m}/${y}` }
 
+/* Rótulos deliberadamente neutros. O ciclo aqui é estimado da data de admissão,
+ * e os recibos da folha provaram que o oficial costuma ser outro: quem entra no
+ * recesso antes de completar 12 meses tem o período reiniciado (art. 140) — a
+ * Danielle conta 21/12→20/12 e a Sthefany 18/12→17/12, nenhuma das duas pela
+ * admissão. Enquanto o Flow não tiver esse marco, ele não pode dizer "vencido"
+ * nem falar em férias em dobro: estaria acusando um atraso que não existe. */
 const SITUACAO: Record<PeriodoFerias['situacao'], { rotulo: string; cls: string }> = {
-  vencido:        { rotulo: 'vencido',        cls: 'bg-red-50 text-red-700 border-red-200' },
-  vence_em_breve: { rotulo: 'vence em breve', cls: 'bg-amber-50 text-amber-800 border-amber-200' },
-  aberto:         { rotulo: 'a programar',    cls: 'bg-blue-50 text-blue-700 border-blue-200' },
-  em_formacao:    { rotulo: 'em formação',    cls: 'bg-gray-100 text-gray-500 border-gray-200' },
-  quitado:        { rotulo: 'quitado',        cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  vencido:        { rotulo: 'estimado · fora da janela', cls: 'bg-gray-100 text-gray-500 border-gray-200' },
+  vence_em_breve: { rotulo: 'estimado · perto do limite', cls: 'bg-gray-100 text-gray-500 border-gray-200' },
+  aberto:         { rotulo: 'estimado · em aberto',      cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+  em_formacao:    { rotulo: 'em formação',               cls: 'bg-gray-100 text-gray-500 border-gray-200' },
+  quitado:        { rotulo: 'quitado',                   cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
 }
 
 type Aba = 'saldo' | 'emendas' | 'clt'
@@ -51,8 +57,6 @@ export function FeriasClient({
   )
   const nPontes = useMemo(() => new Set(pontes.map(p => p.ponte_id)).size, [pontes])
 
-  const vencidos = useMemo(() => periodos.filter(p => p.situacao === 'vencido'), [periodos])
-  const proximos = useMemo(() => periodos.filter(p => p.situacao === 'vence_em_breve'), [periodos])
   const totalDecimo = useMemo(() => decimo.reduce((s, d) => s + Number(d.total ?? 0), 0), [decimo])
   const gozosPorPeriodo = useMemo(() => {
     const m = new Map<string, FeriasGozo[]>()
@@ -80,7 +84,7 @@ export function FeriasClient({
   const ABAS: { id: Aba; rotulo: string }[] = [
     { id: 'saldo',   rotulo: `Saldo do ano · ${saldos.length}` },
     { id: 'emendas', rotulo: `Emendas · ${nPontes}` },
-    { id: 'clt',     rotulo: vencidos.length > 0 ? `CLT e 13º · ${vencidos.length} vencido(s)` : 'CLT e 13º' },
+    { id: 'clt',     rotulo: '13º e estimativa CLT' },
   ]
 
   return (
@@ -90,7 +94,8 @@ export function FeriasClient({
           <Palmtree className="w-5 h-5 text-orange-600" /> Férias e 13º
         </h1>
         <p className="text-gray-500 text-sm">
-          O saldo do ano é a régua da casa; os períodos aquisitivos são a régua da CLT. Só CLT entra.
+          O controle da casa: saldo do ano, emendas e recesso. O período aquisitivo oficial é o do
+          recibo da folha, não sai daqui. Só CLT entra.
         </p>
       </div>
 
@@ -119,20 +124,24 @@ export function FeriasClient({
       {aba === 'emendas' && <PontesView orgSlug={orgSlug} pontes={pontes} ano={ano} />}
 
       {aba === 'clt' && <>
-      {/* O aviso que justifica a tela existir: passar do concessivo é dobro. */}
-      {vencidos.length > 0 && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 mb-5">
-          <p className="text-sm font-semibold text-red-900 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4" />
-            {vencidos.length} período(s) passaram do prazo de concessão
-          </p>
-          <p className="text-xs text-red-800 mt-1">
-            Férias não concedidas dentro dos 12 meses seguintes ao período aquisitivo são pagas
-            <strong> em dobro</strong> (art. 137 da CLT). O mais antigo venceu há{' '}
-            {Math.max(...vencidos.map(v => -v.dias_para_limite))} dias.
-          </p>
-        </div>
-      )}
+      {/* Antes havia aqui um alerta vermelho de "férias em dobro" a partir do
+        * ciclo calculado da admissão. Os recibos da folha mostraram que esse
+        * ciclo não é o oficial (art. 140) e que os vencimentos acusados não
+        * existiam — a Danielle estava quitada. Alerta que aponta um passivo
+        * inexistente é pior que alerta nenhum: virou o aviso abaixo. */}
+      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 mb-5">
+        <p className="text-sm font-medium text-gray-800 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-gray-400" />
+          Os períodos abaixo são estimativa, não o oficial
+        </p>
+        <p className="text-xs text-gray-500 mt-1 max-w-2xl">
+          São contados de 12 em 12 meses a partir da admissão. Na prática o ciclo oficial costuma
+          ser outro: quem entra no recesso de fim de ano antes de completar 12 meses tem o período
+          reiniciado naquela data (art. 140 da CLT) — a Danielle conta 21/12→20/12 e a Sthefany
+          18/12→17/12. Quem vale para prazo, vencimento e pagamento em dobro é o{' '}
+          <strong className="text-gray-700">recibo de férias da folha</strong>.
+        </p>
+      </div>
 
       {/* 13º — não é gestão de período, mas é a conta que ninguém quer descobrir em novembro. */}
       <section className="rounded-2xl border border-gray-200 bg-white p-5 mb-6">
@@ -188,7 +197,7 @@ export function FeriasClient({
       <section>
         <div className="flex items-baseline justify-between gap-3 mb-3">
           <h2 className="text-sm font-semibold text-gray-700">
-            Períodos aquisitivos{proximos.length > 0 && <span className="text-amber-700"> · {proximos.length} vencendo</span>}
+            Períodos aquisitivos <span className="font-normal text-gray-400">(estimados)</span>
           </h2>
           <button onClick={() => setVerTodos(v => !v)}
             className="text-xs text-gray-500 hover:text-gray-700 transition">
