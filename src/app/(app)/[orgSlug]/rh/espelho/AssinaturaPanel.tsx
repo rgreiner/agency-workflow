@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, useTransition } from 'react'
 import { ShieldCheck, Loader2, Check, X, FileSignature, Unlock, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
-import { assinarTermo, assinarEspelho, reabrirCiclo, carregarAssinaturas, TERMO_TEXTO, type Assinaturas } from '@/app/actions/rh-assinatura'
+import { assinarTermo, assinarEspelho, reabrirCiclo, carregarAssinaturas, type Assinaturas } from '@/app/actions/rh-assinatura'
+import { TERMO_TEXTO } from '@/lib/rh/termo'
 import { enviarCodigo } from '@/app/actions/rh-otp'
 
 const dt = (s: string) => new Date(s).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })

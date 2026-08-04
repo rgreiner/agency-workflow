@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { buscarUsuarioPorEmail } from '@/lib/auth/usuarios'
 import { verificarSenha } from '@/lib/auth/password'
+import { TERMO_TEXTO } from '@/lib/rh/termo'
 
 /**
  * Assinatura eletrônica AVANÇADA (Lei 14.063/2020 art. 4º II) — não é ICP-Brasil.
@@ -17,20 +18,6 @@ import { verificarSenha } from '@/lib/auth/password'
  *  · prova              → IP + user-agent + trilha do ciclo
  * O acordo prévio vem do termo de adesão (MP 2.200-2/2001 art. 10 §2º).
  */
-
-export const TERMO_TEXTO = `TERMO DE ADESÃO À ASSINATURA ELETRÔNICA
-
-Declaro estar ciente e de acordo que:
-
-1. Os documentos de registro de jornada (espelho de ponto) me serão apresentados em meio eletrônico, pelo sistema Flow, e serão por mim assinados eletronicamente.
-
-2. Minha assinatura eletrônica é feita mediante autenticação por login e senha pessoais e intransferíveis, cuja guarda e sigilo são de minha responsabilidade exclusiva.
-
-3. Reconheço a validade jurídica dessa forma de assinatura, nos termos do art. 10, § 2º, da Medida Provisória nº 2.200-2/2001, e do art. 4º, inciso II, da Lei nº 14.063/2020, que trata da assinatura eletrônica avançada.
-
-4. Cada assinatura registra a data e a hora do servidor, o endereço IP, o dispositivo utilizado e um código de verificação (hash) do conteúdo assinado, que permite comprovar que o documento não foi alterado após a assinatura.
-
-5. Ao assinar o espelho de ponto, confirmo que conferi os registros do período e que eles refletem a minha jornada, ressalvadas as divergências que eu venha a apontar antes da assinatura.`
 
 /** Hash canônico: chaves ordenadas, para o mesmo conteúdo gerar sempre o mesmo hash. */
 function canonical(v: unknown): string {
