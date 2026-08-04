@@ -108,7 +108,12 @@ export async function confirmarEmailPessoal(orgSlug: string, colaboradorId: stri
   return { ok: true }
 }
 
-export interface StatusEmailPessoal { email_pessoal: string | null; verificado_em: string | null }
+export interface StatusEmailPessoal {
+  email_pessoal: string | null
+  verificado_em: string | null
+  /** E-mail da ficha, oferecido para preencher o campo. Nunca é "verificado". */
+  sugestao?: string | null
+}
 
 /** Status do e-mail pessoal da própria ficha (para a tela de assinatura). */
 export async function statusEmailPessoal(orgSlug: string, colaboradorId: string) {
@@ -116,13 +121,20 @@ export async function statusEmailPessoal(orgSlug: string, colaboradorId: string)
   if ('error' in c) return { error: c.error }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (c.supabase as any)
-    .from('rh_colaborador').select('email_pessoal, email_pessoal_verificado_em')
+    .from('rh_colaborador').select('email_pessoal, email_pessoal_verificado_em, email')
     .eq('id', colaboradorId).maybeSingle()
   if (error) return { error: error.message }
+  // `email` da ficha entra só como SUGESTÃO para preencher o campo: na prática
+  // ele já é o e-mail pessoal de quase todo mundo (gmail/hotmail), e digitar de
+  // novo é atrito à toa. Sugerir não verifica nada — o código continua sendo
+  // enviado e confirmado. Corporativo não é sugerido: não serve de 2º fator.
+  const daFicha = (data?.email ?? '') as string
+  const corporativo = /@oneaone\.com\.br$/i.test(daFicha)
   return {
     status: {
       email_pessoal: data?.email_pessoal ?? null,
       verificado_em: data?.email_pessoal_verificado_em ?? null,
+      sugestao: !data?.email_pessoal && daFicha && !corporativo ? daFicha : null,
     } as StatusEmailPessoal,
   }
 }

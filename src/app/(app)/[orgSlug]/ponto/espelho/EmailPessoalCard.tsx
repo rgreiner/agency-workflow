@@ -21,7 +21,12 @@ export function EmailPessoalCard({ orgSlug, colaboradorId, onPronto }: {
 
   const carregar = useCallback(async () => {
     const r = await statusEmailPessoal(orgSlug, colaboradorId)
-    if (!r?.error) { setSt(r?.status ?? null); setEmail(r?.status?.email_pessoal ?? '') }
+    // Sem e-mail pessoal ainda, cai no da ficha como sugestão — quase sempre já
+    // é o pessoal. Continua tendo que receber e confirmar o código.
+    if (!r?.error) {
+      setSt(r?.status ?? null)
+      setEmail(r?.status?.email_pessoal || r?.status?.sugestao || '')
+    }
   }, [orgSlug, colaboradorId])
 
   useEffect(() => { carregar() }, [carregar]) // eslint-disable-line react-hooks/set-state-in-effect
@@ -59,7 +64,9 @@ export function EmailPessoalCard({ orgSlug, colaboradorId, onPronto }: {
   }
 
   return (
-    <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5 mb-5">
+    /* id fixo: o painel de assinatura rola até aqui quando a pessoa tenta
+       assinar sem ter confirmado o e-mail. */
+    <div id="email-pessoal" className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5 mb-5 scroll-mt-6">
       <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-1"><Mail className="w-4 h-4" /> E-mail pessoal</h2>
       <p className="text-xs text-gray-600 mb-3">
         Necessário para assinar. É para onde vai o código de confirmação. <b>Não use o e-mail da empresa</b> —

@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback, useTransition } from 'react'
-import { ShieldCheck, Loader2, Check, X, FileSignature, Unlock, AlertTriangle } from 'lucide-react'
+import { ShieldCheck, Loader2, Check, X, FileSignature, Unlock, AlertTriangle, Mail } from 'lucide-react'
 import { toast } from 'sonner'
 import { assinarTermo, assinarEspelho, reabrirCiclo, carregarAssinaturas, type Assinaturas } from '@/app/actions/rh-assinatura'
 import { TERMO_TEXTO } from '@/lib/rh/termo'
-import { enviarCodigo } from '@/app/actions/rh-otp'
+import { enviarCodigo, statusEmailPessoal } from '@/app/actions/rh-otp'
 
 const dt = (s: string) => new Date(s).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
@@ -34,6 +34,22 @@ export function AssinaturaPanel({ orgSlug, colaboradorId, competencia, papel, on
   const daEmpresa = a?.espelho.find(x => x.papel === 'empresa')
   const minha = papel === 'colaborador' ? daColab : daEmpresa
   const precisaTermo = papel === 'colaborador' && !a?.termo
+
+  // Sem e-mail pessoal verificado não há como concluir NADA aqui: o código do
+  // segundo fator não tem para onde ir. Antes o painel abria o modal assim
+  // mesmo, e o "Enviar código" morria num toast vermelho com o campo de
+  // cadastro escondido atrás do próprio modal. Agora o painel checa e barra.
+  // A empresa contra-assina só com senha: para ela nunca há trava.
+  const [emailOk, setEmailOk] = useState<boolean | null>(papel === 'colaborador' ? null : true)
+  useEffect(() => {
+    if (papel !== 'colaborador') return
+    let vivo = true
+    statusEmailPessoal(orgSlug, colaboradorId).then(r => {
+      if (vivo) setEmailOk(!r?.error && !!r?.status?.verificado_em)
+    })
+    return () => { vivo = false }
+  }, [orgSlug, colaboradorId, papel, a])
+  const travadoPorEmail = papel === 'colaborador' && emailOk === false
 
   function fechar() { setModal(null); setSenha(''); setCodigo(''); setEnviadoPara(null); setMotivo('') }
 
@@ -92,7 +108,15 @@ export function AssinaturaPanel({ orgSlug, colaboradorId, competencia, papel, on
         ))}
       </div>
 
-      {precisaTermo && (
+      {travadoPorEmail ? (
+        <div className="rounded-xl bg-amber-50 ring-1 ring-amber-200 px-3 py-2.5 mb-3 text-xs text-amber-800 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          <div>
+            Primeiro confirme seu <b>e-mail pessoal</b> — é para lá que vai o código que autoriza a
+            assinatura. O campo está no topo desta página, em “E-mail pessoal”.
+          </div>
+        </div>
+      ) : precisaTermo && (
         <div className="rounded-xl bg-amber-50 ring-1 ring-amber-200 px-3 py-2.5 mb-3 text-xs text-amber-800 flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
           <div>Antes de assinar o espelho é preciso aceitar o <b>termo de adesão à assinatura eletrônica</b> — é ele que dá validade jurídica à assinatura (MP 2.200-2/2001, art. 10 §2º).</div>
@@ -100,13 +124,22 @@ export function AssinaturaPanel({ orgSlug, colaboradorId, competencia, papel, on
       )}
 
       <div className="flex flex-wrap gap-2">
-        {precisaTermo && (
+        {travadoPorEmail && (
+          <button onClick={() => {
+            document.getElementById('email-pessoal')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            document.querySelector<HTMLInputElement>('#email-pessoal input[type="email"]')?.focus()
+          }}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl bg-gray-900 text-[#fff] hover:bg-gray-800 transition active:scale-[0.97]">
+            <Mail className="w-4 h-4" /> Confirmar e-mail pessoal
+          </button>
+        )}
+        {precisaTermo && !travadoPorEmail && (
           <button onClick={() => setModal('termo')}
             className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl bg-gray-900 text-[#fff] hover:bg-gray-800 transition">
             <FileSignature className="w-4 h-4" /> Ler e aceitar o termo
           </button>
         )}
-        {!minha && !precisaTermo && (
+        {!minha && !precisaTermo && !travadoPorEmail && (
           <button onClick={() => setModal('assinar')}
             className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl bg-orange-600 text-[#fff] hover:bg-orange-700 transition">
             <ShieldCheck className="w-4 h-4" /> {papel === 'empresa' ? 'Contra-assinar' : 'Conferi e assino'}
