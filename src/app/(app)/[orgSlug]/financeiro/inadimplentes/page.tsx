@@ -1,4 +1,4 @@
-import { assertFinanceAccess } from '@/lib/finance'
+import { assertFinanceAccess, fetchDescartados } from '@/lib/finance'
 import { unwrap } from '@/lib/supabase/unwrap'
 import { isRealizado, isIgnorado } from '@/lib/extrato'
 import {
@@ -72,6 +72,13 @@ export default async function InadimplentesPage({ params }: { params: Promise<{ 
       .filter((r): r is string => !!r),
   )
 
+  // Descartes (migration 132). A dedup por `origem_ref` só pega o título PROMOVIDO;
+  // quando o título foi refeito NATIVO no Flow (origem_tipo='producao', sem
+  // origem_ref) não há vínculo nenhum e o descarte é a única marca de "esta linha
+  // não vale mais". Sem este filtro o Fee 63 do IMDM — recebido em 28/07 pelo
+  // lançamento nativo — voltava aqui como inadimplente pela linha do Conta Azul.
+  const descartados = await fetchDescartados(sb, orgId)
+
   // Último aviso por título — a tela precisa responder "já cobramos isso?".
   interface AvisoRaw { lancamento_id: string; bucket: string; canal: string; sent_at: string; email: string | null }
   const ultimoAviso = new Map<string, AbertoItem['ultimoAviso']>()
@@ -109,6 +116,7 @@ export default async function InadimplentesPage({ params }: { params: Promise<{ 
   for (const e of importadasRaw) {
     if (isRealizado(e.situacao) || isIgnorado(e.situacao)) continue          // só em aberto
     if (e.import_ref && promoted.has(e.import_ref)) continue                 // já virou lançamento
+    if (e.import_ref && descartados.has(e.import_ref)) continue              // descartada na mão
     const valorNum = Number(e.valor ?? 0)
     const tipo: 'entrada' | 'saida' =
       e.tipo === 'despesa' ? 'saida' : e.tipo === 'receita' ? 'entrada' : (valorNum < 0 ? 'saida' : 'entrada')

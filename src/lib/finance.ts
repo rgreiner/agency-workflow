@@ -2,6 +2,28 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { getAccess } from '@/lib/auth/access'
+import { unwrap } from '@/lib/supabase/unwrap'
+
+/**
+ * Linhas do extrato da Conta Azul que a pessoa descartou (migration 132). O descarte
+ * vive FORA de `extrato_importado` porque o reimport apaga e recarrega o arquivo
+ * inteiro — a marca precisa sobreviver a isso.
+ *
+ * QUALQUER tela que leia `extrato_importado` como dívida/título tem que filtrar por
+ * este set. Ficou só no Lançamentos e o Inadimplentes ressuscitou 12 títulos do IMDM
+ * já refeitos nativos no Flow (um deles pago) — por isso virou helper compartilhado.
+ *
+ * unwrap e não `?? []`: falha em silêncio aqui = descarte deixa de valer sem aviso.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function fetchDescartados(sb: any, orgId: string): Promise<Set<string>> {
+  return new Set(
+    unwrap<{ import_ref: string }>(
+      await sb.from('extrato_descartado').select('import_ref').eq('org_id', orgId),
+      'descartes do extrato',
+    ).map(d => d.import_ref),
+  )
+}
 
 /**
  * Garante que o usuário tem acesso ao Financeiro (can_finance, cargo "vê tudo" ou
