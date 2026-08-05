@@ -16,6 +16,8 @@ export interface JustPend {
   doc_id: string | null
   hora_entrada: string | null; hora_intervalo_ini: string | null
   hora_intervalo_fim: string | null; hora_saida: string | null
+  /** Período coberto pelo documento — só ele sai da carga do dia (mig. 212). */
+  ausencia_ini: string | null; ausencia_fim: string | null
   rh_colaborador: Colab | null
 }
 
@@ -25,8 +27,8 @@ const TIPO: Record<string, string> = { esqueci: 'Esqueceu de bater', atestado: '
 
 const hhmm = (t: string | null) => (t ?? '').slice(0, 5)
 
-interface MarcHoras { ent: string; intIni: string; intFim: string; sai: string }
-const VAZIO: MarcHoras = { ent: '', intIni: '', intFim: '', sai: '' }
+interface MarcHoras { ent: string; intIni: string; intFim: string; sai: string; ausIni: string; ausFim: string }
+const VAZIO: MarcHoras = { ent: '', intIni: '', intFim: '', sai: '', ausIni: '', ausFim: '' }
 
 export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadrao, pontoObrigatorio = false }: {
   orgSlug: string; extras: ExtraPend[]; justificativas: JustPend[]
@@ -54,6 +56,7 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
     Object.fromEntries(justificativas.map(j => [j.id, {
       ent: hhmm(j.hora_entrada), intIni: hhmm(j.hora_intervalo_ini),
       intFim: hhmm(j.hora_intervalo_fim), sai: hhmm(j.hora_saida),
+      ausIni: hhmm(j.ausencia_ini), ausFim: hhmm(j.ausencia_fim),
     }])))
   const setHora = (id: string, k: keyof MarcHoras, v: string) =>
     setHoras(p => ({ ...p, [id]: { ...(p[id] ?? VAZIO), [k]: v } }))
@@ -70,6 +73,7 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
       const r = await decidirJustificativa(orgSlug, id, status, {
         hora_entrada: h?.ent || null, hora_intervalo_ini: h?.intIni || null,
         hora_intervalo_fim: h?.intFim || null, hora_saida: h?.sai || null,
+        ausencia_ini: h?.ausIni || null, ausencia_fim: h?.ausFim || null,
       })
       if (r?.error) toast.error(r.error)
       else {
@@ -174,6 +178,22 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
                 {/* Corrigir marcação só existe em justificativa de UM dia: aprovar
                     aplica as mesmas horas a cada dia do intervalo, o que estaria
                     errado em qualquer dia além do primeiro. */}
+                {j.data_ini === j.data_fim && (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 mb-2 rounded-lg bg-sky-50 px-2.5 py-2">
+                    {/* É este período — e só ele — que sai da carga do dia.
+                        Atraso na entrada e volta depois do fim do atendimento
+                        continuam descontando (migration 212). */}
+                    <span className="text-[11px] text-sky-800 font-medium">Abonar o atendimento das</span>
+                    <input type="time" value={horas[j.id]?.ausIni ?? ''} onChange={e => setHora(j.id, 'ausIni', e.target.value)}
+                      className="px-2 py-1 text-xs bg-white border border-sky-200 rounded-md text-gray-800" />
+                    <span className="text-[11px] text-sky-800">às</span>
+                    <input type="time" value={horas[j.id]?.ausFim ?? ''} onChange={e => setHora(j.id, 'ausFim', e.target.value)}
+                      className="px-2 py-1 text-xs bg-white border border-sky-200 rounded-md text-gray-800" />
+                    <span className="text-[11px] text-sky-700">
+                      — em branco abona o dia inteiro
+                    </span>
+                  </div>
+                )}
                 {j.data_ini === j.data_fim ? (
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 mb-2 rounded-lg bg-gray-50 px-2.5 py-2">
                     <span className="text-[11px] text-gray-500">Corrigir marcação:</span>

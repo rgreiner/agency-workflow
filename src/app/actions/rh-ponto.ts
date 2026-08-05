@@ -31,6 +31,9 @@ export async function criarJustificativa(
   orgSlug: string, colaboradorId: string,
   j: {
     tipo: string; data_ini: string; data_fim: string; descricao?: string | null; doc_id?: string | null
+    // Período que o documento cobre (ex.: 13:00–14:00 da declaração). É ele que
+    // define quanto sai da carga do dia — ver rh_abono_min (migration 212).
+    ausencia_ini?: string | null; ausencia_fim?: string | null
     // Horário correto (opcional): se informado, a aprovação do RH AJUSTA a marcação.
     hora_entrada?: string | null; hora_intervalo_ini?: string | null
     hora_intervalo_fim?: string | null; hora_saida?: string | null
@@ -43,6 +46,7 @@ export async function criarJustificativa(
     org_id: c.orgId, colaborador_id: colaboradorId, tipo: j.tipo,
     data_ini: j.data_ini, data_fim: j.data_fim || j.data_ini,
     descricao: j.descricao || null, doc_id: j.doc_id || null, created_by: c.userId,
+    ausencia_ini: j.ausencia_ini || null, ausencia_fim: j.ausencia_fim || null,
     hora_entrada: j.hora_entrada || null, hora_intervalo_ini: j.hora_intervalo_ini || null,
     hora_intervalo_fim: j.hora_intervalo_fim || null, hora_saida: j.hora_saida || null,
   })
@@ -58,6 +62,7 @@ export async function criarJustificativa(
 export async function decidirJustificativa(orgSlug: string, id: string, status: string, horas?: {
   hora_entrada?: string | null; hora_intervalo_ini?: string | null
   hora_intervalo_fim?: string | null; hora_saida?: string | null
+  ausencia_ini?: string | null; ausencia_fim?: string | null
 }) {
   const c = await ctx(orgSlug)
   if ('error' in c) return { error: c.error }
@@ -70,6 +75,7 @@ export async function decidirJustificativa(orgSlug: string, id: string, status: 
       .update({
         hora_entrada: horas.hora_entrada || null, hora_intervalo_ini: horas.hora_intervalo_ini || null,
         hora_intervalo_fim: horas.hora_intervalo_fim || null, hora_saida: horas.hora_saida || null,
+        ausencia_ini: horas.ausencia_ini || null, ausencia_fim: horas.ausencia_fim || null,
       })
       .eq('id', id).eq('org_id', c.orgId)
     if (e1) return { error: e1.message }

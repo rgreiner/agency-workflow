@@ -150,6 +150,10 @@ function JustificarModal({ orgSlug, colaboradorId, onClose }: { orgSlug: string;
   const [hIntFim, setHIntFim] = useState('')
   const [hSai, setHSai] = useState('')
   const [arquivo, setArquivo] = useState<File | null>(null)
+  // Período que o atestado/declaração cobre. É o que sai da carga do dia — o
+  // resto (atraso na entrada, volta depois do fim da consulta) continua contando.
+  const [ausIni, setAusIni] = useState('')
+  const [ausFim, setAusFim] = useState('')
   const [saving, start] = useTransition()
 
   const podeMultidia = TIPOS_MULTIDIA.has(tipo)
@@ -184,6 +188,8 @@ function JustificarModal({ orgSlug, colaboradorId, onClose }: { orgSlug: string;
 
       const r = await criarJustificativa(orgSlug, colaboradorId, {
         tipo, data_ini: dia, data_fim: fim, descricao, doc_id: docId,
+        ausencia_ini: periodo ? null : (ausIni || null),
+        ausencia_fim: periodo ? null : (ausFim || null),
         hora_entrada: periodo ? null : (hEnt || null),
         hora_intervalo_ini: periodo ? null : (hIntIni || null),
         hora_intervalo_fim: periodo ? null : (hIntFim || null),
@@ -262,6 +268,24 @@ function JustificarModal({ orgSlug, colaboradorId, onClose }: { orgSlug: string;
           )}
 
           <div><label className="block text-sm text-gray-600 mb-1.5">Descrição</label><textarea value={descricao} onChange={e => setDescricao(e.target.value)} rows={2} className={inputCls} placeholder="Opcional" /></div>
+
+          {!periodo && (
+            <div className="rounded-xl bg-gray-50 p-3">
+              <div className="text-xs font-medium text-gray-600">
+                Horário do atendimento <span className="font-normal text-gray-400">(opcional)</span>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-0.5 mb-2">
+                O que está na declaração (&ldquo;das 13:00 às 14:00&rdquo;). Só este período sai da
+                sua jornada — atraso na entrada ou na volta continua contando.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className={subCls}>Das</label>
+                  <input type="time" value={ausIni} onChange={e => setAusIni(e.target.value)} className={horaCls} /></div>
+                <div><label className={subCls}>Às</label>
+                  <input type="time" value={ausFim} onChange={e => setAusFim(e.target.value)} className={horaCls} /></div>
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm text-gray-600 mb-1.5">
