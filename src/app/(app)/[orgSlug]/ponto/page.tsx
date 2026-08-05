@@ -32,21 +32,14 @@ export default async function PontoPage({ params }: { params: Promise<{ orgSlug:
   }
 
   const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+  // Por RPC, e não direto da tabela: `rh_ponto.saldo_min` é o número gravado
+  // quando o ponto foi batido — não sabe de feriado, emenda nem abono do RH.
+  // Lendo dali, esta tela mostrava -0h39 num dia que o espelho já dava -0h09.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: dias } = await (supabase as any)
-    .from('rh_ponto').select('id, data, entrada, intervalo_ini, intervalo_fim, saida, minutos, saldo_min, acima_10h, extra_status, ajuste_de, ajuste_em, intervalo_maior_min, intervalo_ok, rh_marcacao(hora, seq)')
-    .eq('colaborador_id', colab.id).order('data', { ascending: false }).limit(15)
+    .rpc('rh_ponto_recentes', { p_colaborador: colab.id, p_limite: 15 })
 
-  // rh_marcacao vem aninhada; achata em uma lista de horas na ordem do dia.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const lista = ((dias ?? []) as any[]).map(d => ({
-    ...d,
-    marcacoes: (d.rh_marcacao ?? [])
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .sort((a: any, b: any) => a.seq - b.seq)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .map((m: any) => m.hora as string),
-  })) as PontoDia[]
+  const lista = ((dias ?? []) as PontoDia[])
   const diaHoje = lista.find(d => d.data === hoje) ?? null
 
   return <PontoClient orgSlug={orgSlug} colaboradorId={colab.id} nome={colab.nome} hoje={hoje} diaHoje={diaHoje} recentes={lista.filter(d => d.data !== hoje)} />
