@@ -1,0 +1,41 @@
+/**
+ * Service worker do Flow — mínimo de propósito.
+ *
+ * Só faz uma coisa: quando uma NAVEGAÇÃO falha por falta de rede, serve a
+ * página /offline (cacheada no install). Nenhum outro request é interceptado —
+ * nada de cachear API, página autenticada ou asset: dado velho em tela de
+ * dinheiro/ponto é pior do que erro de rede.
+ *
+ * A existência dele também é o que destrava o resto do PWA: instalação "rica"
+ * no Android e, na fase do web-push, os handlers de push entram aqui.
+ */
+const CACHE = 'flow-sw-v1'
+const OFFLINE_URL = '/offline'
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE).then((cache) =>
+      // cache: 'reload' ignora o cache HTTP — garante a versão viva da página.
+      cache.add(new Request(OFFLINE_URL, { cache: 'reload' })),
+    ),
+  )
+  self.skipWaiting()
+})
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim()),
+  )
+})
+
+self.addEventListener('fetch', (event) => {
+  if (event.request.mode !== 'navigate') return
+  event.respondWith(
+    fetch(event.request).catch(() =>
+      caches.match(OFFLINE_URL).then((r) => r ?? Response.error()),
+    ),
+  )
+})

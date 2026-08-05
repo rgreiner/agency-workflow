@@ -35,6 +35,12 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // O service worker não pode ficar preso em cache HTTP: versão velha de
+        // SW é o bug mais chato de PWA (o navegador segura por até 24h).
+        source: "/sw.js",
+        headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
+      },
+      {
         source: "/(.*)",
         headers: [
           { key: "Content-Security-Policy", value: csp },

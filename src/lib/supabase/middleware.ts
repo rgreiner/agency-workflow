@@ -23,7 +23,14 @@ export async function updateSession(request: NextRequest) {
   // JSON, que é o que o supabase-js sabe tratar. Redirecionar pro /login devolveria
   // HTML no lugar da resposta da API.
   const isRest = path.startsWith('/api/rest/')
-  const isPublic = isAuthPage || isConvite || isCron || isPortal || isRest
+  // Ativos do PWA e de link-preview: o navegador busca manifest e ícones SEM
+  // cookie (fetch sem credenciais, por spec) e o /sw.js não pode ser
+  // redirecionado (a resposta viraria o HTML do login e o registro falha).
+  // /offline é a página que o service worker cacheia pra servir sem rede.
+  const isPwaAsset =
+    path === '/manifest.webmanifest' || path === '/sw.js' || path === '/offline' ||
+    path === '/icon' || path === '/apple-icon' || path === '/opengraph-image'
+  const isPublic = isAuthPage || isConvite || isCron || isPortal || isRest || isPwaAsset
 
   if (!claims && !isPublic) {
     const url = request.nextUrl.clone()

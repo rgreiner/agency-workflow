@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import "./globals.css";
 import { ThemeApplier } from "@/components/layout/ThemeApplier";
+import { PwaRegister } from "@/components/pwa/PwaRegister";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://flow.oneaone.com.br";
 const DESCRIPTION = "Gestão de pauta, produção e mídia para agências.";
@@ -45,6 +46,7 @@ export default function RootLayout({
           }}
         />
         <ThemeApplier />
+        <PwaRegister />
         {children}
       </body>
     </html>
