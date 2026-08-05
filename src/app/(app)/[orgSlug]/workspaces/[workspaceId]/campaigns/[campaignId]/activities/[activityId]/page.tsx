@@ -8,6 +8,7 @@ import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, P
 import Link from 'next/link'
 import { DriveProvisioningNotice } from './DriveProvisioningNotice'
 import { StatusChanger } from './StatusChanger'
+import { MobileStatusBar } from './MobileStatusBar'
 import { ReviewBanner } from './ReviewBanner'
 import { PortalFeedback, type PortalFeedbackItem } from './PortalFeedback'
 import { AutoRefresh } from '@/components/ui/AutoRefresh'
@@ -701,7 +702,19 @@ export default async function ActivityPage({
           </div>
         </div>
 
+        {/* Respiro pro conteúdo não ficar atrás da barra fixa do celular */}
+        <div className="h-16 lg:hidden shrink-0" aria-hidden />
       </div>
+
+      {/* Avançar/voltar com o dedão — só no celular */}
+      <MobileStatusBar
+        key={activity.status}
+        activityId={activityId}
+        currentStatus={activity.status}
+        path={path}
+        meusStatus={meusStatus}
+        ignoraCargo={ignoraCargo}
+      />
     </div>
   )
 }
