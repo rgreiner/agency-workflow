@@ -48,6 +48,20 @@ export async function salvarColaborador(orgSlug: string, id: string | null, data
   return { id: novoId as string }
 }
 
+/** Liga/desliga o controle de jornada da pessoa (migration 209).
+ *  Salva na hora, fora do formulário: é um interruptor, não um campo. */
+export async function setBatePonto(orgSlug: string, id: string, bate: boolean) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (c.supabase as any).rpc('rh_set_bate_ponto', { p_colaborador: id, p_bate: bate })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/rh`)
+  revalidatePath(`/${orgSlug}/rh/${id}`)
+  revalidatePath(`/${orgSlug}/rh/ponto`)
+  return { ok: true }
+}
+
 export async function setColaboradorArquivado(orgSlug: string, id: string, arquivado: boolean) {
   const c = await ctx(orgSlug)
   if ('error' in c) return { error: c.error }

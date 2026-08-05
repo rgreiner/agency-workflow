@@ -117,6 +117,8 @@ export async function carregarFechamento(orgSlug: string, competencia: string) {
 
 export interface EspelhoLinha {
   id: string; nome: string; cargo: string | null; tem_login: boolean
+  /** false = dispensado de jornada controlada (migration 209). */
+  bate_ponto?: boolean
   dias_com_ponto: number; extras_pendentes: number; intervalo_curto: number
   ajustados: number; saldo_min: number
 }

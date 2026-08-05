@@ -56,7 +56,15 @@ export function EspelhoListaClient({ orgSlug, compInicial }: { orgSlug: string; 
                 <tr key={c.id} className="border-b border-gray-50 last:border-0 hover:bg-orange-50/40 transition">
                   <td className="px-4 py-3">
                     <Link href={`/${orgSlug}/rh/espelho/${c.id}?comp=${comp}`} className="font-medium text-gray-900 hover:text-orange-600 transition">{c.nome}</Link>
-                    <div className="text-xs text-gray-400">{c.cargo || '—'}{!c.tem_login && ' · sem login (não bate ponto)'}</div>
+                    <div className="text-xs text-gray-400">
+                      {c.cargo || '—'}
+                      {/* Dispensado por decisão do RH (toggle na ficha) é
+                          diferente de não ter login: um é regra, o outro é
+                          cadastro pela metade. */}
+                      {c.bate_ponto === false
+                        ? ' · dispensado de bater ponto'
+                        : !c.tem_login && ' · sem login (não bate ponto)'}
+                    </div>
                   </td>
                   <td className="px-3 py-3 text-right tabular-nums text-gray-600">{c.dias_com_ponto}</td>
                   <td className={`px-3 py-3 text-right tabular-nums font-medium ${c.saldo_min < 0 ? 'text-red-600' : c.saldo_min > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>{hm(c.saldo_min)}</td>

@@ -5,14 +5,17 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Loader2, Check, Archive, ArchiveRestore, CalendarClock, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Select } from '@/components/ui/Select'
+import { cn } from '@/lib/utils'
 import { formatBRL, parseMoney } from '@/lib/midia'
 import { maskCPF, maskPhone } from '@/lib/masks'
-import { salvarColaborador, setColaboradorArquivado, carregarImpactoDesligamento } from '@/app/actions/rh'
+import { salvarColaborador, setColaboradorArquivado, carregarImpactoDesligamento, setBatePonto } from '@/app/actions/rh'
 import { JornadaEditor, type JornadaVals } from '../JornadaEditor'
 
 export interface Colaborador {
   id: string; nome: string; cpf: string | null; email: string | null; telefone: string | null
   cargo: string | null; tipo_vinculo: string | null; data_admissao: string | null; data_demissao: string | null
+  /** false = sócio/cargo de confiança: sem jornada controlada (migration 209). */
+  bate_ponto?: boolean | null
   status: string; gestor_id: string | null; salario_atual: number | string | null; beneficios_mensal: number | string | null; observacao: string | null; arquivado: boolean
   membro_user_id: string | null
 }
@@ -52,6 +55,18 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
   }
   const [saving, startSave] = useTransition()
   const [pending, startAction] = useTransition()
+
+  const [batePonto, setBatePontoLocal] = useState(colab.bate_ponto !== false)
+  const [togglando, startToggle] = useTransition()
+  function alternarPonto(v: boolean) {
+    setBatePontoLocal(v)               // otimista: o interruptor responde na hora
+    startToggle(async () => {
+      const r = await setBatePonto(orgSlug, colab.id, v)
+      if (r?.error) { setBatePontoLocal(!v); toast.error(r.error); return }
+      toast.success(v ? 'Passa a bater ponto.' : 'Dispensado de bater ponto.')
+      router.refresh()
+    })
+  }
 
   function salvar() {
     if (!f.nome.trim()) { toast.error('Nome é obrigatório.'); return }
@@ -112,6 +127,32 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
             )}
           </div>
           <div><label className={labelCls}>Vínculo</label><Select value={f.tipo_vinculo} onChange={v => set('tipo_vinculo', v)} options={VINCULOS} placeholder="—" /></div>
+
+          {/* Interruptor, não campo do formulário: salva na hora pela RPC
+              própria. Fica ao lado do Vínculo porque é ali que se decide se a
+              pessoa tem jornada controlada. */}
+          <div className="sm:col-span-2">
+            <label className={labelCls}>Controle de jornada</label>
+            <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-gray-100">
+              <button type="button" role="switch" aria-checked={batePonto} disabled={togglando}
+                onClick={() => alternarPonto(!batePonto)}
+                className={cn('mt-0.5 relative w-10 h-6 rounded-full transition-colors shrink-0 disabled:opacity-50',
+                  batePonto ? 'bg-orange-600' : 'bg-gray-300')}>
+                <span className={cn('absolute top-0.5 w-5 h-5 rounded-full bg-[#fff] shadow transition-transform',
+                  batePonto ? 'translate-x-[1.125rem]' : 'translate-x-0.5')} />
+              </button>
+              <div className="min-w-0">
+                <p className="text-sm text-gray-800">
+                  {batePonto ? 'Bate ponto' : 'Dispensado de bater ponto'}
+                </p>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  {batePonto
+                    ? 'Tem jornada a cumprir: entra na cobrança, no espelho e no fechamento.'
+                    : 'Sem jornada a cumprir — não gera falta nem entra na cobrança. É o caso de sócio e cargo de confiança (art. 62, II da CLT). Se registrar horas, elas aparecem como estão.'}
+                </p>
+              </div>
+            </div>
+          </div>
           <div><label className={labelCls}>E-mail</label><input value={f.email} onChange={e => set('email', e.target.value)} className={inputCls} /></div>
           <div><label className={labelCls}>Telefone</label><input value={f.telefone} onChange={e => set('telefone', maskPhone(e.target.value))} className={inputCls} placeholder="(00) 00000-0000" inputMode="tel" /></div>
           <div><label className={labelCls}>Admissão</label><input type="date" value={f.data_admissao} onChange={e => set('data_admissao', e.target.value)} className={inputCls} /></div>
