@@ -246,7 +246,6 @@ export function Sidebar({
   // Cadastros de can_vendas OU can_finance.
   const groupVisible: Record<string, boolean> = { midias: canMidias, producao: canProducao, financeiro: canFinance, cadastros: canCadastros, rh: canRh }
   const comercialGroups = COMERCIAL_GROUPS.filter(g => groupVisible[g.id])
-  const gruposDoModo = comercialGroups.filter(g => GRUPO_MODO[g.id] === mode)
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   useEffect(() => {
     try {
@@ -290,6 +289,12 @@ export function Sidebar({
     if (m && m !== mode && modoPermitido[m]) setMode(m)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname])
+
+  // Depois do `mode`, nunca antes: `.filter` executa na renderização e ler
+  // `mode` acima da declaração derruba a tela inteira com "Cannot access before
+  // initialization". O TypeScript não acusa porque o uso está dentro de um
+  // callback — só aparece em runtime, e em produção já minificado.
+  const gruposDoModo = comercialGroups.filter(g => GRUPO_MODO[g.id] === mode)
 
   // SSR sempre renderiza 'Ctrl K'; suppressHydrationWarning no <kbd> cobre o Mac.
   const shortcutLabel =
