@@ -273,7 +273,7 @@ async function runGemini(system: string, parts: ReviewPart[]): Promise<{ model: 
 }
 
 /** Monta URL + headers do Gemini: AI Studio (key) se houver, senão Vertex (JWT). */
-async function geminiEndpoint(model: string): Promise<{ url: string; headers: Record<string, string> }> {
+export async function geminiEndpoint(model: string): Promise<{ url: string; headers: Record<string, string> }> {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY
   if (apiKey) {
     return {

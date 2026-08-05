@@ -68,6 +68,14 @@ export function MeuEspelhoClient({ orgSlug, colaboradorId, compInicial }: {
             <div key={x.l} className="rounded-xl border border-gray-200 bg-white p-3">
               <div className="text-[11px] text-gray-400">{x.l}</div>
               <div className={`text-lg font-semibold tabular-nums ${x.c}`}>{x.v}</div>
+              {/* O total de extras é o que foi TRABALHADO além da jornada. O que
+                  entra na folha é só a parte aprovada — dizer isso aqui evita a
+                  conversa de "mas o sistema mostrava X". */}
+              {x.l === 'Extras' && (
+                <div className="text-[10px] text-amber-700 mt-1 leading-tight">
+                  só entra na folha depois de aprovado
+                </div>
+              )}
             </div>
           ))}
         </div>

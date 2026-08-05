@@ -86,6 +86,7 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
         </button>
         <p className="text-[11px] text-gray-400 text-center mt-2">
           Pode pausar quantas vezes precisar. Só o almoço (o maior intervalo do dia) precisa ter no mínimo 1h.
+          Hora além da jornada <b className="text-amber-700">só é computada depois de aprovada</b> pelo gestor.
         </p>
 
         {d && !dentro && horas.length > 0 && (

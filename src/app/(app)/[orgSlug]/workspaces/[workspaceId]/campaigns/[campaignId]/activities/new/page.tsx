@@ -6,6 +6,7 @@ import { createActivity } from '@/app/actions/activity'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG } from '@/types'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { ArrowLeft, FolderOpen, ExternalLink, Sparkles } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { DatePicker } from '@/components/ui/DatePicker'
 
@@ -59,6 +60,8 @@ export default function NewActivityPage() {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
   const [isImprovingAI, setIsImprovingAI] = useState(false)
+  // Perguntas devolvidas pela IA quando o rascunho não dá pra estruturar.
+  const [faltandoIA, setFaltandoIA] = useState<string[]>([])
 
   const [date, setDate] = useState(todayPrefix())
   const [veiculo, setVeiculo] = useState('')
@@ -96,6 +99,8 @@ export default function NewActivityPage() {
   async function handleImproveWithAI() {
     if (!form.description.trim() || isImprovingAI) return
     setIsImprovingAI(true)
+    setFaltandoIA([])
+    const anterior = form.description
     try {
       const res = await fetch('/api/ai/improve-briefing', {
         method: 'POST',
@@ -103,9 +108,19 @@ export default function NewActivityPage() {
         body: JSON.stringify({ text: form.description }),
       })
       const data = await res.json()
-      if (data.improved) setF('description', data.improved)
+      if (!res.ok) throw new Error(data.error)
+      if (data.briefing) {
+        setF('description', data.briefing)
+        toast.success('Briefing otimizado.', {
+          action: { label: 'Desfazer', onClick: () => setF('description', anterior) },
+        })
+      } else if (data.faltando?.length) {
+        setFaltandoIA(data.faltando)
+      } else {
+        toast.error('A IA não retornou um briefing. Tente de novo.')
+      }
     } catch {
-      // silently fail — user keeps original text
+      toast.error('Não foi possível otimizar o briefing agora.')
     } finally {
       setIsImprovingAI(false)
     }
@@ -220,15 +235,27 @@ export default function NewActivityPage() {
                 className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-full border border-orange-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Sparkles className={cn('w-3 h-3', isImprovingAI && 'animate-pulse')} />
-                {isImprovingAI ? 'Melhorando...' : 'Melhorar com IA'}
+                {isImprovingAI ? 'Otimizando...' : 'Otimizar com IA'}
               </button>
             )}
           </div>
           <textarea name="description" value={form.description}
             onChange={(e) => setF('description', e.target.value)}
             placeholder="Descreva o objetivo, diretrizes e referências..."
-            rows={4}
+            rows={Math.min(16, Math.max(4, form.description.split('\n').length + 1))}
             className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none" />
+          {faltandoIA.length > 0 && (
+            <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-xs font-medium text-amber-800 mb-1.5">
+                Para estruturar o briefing, responda no texto acima:
+              </p>
+              <ul className="space-y-1">
+                {faltandoIA.map((q, i) => (
+                  <li key={i} className="text-xs text-amber-700">• {q}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* Status inicial */}
