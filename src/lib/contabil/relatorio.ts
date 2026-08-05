@@ -26,11 +26,33 @@ function fmtData(iso: string | null): string {
   return `${d}/${m}/${y}`
 }
 
+const brlAviso = (v: number) =>
+  `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
 /** Primeiro e último dia da competência 'YYYY-MM'. */
 export function limitesCompetencia(competencia: string): { ini: string; fim: string } {
   const [y, m] = competencia.split('-').map(Number)
   const ultimo = new Date(Date.UTC(y, m, 0)).getUTCDate()
   return { ini: `${competencia}-01`, fim: `${competencia}-${String(ultimo).padStart(2, '0')}` }
+}
+
+/**
+ * Nomes de categoria que representam dinheiro mudando de conta, lidos do
+ * CADASTRO da org (grupo "Transferências" e seus filhos). Vem do cadastro e não
+ * de uma lista fixa porque a org renomeia categoria quando quer — e uma lista
+ * fixa que envelhece aqui volta a inflar a receita em silêncio.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function categoriasDeTransferencia(finance_categorias: any): Set<string> {
+  const nomes = new Set<string>()
+  for (const g of (Array.isArray(finance_categorias) ? finance_categorias : [])) {
+    if (!/^transfer/i.test(String(g?.nome ?? ''))) continue
+    if (g?.nome) nomes.add(String(g.nome))
+    for (const f of (Array.isArray(g?.filhos) ? g.filhos : [])) {
+      if (f?.nome) nomes.add(String(f.nome))
+    }
+  }
+  return nomes
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -82,13 +104,28 @@ export async function montarPacoteContabil(sb: any, orgId: string, competencia: 
     .order('data_liquidacao', { ascending: true })
 
   const nomeConta = new Map((contas ?? []).map((c: { id: string; nome: string }) => [c.id, c.nome]))
+
+  // Transferência entre contas NÃO é receita — é dinheiro mudando de bolso, e a
+  // base do imposto é o que entra de CLIENTE. Olhar só `origem_tipo` não bastava:
+  // pega a transferência feita pela tela do Flow, mas deixa passar a que veio do
+  // extrato importado, que chega com origem 'conta_azul'/'ofx' e categoria de
+  // transferência. Foi assim que R$ 8.500 entraram na receita de julho/2026.
+  const { data: cfgCat } = await sb
+    .from('org_settings').select('finance_categorias').eq('org_id', orgId).maybeSingle()
+  const catTransf = categoriasDeTransferencia(cfgCat?.finance_categorias)
+  const ehTransferencia = (l: Record<string, unknown>) =>
+    l.origem_tipo === 'transferencia'
+    || catTransf.has(String(l.categoria ?? ''))
+    || /^transfer/i.test(String(l.categoria ?? ''))
+
   let totalRecebido = 0
-  // Transferência entre contas NÃO é receita — é dinheiro mudando de conta (nasce
-  // 'recebido' com data_liquidacao). Sem excluir, o fechamento reportava a
-  // transferência como receita realizada pra contabilidade. Filtro no JS (o `neq`
-  // do PostgREST descartaria também as linhas com origem_tipo NULL).
+  let transferenciasFora = 0
   const linhasReceb = ((receb ?? []) as Record<string, unknown>[])
-    .filter(l => l.origem_tipo !== 'transferencia')
+    .filter(l => {
+      if (!ehTransferencia(l)) return true
+      transferenciasFora += Number(l.valor_realizado ?? l.valor ?? 0)
+      return false
+    })
     .map(l => {
     const v = Number(l.valor_realizado ?? l.valor ?? 0)
     totalRecebido += v
@@ -128,6 +165,15 @@ export async function montarPacoteContabil(sb: any, orgId: string, competencia: 
     } catch {
       avisos.push(`OFX "${a.nome}" está registrado mas o arquivo não foi encontrado no servidor.`)
     }
+  }
+
+  // Dito em voz alta: a contabilidade compara o total com o extrato e a
+  // diferença precisa ter nome, senão parece receita faltando.
+  if (transferenciasFora > 0) {
+    avisos.push(
+      `${brlAviso(transferenciasFora)} em transferências entre contas próprias ficaram FORA dos recebimentos `
+      + '— é dinheiro mudando de conta, não receita de cliente. Aparece no Extrato, como movimento bancário.',
+    )
   }
 
   const ofxAnexados = anexos.length - 1
