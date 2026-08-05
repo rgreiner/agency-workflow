@@ -85,7 +85,7 @@ export default async function FaturamentoPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const docsRaw = unwrap<any>(await (supabase as any)
     .from('midias')
-    .select(`id, numero, serie, titulo, valor, desconto_pct, faturamento, prazo, data_base, dias_agencia, detalhe, anexos, workspaces(${WS_CONTATO}), veiculos(name, tax_id, notes, ${CONTATO_JSON})`)
+    .select(`id, numero, serie, titulo, valor, desconto_pct, faturamento, prazo, data_base, dias_agencia, detalhe, anexos, situacao, workspaces(${WS_CONTATO}), veiculos(name, tax_id, notes, ${CONTATO_JSON})`)
     .eq('org_id', orgId).in('situacao', ['faturar', 'faturado']).eq('archived', false)
     .order('numero', { ascending: false }), 'mídias a faturar')
 
@@ -135,8 +135,22 @@ export default async function FaturamentoPage({
     return Math.round(v * q * pct) / 100
   }
 
+  /**
+   * Sai da fila quem já foi lançado — e também quem foi faturado SEM comissão
+   * (migration 219): esse não gera lançamento por definição, então o teste de
+   * "tem lançamento?" nunca o removeria e ele ficaria preso na tela para
+   * sempre, já faturado. 'faturar' nunca é filtrado aqui: é o estado de quem
+   * ainda espera ação.
+   */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const midias: MidiaView[] = (docsRaw as any[]).filter(d => !lancadas.has(d.id)).map(d => ({
+  const resolvida = (d: any) =>
+    lancadas.has(d.id) ||
+    (d.situacao === 'faturado'
+      && (Math.round(Number(d.valor ?? 0) * Number(d.desconto_pct ?? 0)) / 100)
+         + comissaoProducaoDe(d.detalhe) <= 0)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const midias: MidiaView[] = (docsRaw as any[]).filter(d => !resolvida(d)).map(d => ({
     id: d.id as string,
     numero: d.numero as number | null,
     serie: d.serie as string | null,
