@@ -36,6 +36,10 @@ export function CategoriasClient({ orgSlug, categorias: initCats, centros: initC
     setGrupos(prev => prev.map((g, i) => i === gi ? { ...g, filhos: [...g.filhos, { nome: '', cor: g.cor }] } : g))
     setOpen(prev => new Set(prev).add(gi))
   }
+  const setFilhoFora = (gi: number, fi: number, fora: boolean) =>
+    setGrupos(prev => prev.map((g, i) => i === gi
+      ? { ...g, filhos: g.filhos.map((f, j) => j === fi ? { ...f, fora_receita: fora } : f) }
+      : g))
   const updateFilho = (gi: number, fi: number, nome: string) =>
     setGrupos(prev => prev.map((g, i) => i === gi ? { ...g, filhos: g.filhos.map((f, j) => j === fi ? { ...f, nome } : f) } : g))
   const removeFilho = (gi: number, fi: number) =>
@@ -136,6 +140,20 @@ export function CategoriasClient({ orgSlug, categorias: initCats, centros: initC
                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: f.cor ?? g.cor ?? '#cbd5e1' }} />
                     <input value={f.nome} placeholder="Nome da subcategoria"
                       onChange={e => updateFilho(gi, fi, e.target.value)} className={rowInput} />
+                    {/* O que entra na conta sem ser venda (transferência, estorno,
+                        numerário em trânsito) não pode virar base de imposto. */}
+                    {tab === 'entrada' && !g.fora_receita && (
+                      <label title="Entra na conta mas não é receita de cliente — fica fora do fechamento contábil"
+                        className="inline-flex items-center gap-1 shrink-0 text-[11px] text-gray-400 cursor-pointer hover:text-gray-600 transition">
+                        <input type="checkbox" checked={!!f.fora_receita}
+                          onChange={e => setFilhoFora(gi, fi, e.target.checked)}
+                          className="w-3.5 h-3.5 accent-orange-600" />
+                        não é receita
+                      </label>
+                    )}
+                    {tab === 'entrada' && g.fora_receita && (
+                      <span className="shrink-0 text-[11px] text-gray-400">não é receita</span>
+                    )}
                     <button onClick={() => removeFilho(gi, fi)} title="Remover"
                       className="p-1 rounded text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>

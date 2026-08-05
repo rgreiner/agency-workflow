@@ -636,11 +636,18 @@ export async function limparExtrato(orgSlug: string) {
 // Categorias em árvore de 2 níveis (grupo → filhos), separadas por tipo
 // (entrada = receita | saida = despesa). Um grupo sem filhos é uma categoria
 // avulsa, selecionável diretamente.
-export interface FinanceCategoriaFilho { nome: string; cor: string | null }
+export interface FinanceCategoriaFilho {
+  nome: string; cor: string | null
+  /** Entra na conta mas não é receita de cliente (transferência, estorno,
+   *  numerário em trânsito). Fica fora da base que vai à contabilidade. */
+  fora_receita?: boolean
+}
 export interface FinanceCategoriaGrupo {
   nome: string
   tipo: string
   cor: string | null
+  /** Marca o grupo inteiro como fora da receita — vale para todos os filhos. */
+  fora_receita?: boolean
   filhos: FinanceCategoriaFilho[]
 }
 export interface FinanceCentro { nome: string; cor: string | null; arquivado?: boolean }

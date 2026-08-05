@@ -37,19 +37,24 @@ export function limitesCompetencia(competencia: string): { ini: string; fim: str
 }
 
 /**
- * Nomes de categoria que representam dinheiro mudando de conta, lidos do
- * CADASTRO da org (grupo "Transferências" e seus filhos). Vem do cadastro e não
- * de uma lista fixa porque a org renomeia categoria quando quer — e uma lista
- * fixa que envelhece aqui volta a inflar a receita em silêncio.
+ * Categorias que NÃO são receita de cliente e por isso ficam fora da base que
+ * vai à contabilidade: transferência entre contas próprias, numerário em
+ * trânsito, estorno. É dinheiro que entra na conta sem ser venda.
+ *
+ * Sai do CADASTRO da org (flag `fora_receita` no grupo ou no filho), não de uma
+ * lista fixa no código: lista fixa envelhece quando alguém cria ou renomeia
+ * categoria, e volta a inflar a receita em silêncio — que é exatamente o bug
+ * que isto conserta. O prefixo "Transfer" fica como rede de segurança para org
+ * que ainda não marcou nada.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function categoriasDeTransferencia(finance_categorias: any): Set<string> {
+function categoriasForaDaReceita(finance_categorias: any): Set<string> {
   const nomes = new Set<string>()
   for (const g of (Array.isArray(finance_categorias) ? finance_categorias : [])) {
-    if (!/^transfer/i.test(String(g?.nome ?? ''))) continue
-    if (g?.nome) nomes.add(String(g.nome))
+    const grupoFora = !!g?.fora_receita || /^transfer/i.test(String(g?.nome ?? ''))
+    if (grupoFora && g?.nome) nomes.add(String(g.nome))
     for (const f of (Array.isArray(g?.filhos) ? g.filhos : [])) {
-      if (f?.nome) nomes.add(String(f.nome))
+      if ((grupoFora || f?.fora_receita) && f?.nome) nomes.add(String(f.nome))
     }
   }
   return nomes
@@ -112,10 +117,10 @@ export async function montarPacoteContabil(sb: any, orgId: string, competencia: 
   // transferência. Foi assim que R$ 8.500 entraram na receita de julho/2026.
   const { data: cfgCat } = await sb
     .from('org_settings').select('finance_categorias').eq('org_id', orgId).maybeSingle()
-  const catTransf = categoriasDeTransferencia(cfgCat?.finance_categorias)
+  const catFora = categoriasForaDaReceita(cfgCat?.finance_categorias)
   const ehTransferencia = (l: Record<string, unknown>) =>
     l.origem_tipo === 'transferencia'
-    || catTransf.has(String(l.categoria ?? ''))
+    || catFora.has(String(l.categoria ?? ''))
     || /^transfer/i.test(String(l.categoria ?? ''))
 
   let totalRecebido = 0
@@ -171,8 +176,9 @@ export async function montarPacoteContabil(sb: any, orgId: string, competencia: 
   // diferença precisa ter nome, senão parece receita faltando.
   if (transferenciasFora > 0) {
     avisos.push(
-      `${brlAviso(transferenciasFora)} em transferências entre contas próprias ficaram FORA dos recebimentos `
-      + '— é dinheiro mudando de conta, não receita de cliente. Aparece no Extrato, como movimento bancário.',
+      `${brlAviso(transferenciasFora)} ficaram FORA dos recebimentos: transferência entre contas `
+      + 'próprias, numerário em trânsito e estorno não são receita de cliente. Continuam no Extrato, '
+      + 'como movimento bancário.',
     )
   }
 
