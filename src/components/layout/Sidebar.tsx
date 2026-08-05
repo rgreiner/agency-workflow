@@ -382,7 +382,7 @@ export function Sidebar({
   const displayName = userName || userEmail
 
   const sidebarContent = (
-    <aside className="sidebar-shell w-60 bg-gray-900 flex flex-col h-full select-none">
+    <aside className="sidebar-shell w-60 bg-gray-900 flex flex-col h-full select-none pt-[env(safe-area-inset-top,0px)] md:pt-0">
 
       {/* ── Org header: logo + switcher de modo (Trabalho × Operacional) ── */}
       <div className="px-3 pt-4 pb-3 border-b border-gray-800 flex items-center gap-2">
@@ -734,7 +734,7 @@ export function Sidebar({
       <button
         onClick={() => setMobileOpen(true)}
         className={cn(
-          'fixed top-3 left-3 z-50 md:hidden',
+          'fixed top-[max(0.75rem,env(safe-area-inset-top,0px))] left-3 z-50 md:hidden',
           'bg-gray-900 text-gray-300 rounded-lg p-2 shadow-lg',
           'transition-opacity duration-200',
           mobileOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'

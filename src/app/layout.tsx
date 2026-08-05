@@ -26,6 +26,10 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // PWA instalado no iOS: com statusBarStyle black-translucent o conteúdo vai
+  // até a borda da tela — o cover + safe-area (AppShell/Sidebar) evita que o
+  // topo fique embaixo do relógio/notch.
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
     { media: "(prefers-color-scheme: dark)", color: "#0d1117" },

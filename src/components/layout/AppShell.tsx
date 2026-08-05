@@ -83,7 +83,8 @@ export function AppShell({
       />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <main className="flex-1 overflow-y-auto min-w-0">
-          <div className="pt-12 md:pt-0 h-full">
+          {/* Mobile: 3rem pro hambúrguer + safe-area (PWA iOS, conteúdo sob o notch). */}
+          <div className="pt-[calc(env(safe-area-inset-top,0px)+3rem)] md:pt-0 h-full">
             {children}
           </div>
         </main>

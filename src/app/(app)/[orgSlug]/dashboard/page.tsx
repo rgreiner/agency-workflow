@@ -13,6 +13,8 @@ import Link from 'next/link'
 import { Avatar } from '@/components/ui/Avatar'
 import { WeeklyProgress } from '@/components/dashboard/WeeklyProgress'
 import { ConciliacaoAlert } from '@/components/dashboard/ConciliacaoAlert'
+import { PontoCardHome } from '@/components/ponto/PontoCardHome'
+import { pontoEstado } from '@/app/actions/rh-ponto'
 
 interface HomePessoal { concluidas_mes: number; no_prazo_pct: number | null; tempo_medio_dias: number | null; interacoes_30d: number }
 interface HomePessoaRank { user_id: string; full_name: string | null; avatar_url: string | null; entregas: number; carga: number; atrasadas: number }
@@ -114,6 +116,9 @@ export default async function DashboardPage({ params }: { params: Promise<{ orgS
 
   const userName = profile?.full_name ?? user.email ?? 'você'
 
+  // Card do ponto (null para quem não é colaborador com ponto — ex.: sócio).
+  const ponto = await pontoEstado()
+
   const meuDesempenho = [
     { label: 'Concluídas no mês', value: String(pessoal?.concluidas_mes ?? 0), icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
     { label: 'Entregues no prazo', value: pct(pessoal?.no_prazo_pct ?? null), icon: Target, color: pctColor(pessoal?.no_prazo_pct ?? null), bg: 'bg-blue-50' },
@@ -122,9 +127,14 @@ export default async function DashboardPage({ params }: { params: Promise<{ orgS
   ]
 
   return (
-    <div className="p-6">
+    <div className="p-4 md:p-6">
       <WeeklyProgress done={doneThisWeek} total={Math.max(totalWeek, doneThisWeek)}
         overdue={overdueTasks.length} myActiveCount={myActive.length} userName={userName} />
+
+      {ponto && (
+        <PontoCardHome orgSlug={orgSlug} colaboradorId={ponto.colaborador_id}
+          marcacoes={ponto.marcacoes ?? []} />
+      )}
 
       <ConciliacaoAlert orgSlug={orgSlug} orgId={orgData.id} userId={user.id} />
 
