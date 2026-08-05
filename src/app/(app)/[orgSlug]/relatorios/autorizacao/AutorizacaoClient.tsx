@@ -47,7 +47,8 @@ export function AutorizacaoClient({ orgSlug, clientes, clienteId, competencia, d
         </h1>
         <p className="text-gray-500 text-sm">
           A lista do mês que vai ao financeiro do cliente: o que não está aqui, ele confirma com a
-          agência antes de pagar. Mídia entra pela veiculação, produção pela emissão.
+          agência antes de pagar. Mídia entra no mês em que a veiculação começa; produção, pela
+          emissão.
         </p>
       </div>
 

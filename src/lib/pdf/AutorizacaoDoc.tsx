@@ -137,8 +137,9 @@ export function AutorizacaoDoc({ d }: { d: AutorizacaoData }) {
         <Text style={t.nota}>
           Esta relação contém os documentos autorizados por {d.agencia.nome} e faturados na
           competência de {d.competenciaLabel}. Notas fiscais que não correspondam a um documento
-          desta lista devem ser confirmadas com a agência antes do pagamento. A mídia entra pelo
-          período de veiculação e a produção pela data de emissão.
+          desta lista devem ser confirmadas com a agência antes do pagamento. A mídia entra no mês
+          em que a veiculação começa e a produção pela data de emissão — cada documento aparece em
+          um único relatório.
         </Text>
 
         <View style={t.rodape} fixed>

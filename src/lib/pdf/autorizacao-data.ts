@@ -8,9 +8,12 @@
 // veiculação vazias nas linhas de produção).
 //
 // Duas regras de competência, e elas são diferentes de propósito:
-//  · MÍDIA por VEICULAÇÃO, com INTERSECÇÃO do mês: uma bi-semana de 27/07 a
-//    09/08 aparece no relatório de julho E no de agosto, porque em ambos ela
-//    esteve no ar. Era assim no SiGA e o Rafael manteve (04/08).
+//  · MÍDIA pelo INÍCIO da veiculação: a bi-semana de 27/07 a 09/08 é de julho,
+//    e só de julho. A régua era intersecção até 05/08, quando o Rafael corrigiu
+//    ("bi-semana 28 começa em junho, conta a data de início dela"): o relatório
+//    autoriza PAGAMENTO, e o mesmo documento saindo em dois meses faz o
+//    financeiro do cliente ler duas cobranças onde existe uma. Em agosto do É o
+//    Amor isso era a diferença entre R$ 20.100 e R$ 9.900.
 //  · PRODUÇÃO por EMISSÃO: entra no mês em que o documento foi emitido.
 //
 // Só entra o que está FATURADO (decisão do Rafael, 04/08): o relatório é o que
@@ -82,7 +85,7 @@ export async function loadAutorizacao(
       .select('id, serie, numero, titulo, prazo, valor, situacao, primeira_veiculacao, ultima_veiculacao, veiculo_id')
       .eq('org_id', orgId).eq('workspace_id', workspaceId)
       .eq('archived', false)
-      .lte('primeira_veiculacao', fim).gte('ultima_veiculacao', ini)
+      .gte('primeira_veiculacao', ini).lte('primeira_veiculacao', fim)
       .order('numero'),
     // Só o Pedido de Produção (PP). Orçamento e proposta não são cobrança, e o
     // Fee é honorário da agência — nenhum dos três estava no relatório antigo.
