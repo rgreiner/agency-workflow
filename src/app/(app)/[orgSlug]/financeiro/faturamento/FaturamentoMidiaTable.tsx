@@ -73,6 +73,9 @@ function MidiaRow({ orgSlug, midia, cat }: { orgSlug: string; midia: MidiaView; 
   const [cls, setCls] = useState<Classificacao>({
     conta: cat.defaultConta, categoria: 'Comissão', centro: midia.cliente, forma: '',
   })
+  // Sem comissão nenhuma: o documento existe só para constar no Relatório de
+  // Autorização (o cliente paga o veículo direto). Faturar não gera lançamento.
+  const semComissao = (midia.comissao + midia.comissaoProducao) <= 0
 
   function persist(next: Anexo[]) {
     setAnexos(next)
@@ -121,10 +124,13 @@ function MidiaRow({ orgSlug, midia, cat }: { orgSlug: string; midia: MidiaView; 
             <FaturarButton
               missing={faltando(anexos)}
               blocked={midia.semVeiculo ? 'Informe o veículo na mídia — sem ele a comissão não vira lançamento.' : undefined}
-              okToast="Comissão lançada no financeiro."
+              semComissao={semComissao}
+              okToast={semComissao
+                ? 'Faturado sem comissão — entrou no relatório, sem lançamento no caixa.'
+                : 'Comissão lançada no financeiro.'}
               action={() => lancarMidia(orgSlug, midia.id, {
                 conta_id: cls.conta, categoria: cls.categoria, centro_custo: cls.centro, forma_pagamento: cls.forma,
-              })}
+              }, semComissao)}
               destinatarioPadrao={midia.contatos.find(c => c.papel === 'Cliente')?.emailNf}
               enviar={(dest) => enviarFaturamentoEmail(orgSlug, 'midia', midia.id, dest)}
             />

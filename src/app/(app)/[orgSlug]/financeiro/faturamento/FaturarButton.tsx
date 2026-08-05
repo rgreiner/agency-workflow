@@ -17,13 +17,19 @@ import { toast } from 'sonner'
  * mídia sem veículo. Aí o botão some e fica o motivo no lugar dele, porque deixar
  * clicar só pra receber erro do banco é pior do que não deixar clicar.
  */
-export function FaturarButton({ action, missing, okToast, enviar, destinatarioPadrao, blocked }: {
+export function FaturarButton({ action, missing, okToast, enviar, destinatarioPadrao, blocked, semComissao }: {
   action: () => Promise<{ error?: string } | void>
   missing: string[]
   okToast: string
   enviar?: (destinatario: string) => Promise<{ error?: string }>
   destinatarioPadrao?: string
   blocked?: string
+  /**
+   * Documento em que a agência não ganha comissão (o cliente paga o veículo
+   * direto). Faturar aqui serve só para ele constar no Relatório de
+   * Autorização — nenhum lançamento é gerado, e a confirmação diz isso.
+   */
+  semComissao?: boolean
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -90,7 +96,9 @@ export function FaturarButton({ action, missing, okToast, enviar, destinatarioPa
     return (
       <span className="inline-flex items-center gap-2 text-xs">
         {avisoMissing}
-        <span className="text-gray-500">Faturar?</span>
+        <span className={semComissao ? 'text-amber-700' : 'text-gray-500'}>
+          {semComissao ? 'Sem comissão — entra no relatório, não gera lançamento. Faturar?' : 'Faturar?'}
+        </span>
         <button onClick={runFaturar} disabled={pending}
           className="font-medium text-orange-600 hover:text-orange-700 inline-flex items-center gap-1 disabled:opacity-50">
           {pending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Sim'}

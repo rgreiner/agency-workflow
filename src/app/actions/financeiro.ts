@@ -13,7 +13,9 @@ export interface FaturarClassificacao {
   forma_pagamento?: string | null
 }
 
-export async function lancarMidia(orgSlug: string, midiaId: string, cls?: FaturarClassificacao) {
+/** `semComissao` é a confirmação explícita para documento sem comissão: entra no
+ *  Relatório de Autorização e NÃO gera lançamento (ver migration 219). */
+export async function lancarMidia(orgSlug: string, midiaId: string, cls?: FaturarClassificacao, semComissao = false) {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
@@ -23,6 +25,7 @@ export async function lancarMidia(orgSlug: string, midiaId: string, cls?: Fatura
     p_user_id: user.id, p_midia_id: midiaId,
     p_conta_id: cls?.conta_id || null, p_categoria: cls?.categoria || null,
     p_centro_custo: cls?.centro_custo || null, p_forma: cls?.forma_pagamento || null,
+    p_sem_comissao: semComissao,
   })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/financeiro/faturamento`)
