@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
+import { dispatchPushNotificacoes } from '@/lib/push'
 import { provisionActivitiesDrive, moveActivityDrive, regenerateActivityDrive } from '@/lib/drive-provision'
 import { scheduleReview, reviewKindForAdvance, ordemStatusDaAtividade } from '@/lib/review-gate'
 import { scheduleRecurrence, isConclusion } from '@/lib/recurrence-gate'
@@ -180,6 +182,8 @@ export async function updateActivityStatus(
   if (isConclusion(fromStatus, newStatus)) {
     scheduleRecurrence({ supabase, userId: user.id, activityId })
   }
+  // Push imediato pra quem foi notificado pelo trigger (o cron de 15min é só varredura).
+  after(() => dispatchPushNotificacoes().catch(() => {}))
   revalidatePath(path)
 }
 
@@ -314,6 +318,7 @@ export async function bulkUpdateStatus(path: string, ids: string[], newStatus: s
       scheduleRecurrence({ supabase, userId: user.id, activityId: id })
     }
   }
+  after(() => dispatchPushNotificacoes().catch(() => {}))
   revalidatePath(path)
 }
 
@@ -380,6 +385,8 @@ export async function addComment(
   })
 
   if (error) return { error: error.message }
+  // Menção/comentário é o push que mais importa chegar na hora.
+  after(() => dispatchPushNotificacoes().catch(() => {}))
 }
 
 /** Silencia/reativa as notificações de MUDANÇA DE STATUS desta tarefa (só pra mim). */

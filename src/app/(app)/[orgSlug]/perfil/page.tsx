@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { redirect } from 'next/navigation'
 import { ProfileForm } from './ProfileForm'
+import { PushSettings } from '@/components/pwa/PushSettings'
 
 export default async function PerfilPage({
   params,
@@ -27,6 +28,7 @@ export default async function PerfilPage({
   const digestEnabled = prefs?.digest_enabled ?? true
 
   return (
+    <>
     <ProfileForm
       user={{
         id:               authUser.id,
@@ -41,5 +43,10 @@ export default async function PerfilPage({
       }}
       digestEnabled={digestEnabled}
     />
+    {/* Push do aparelho (some sozinho se o servidor não tem chave VAPID). */}
+    <div className="px-6 pb-6 max-w-lg">
+      <PushSettings />
+    </div>
+    </>
   )
 }

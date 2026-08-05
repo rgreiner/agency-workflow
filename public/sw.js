@@ -39,3 +39,38 @@ self.addEventListener('fetch', (event) => {
     ),
   )
 })
+
+// ── Web-push (fase 4) ────────────────────────────────────────────────────────
+// Payload JSON: { title, body, url, tag } — montado em src/lib/push.ts.
+self.addEventListener('push', (event) => {
+  if (!event.data) return
+  let d = {}
+  try { d = event.data.json() } catch { return }
+  event.waitUntil(
+    self.registration.showNotification(d.title || 'Flow', {
+      body: d.body || '',
+      icon: '/apple-icon',
+      badge: '/apple-icon',
+      tag: d.tag || undefined,
+      data: { url: d.url || '/' },
+    }),
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const url = (event.notification.data && event.notification.data.url) || '/'
+  const alvo = new URL(url, self.location.origin).href
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        // Janela já aberta: navega nela e traz pra frente (não abre outra).
+        if ('focus' in c) {
+          if ('navigate' in c) c.navigate(alvo)
+          return c.focus()
+        }
+      }
+      return clients.openWindow(alvo)
+    }),
+  )
+})

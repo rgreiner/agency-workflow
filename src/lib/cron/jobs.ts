@@ -7,6 +7,7 @@ import { btgSyncJob } from './btg-sync'
 import { fechamentoContabilJob } from './fechamento-contabil'
 import { rhExpurgoJob } from './rh-expurgo'
 import { limparTentativasAntigas } from '@/lib/auth/rate-limit'
+import { dispatchPushNotificacoes, pushLembretePonto } from '@/lib/push'
 
 /**
  * Executor de tarefas agendadas. A rota /api/cron (batida pelo crontab do VPS)
@@ -71,6 +72,28 @@ export const JOBS: CronJob[] = [
   cobrancaJob, // lembrete de vencimento ao cliente 9h (BRT), opt-in por cliente
   fechamentoContabilJob, // abre o fechamento do mes anterior e avisa o Financeiro (nao envia)
   rhExpurgoJob, // retencao de documentos de RH: dia 1, 3h (unico job que APAGA arquivo)
+  {
+    // Varredura de web-push: pega notificação criada por trigger/cron (due_soon
+    // etc.) que ninguém despachou inline. O claim no banco é atômico — rodar
+    // junto com o disparo pós-action não duplica push.
+    name: 'push-notificacoes',
+    everyMinutes: 15,
+    run: async ({ dry }) => {
+      if (dry) return 'dry-run: pulado (o claim marca como enviado)'
+      return dispatchPushNotificacoes()
+    },
+  },
+  {
+    // Lembrete de entrada com o app FECHADO — a peça que destrava a virada do
+    // Pontomais. A régua (janela, feriado, justificativa, 1x/dia) mora na RPC.
+    name: 'push-lembrete-ponto',
+    everyMinutes: 15,
+    weekdaysOnly: true,
+    run: async ({ dry }) => {
+      if (dry) return 'dry-run: pulado (a RPC registra o lembrete como enviado)'
+      return pushLembretePonto()
+    },
+  },
   // Futuro (onda 4): 'contratos'.
 ]
 
