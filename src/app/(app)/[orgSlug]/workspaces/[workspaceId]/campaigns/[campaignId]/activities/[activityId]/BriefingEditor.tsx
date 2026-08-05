@@ -192,12 +192,32 @@ export function BriefingEditor({ activityId, path, description, canEdit }: {
           <EditorContent editor={editor} />
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-2 py-1.5 border-t border-gray-100 bg-gray-50/50">
-          <button onClick={() => setEditing(false)} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">Cancelar</button>
-          <button onClick={save} disabled={isPending}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 disabled:opacity-50 transition">
-            {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Salvar
+        {faltandoIA.length > 0 && (
+          <div className="mx-2 mb-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-xs font-medium text-amber-800 mb-1.5">
+              Para estruturar o briefing, responda no texto acima:
+            </p>
+            <ul className="space-y-1">
+              {faltandoIA.map((q, i) => (
+                <li key={i} className="text-xs text-amber-700">• {q}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-t border-gray-100 bg-gray-50/50">
+          <button type="button" onClick={otimizar} disabled={isImproving}
+            className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-full border border-orange-100 transition disabled:opacity-50 disabled:cursor-not-allowed">
+            <Sparkles className={cn('w-3 h-3', isImproving && 'animate-pulse')} />
+            {isImproving ? 'Otimizando...' : 'Otimizar com IA'}
           </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => { setFaltandoIA([]); setEditing(false) }} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">Cancelar</button>
+            <button onClick={save} disabled={isPending}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 disabled:opacity-50 transition">
+              {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Salvar
+            </button>
+          </div>
         </div>
       </div>
     )
