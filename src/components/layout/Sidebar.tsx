@@ -137,7 +137,9 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
 ]
 
 function NavGroup({ base, pathname, group, open, onToggle }: {
-  base: string; pathname: string; group: NavGroupDef; open: boolean; onToggle: () => void
+  base: string; pathname: string; group: NavGroupDef; open: boolean
+  /** Ausente = grupo fixo, sem colapsar (modo que tem um grupo só). */
+  onToggle?: () => void
 }) {
   const Icon = group.icon
   const anyActive = group.items.some(it => pathname.startsWith(`${base}/${it.href}`))
@@ -146,14 +148,18 @@ function NavGroup({ base, pathname, group, open, onToggle }: {
       <button
         type="button"
         onClick={onToggle}
+        disabled={!onToggle}
         className={cn(
           'flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition w-[calc(100%-1rem)]',
-          anyActive ? 'text-gray-100' : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
+          anyActive ? 'text-gray-100' : 'text-gray-400',
+          onToggle && 'hover:text-gray-100 hover:bg-gray-800/60'
         )}
       >
         <Icon className="w-4 h-4 shrink-0" />
         <span className="flex-1 text-left truncate">{group.label}</span>
-        <ChevronRight className={cn('w-3.5 h-3.5 text-gray-600 shrink-0 transition-transform duration-150', open && 'rotate-90')} />
+        {onToggle && (
+          <ChevronRight className={cn('w-3.5 h-3.5 text-gray-600 shrink-0 transition-transform duration-150', open && 'rotate-90')} />
+        )}
       </button>
       {open && (
         <div className="ml-7 mr-2 mt-px space-y-px">
@@ -187,17 +193,40 @@ const VIEWS = [
   { id: 'boards',label: 'Quadros',    icon: PenTool,    href: 'boards' },
 ]
 
-type SidebarMode = 'trabalho' | 'operacional'
+/**
+ * Modos da sidebar. "Operacional" era um guarda-chuva que juntava mídia,
+ * produção, cadastros, financeiro e RH — cinco assuntos que não conversam entre
+ * si. Conforme RH e Financeiro cresceram (ponto, folha, férias, lançamentos,
+ * conciliação), a lista virou uma pilha em que achar as coisas custava rolagem.
+ * Agora cada um é um contexto próprio (pedido do Rafael, 05/08).
+ */
+type SidebarMode = 'trabalho' | 'comercial' | 'rh' | 'financeiro'
+
+/** A que modo cada grupo do menu pertence. */
+const GRUPO_MODO: Record<string, SidebarMode> = {
+  midias: 'comercial', producao: 'comercial', cadastros: 'comercial',
+  rh: 'rh', financeiro: 'financeiro',
+}
+
 // Em que modo cada rota se encaixa (null = neutra, não troca o modo).
 function modeForPath(path: string, base: string): SidebarMode | null {
-  if (['financeiro', 'midias', 'producao', 'cadastros', 'rh', 'relatorios'].some(p => path.startsWith(`${base}/${p}`))) return 'operacional'
-  if (['dashboard', 'views', 'docs', 'boards', 'workspaces'].some(p => path.startsWith(`${base}/${p}`))) return 'trabalho'
+  if (path.startsWith(`${base}/rh`)) return 'rh'
+  if (path.startsWith(`${base}/financeiro`)) return 'financeiro'
+  if (['midias', 'producao', 'cadastros', 'relatorios', 'solicitacoes', 'documentos']
+      .some(p => path.startsWith(`${base}/${p}`))) return 'comercial'
+  if (['dashboard', 'views', 'docs', 'boards'].some(p => path.startsWith(`${base}/${p}`))) return 'trabalho'
+  // `workspaces` fica NEUTRA de propósito: é "Espaços" no Trabalho e "Clientes"
+  // no Comercial. Amarrar a um modo faria a sidebar pular de contexto no clique.
   return null
 }
-// Abas de modo (ícones no header). Tarefas/trabalho × comercial/operacional.
+
+// Ícones repetem os dos grupos: quem já reconhece a carteira do Financeiro
+// reconhece a aba dele.
 const MODE_TABS: { m: SidebarMode; Icon: LucideIcon; label: string }[] = [
-  { m: 'trabalho', Icon: SquareKanban, label: 'Trabalho' },
-  { m: 'operacional', Icon: Building2, label: 'Operacional' },
+  { m: 'trabalho',   Icon: SquareKanban, label: 'Trabalho' },
+  { m: 'comercial',  Icon: Building2,    label: 'Comercial' },
+  { m: 'financeiro', Icon: Wallet,       label: 'Financeiro' },
+  { m: 'rh',         Icon: UserCog,      label: 'RH' },
 ]
 
 export function Sidebar({
@@ -217,6 +246,7 @@ export function Sidebar({
   // Cadastros de can_vendas OU can_finance.
   const groupVisible: Record<string, boolean> = { midias: canMidias, producao: canProducao, financeiro: canFinance, cadastros: canCadastros, rh: canRh }
   const comercialGroups = COMERCIAL_GROUPS.filter(g => groupVisible[g.id])
+  const gruposDoModo = comercialGroups.filter(g => GRUPO_MODO[g.id] === mode)
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   useEffect(() => {
     try {
@@ -242,15 +272,22 @@ export function Sidebar({
   // Modo da sidebar: "Trabalho" (visões + espaços) × "Operacional" (mídia/produção/
   // financeiro/cadastros) — um contexto por vez p/ reduzir a poluição. O switcher só
   // aparece com permissão; ao navegar, o modo acompanha a página atual.
-  const canOperacional = canMidias || canProducao || canFinance || canCadastros || canRh
-  const [mode, setMode] = useState<SidebarMode>(
-    () => (canOperacional ? modeForPath(pathname, base) : null) ?? 'trabalho'
-  )
+  const canComercial = canMidias || canProducao || canCadastros
+  const canOperacional = canComercial || canFinance || canRh
+  const modoPermitido: Record<SidebarMode, boolean> = {
+    trabalho: true, comercial: canComercial, financeiro: canFinance, rh: canRh,
+  }
+  // Só mostra a aba de quem pode entrar nela: quem não tem RH nunca vê a aba RH.
+  const abas = MODE_TABS.filter(a => modoPermitido[a.m])
+
+  const [mode, setMode] = useState<SidebarMode>(() => {
+    const m = modeForPath(pathname, base)
+    return m && modoPermitido[m] ? m : 'trabalho'
+  })
   useEffect(() => {
-    if (!canOperacional) return
     const m = modeForPath(pathname, base)
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (m && m !== mode) setMode(m)
+    if (m && m !== mode && modoPermitido[m]) setMode(m)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname])
 
@@ -361,9 +398,9 @@ export function Sidebar({
         </Link>
 
         {/* Modo: Trabalho × Operacional (ícones) — só com permissão ao Operacional */}
-        {canOperacional && (
+        {canOperacional && abas.length > 1 && (
           <div className="flex items-center gap-0.5 bg-gray-800/60 rounded-lg p-0.5">
-            {MODE_TABS.map(({ m, Icon, label }) => (
+            {abas.map(({ m, Icon, label }) => (
               <button
                 key={m}
                 type="button"
@@ -372,7 +409,8 @@ export function Sidebar({
                 aria-label={label}
                 title={label}
                 className={cn(
-                  'p-1.5 rounded-md transition-colors',
+                  'rounded-md transition-colors',
+                  abas.length > 3 ? 'p-1' : 'p-1.5',
                   mode === m ? 'bg-gray-700 text-orange-400' : 'text-gray-500 hover:text-gray-200'
                 )}
               >
@@ -480,17 +518,19 @@ export function Sidebar({
           </>
         )}
 
-        {/* ── Modo Operacional: Mídia / Produção / Financeiro / Cadastros ── */}
-        {mode === 'operacional' && canOperacional && (
+        {/* ── Modos Comercial / Financeiro / RH ── */}
+        {mode !== 'trabalho' && gruposDoModo.length > 0 && (
           <div className="mt-1">
-            {comercialGroups.map(g => (
+            {gruposDoModo.map(g => (
               <NavGroup
                 key={g.id}
                 base={base}
                 pathname={pathname}
                 group={g}
-                open={openGroups.has(g.id)}
-                onToggle={() => toggleGroup(g.id)}
+                // Modo com um grupo só (RH, Financeiro) nasce aberto: esconder a
+                // única lista atrás de um clique não economiza nada.
+                open={gruposDoModo.length === 1 ? true : openGroups.has(g.id)}
+                onToggle={gruposDoModo.length === 1 ? undefined : () => toggleGroup(g.id)}
               />
             ))}
           </div>
