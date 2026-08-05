@@ -141,7 +141,12 @@ export interface EspelhoDia {
   minutos: number; saldo_min: number; intervalo_maior_min: number | null; intervalo_ok: boolean | null
   extra_status: string | null; origem: string | null; motivo: string | null
   feriado: { nome: string | null; tipo: string; carga_min: number | null } | null
-  justificativa: { tipo: string; descricao: string | null; status: string; decidido_por: string | null; decidido_em: string | null } | null
+  justificativa: {
+    tipo: string; descricao: string | null; status: string
+    decidido_por: string | null; decidido_em: string | null
+    /** Anexo (atestado/declaração) e período coberto — migrations 207/212/218. */
+    doc_id?: string | null; ausencia_ini?: string | null; ausencia_fim?: string | null
+  } | null
   ajuste: { de: { marcacoes?: string[]; entrada?: string; saida?: string } | null; por: string | null; em: string } | null
   log: { acao: string; antes: string[]; depois: string[]; motivo: string | null; em: string; por: string | null }[]
 }

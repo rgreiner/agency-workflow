@@ -14,7 +14,7 @@ import TaskItem from '@tiptap/extension-task-item'
 import Image from '@tiptap/extension-image'
 import {
   Bold, Italic, Strikethrough, Heading2, Heading3,
-  List, ListOrdered, ListChecks, Quote, Link2, ImagePlus, Check, Loader2, Pencil,
+  List, ListOrdered, ListChecks, Quote, Link2, ImagePlus, Check, Loader2, Pencil, Sparkles,
 } from 'lucide-react'
 import { updateActivityField } from '@/app/actions/activity'
 import { downscaleImage } from '@/lib/image-resize'
@@ -35,6 +35,27 @@ function toHTML(desc: string | null): string {
 
 const isEmptyHtml = (html: string) => html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim() === ''
 
+/** Briefing otimizado (texto puro da IA) → HTML do editor: seções viram título, "- " vira lista. */
+function briefingToEditorHTML(text: string): string {
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const out: string[] = []
+  let list: string[] = []
+  const flush = () => {
+    if (list.length) { out.push(`<ul>${list.map(i => `<li>${i}</li>`).join('')}</ul>`); list = [] }
+  }
+  for (const raw of text.split('\n')) {
+    const line = raw.trim()
+    if (!line) { flush(); continue }
+    if (line.startsWith('- ')) { list.push(esc(line.slice(2))); continue }
+    flush()
+    if (/^(Objetivo|Diretrizes):?$/i.test(line)) out.push(`<h3>${esc(line)}</h3>`)
+    else if (line.length <= 40 && /:$/.test(line)) out.push(`<p><strong>${esc(line)}</strong></p>`)
+    else out.push(`<p>${esc(line)}</p>`)
+  }
+  flush()
+  return out.join('')
+}
+
 export function BriefingEditor({ activityId, path, description, canEdit }: {
   activityId: string
   path: string
@@ -43,6 +64,9 @@ export function BriefingEditor({ activityId, path, description, canEdit }: {
 }) {
   const [editing, setEditing] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const [isImproving, setIsImproving] = useState(false)
+  // Perguntas devolvidas pela IA quando o rascunho não dá pra estruturar.
+  const [faltandoIA, setFaltandoIA] = useState<string[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
 
   const editor = useEditor({
@@ -86,8 +110,41 @@ export function BriefingEditor({ activityId, path, description, canEdit }: {
 
   function start() {
     editor?.commands.setContent(toHTML(description))
+    setFaltandoIA([])
     setEditing(true)
     setTimeout(() => editor?.commands.focus('end'), 30)
+  }
+
+  async function otimizar() {
+    if (!editor || isImproving) return
+    const texto = editor.getText({ blockSeparator: '\n' }).trim()
+    if (!texto) return
+    setIsImproving(true)
+    setFaltandoIA([])
+    const anterior = editor.getHTML()
+    try {
+      const res = await fetch('/api/ai/improve-briefing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: texto }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      if (data.briefing) {
+        editor.commands.setContent(briefingToEditorHTML(data.briefing))
+        toast.success('Briefing otimizado.', {
+          action: { label: 'Desfazer', onClick: () => editor.commands.setContent(anterior) },
+        })
+      } else if (data.faltando?.length) {
+        setFaltandoIA(data.faltando)
+      } else {
+        toast.error('A IA não retornou um briefing. Tente de novo.')
+      }
+    } catch {
+      toast.error('Não foi possível otimizar o briefing agora.')
+    } finally {
+      setIsImproving(false)
+    }
   }
 
   function setLink() {

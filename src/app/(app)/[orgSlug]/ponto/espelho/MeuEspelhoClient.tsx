@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, AlertTriangle, Pencil, Lock, Download } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, Pencil, Lock, Download, Paperclip } from 'lucide-react'
 import { toast } from 'sonner'
 import { carregarEspelho, type Espelho } from '@/app/actions/rh-calendario'
 import { AssinaturaPanel } from '../../rh/espelho/AssinaturaPanel'
@@ -119,6 +119,17 @@ export function MeuEspelhoClient({ orgSlug, colaboradorId, compInicial }: {
                       <div className="flex flex-wrap items-center gap-1">
                         {d.feriado && <span className={`text-[10px] px-1.5 py-0.5 rounded ${d.feriado.tipo === 'feriado' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>{d.feriado.nome || d.feriado.tipo}</span>}
                         {d.justificativa && <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-50 text-sky-700">{d.justificativa.tipo} {STATUS_JUST[d.justificativa.status] ?? d.justificativa.status}</span>}
+                        {/* O próprio anexo continua acessível: a policy da 207
+                            deixa a pessoa ver o documento amarrado a uma
+                            justificativa dela. */}
+                        {d.justificativa?.doc_id && (
+                          <a href={`/api/rh/documento/${d.justificativa.doc_id}`} target="_blank" rel="noopener noreferrer"
+                            title="Abrir o anexo que você enviou"
+                            onClick={e => e.stopPropagation()}
+                            className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 hover:bg-orange-100 transition">
+                            <Paperclip className="w-2.5 h-2.5" />anexo
+                          </a>
+                        )}
                         {d.ajuste && <span title={`Ajustado por ${d.ajuste.por ?? '—'}`} className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-violet-50 text-violet-700"><Pencil className="w-2.5 h-2.5" />ajustado</span>}
                         {d.intervalo_ok === false && <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-700"><AlertTriangle className="w-2.5 h-2.5" />almoço {hm(d.intervalo_maior_min ?? 0)}</span>}
                         {!semCarga && d.marcacoes.length === 0 && !d.justificativa && <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-700">sem marcação</span>}

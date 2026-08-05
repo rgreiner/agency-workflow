@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useTransition } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Loader2, Check, Pencil, AlertTriangle, History, X, Plus, Trash2, Lock, Download } from 'lucide-react'
+import { ArrowLeft, Loader2, Check, Pencil, AlertTriangle, History, X, Plus, Trash2, Lock, Download, Paperclip } from 'lucide-react'
 import { toast } from 'sonner'
 import { carregarEspelho, editarPonto, type Espelho, type EspelhoDia } from '@/app/actions/rh-calendario'
 import { AssinaturaPanel } from '../AssinaturaPanel'
@@ -116,6 +116,17 @@ export function EspelhoClient({ orgSlug, colaboradorId, compInicial }: { orgSlug
                         <div className="flex flex-wrap items-center gap-1">
                           {d.feriado && <span className={`text-[10px] px-1.5 py-0.5 rounded ${d.feriado.tipo === 'feriado' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>{d.feriado.nome || d.feriado.tipo}</span>}
                           {d.justificativa && <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-50 text-sky-700">{d.justificativa.tipo} {STATUS_JUST[d.justificativa.status] ?? d.justificativa.status}</span>}
+                          {/* Anexo continua alcançável DEPOIS de decidida — a fila
+                              de pendentes esvazia, e é conferindo o mês que alguém
+                              pergunta "cadê o atestado desse dia?". */}
+                          {d.justificativa?.doc_id && (
+                            <a href={`/api/rh/documento/${d.justificativa.doc_id}`} target="_blank" rel="noopener noreferrer"
+                              title="Abrir o anexo da justificativa"
+                              onClick={e => e.stopPropagation()}
+                              className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 hover:bg-orange-100 transition">
+                              <Paperclip className="w-2.5 h-2.5" />anexo
+                            </a>
+                          )}
                           {d.ajuste && <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-violet-50 text-violet-700"><Pencil className="w-2.5 h-2.5" />ajustado</span>}
                           {d.intervalo_ok === false && <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-700"><AlertTriangle className="w-2.5 h-2.5" />almoço {hm(d.intervalo_maior_min ?? 0)}</span>}
                           {d.extra_status === 'pendente' && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">extra pendente</span>}
@@ -151,6 +162,16 @@ export function EspelhoClient({ orgSlug, colaboradorId, compInicial }: { orgSlug
                                 {' · '}<b>{STATUS_JUST[d.justificativa.status] ?? d.justificativa.status}</b>
                                 {d.justificativa.decidido_por && <> por <b>{d.justificativa.decidido_por}</b></>}
                                 {d.justificativa.decidido_em && ` em ${dtBR(d.justificativa.decidido_em)}`}
+                                {/* Explica na própria linha por que a carga do dia
+                                    foi menor — sem isto o saldo parece arbitrário. */}
+                                {d.justificativa.ausencia_ini && d.justificativa.ausencia_fim && (
+                                  <> · abonado das <b>{d.justificativa.ausencia_ini.slice(0, 5)}</b> às{' '}
+                                    <b>{d.justificativa.ausencia_fim.slice(0, 5)}</b></>
+                                )}
+                                {d.justificativa.doc_id && (
+                                  <> · <a href={`/api/rh/documento/${d.justificativa.doc_id}`} target="_blank" rel="noopener noreferrer"
+                                    className="text-orange-700 hover:underline font-medium">ver anexo</a></>
+                                )}
                               </div>
                             )}
                             {d.log.map((l, i) => (
