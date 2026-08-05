@@ -93,8 +93,14 @@ export default async function FaturamentoPage({
   // `?? []`, `lancadas` ficaria vazio e mídias já faturadas voltariam como "a faturar"
   // → risco de faturar em dobro. Por isso unwrap (falha alto).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // Sem filtrar por origem_tipo: a comissão de um documento pode ter entrado
+  // pelo import da Conta Azul (origem 'conta_azul') e ainda assim já existir.
+  // Filtrando só 'midia', esses documentos voltavam à fila e eram faturados de
+  // novo — foi o que duplicou a comissão das MX 1618/1619/1623/1624 em 05/08.
+  // O que marca "já lançado" é o VÍNCULO (origem_id), não por onde ele entrou.
   const lancRaw = unwrap<any>(await (supabase as any)
-    .from('lancamentos').select('origem_id').eq('org_id', orgId).eq('origem_tipo', 'midia'), 'lançamentos já lançados')
+    .from('lancamentos').select('origem_id').eq('org_id', orgId)
+    .not('origem_id', 'is', null), 'lançamentos já lançados')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const lancadas = new Set<string>(lancRaw.map((l: any) => l.origem_id))
 
