@@ -2,9 +2,10 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Clock, LogIn, Coffee, Undo2, Loader2, FileText, Check, FileSignature } from 'lucide-react'
+import { Clock, LogIn, Coffee, Undo2, Loader2, FileText, Check, FileSignature, Paperclip, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Select } from '@/components/ui/Select'
+import { downscaleImage } from '@/lib/image-resize'
 import { baterPonto, criarJustificativa } from '@/app/actions/rh-ponto'
 
 export interface PontoDia {
@@ -148,6 +149,7 @@ function JustificarModal({ orgSlug, colaboradorId, onClose }: { orgSlug: string;
   const [hIntIni, setHIntIni] = useState('')
   const [hIntFim, setHIntFim] = useState('')
   const [hSai, setHSai] = useState('')
+  const [arquivo, setArquivo] = useState<File | null>(null)
   const [saving, start] = useTransition()
 
   const podeMultidia = TIPOS_MULTIDIA.has(tipo)
@@ -165,8 +167,23 @@ function JustificarModal({ orgSlug, colaboradorId, onClose }: { orgSlug: string;
     const fim = periodo ? dataFim : dia
     if (fim < dia) { toast.error('O último dia não pode ser antes do primeiro.'); return }
     start(async () => {
+      // O anexo sobe primeiro: sem doc_id a justificativa seria criada e o
+      // arquivo se perderia se o upload falhasse depois.
+      let docId: string | null = null
+      if (arquivo) {
+        // Imagem vira WebP reduzido no cliente (padrão do app); PDF sobe como está.
+        const enviar = arquivo.type.startsWith('image/') ? await downscaleImage(arquivo) : arquivo
+        const fd = new FormData()
+        fd.append('colaboradorId', colaboradorId)
+        fd.append('file', enviar)
+        const resp = await fetch('/api/rh/justificativa/anexo', { method: 'POST', body: fd })
+        const json = await resp.json().catch(() => ({}))
+        if (!resp.ok) { toast.error(json?.error || 'Falha ao enviar o anexo.'); return }
+        docId = json.doc_id ?? null
+      }
+
       const r = await criarJustificativa(orgSlug, colaboradorId, {
-        tipo, data_ini: dia, data_fim: fim, descricao,
+        tipo, data_ini: dia, data_fim: fim, descricao, doc_id: docId,
         hora_entrada: periodo ? null : (hEnt || null),
         hora_intervalo_ini: periodo ? null : (hIntIni || null),
         hora_intervalo_fim: periodo ? null : (hIntFim || null),
@@ -245,7 +262,32 @@ function JustificarModal({ orgSlug, colaboradorId, onClose }: { orgSlug: string;
           )}
 
           <div><label className="block text-sm text-gray-600 mb-1.5">Descrição</label><textarea value={descricao} onChange={e => setDescricao(e.target.value)} rows={2} className={inputCls} placeholder="Opcional" /></div>
-          <p className="text-[11px] text-gray-400">Atestado: envie o PDF depois na sua ficha (o RH anexa à justificativa).</p>
+
+          <div>
+            <label className="block text-sm text-gray-600 mb-1.5">
+              Anexo <span className="text-gray-400 font-normal">(opcional)</span>
+            </label>
+            {arquivo ? (
+              <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl">
+                <Paperclip className="w-4 h-4 text-gray-400 shrink-0" />
+                <span className="text-sm text-gray-700 truncate flex-1">{arquivo.name}</span>
+                <button type="button" onClick={() => setArquivo(null)} disabled={saving}
+                  className="text-gray-400 hover:text-red-600 transition disabled:opacity-40" title="Remover">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <label className="flex items-center gap-2 px-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-500 cursor-pointer hover:bg-gray-200 transition">
+                <Paperclip className="w-4 h-4" />
+                Escolher PDF ou imagem
+                <input type="file" accept="application/pdf,image/*" className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) setArquivo(f); e.target.value = '' }} />
+              </label>
+            )}
+            <p className="text-[11px] text-gray-400 mt-1">
+              Atestado, declaração de comparecimento. Só o RH e você enxergam.
+            </p>
+          </div>
         </div>
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-100">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">Cancelar</button>

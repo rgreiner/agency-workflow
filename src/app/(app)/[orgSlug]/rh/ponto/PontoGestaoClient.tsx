@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Clock, FileText, Check, X, Ban, CalendarX, CalendarClock } from 'lucide-react'
+import { Clock, FileText, Check, X, Ban, CalendarX, CalendarClock, Paperclip } from 'lucide-react'
 import { toast } from 'sonner'
 import { decidirExtra, decidirJustificativa, setPontoObrigatorio } from '@/app/actions/rh-ponto'
 import { JornadaEditor, type JornadaVals } from '../JornadaEditor'
@@ -12,6 +12,8 @@ interface Colab { nome: string | null }
 export interface ExtraPend { id: string; data: string; minutos: number; saldo_min: number; acima_10h: boolean; rh_colaborador: Colab | null }
 export interface JustPend {
   id: string; data_ini: string; data_fim: string; tipo: string; descricao: string | null; status: string
+  /** Anexo enviado junto da justificativa (atestado, declaração). */
+  doc_id: string | null
   hora_entrada: string | null; hora_intervalo_ini: string | null
   hora_intervalo_fim: string | null; hora_saida: string | null
   rh_colaborador: Colab | null
@@ -159,6 +161,14 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
                   <div className="flex-1">
                     <div className="text-sm font-medium text-gray-900">{j.rh_colaborador?.nome ?? '—'} <span className="text-[10px] font-medium text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 ml-1">{TIPO[j.tipo] ?? j.tipo}</span></div>
                     <div className="text-xs text-gray-500 tabular-nums">{dataBR(j.data_ini)}{j.data_fim !== j.data_ini && ` – ${dataBR(j.data_fim)}`}{j.descricao && <span className="text-gray-400"> · {j.descricao}</span>}</div>
+                    {/* Atestado abre em aba nova pela rota autenticada — o arquivo
+                        mora em rh-privado/ e não tem URL pública. */}
+                    {j.doc_id && (
+                      <a href={`/api/rh/documento/${j.doc_id}`} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 mt-1 text-xs font-medium text-orange-700 hover:text-orange-800 transition">
+                        <Paperclip className="w-3.5 h-3.5" /> Ver anexo
+                      </a>
+                    )}
                   </div>
                 </div>
                 {/* Corrigir marcação só existe em justificativa de UM dia: aprovar

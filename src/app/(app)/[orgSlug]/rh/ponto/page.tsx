@@ -19,7 +19,7 @@ export default async function PontoGestaoPage({ params }: { params: Promise<{ or
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const justs = unwrap<JustPend>(await (supabase as any)
     .from('rh_justificativa')
-    .select('id, data_ini, data_fim, tipo, descricao, status, hora_entrada, hora_intervalo_ini, hora_intervalo_fim, hora_saida, rh_colaborador!colaborador_id(nome)')
+    .select('id, data_ini, data_fim, tipo, descricao, status, doc_id, hora_entrada, hora_intervalo_ini, hora_intervalo_fim, hora_saida, rh_colaborador!colaborador_id(nome)')
     .eq('org_id', orgId).eq('status', 'pendente')
     .order('created_at', { ascending: false }), 'justificativas')
 
