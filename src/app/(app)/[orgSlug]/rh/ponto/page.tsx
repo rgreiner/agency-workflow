@@ -19,9 +19,20 @@ export default async function PontoGestaoPage({ params }: { params: Promise<{ or
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const justs = unwrap<JustPend>(await (supabase as any)
     .from('rh_justificativa')
-    .select('id, data_ini, data_fim, tipo, descricao, status, doc_id, ausencia_ini, ausencia_fim, hora_entrada, hora_intervalo_ini, hora_intervalo_fim, hora_saida, rh_colaborador!colaborador_id(nome)')
+    .select('id, colaborador_id, data_ini, data_fim, tipo, descricao, status, doc_id, ausencia_ini, ausencia_fim, marcacoes, hora_entrada, hora_intervalo_ini, hora_intervalo_fim, hora_saida, rh_colaborador!colaborador_id(nome)')
     .eq('org_id', orgId).eq('status', 'pendente')
     .order('created_at', { ascending: false }), 'justificativas')
+
+  // Marcações ATUAIS do dia de cada justificativa de um dia só: pré-carregam o
+  // editor de pares e são a régua do "mudou de verdade?" na decisão.
+  await Promise.all(justs.filter(j => j.data_ini === j.data_fim).map(async j => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: ponto } = await (supabase as any)
+      .from('rh_ponto').select('rh_marcacao(hora, seq)')
+      .eq('colaborador_id', j.colaborador_id).eq('data', j.data_ini).maybeSingle()
+    j.atuais = ((ponto?.rh_marcacao ?? []) as { hora: string; seq: number }[])
+      .sort((a, b) => a.seq - b.seq).map(m => m.hora.slice(0, 5))
+  }))
 
   // Jornada padrão da org (colaborador_id null) — pode não existir se a org é nova.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

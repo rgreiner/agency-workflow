@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Clock, LogIn, Coffee, Undo2, Loader2, FileText, Check, FileSignature, Paperclip, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Select } from '@/components/ui/Select'
+import { MarcacoesEditor, validarMarcacoes } from '@/components/ponto/MarcacoesEditor'
 import { downscaleImage } from '@/lib/image-resize'
 import { baterPonto, criarJustificativa } from '@/app/actions/rh-ponto'
 
@@ -126,7 +127,9 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
         </div>
       )}
 
-      {just && <JustificarModal orgSlug={orgSlug} colaboradorId={colaboradorId} onClose={() => setJust(false)} />}
+      {just && <JustificarModal orgSlug={orgSlug} colaboradorId={colaboradorId}
+        dias={Object.fromEntries([...(d ? [d] : []), ...recentes].map(r => [r.data, (r.marcacoes ?? []).map(h => h.slice(0, 5))]))}
+        onClose={() => setJust(false)} />}
     </div>
   )
 }
@@ -135,7 +138,12 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
  *  são sempre de UM dia — e é justamente neles que o horário correto é pedido. */
 const TIPOS_MULTIDIA = new Set(['atestado', 'falta', 'outro'])
 
-function JustificarModal({ orgSlug, colaboradorId, onClose }: { orgSlug: string; colaboradorId: string; onClose: () => void }) {
+function JustificarModal({ orgSlug, colaboradorId, dias, onClose }: {
+  orgSlug: string; colaboradorId: string
+  /** Marcações atuais por data (hoje + últimos dias) — pré-carregam o editor. */
+  dias: Record<string, string[]>
+  onClose: () => void
+}) {
   const router = useRouter()
   const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
   const [tipo, setTipo] = useState('esqueci')
@@ -144,12 +152,10 @@ function JustificarModal({ orgSlug, colaboradorId, onClose }: { orgSlug: string;
   const [varios, setVarios] = useState(false)
   const [dataFim, setDataFim] = useState(hoje)
   const [descricao, setDescricao] = useState('')
-  // As 4 marcações do dia — cada uma opcional. Dá pra corrigir só um horário
-  // que saiu errado, um período do dia (manhã ou tarde) ou o dia inteiro.
-  const [hEnt, setHEnt] = useState('')
-  const [hIntIni, setHIntIni] = useState('')
-  const [hIntFim, setHIntFim] = useState('')
-  const [hSai, setHSai] = useState('')
+  // O dia completo em N pares, pré-carregado com as marcações reais do dia
+  // escolhido: corrija um horário, complete o que faltou ou adicione uma pausa.
+  const prefill = (data: string) => { const m = dias[data] ?? []; return m.length ? m : ['', ''] }
+  const [horas, setHoras] = useState<string[]>(() => prefill(hoje))
   const [arquivo, setArquivo] = useState<File | null>(null)
   // Período que o atestado/declaração cobre. É o que sai da carga do dia — o
   // resto (atraso na entrada, volta depois do fim da consulta) continua contando.
@@ -171,6 +177,15 @@ function JustificarModal({ orgSlug, colaboradorId, onClose }: { orgSlug: string;
   function enviar() {
     const fim = periodo ? dataFim : dia
     if (fim < dia) { toast.error('O último dia não pode ser antes do primeiro.'); return }
+    // Só envia correção se a lista mudou de verdade em relação às marcações
+    // atuais do dia — enviar o dia igual criaria um "ajuste" que não muda nada.
+    let marcacoes: string[] | null = null
+    if (!periodo) {
+      const v = validarMarcacoes(horas)
+      if (!v.ok) { toast.error(v.erro); return }
+      const atual = dias[dia] ?? []
+      if (v.limpo.join() !== atual.join()) marcacoes = v.limpo.length ? v.limpo : null
+    }
     start(async () => {
       // O anexo sobe primeiro: sem doc_id a justificativa seria criada e o
       // arquivo se perderia se o upload falhasse depois.
@@ -191,10 +206,7 @@ function JustificarModal({ orgSlug, colaboradorId, onClose }: { orgSlug: string;
         tipo, data_ini: dia, data_fim: fim, descricao, doc_id: docId,
         ausencia_ini: periodo ? null : (ausIni || null),
         ausencia_fim: periodo ? null : (ausFim || null),
-        hora_entrada: periodo ? null : (hEnt || null),
-        hora_intervalo_ini: periodo ? null : (hIntIni || null),
-        hora_intervalo_fim: periodo ? null : (hIntFim || null),
-        hora_saida: periodo ? null : (hSai || null),
+        marcacoes,
       })
       if (r?.error) toast.error(r.error)
       else { toast.success('Justificativa enviada ao RH.'); onClose(); router.refresh() }
@@ -230,7 +242,9 @@ function JustificarModal({ orgSlug, colaboradorId, onClose }: { orgSlug: string;
               )}
             </div>
             <div className={periodo ? 'grid grid-cols-2 gap-3' : ''}>
-              <input type="date" value={dia} onChange={e => setDia(e.target.value)} className={inputCls} />
+              <input type="date" value={dia}
+                onChange={e => { setDia(e.target.value); setHoras(prefill(e.target.value)) }}
+                className={inputCls} />
               {periodo && (
                 <div>
                   <input type="date" value={dataFim} min={dia} onChange={e => setDataFim(e.target.value)} className={inputCls} />
@@ -248,23 +262,13 @@ function JustificarModal({ orgSlug, colaboradorId, onClose }: { orgSlug: string;
             <div className="rounded-xl bg-gray-50 p-3 space-y-3">
               <div>
                 <div className="text-xs font-medium text-gray-600">Horário correto <span className="font-normal text-gray-400">(opcional)</span></div>
-                <p className="text-[11px] text-gray-400 mt-0.5">Preencha só o que precisa corrigir: um horário, um período do dia ou os quatro.</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  Monte o dia como ele deveria ficar: corrija um horário, complete o que
+                  faltou ou adicione um par para uma pausa. Sem mudança, nada é corrigido.
+                </p>
               </div>
-              <div>
-                <div className="text-[11px] font-medium text-gray-500 mb-1.5">Manhã</div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><label className={subCls}>Entrada</label><input type="time" value={hEnt} onChange={e => setHEnt(e.target.value)} className={horaCls} /></div>
-                  <div><label className={subCls}>Saída p/ intervalo</label><input type="time" value={hIntIni} onChange={e => setHIntIni(e.target.value)} className={horaCls} /></div>
-                </div>
-              </div>
-              <div>
-                <div className="text-[11px] font-medium text-gray-500 mb-1.5">Tarde</div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><label className={subCls}>Volta do intervalo</label><input type="time" value={hIntFim} onChange={e => setHIntFim(e.target.value)} className={horaCls} /></div>
-                  <div><label className={subCls}>Saída</label><input type="time" value={hSai} onChange={e => setHSai(e.target.value)} className={horaCls} /></div>
-                </div>
-              </div>
-              <p className="text-[11px] text-gray-400">Ex.: chegou 8h39 e só bateu 9h37 → preencha a Entrada. Ao aprovar, o RH corrige a marcação — a original fica no histórico.</p>
+              <MarcacoesEditor horas={horas} onChange={setHoras} />
+              <p className="text-[11px] text-gray-400">Ex.: chegou 8h39 e só bateu 9h37 → corrija a Entrada. Ao aprovar, o RH grava essas marcações — a original fica no histórico.</p>
             </div>
           )}
 

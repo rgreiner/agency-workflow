@@ -5,19 +5,26 @@ import { useRouter } from 'next/navigation'
 import { Clock, FileText, Check, X, Ban, CalendarX, CalendarClock, Paperclip } from 'lucide-react'
 import { toast } from 'sonner'
 import { decidirExtra, decidirJustificativa, setPontoObrigatorio } from '@/app/actions/rh-ponto'
+import { MarcacoesEditor, validarMarcacoes } from '@/components/ponto/MarcacoesEditor'
 import { JornadaEditor, type JornadaVals } from '../JornadaEditor'
 import { ImportarPontomais } from './ImportarPontomais'
 
 interface Colab { nome: string | null }
 export interface ExtraPend { id: string; data: string; minutos: number; saldo_min: number; acima_10h: boolean; rh_colaborador: Colab | null }
 export interface JustPend {
-  id: string; data_ini: string; data_fim: string; tipo: string; descricao: string | null; status: string
+  id: string; colaborador_id: string; data_ini: string; data_fim: string
+  tipo: string; descricao: string | null; status: string
   /** Anexo enviado junto da justificativa (atestado, declaração). */
   doc_id: string | null
+  /** Dia completo proposto em N pares (mig. 222). */
+  marcacoes: string[] | null
+  /** Campos legados (justificativa anterior à 222): posições, não lista. */
   hora_entrada: string | null; hora_intervalo_ini: string | null
   hora_intervalo_fim: string | null; hora_saida: string | null
   /** Período coberto pelo documento — só ele sai da carga do dia (mig. 212). */
   ausencia_ini: string | null; ausencia_fim: string | null
+  /** Marcações ATUAIS do dia (preenchidas pela page) — base do editor. */
+  atuais?: string[]
   rh_colaborador: Colab | null
 }
 
@@ -27,8 +34,21 @@ const TIPO: Record<string, string> = { esqueci: 'Esqueceu de bater', atestado: '
 
 const hhmm = (t: string | null) => (t ?? '').slice(0, 5)
 
-interface MarcHoras { ent: string; intIni: string; intFim: string; sai: string; ausIni: string; ausFim: string }
-const VAZIO: MarcHoras = { ent: '', intIni: '', intFim: '', sai: '', ausIni: '', ausFim: '' }
+/** O dia como a aprovação deixaria: a lista da justificativa quando existe;
+ *  senão, as marcações atuais com os campos legados aplicados por POSIÇÃO
+ *  (espelha o merge da migration 222, incluindo o dia ímpar). */
+function diaProposto(j: JustPend): string[] {
+  if (j.marcacoes?.length) return j.marcacoes
+  const m = j.atuais ?? []
+  const n = m.length
+  const e = hhmm(j.hora_entrada) || m[0] || ''
+  const ii = hhmm(j.hora_intervalo_ini) || (n >= 3 ? m[1] : '')
+  const iF = hhmm(j.hora_intervalo_fim) || (n >= 3 ? m[2] : '')
+  const s = hhmm(j.hora_saida) || (n >= 2 && n % 2 === 0 ? m[n - 1] : '')
+  const extras = n >= 5 ? m.slice(3, n % 2 === 0 ? n - 1 : n) : []
+  const lista = [e, ii, iF, ...extras, s].filter(Boolean)
+  return lista.length ? lista : ['', '']
+}
 
 export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadrao, pontoObrigatorio = false }: {
   orgSlug: string; extras: ExtraPend[]; justificativas: JustPend[]
@@ -49,17 +69,14 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
       router.refresh()
     })
   }
-  // As 4 marcações que o RH vai gravar ao aprovar, pré-carregadas com o que a
-  // pessoa pediu. Precisam ser as QUATRO: a action regrava as quatro colunas, e
-  // mandar só entrada/saída apagaria o intervalo que a pessoa tinha informado.
-  const [horas, setHoras] = useState<Record<string, MarcHoras>>(() =>
-    Object.fromEntries(justificativas.map(j => [j.id, {
-      ent: hhmm(j.hora_entrada), intIni: hhmm(j.hora_intervalo_ini),
-      intFim: hhmm(j.hora_intervalo_fim), sai: hhmm(j.hora_saida),
-      ausIni: hhmm(j.ausencia_ini), ausFim: hhmm(j.ausencia_fim),
-    }])))
-  const setHora = (id: string, k: keyof MarcHoras, v: string) =>
-    setHoras(p => ({ ...p, [id]: { ...(p[id] ?? VAZIO), [k]: v } }))
+  // O dia completo que a aprovação vai gravar, em N pares, pré-carregado com o
+  // que a pessoa pediu (ou com as marcações atuais, se ela não pediu correção).
+  const [pares, setPares] = useState<Record<string, string[]>>(() =>
+    Object.fromEntries(justificativas.map(j => [j.id, diaProposto(j)])))
+  const [abonos, setAbonos] = useState<Record<string, { ausIni: string; ausFim: string }>>(() =>
+    Object.fromEntries(justificativas.map(j => [j.id, { ausIni: hhmm(j.ausencia_ini), ausFim: hhmm(j.ausencia_fim) }])))
+  const setAbono = (id: string, k: 'ausIni' | 'ausFim', v: string) =>
+    setAbonos(p => ({ ...p, [id]: { ...(p[id] ?? { ausIni: '', ausFim: '' }), [k]: v } }))
 
   function extra(id: string, status: string) {
     start(async () => {
@@ -68,12 +85,25 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
     })
   }
   function just(id: string, status: string) {
-    const h = horas[id]
+    const j = justificativas.find(x => x.id === id)
+    const ab = abonos[id]
+    // Só manda a lista se ela difere das marcações atuais do dia — aprovar sem
+    // mudança não pode gerar um "ajuste" que regrava o dia igual.
+    let marcacoes: string[] | undefined
+    if (j && j.data_ini === j.data_fim) {
+      const v = validarMarcacoes(pares[id] ?? [])
+      if (!v.ok) { toast.error(v.erro); return }
+      const mudou = v.limpo.join() !== (j.atuais ?? []).join()
+      const pedido = (j.marcacoes ?? []).join()
+      // Se a pessoa pediu correção e o RH não mexeu, a lista já difere do dia
+      // atual e segue mesmo assim — é exatamente o pedido dela.
+      if (mudou && v.limpo.join() !== pedido) marcacoes = v.limpo
+      else if (!mudou && pedido) marcacoes = []   // RH desfez o pedido: só decide
+    }
     start(async () => {
       const r = await decidirJustificativa(orgSlug, id, status, {
-        hora_entrada: h?.ent || null, hora_intervalo_ini: h?.intIni || null,
-        hora_intervalo_fim: h?.intFim || null, hora_saida: h?.sai || null,
-        ausencia_ini: h?.ausIni || null, ausencia_fim: h?.ausFim || null,
+        marcacoes,
+        ausencia_ini: ab?.ausIni || null, ausencia_fim: ab?.ausFim || null,
       })
       if (r?.error) toast.error(r.error)
       else {
@@ -184,10 +214,10 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
                         Atraso na entrada e volta depois do fim do atendimento
                         continuam descontando (migration 212). */}
                     <span className="text-[11px] text-sky-800 font-medium">Abonar o atendimento das</span>
-                    <input type="time" value={horas[j.id]?.ausIni ?? ''} onChange={e => setHora(j.id, 'ausIni', e.target.value)}
+                    <input type="time" value={abonos[j.id]?.ausIni ?? ''} onChange={e => setAbono(j.id, 'ausIni', e.target.value)}
                       className="px-2 py-1 text-xs bg-white border border-sky-200 rounded-md text-gray-800" />
                     <span className="text-[11px] text-sky-800">às</span>
-                    <input type="time" value={horas[j.id]?.ausFim ?? ''} onChange={e => setHora(j.id, 'ausFim', e.target.value)}
+                    <input type="time" value={abonos[j.id]?.ausFim ?? ''} onChange={e => setAbono(j.id, 'ausFim', e.target.value)}
                       className="px-2 py-1 text-xs bg-white border border-sky-200 rounded-md text-gray-800" />
                     <span className="text-[11px] text-sky-700">
                       — em branco abona o dia inteiro
@@ -195,16 +225,13 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
                   </div>
                 )}
                 {j.data_ini === j.data_fim ? (
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 mb-2 rounded-lg bg-gray-50 px-2.5 py-2">
-                    <span className="text-[11px] text-gray-500">Corrigir marcação:</span>
-                    {([['ent', 'entrada'], ['intIni', 'saída p/ intervalo'], ['intFim', 'volta'], ['sai', 'saída']] as const).map(([k, rotulo]) => (
-                      <span key={k} className="inline-flex items-center gap-1">
-                        <label className="text-[11px] text-gray-400">{rotulo}</label>
-                        <input type="time" value={horas[j.id]?.[k] ?? ''} onChange={e => setHora(j.id, k, e.target.value)}
-                          className="px-2 py-1 text-xs bg-white border border-gray-200 rounded-md text-gray-800" />
-                      </span>
-                    ))}
-                    <span className="text-[11px] text-gray-400">— tudo em branco = só decide, não altera o ponto</span>
+                  <div className="mb-2 rounded-lg bg-gray-50 px-2.5 py-2">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[11px] text-gray-500 font-medium">Como o dia fica ao aprovar:</span>
+                      <span className="text-[11px] text-gray-400 tabular-nums">hoje: {(j.atuais ?? []).join(' · ') || 'sem marcação'}</span>
+                    </div>
+                    <MarcacoesEditor horas={pares[j.id] ?? ['', '']} onChange={v => setPares(p => ({ ...p, [j.id]: v }))} />
+                    <p className="text-[11px] text-gray-400 mt-1.5">Igual às marcações atuais (ou tudo em branco) = só decide, não altera o ponto.</p>
                   </div>
                 ) : (
                   <p className="text-[11px] text-gray-400 mb-2">Vários dias — a decisão vale para os dias inteiros, sem alterar marcação.</p>

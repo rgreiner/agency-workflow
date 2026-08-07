@@ -26,6 +26,15 @@ export async function baterPonto(orgSlug: string, colaboradorId: string) {
   return { ok: true, resultado: data }
 }
 
+/** Pares completos, ordem crescente, HH:MM — a mesma régua do editor. */
+function validarPares(marcacoes: string[]): string | null {
+  if (marcacoes.some(h => !/^\d{2}:\d{2}$/.test(h))) return 'Horário inválido nas marcações.'
+  if (marcacoes.length % 2 === 1) return 'As marcações vêm em pares (entrada e saída).'
+  const ordenado = [...marcacoes].sort()
+  if (ordenado.join() !== marcacoes.join()) return 'As marcações precisam estar em ordem crescente.'
+  return null
+}
+
 /** Abre uma justificativa (falta/atestado/esqueci) → decisão do RH. */
 export async function criarJustificativa(
   orgSlug: string, colaboradorId: string,
@@ -34,21 +43,24 @@ export async function criarJustificativa(
     // Período que o documento cobre (ex.: 13:00–14:00 da declaração). É ele que
     // define quanto sai da carga do dia — ver rh_abono_min (migration 212).
     ausencia_ini?: string | null; ausencia_fim?: string | null
-    // Horário correto (opcional): se informado, a aprovação do RH AJUSTA a marcação.
-    hora_entrada?: string | null; hora_intervalo_ini?: string | null
-    hora_intervalo_fim?: string | null; hora_saida?: string | null
+    // Marcações corretas (opcional): o dia COMPLETO em N pares ["08:30","12:00",…].
+    // Se informado, a aprovação do RH grava a lista inteira (migration 222).
+    marcacoes?: string[] | null
   },
 ) {
   const c = await ctx(orgSlug)
   if ('error' in c) return { error: c.error }
+  if (j.marcacoes?.length) {
+    const erro = validarPares(j.marcacoes)
+    if (erro) return { error: erro }
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (c.supabase as any).from('rh_justificativa').insert({
     org_id: c.orgId, colaborador_id: colaboradorId, tipo: j.tipo,
     data_ini: j.data_ini, data_fim: j.data_fim || j.data_ini,
     descricao: j.descricao || null, doc_id: j.doc_id || null, created_by: c.userId,
     ausencia_ini: j.ausencia_ini || null, ausencia_fim: j.ausencia_fim || null,
-    hora_entrada: j.hora_entrada || null, hora_intervalo_ini: j.hora_intervalo_ini || null,
-    hora_intervalo_fim: j.hora_intervalo_fim || null, hora_saida: j.hora_saida || null,
+    marcacoes: j.marcacoes?.length ? j.marcacoes : null,
   })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/ponto`)
@@ -58,10 +70,10 @@ export async function criarJustificativa(
 
 /** RH decide a justificativa: aprovado | rejeitado | abonado | falta.
  *  Se `horas` vier (ou já estiver na justificativa), aprovar AJUSTA a marcação do ponto
- *  — preservando a original em rh_ponto.ajuste_de. */
+ *  — preservando a original em rh_ponto.ajuste_de. `marcacoes` é o dia completo em
+ *  N pares; os 4 campos legados (hora_*) da justificativa antiga não são tocados. */
 export async function decidirJustificativa(orgSlug: string, id: string, status: string, horas?: {
-  hora_entrada?: string | null; hora_intervalo_ini?: string | null
-  hora_intervalo_fim?: string | null; hora_saida?: string | null
+  marcacoes?: string[] | null
   ausencia_ini?: string | null; ausencia_fim?: string | null
 }) {
   const c = await ctx(orgSlug)
@@ -69,14 +81,20 @@ export async function decidirJustificativa(orgSlug: string, id: string, status: 
   if (!['aprovado', 'rejeitado', 'abonado', 'falta'].includes(status)) return { error: 'Status inválido' }
 
   // O RH pode corrigir/informar o horário na hora de decidir.
-  if (horas && Object.values(horas).some(v => v)) {
+  if (horas && (horas.marcacoes !== undefined || horas.ausencia_ini || horas.ausencia_fim)) {
+    if (horas.marcacoes?.length) {
+      const erro = validarPares(horas.marcacoes)
+      if (erro) return { error: erro }
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const upd: Record<string, any> = {
+      ausencia_ini: horas.ausencia_ini || null, ausencia_fim: horas.ausencia_fim || null,
+    }
+    // undefined = não mexe; [] = limpa a correção pedida; lista = dia completo novo.
+    if (horas.marcacoes !== undefined) upd.marcacoes = horas.marcacoes?.length ? horas.marcacoes : null
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error: e1 } = await (c.supabase as any).from('rh_justificativa')
-      .update({
-        hora_entrada: horas.hora_entrada || null, hora_intervalo_ini: horas.hora_intervalo_ini || null,
-        hora_intervalo_fim: horas.hora_intervalo_fim || null, hora_saida: horas.hora_saida || null,
-        ausencia_ini: horas.ausencia_ini || null, ausencia_fim: horas.ausencia_fim || null,
-      })
+      .update(upd)
       .eq('id', id).eq('org_id', c.orgId)
     if (e1) return { error: e1.message }
   }
