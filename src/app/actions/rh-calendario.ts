@@ -139,6 +139,9 @@ export async function carregarEspelhoLista(orgSlug: string, competencia: string)
 export interface EspelhoDia {
   data: string; dow: number; esperado_min: number; marcacoes: string[]
   minutos: number; saldo_min: number; intervalo_maior_min: number | null; intervalo_ok: boolean | null
+  /** Diferença absorvida pela tolerância do dia (mig. 223); 0 = nada absorvido.
+   *  Explica por que 7:55 trabalhadas ficam com saldo zero. */
+  tolerado_min?: number
   extra_status: string | null; origem: string | null; motivo: string | null
   feriado: { nome: string | null; tipo: string; carga_min: number | null } | null
   justificativa: {
@@ -152,7 +155,7 @@ export interface EspelhoDia {
 }
 export interface Espelho {
   colaborador: { id: string; nome: string; cargo: string | null; cpf: string | null }
-  jornada: { carga_min: number; entrada: string; saida: string; intervalo_min: number; dias_semana: number[] }
+  jornada: { carga_min: number; entrada: string; saida: string; intervalo_min: number; dias_semana: number[]; tolerancia_min?: number }
   ini: string; fim: string; competencia: string
   resumo: { hn_min: number; faltas_min: number; extra_min: number; saldo_min: number }
   dias: EspelhoDia[]

@@ -111,7 +111,14 @@ export function EspelhoClient({ orgSlug, colaboradorId, compInicial }: { orgSlug
                         {d.origem && <span title={`Importado do ${d.origem}`} className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] text-gray-400"><Lock className="w-3 h-3" />{d.origem}</span>}
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{d.minutos ? hm(d.minutos) : <span className="text-gray-300">—</span>}</td>
-                      <td className={`px-3 py-2.5 text-right tabular-nums ${d.saldo_min < 0 ? 'text-red-600' : d.saldo_min > 0 ? 'text-emerald-600' : 'text-gray-300'}`}>{d.saldo_min ? hm(d.saldo_min) : '—'}</td>
+                      {/* Saldo zerado pela tolerância mostra o quanto foi absorvido:
+                          sem isso, 7:55 trabalhadas com saldo "—" parece erro de conta. */}
+                      <td className={`px-3 py-2.5 text-right tabular-nums ${d.saldo_min < 0 ? 'text-red-600' : d.saldo_min > 0 ? 'text-emerald-600' : 'text-gray-300'}`}>
+                        {d.saldo_min ? hm(d.saldo_min) : d.tolerado_min
+                          ? <span title={`${hm(d.tolerado_min)} dentro da tolerância de ${esp.jornada.tolerancia_min ?? 10} min — não vira falta nem extra.`}
+                              className="text-gray-400">{hm(d.tolerado_min)}<span className="text-gray-300">*</span></span>
+                          : '—'}
+                      </td>
                       <td className="px-3 py-2.5">
                         <div className="flex flex-wrap items-center gap-1">
                           {d.feriado && <span className={`text-[10px] px-1.5 py-0.5 rounded ${d.feriado.tipo === 'feriado' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>{d.feriado.nome || d.feriado.tipo}</span>}
@@ -194,6 +201,12 @@ export function EspelhoClient({ orgSlug, colaboradorId, compInicial }: { orgSlug
         </div>
       )}
 
+      {esp?.dias.some(d => d.tolerado_min) && (
+        <p className="text-[11px] text-gray-400 mt-3">
+          <b className="text-gray-500">*</b> diferença dentro da tolerância de {esp.jornada.tolerancia_min ?? 10} minutos
+          do dia (art. 58 §1º da CLT): não vira falta nem hora extra, e o dia conta a jornada cheia nas horas normais.
+        </p>
+      )}
       <p className="text-[11px] text-gray-400 mt-3">
         Dia importado do Pontomais é o registro legal do sistema anterior e não pode ser editado aqui.
         Toda edição exige motivo e fica no histórico (registro original, quem alterou e quando).
