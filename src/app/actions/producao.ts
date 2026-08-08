@@ -223,6 +223,9 @@ export async function setProducaoSituacao(
   })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/${basePath}`)
+  // Liberar/faturar muda a fila do Financeiro, que quase sempre é outra tela.
+  revalidatePath(`/${orgSlug}/financeiro/faturamento`)
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
 }
 
 export async function setProducaoArchived(orgSlug: string, producaoId: string, archived: boolean, basePath: string) {

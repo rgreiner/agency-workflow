@@ -8,6 +8,12 @@ import type { ContaRef } from './ClassificacaoFields'
 import type { Anexo, FinanceCentro, FinanceCategoriaGrupo } from '@/app/actions/financeiro'
 import { Receipt } from 'lucide-react'
 
+// Sempre dinâmica, como as outras telas do módulo. Sem isto a fila servia uma
+// versão cacheada: mudar a situação pela tela de Produção revalida o caminho
+// DAQUELA tela, não o do Faturamento — e o documento liberado só aparecia aqui
+// quando outra coisa forçasse a revalidação.
+export const dynamic = 'force-dynamic'
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function enderecoFlat(w: any): string {
   return [
