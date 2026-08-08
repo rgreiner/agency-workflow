@@ -72,6 +72,14 @@ export function PropostaForm({
   const addParc = () => setForm(f => ({ ...f, parcelas: [...f.parcelas, { vencimento: f.data_base, valor: '' }] }))
   const delParc = (i: number) => setForm(f => ({ ...f, parcelas: f.parcelas.filter((_, idx) => idx !== i) }))
 
+  /**
+   * Faturando POR ITEM, cada item vira um documento próprio (mídia/produção/fee)
+   * e a situação dele decide o que o "Gerar docs" cria. Agrupando NA PROPOSTA,
+   * quem é faturada é a proposta inteira pelas parcelas — a situação por item
+   * não tem consumidor e só ocupa espaço na linha.
+   */
+  const porItem = form.agrupar_faturamento === 'por_item'
+
   const totalGeral = useMemo(() => form.itens.reduce((s, it) => s + itemValor(it), 0), [form.itens])
   const somaParcelas = useMemo(() => form.parcelas.reduce((s, p) => s + parseMoney(p.valor), 0), [form.parcelas])
   // Um centavo de diferença é arredondamento, não erro de digitação.
@@ -185,7 +193,8 @@ export function PropostaForm({
               <thead><tr className="text-xs font-medium text-gray-400 text-left">
                 <th className="px-1 py-1 w-32">Tipo</th><th className="px-1 py-1">Item</th><th className="px-1 py-1 w-16 text-right">Qtd.</th>
                 <th className="px-1 py-1 w-28 text-right">Vl. unit.</th><th className="px-1 py-1 w-20 text-right">Desc.%</th>
-                <th className="px-1 py-1 w-32">Situação</th><th className="px-1 py-1 w-28 text-right">Total</th><th className="w-8" />
+                {porItem && <th className="px-1 py-1 w-32">Situação</th>}
+                <th className="px-1 py-1 w-28 text-right">Total</th><th className="w-8" />
               </tr></thead>
               <tbody>
                 {form.itens.map((it, i) => (
@@ -195,7 +204,7 @@ export function PropostaForm({
                     <td className="px-1 py-1"><input value={it.quantidade} onChange={e => setItem(i, 'quantidade', e.target.value)} className={cn(cellCls, 'text-right')} /></td>
                     <td className="px-1 py-1"><input inputMode="decimal" value={it.valor_unit} onChange={e => setItem(i, 'valor_unit', e.target.value)} placeholder="0,00" className={cn(cellCls, 'text-right')} /></td>
                     <td className="px-1 py-1"><input inputMode="decimal" value={it.desconto} onChange={e => setItem(i, 'desconto', e.target.value)} className={cn(cellCls, 'text-right')} /></td>
-                    <td className="px-1 py-1"><Select size="sm" value={it.situacao} onChange={v => setItem(i, 'situacao', v)} options={PRODUCAO_SITUACAO_OPTIONS} /></td>
+                    {porItem && <td className="px-1 py-1"><Select size="sm" value={it.situacao} onChange={v => setItem(i, 'situacao', v)} options={PRODUCAO_SITUACAO_OPTIONS} /></td>}
                     <td className="px-1 py-1 text-right font-medium whitespace-nowrap">{formatBRL(itemValor(it))}</td>
                     <td className="px-1 py-1 text-right">{form.itens.length > 1 && <button aria-label="Remover" type="button" onClick={() => delItem(i)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-3.5 h-3.5" /></button>}</td>
                   </tr>
@@ -209,12 +218,12 @@ export function PropostaForm({
         <div className={cardCls}>
           <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Valor por tipo</h3>
           <table className="w-full sm:w-2/3 text-sm">
-            <thead><tr className="text-xs text-gray-400 text-left"><th className="py-1">Tipo</th><th className="py-1 text-right">Total</th><th className="py-1 text-right">Aprovado</th></tr></thead>
+            <thead><tr className="text-xs text-gray-400 text-left"><th className="py-1">Tipo</th><th className="py-1 text-right">Total</th>{porItem && <th className="py-1 text-right">Aprovado</th>}</tr></thead>
             <tbody>
-              {porTipo.length === 0 ? <tr><td className="py-1.5 text-gray-400" colSpan={3}>Sem itens.</td></tr> : porTipo.map(t => (
-                <tr key={t.value} className="border-t border-gray-100"><td className="py-1.5">{labelOf(ITEM_TIPOS, t.value)}</td><td className="py-1.5 text-right">{formatBRL(t.total)}</td><td className="py-1.5 text-right">{formatBRL(t.aprovado)}</td></tr>
+              {porTipo.length === 0 ? <tr><td className="py-1.5 text-gray-400" colSpan={porItem ? 3 : 2}>Sem itens.</td></tr> : porTipo.map(t => (
+                <tr key={t.value} className="border-t border-gray-100"><td className="py-1.5">{labelOf(ITEM_TIPOS, t.value)}</td><td className="py-1.5 text-right">{formatBRL(t.total)}</td>{porItem && <td className="py-1.5 text-right">{formatBRL(t.aprovado)}</td>}</tr>
               ))}
-              <tr className="border-t border-gray-200 font-semibold"><td className="py-1.5">Total</td><td className="py-1.5 text-right">{formatBRL(totalGeral)}</td><td className="py-1.5 text-right text-emerald-600">{formatBRL(aprovado)}</td></tr>
+              <tr className="border-t border-gray-200 font-semibold"><td className="py-1.5">Total</td><td className="py-1.5 text-right">{formatBRL(totalGeral)}</td>{porItem && <td className="py-1.5 text-right text-emerald-600">{formatBRL(aprovado)}</td>}</tr>
             </tbody>
           </table>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">

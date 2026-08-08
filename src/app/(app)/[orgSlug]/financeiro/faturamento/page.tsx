@@ -92,12 +92,12 @@ export default async function FaturamentoPage({
   // Quais já foram lançadas (têm lançamento). CRÍTICO: se esta query falhasse com
   // `?? []`, `lancadas` ficaria vazio e mídias já faturadas voltariam como "a faturar"
   // → risco de faturar em dobro. Por isso unwrap (falha alto).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   // Sem filtrar por origem_tipo: a comissão de um documento pode ter entrado
   // pelo import da Conta Azul (origem 'conta_azul') e ainda assim já existir.
   // Filtrando só 'midia', esses documentos voltavam à fila e eram faturados de
   // novo — foi o que duplicou a comissão das MX 1618/1619/1623/1624 em 05/08.
   // O que marca "já lançado" é o VÍNCULO (origem_id), não por onde ele entrou.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const lancRaw = unwrap<any>(await (supabase as any)
     .from('lancamentos').select('origem_id').eq('org_id', orgId)
     .not('origem_id', 'is', null), 'lançamentos já lançados')
@@ -188,19 +188,27 @@ export default async function FaturamentoPage({
   const totalComissao = midias.reduce((s, d) => s + d.comissao + d.comissaoProducao, 0)
   const totalDocs = midias.reduce((s, d) => s + d.valorDoc, 0)
 
-  // Produção liberada pro Financeiro (estado unificado 'faturar' = A Faturar): Fee e Pedido.
+  // Produção liberada pro Financeiro (estado unificado 'faturar' = A Faturar):
+  // Fee, Pedido e PROPOSTA. A proposta entra quando é faturada nela mesma (job)
+  // — cobrança pelas parcelas, sem gerar mídia/produção/fee. Sem ela na lista, o
+  // documento ficava "A Faturar" e nunca chegava ao financeiro pela tela.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const feesRaw = unwrap<any>(await (supabase as any)
     .from('producao')
     .select(`id, numero, serie, titulo, tipo, valor, bv_pct, honorarios_pct, detalhe, anexos, workspaces(${WS_CONTATO})`)
     .eq('org_id', orgId).eq('archived', false)
-    .eq('situacao', 'faturar').in('tipo', ['fee', 'pedido'])
+    .eq('situacao', 'faturar').in('tipo', ['fee', 'pedido', 'proposta'])
     .order('numero', { ascending: false }), 'produção a faturar')
   // Parcelas que viram lançamento a receber (o que a agência realmente fatura).
   const RECEBER_TIPOS = ['receber_bv', 'receber_honorarios', 'receber_cliente']
   const COMISSAO_TIPOS = ['receber_bv', 'receber_honorarios']
+  // Proposta que gera documentos (mídia/produção/fee) NÃO se fatura sozinha: quem
+  // vira lançamento são os documentos gerados. O sinal de "faturada nela mesma" é
+  // ter parcelas — sem elas, faturar aqui cobraria o cliente duas vezes.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fees = (feesRaw as any[]).map(f => {
+  const fees = (feesRaw as any[]).filter(f =>
+    f.tipo !== 'proposta' || (Array.isArray(f.detalhe?.parcelas) && f.detalhe.parcelas.length > 0)
+  ).map(f => {
     const valorCheio = Number(f.valor ?? 0)
     const diasAg = Number(f.detalhe?.dias_agencia ?? 7)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
