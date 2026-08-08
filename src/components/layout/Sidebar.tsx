@@ -26,6 +26,7 @@ import {
   Megaphone,
   ClipboardList,
   Clock,
+  ClipboardCheck,
   Compass,
   UserCog,
   Wallet,
@@ -131,6 +132,7 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Espelho', href: 'rh/espelho' },
     { label: 'Horas',   href: 'rh/horas' },
     { label: 'Férias e 13º', href: 'rh/ferias' },
+    { label: 'Avaliação', href: 'rh/avaliacao' },
     { label: 'Calendário', href: 'rh/calendario' },
     { label: 'Fechamento', href: 'rh/fechamento' },
   ] },
@@ -689,6 +691,17 @@ export function Sidebar({
         >
           <Clock className="w-4 h-4 shrink-0" />
           Meu ponto
+        </Link>
+        {/* Avaliação: pessoal também — todo mundo responde a própria. */}
+        <Link
+          href={`${base}/avaliacao`}
+          className={cn(
+            'flex items-center gap-2.5 px-5 py-2.5 text-sm transition-colors',
+            pathname.startsWith(`${base}/avaliacao`) ? 'text-white' : 'text-gray-500 hover:text-gray-200'
+          )}
+        >
+          <ClipboardCheck className="w-4 h-4 shrink-0" />
+          Avaliação
         </Link>
         {/* Configurações: só o PROPRIETÁRIO (canManage = isOwner). */}
         {canManage && (
