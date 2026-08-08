@@ -28,6 +28,11 @@ export const ITEM_TIPOS = [
 const AGRUPAR = [{ value: 'na_proposta', label: 'Na proposta' }, { value: 'por_item', label: 'Por item' }]
 const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 const cellCls = 'w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500'
+function addMonths(iso: string, k: number): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1 + k, d)).toISOString().slice(0, 10)
+}
+
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 const cardCls = 'bg-white rounded-2xl border border-gray-200 p-5'
 
@@ -61,11 +66,38 @@ export function PropostaForm({
   const setItem = (i: number, k: keyof ItemProposta, v: string) => setForm(f => ({ ...f, itens: f.itens.map((it, idx) => idx === i ? { ...it, [k]: v } : it) }))
   const addItem = (tipo: string) => setForm(f => ({ ...f, itens: [...f.itens, newItem(tipo)] }))
   const delItem = (i: number) => setForm(f => ({ ...f, itens: f.itens.filter((_, idx) => idx !== i) }))
+  const [nParcelas, setNParcelas] = useState('3')
+
   const setParc = (i: number, k: keyof ParcelaProposta, v: string) => setForm(f => ({ ...f, parcelas: f.parcelas.map((p, idx) => idx === i ? { ...p, [k]: v } : p) }))
   const addParc = () => setForm(f => ({ ...f, parcelas: [...f.parcelas, { vencimento: f.data_base, valor: '' }] }))
   const delParc = (i: number) => setForm(f => ({ ...f, parcelas: f.parcelas.filter((_, idx) => idx !== i) }))
 
   const totalGeral = useMemo(() => form.itens.reduce((s, it) => s + itemValor(it), 0), [form.itens])
+  const somaParcelas = useMemo(() => form.parcelas.reduce((s, p) => s + parseMoney(p.valor), 0), [form.parcelas])
+  // Um centavo de diferença é arredondamento, não erro de digitação.
+  const diferenca = Math.round((somaParcelas - totalGeral) * 100) / 100
+  const parcelasDivergem = form.parcelas.length > 0 && Math.abs(diferenca) >= 0.01
+
+  /**
+   * Distribui o total nas N parcelas, uma por mês a partir da data base.
+   * Fica DEPOIS de `totalGeral`: ler valor declarado abaixo dentro de função
+   * funciona em runtime, mas impede o React Compiler de otimizar o componente —
+   * e é a mesma armadilha que já derrubou a sidebar.
+   *
+   * A divisão é feita em centavos e a última parcela absorve o resto, então a
+   * soma fecha exatamente com o total (3x de R$ 10.000,01 não vira 30.000,03).
+   */
+  function gerarParcelas() {
+    const n = Math.max(1, parseInt(nParcelas || '1', 10) || 1)
+    const centavos = Math.round(totalGeral * 100)
+    const base = Math.floor(centavos / n)
+    const ps: ParcelaProposta[] = []
+    for (let k = 0; k < n; k++) {
+      const c = k === n - 1 ? centavos - base * (n - 1) : base
+      ps.push({ vencimento: addMonths(form.data_base, k), valor: (c / 100).toFixed(2).replace('.', ',') })
+    }
+    setForm(f => ({ ...f, parcelas: ps }))
+  }
   const aprovado = useMemo(() => form.itens.filter(it => it.situacao === 'aprovado').reduce((s, it) => s + itemValor(it), 0), [form.itens])
   const porTipo = useMemo(() => ITEM_TIPOS.map(t => {
     const its = form.itens.filter(it => it.tipo === t.value)
@@ -82,6 +114,15 @@ export function PropostaForm({
     setError('')
     if (!form.workspace_id) { setError('Selecione o cliente'); return }
     if (!form.titulo.trim()) { setError('Informe o título'); return }
+    // As parcelas viram lançamentos quando a proposta é faturada: se a soma não
+    // fecha com o total, o financeiro nasce com valor diferente do que o cliente
+    // aprovou — e a diferença só apareceria na cobrança.
+    if (parcelasDivergem) {
+      setError(diferenca > 0
+        ? `As parcelas somam ${formatBRL(somaParcelas)}, ${formatBRL(diferenca)} a mais que o total da proposta (${formatBRL(totalGeral)}).`
+        : `As parcelas somam ${formatBRL(somaParcelas)} e faltam ${formatBRL(Math.abs(diferenca))} para o total da proposta (${formatBRL(totalGeral)}).`)
+      return
+    }
 
     const fd = new FormData()
     const scalars: (keyof PropostaValues)[] = ['workspace_id', 'campaign_id', 'titulo', 'emissao', 'validade_dias', 'observacao', 'texto_legal', 'contato', 'responsavel_id', 'situacao']
@@ -189,8 +230,18 @@ export function PropostaForm({
               <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Cobrança (parcelas a receber)</h3>
               <p className="text-xs text-gray-400 mt-0.5">Use quando a proposta é faturada nela mesma (job), sem gerar mídia/produção/fee.</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-end gap-2 flex-wrap">
               <button type="button" onClick={() => setForm(f => ({ ...f, parcelas: [{ vencimento: f.data_base, valor: String(totalGeral) }] }))} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition">1x (total)</button>
+              <span className="inline-flex items-end gap-1.5">
+                <input inputMode="numeric" value={nParcelas} onChange={e => setNParcelas(e.target.value.replace(/\D/g, ''))}
+                  aria-label="Número de parcelas"
+                  className={cn(inputCls, 'w-14 text-center py-1.5')} />
+                <button type="button" onClick={gerarParcelas}
+                  title="Divide o total pelo número de parcelas, uma por mês a partir da data base"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
+                  Gerar parcelas
+                </button>
+              </span>
               <button type="button" onClick={addParc} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition"><Plus className="w-3.5 h-3.5" /> Parcela</button>
             </div>
           </div>
@@ -206,6 +257,22 @@ export function PropostaForm({
                   <button aria-label="Remover" type="button" onClick={() => delParc(i)} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>
                 </div>
               ))}
+              {/* Soma sempre visível: sem isto, parcela digitada a menos (ou a
+                  mais) só aparece quando o faturamento não fecha com a proposta. */}
+              <div className="flex justify-end items-baseline gap-2 pt-2 text-sm border-t border-gray-100 mt-1">
+                <span className="text-gray-500">Soma das parcelas:</span>
+                <span className={cn('font-semibold tabular-nums', parcelasDivergem ? 'text-red-600' : 'text-gray-900')}>
+                  {formatBRL(somaParcelas)}
+                </span>
+                <span className="text-xs text-gray-400">de {formatBRL(totalGeral)}</span>
+              </div>
+              {parcelasDivergem && (
+                <p className="text-xs text-red-600 text-right">
+                  {diferenca > 0
+                    ? `${formatBRL(diferenca)} a mais que o total da proposta.`
+                    : `Faltam ${formatBRL(Math.abs(diferenca))} para fechar o total da proposta.`}
+                </p>
+              )}
             </div>
           )}
         </div>
