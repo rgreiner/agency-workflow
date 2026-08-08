@@ -126,6 +126,7 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Histórico de docs', href: 'documentos' },
   ] },
   { id: 'rh', label: 'RH', icon: UserCog, rh: true, items: [
+    { label: 'Painel',  href: 'rh/painel' },
     { label: 'Pessoas', href: 'rh' },
     { label: 'Folha',   href: 'rh/folha' },
     { label: 'Ponto',   href: 'rh/ponto' },
