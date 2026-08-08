@@ -13,8 +13,14 @@ export interface ParcelaProposta { vencimento: string; valor: string }
 export interface PropostaValues {
   workspace_id: string; campaign_id: string; titulo: string; emissao: string; validade_dias: string
   agrupar_faturamento: string; prazo: string; data_base: string
+  /**
+   * Sem campo na tela e sem uso no PDF desde 05/08 — a agência não preenche
+   * nenhum dos quatro na proposta. Continuam no tipo e no envio de propósito:
+   * assim uma proposta antiga que tenha texto não o perde ao ser reeditada.
+   */
   introducao: string; observacao: string; texto_legal: string
-  contato: string; responsavel_id: string; situacao: string
+  contato: string
+  responsavel_id: string; situacao: string
   itens: ItemProposta[]
   parcelas: ParcelaProposta[]
 }
@@ -286,16 +292,12 @@ export function PropostaForm({
           )}
         </div>
 
-        {/* Textos */}
+        {/* Introdução, Observação, Texto Legal e Contato saíram daqui e do PDF:
+            a agência não usa nenhum dos quatro na proposta (05/08). Fee, Pedido e
+            Orçamento continuam com os seus — lá as notas são instrução de
+            faturamento para o fornecedor. */}
         <div className={cardCls}>
-          <label className={labelCls}>Introdução</label>
-          <textarea rows={4} value={form.introducao} onChange={e => set('introducao', e.target.value)} className={cn(inputCls, 'resize-y min-h-[80px]')} />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-            <div><label className={labelCls}>Observação</label><textarea rows={3} value={form.observacao} onChange={e => set('observacao', e.target.value)} className={cn(inputCls, 'resize-y min-h-[64px]')} /></div>
-            <div><label className={labelCls}>Texto Legal</label><textarea rows={3} value={form.texto_legal} onChange={e => set('texto_legal', e.target.value)} className={cn(inputCls, 'resize-y min-h-[64px]')} /></div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
-            <div><label className={labelCls}>Contato</label><input value={form.contato} onChange={e => set('contato', e.target.value)} className={inputCls} /></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div><label className={labelCls}>Responsável</label><Select value={form.responsavel_id} onChange={v => set('responsavel_id', v)} options={memberOptions} placeholder="Selecionar" /></div>
             <div><label className={labelCls}>Situação</label><Select value={form.situacao} onChange={v => set('situacao', v)} options={PRODUCAO_SITUACAO_OPTIONS} /></div>
           </div>

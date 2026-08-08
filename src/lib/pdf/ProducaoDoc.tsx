@@ -100,7 +100,6 @@ function Proposta({ d }: { d: Extract<ProducaoDocData, { tipo: 'proposta' }> }) 
   return (
     <>
       <Text style={t.sub}>{[d.cliente.nome, d.campanha].filter(Boolean).join(' · ')} — {d.titulo}</Text>
-      {!!pr.introducao && <Text style={[s.item, { marginBottom: 12 }]}>{pr.introducao}</Text>}
       <Secao titulo="Itens" />
       <View style={t.th}>
         <Text style={[t.thText, { width: '18%' }]}>Tipo</Text>
@@ -117,7 +116,9 @@ function Proposta({ d }: { d: Extract<ProducaoDocData, { tipo: 'proposta' }> }) 
         </View>
       ))}
       <View style={t.trForte}><Text style={{ flex: 1 }}>Total</Text><Text style={[{ width: '22%' }, t.right]}>{brl(pr.total)}</Text></View>
-      <Rodapes observacao={d.observacao} textoLegal={d.textoLegal} />
+      {/* Sem introdução, observação e texto legal: a agência não usa nenhum dos
+          três na proposta (decisão do Rafael, 05/08). Fee, Pedido e Orçamento
+          seguem com os seus — lá as notas são instrução de faturamento. */}
     </>
   )
 }
