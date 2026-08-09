@@ -5,6 +5,24 @@ import { getUsuario } from '@/lib/auth/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
+/**
+ * Telas afetadas por qualquer mudança em mídia.
+ *
+ * Revalidar só `midias/simplificada` deixava dois furos: quem trabalha em
+ * Externas/Digitais não via a própria mudança, e — pior — liberar um documento
+ * para o Financeiro não atualizava a fila do Faturamento, que é outra rota. O
+ * documento ficava "A Faturar" sem aparecer lá, exatamente como aconteceu com a
+ * proposta PR 145 em 05/08.
+ */
+function revalidarMidia(orgSlug: string) {
+  for (const t of ['simplificada', 'impressa', 'eletronica', 'externas', 'digitais']) {
+    revalidatePath(`/${orgSlug}/midias/${t}`)
+  }
+  revalidatePath(`/${orgSlug}/financeiro/faturamento`)
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+  revalidatePath(`/${orgSlug}/relatorios/autorizacao`)
+}
+
 const FIELDS = [
   'workspace_id', 'campaign_id', 'veiculo_id', 'tipo', 'serie', 'titulo', 'emissao', 'job',
   'aut_veiculo', 'codigo_identificador', 'nota_fiscal', 'pecas', 'praca', 'abrangencia',
@@ -65,6 +83,8 @@ export async function updateMidia(orgSlug: string, midiaId: string, formData: Fo
   })
   if (error) return { error: error.message }
   const dest = redirectTo || `/${orgSlug}/midias/simplificada`
+  // Editar mexe em situação, valor e desconto — tudo que a fila do Faturamento lê.
+  revalidarMidia(orgSlug)
   revalidatePath(dest)
   redirect(dest)
 }
@@ -79,7 +99,7 @@ export async function setMidiaSituacao(orgSlug: string, midiaId: string, situaca
     p_user_id: user.id, p_midia_id: midiaId, p_situacao: situacao,
   })
   if (error) return { error: error.message }
-  revalidatePath(`/${orgSlug}/midias/simplificada`)
+  revalidarMidia(orgSlug)
 }
 
 /**
@@ -129,8 +149,7 @@ export async function duplicarMidia(orgSlug: string, midiaId: string) {
     p_user_id: user.id, p_org_id: org.id, p_data: payload,
   })
   if (error) return { error: error.message }
-  revalidatePath(`/${orgSlug}/midias/externas`)
-  revalidatePath(`/${orgSlug}/midias/simplificada`)
+  revalidarMidia(orgSlug)
   return { ok: true, id: novoId as string }
 }
 
@@ -144,5 +163,6 @@ export async function setMidiaArchived(orgSlug: string, midiaId: string, archive
     p_user_id: user.id, p_midia_id: midiaId, p_archived: archived,
   })
   if (error) return { error: error.message }
-  revalidatePath(`/${orgSlug}/midias/simplificada`)
+  // Arquivar TIRA da fila do Faturamento — a tela precisa saber disso.
+  revalidarMidia(orgSlug)
 }

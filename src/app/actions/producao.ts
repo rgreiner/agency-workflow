@@ -6,6 +6,20 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { parseMoney } from '@/lib/midia'
 
+/**
+ * Telas afetadas por qualquer mudança em produção. Mesma razão do equivalente
+ * em midia.ts: liberar, editar ou arquivar um documento muda a fila do
+ * Faturamento, que é outra rota e não seria revalidada sozinha.
+ */
+function revalidarProducao(orgSlug: string) {
+  for (const t of ['orcamento', 'pedido', 'fee', 'proposta']) {
+    revalidatePath(`/${orgSlug}/producao/${t}`)
+  }
+  revalidatePath(`/${orgSlug}/financeiro/faturamento`)
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+  revalidatePath(`/${orgSlug}/relatorios/autorizacao`)
+}
+
 const FIELDS = [
   'tipo', 'workspace_id', 'campaign_id', 'titulo', 'faturar', 'emissao', 'validade_dias',
   'bv_pct', 'honorarios_pct', 'valor', 'codigo_identificador', 'nota_fiscal', 'situacao',
@@ -55,6 +69,8 @@ export async function updateProducao(orgSlug: string, producaoId: string, formDa
   const { error } = await (supabase as any).rpc('update_producao', { p_user_id: user.id, p_producao_id: producaoId, p_data: payload })
   if (error) return { error: error.message }
   const dest = redirectTo || `/${orgSlug}/producao/orcamento`
+  // Editar mexe em situação, valor e parcelas — tudo que a fila do Faturamento lê.
+  revalidarProducao(orgSlug)
   revalidatePath(dest)
   redirect(dest)
 }
@@ -223,9 +239,7 @@ export async function setProducaoSituacao(
   })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/${basePath}`)
-  // Liberar/faturar muda a fila do Financeiro, que quase sempre é outra tela.
-  revalidatePath(`/${orgSlug}/financeiro/faturamento`)
-  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+  revalidarProducao(orgSlug)
 }
 
 export async function setProducaoArchived(orgSlug: string, producaoId: string, archived: boolean, basePath: string) {
