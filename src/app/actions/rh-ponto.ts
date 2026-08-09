@@ -1,5 +1,6 @@
 'use server'
 
+import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { revalidatePath } from 'next/cache'
@@ -15,15 +16,60 @@ async function ctx(orgSlug: string) {
 
 /** Registra a próxima marcação do dia. Não há tipo fixo: são N pares livres
  *  (entrada, pausas quantas precisar, saída). A regra do almoço de 1h é conferida
- *  no fechamento do dia (intervalo_ok), não no clique. */
-export async function baterPonto(orgSlug: string, colaboradorId: string) {
+ *  no fechamento do dia (intervalo_ok), não no clique.
+ *
+ *  Localização (mig. 227): o IP sai do header aqui no servidor — o cliente não
+ *  tem como saber o próprio IP público, e mandar de lá seria forjável. A
+ *  coordenada vem do navegador e é opcional: quem negar a permissão bate
+ *  normalmente e a marcação entra na fila do RH como "fora". */
+export async function baterPonto(orgSlug: string, colaboradorId: string, geo?: {
+  lat: number | null; lon: number | null; motivo?: string | null
+}) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+
+  const h = await headers()
+  // x-forwarded-for pode vir encadeado ("cliente, proxy1, proxy2") — o primeiro
+  // é o cliente real. Atrás do Traefik é sempre esse formato.
+  const ip = (h.get('x-forwarded-for') ?? h.get('x-real-ip') ?? '').split(',')[0].trim() || null
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (c.supabase as any).rpc('rh_bater_ponto', {
+    p_colaborador_id: colaboradorId,
+    p_lat: geo?.lat ?? null, p_lon: geo?.lon ?? null,
+    p_ip: ip, p_motivo: geo?.motivo ?? null,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/ponto`)
+  return { ok: true, resultado: data as { hora: string; fora?: boolean; local?: string | null } }
+}
+
+/** Marcações batidas fora dos locais autorizados, aguardando o RH. */
+export async function marcacoesFora(orgSlug: string, status = 'pendente') {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (c.supabase as any).rpc('rh_marcacoes_fora', { p_org: c.orgId, p_status: status })
+  return (data ?? []) as {
+    marcacao_id: string; data: string; hora: string; seq: number
+    colaborador_id: string; nome: string; cargo: string | null
+    lat: number | null; lon: number | null; ip: string | null
+    motivo: string | null; status: string
+  }[]
+}
+
+/** Decide uma marcação fora. É AUDITORIA: a hora já contou desde a batida —
+ *  corrigir o dia continua sendo o editor do espelho (rh_editar_ponto). */
+export async function decidirMarcacaoFora(orgSlug: string, marcacaoId: string, status: string) {
   const c = await ctx(orgSlug)
   if ('error' in c) return { error: c.error }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (c.supabase as any).rpc('rh_bater_ponto', { p_colaborador_id: colaboradorId })
+  const { error } = await (c.supabase as any).rpc('rh_marcacao_decidir_fora', {
+    p_marcacao: marcacaoId, p_status: status,
+  })
   if (error) return { error: error.message }
-  revalidatePath(`/${orgSlug}/ponto`)
-  return { ok: true, resultado: data }
+  revalidatePath(`/${orgSlug}/rh/ponto`)
+  return { ok: true }
 }
 
 /** Pares completos, ordem crescente, HH:MM — a mesma régua do editor. */

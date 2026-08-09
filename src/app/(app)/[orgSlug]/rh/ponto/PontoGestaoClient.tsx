@@ -6,6 +6,9 @@ import { Clock, FileText, Check, X, Ban, CalendarX, CalendarClock, Paperclip } f
 import { toast } from 'sonner'
 import { decidirExtra, decidirJustificativa, setPontoObrigatorio } from '@/app/actions/rh-ponto'
 import { MarcacoesEditor, validarMarcacoes } from '@/components/ponto/MarcacoesEditor'
+import { LocaisPonto } from '@/components/rh/LocaisPonto'
+import { FilaForaLocal, type MarcacaoFora } from '@/components/rh/FilaForaLocal'
+import type { LocalRh } from '@/app/actions/rh-local'
 import { JornadaEditor, type JornadaVals } from '../JornadaEditor'
 import { ImportarPontomais } from './ImportarPontomais'
 
@@ -50,11 +53,14 @@ function diaProposto(j: JustPend): string[] {
   return lista.length ? lista : ['', '']
 }
 
-export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadrao, pontoObrigatorio = false }: {
+export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadrao, pontoObrigatorio = false,
+  locais = [], fora = [], ipAtual = null }: {
   orgSlug: string; extras: ExtraPend[]; justificativas: JustPend[]
   jornadaPadrao: Partial<JornadaVals> | null
   /** Trava do Flow sem ponto batido (migration 199). */
   pontoObrigatorio?: boolean
+  /** Locais autorizados e batidas fora deles (migration 227). */
+  locais?: LocalRh[]; fora?: MarcacaoFora[]; ipAtual?: string | null
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -149,6 +155,10 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
           </label>
         </div>
       </section>
+
+      {/* Locais de trabalho + fila de batidas fora (mig. 227) */}
+      <LocaisPonto orgSlug={orgSlug} locais={locais} ipAtual={ipAtual} />
+      <FilaForaLocal orgSlug={orgSlug} itens={fora} />
 
       {/* Jornada padrão da empresa */}
       <section className="mb-8">
