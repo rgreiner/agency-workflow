@@ -7,9 +7,11 @@
  */
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createPortalClient } from '@/lib/supabase/portal'
 import { getUsuario } from '@/lib/auth/server'
+import { dispatchPushNotificacoes } from '@/lib/push'
 import {
   buscarPortalUsersPorEmail, criarTokenPortal, consumirTokenPortal,
   iniciarSessaoPortal, encerrarSessaoPortal, sessaoPortal,
@@ -122,6 +124,8 @@ export async function responderPendencia(
     p_anexos: anexos,
   })
   if (error) return { error: 'Não foi possível enviar sua resposta. Tente de novo.' }
+  // A RPC notifica o time no sino — empurra o push na hora, não na varredura.
+  after(() => dispatchPushNotificacoes().catch(() => {}))
   return {}
 }
 
@@ -137,6 +141,7 @@ export async function criarSolicitacao(
     p_anexos: anexos,
   })
   if (error) return { error: 'Não foi possível enviar sua solicitação. Tente de novo.' }
+  after(() => dispatchPushNotificacoes().catch(() => {}))
   return {}
 }
 
@@ -231,6 +236,8 @@ export async function registrarDecisao(
     if (msg.includes('Descreva o ajuste')) return { error: 'Conte o que precisa ser ajustado.' }
     return { error: 'Não foi possível registrar. Tente de novo.' }
   }
+  // "Cliente APROVOU / pediu ajuste" é o push que o atendimento mais espera.
+  after(() => dispatchPushNotificacoes().catch(() => {}))
   return {}
 }
 
