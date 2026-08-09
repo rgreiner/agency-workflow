@@ -133,6 +133,7 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Espelho', href: 'rh/espelho' },
     { label: 'Horas',   href: 'rh/horas' },
     { label: 'Férias e 13º', href: 'rh/ferias' },
+    { label: 'Reajuste', href: 'rh/reajuste' },
     { label: 'Avaliação', href: 'rh/avaliacao' },
     { label: 'Calendário', href: 'rh/calendario' },
     { label: 'Fechamento', href: 'rh/fechamento' },

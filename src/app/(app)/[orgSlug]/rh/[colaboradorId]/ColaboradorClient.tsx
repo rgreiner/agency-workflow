@@ -10,6 +10,7 @@ import { formatBRL, parseMoney } from '@/lib/midia'
 import { maskCPF, maskPhone } from '@/lib/masks'
 import { salvarColaborador, setColaboradorArquivado, carregarImpactoDesligamento, setBatePonto } from '@/app/actions/rh'
 import { JornadaEditor, type JornadaVals } from '../JornadaEditor'
+import { Timeline } from '@/components/rh/Timeline'
 
 export interface Colaborador {
   id: string; nome: string; cpf: string | null; email: string | null; telefone: string | null
@@ -191,6 +192,13 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
       </div>
 
       <p className="text-xs text-gray-400 mt-3">Os documentos ficam na lista de Pessoas — botão “Documentos” na linha da pessoa.</p>
+
+      {/* Linha do tempo: promoção, reajuste, feedback, advertência (mig. 226) */}
+      <div className="mt-4">
+        <Timeline orgSlug={orgSlug} colaboradorId={colab.id}
+          salarioAtual={colab.salario_atual != null ? Number(colab.salario_atual) : null}
+          cargoAtual={colab.cargo ?? null} />
+      </div>
 
       {/* Jornada: herda o padrão da empresa ou personaliza */}
       <div className="rounded-2xl border border-gray-200 bg-white p-6 mt-4">
