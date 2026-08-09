@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from 'react'
 import { Bell, BellOff, BellRing, Loader2, Share } from 'lucide-react'
 import { toast } from 'sonner'
 import { pushPublicKey, pushSubscribe, pushUnsubscribe } from '@/app/actions/push'
+import { assinarPush, assinaturaAtual, detectarSuporte } from './push-client'
 
 /**
  * Ativação de notificações push do aparelho (Perfil). Estados possíveis:
@@ -15,13 +16,6 @@ import { pushPublicKey, pushSubscribe, pushUnsubscribe } from '@/app/actions/pus
  *   inativo/ativo  — o toggle de verdade
  */
 type Estado = 'carregando' | 'indisponivel' | 'sem-suporte' | 'ios-instalar' | 'negado' | 'inativo' | 'ativo'
-
-function urlBase64ToUint8Array(base64: string) {
-  const padding = '='.repeat((4 - (base64.length % 4)) % 4)
-  const b64 = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/')
-  const raw = window.atob(b64)
-  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)))
-}
 
 export function PushSettings() {
   const [estado, setEstado] = useState<Estado>('carregando')
@@ -36,16 +30,11 @@ export function PushSettings() {
       if (!key) { setEstado('indisponivel'); return }
       setChave(key)
 
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
-      const standalone = window.matchMedia('(display-mode: standalone)').matches
-      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        setEstado(isIOS && !standalone ? 'ios-instalar' : 'sem-suporte')
-        return
-      }
+      const suporte = detectarSuporte()
+      if (suporte !== 'ok') { setEstado(suporte); return }
       if (Notification.permission === 'denied') { setEstado('negado'); return }
       try {
-        const reg = await navigator.serviceWorker.ready
-        const sub = await reg.pushManager.getSubscription()
+        const sub = await assinaturaAtual()
         if (vivo) setEstado(sub ? 'ativo' : 'inativo')
       } catch {
         if (vivo) setEstado('inativo')
@@ -58,16 +47,8 @@ export function PushSettings() {
   function ativar() {
     start(async () => {
       try {
-        const reg = await navigator.serviceWorker.ready
-        const sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(chave!),
-        })
-        const json = sub.toJSON()
-        const r = await pushSubscribe(
-          { endpoint: sub.endpoint, keys: { p256dh: json.keys!.p256dh, auth: json.keys!.auth } },
-          navigator.userAgent,
-        )
+        const sub = await assinarPush(chave!)
+        const r = await pushSubscribe(sub, navigator.userAgent)
         if (r?.error) { toast.error(r.error); return }
         setEstado('ativo')
         toast.success('Notificações ativadas neste aparelho.')
@@ -81,8 +62,7 @@ export function PushSettings() {
   function desativar() {
     start(async () => {
       try {
-        const reg = await navigator.serviceWorker.ready
-        const sub = await reg.pushManager.getSubscription()
+        const sub = await assinaturaAtual()
         if (sub) {
           await pushUnsubscribe(sub.endpoint)
           await sub.unsubscribe()

@@ -14,6 +14,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { WeeklyProgress } from '@/components/dashboard/WeeklyProgress'
 import { ConciliacaoAlert } from '@/components/dashboard/ConciliacaoAlert'
 import { PontoCardHome } from '@/components/ponto/PontoCardHome'
+import { PushPrompt } from '@/components/pwa/PushPrompt'
 import { pontoEstado } from '@/app/actions/rh-ponto'
 
 interface HomePessoal { concluidas_mes: number; no_prazo_pct: number | null; tempo_medio_dias: number | null; interacoes_30d: number }
@@ -135,6 +136,9 @@ export default async function DashboardPage({ params }: { params: Promise<{ orgS
         <PontoCardHome orgSlug={orgSlug} colaboradorId={ponto.colaborador_id}
           marcacoes={ponto.marcacoes ?? []} />
       )}
+
+      {/* Convite de push: o padrão é todo mundo ligado; some quando já ativou. */}
+      <PushPrompt />
 
       <ConciliacaoAlert orgSlug={orgSlug} orgId={orgData.id} userId={user.id} />
 
