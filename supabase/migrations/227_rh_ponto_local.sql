@@ -1,6 +1,6 @@
 -- 227_rh_ponto_local.sql
 -- Trava de presença no ponto — a pergunta aberta desde 22/07, agora respondida
--- pelo Rafael (08/08): detectar por IP da rede E geolocalização, em cascata; e
+-- pelo Rafael (10/08): detectar por IP da rede E geolocalização, em cascata; e
 -- marcação feita fora vai para aprovação do RH.
 --
 -- Régua definida por ele: quem bate fora da agência **conta normalmente** e fica

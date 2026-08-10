@@ -1,7 +1,7 @@
 -- 224_rh_avaliacao_360.sql
 -- Módulo RH — Fase 4: avaliação 360 + autoavaliação + clima.
 --
--- Decisões do Rafael (08/08/2026):
+-- Decisões do Rafael (10/08/2026):
 --   · matriz montada pelo RH, com SUGESTÃO do sistema (gestor, liderados e os
 --     pares que mais dividiram atividade no período — activity_focus);
 --   · resposta identificada para o gestor/RH, EXCETO feedback ascendente

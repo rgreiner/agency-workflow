@@ -1,7 +1,7 @@
 -- 225_rh_dashboard.sql
 -- Módulo RH — Fase 5: dashboard analítico ("sair do achismo").
 --
--- O que o dado de PRODUÇÃO permitia em 08/08/2026 (medido antes de desenhar):
+-- O que o dado de PRODUÇÃO permitia em 10/08/2026 (medido antes de desenhar):
 --   · quadro/tempo de casa → 11 ativos, admissões desde 01/2023 · COMPLETO
 --   · turnover             → 1 desligamento só · número honesto, sem tendência
 --   · folha                → 1 competência (07/2026) · custo atual sim,
