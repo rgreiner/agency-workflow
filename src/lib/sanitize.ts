@@ -11,7 +11,24 @@ import DOMPurify from 'isomorphic-dompurify'
  * vetores de XSS: handlers `on*`, URIs `javascript:`/`data:` executáveis,
  * <script>/<style>. Reforço explícito contra tags de embed.
  */
+// Link no comentário/briefing SEMPRE abre em nova aba: o conteúdo vive dentro do
+// modal da tarefa — sair na mesma aba perde o contexto (e o rascunho do
+// comentário). O DOMPurify remove `target` por padrão, então reforçamos aqui,
+// depois da sanitização; o `rel` fecha o tabnabbing que o `_blank` abriria.
+let hooked = false
+function forceBlankTarget() {
+  if (hooked) return
+  hooked = true
+  DOMPurify.addHook('afterSanitizeAttributes', node => {
+    if (node.nodeName === 'A') {
+      node.setAttribute('target', '_blank')
+      node.setAttribute('rel', 'noopener noreferrer nofollow')
+    }
+  })
+}
+
 export function sanitizeHtml(dirty: string): string {
+  forceBlankTarget()
   return DOMPurify.sanitize(dirty ?? '', {
     USE_PROFILES: { html: true },
     FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form'],
