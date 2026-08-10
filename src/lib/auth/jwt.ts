@@ -12,9 +12,37 @@ export const COOKIE_TOKEN = "flow-jwt";
 const VALIDADE_DIAS = 7;
 export const MAX_AGE_SEG = VALIDADE_DIAS * 24 * 60 * 60;
 
+/**
+ * Janela deslizante: o proxy re-emite o token quando ele já passou disto de
+ * idade, então os 7 dias contam da ÚLTIMA visita, não do login. Sem isso a
+ * sessão morria no 7º dia mesmo de quem usava o Flow todo dia. Um dia de folga
+ * evita re-assinar (e mandar Set-Cookie) a cada request.
+ */
+export const RENOVAR_APOS_SEG = 24 * 60 * 60;
+
 const ALG = { name: "HMAC", hash: "SHA-256" } as const;
 
 export type Claims = { sub: string; email: string };
+/** Claims + tempos, como saem de um token já validado. */
+export type ClaimsVerificados = Claims & { iat: number; exp: number };
+
+/**
+ * Opções do cookie de sessão — mesmas no login e na renovação (se divergirem, a
+ * renovação vira um cookie novo e o antigo continua lá).
+ */
+export function opcoesCookie() {
+  return {
+    // httpOnly desde 03/08: o supabase-js do browser não lê mais este token —
+    // ele fala com `/api/rest`, na nossa origem, e o servidor é que anexa o
+    // Authorization. Antes o cookie era legível por JS de propósito, e um XSS
+    // levava embora uma credencial de 7 dias sem revogação.
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: MAX_AGE_SEG,
+  };
+}
 
 function segredo(): string {
   const s = process.env.JWT_SECRET?.trim();
@@ -137,7 +165,7 @@ export async function verifyPortalToken(token: string | undefined): Promise<Port
 }
 
 /** Valida assinatura + expiração e devolve os claims, ou null. */
-export async function verifyToken(token: string | undefined): Promise<Claims | null> {
+export async function verifyToken(token: string | undefined): Promise<ClaimsVerificados | null> {
   if (!token) return null;
   const parts = token.split(".");
   if (parts.length !== 3) return null;
@@ -152,8 +180,14 @@ export async function verifyToken(token: string | undefined): Promise<Claims | n
   try {
     const payload = JSON.parse(new TextDecoder().decode(b64urlDecode(p)));
     if (!payload?.sub) return null;
-    if (typeof payload.exp === "number" && Math.floor(Date.now() / 1000) > payload.exp) return null;
-    return { sub: String(payload.sub), email: String(payload.email ?? "") };
+    const agora = Math.floor(Date.now() / 1000);
+    if (typeof payload.exp === "number" && agora > payload.exp) return null;
+    return {
+      sub: String(payload.sub),
+      email: String(payload.email ?? ""),
+      iat: typeof payload.iat === "number" ? payload.iat : agora,
+      exp: typeof payload.exp === "number" ? payload.exp : agora + MAX_AGE_SEG,
+    };
   } catch {
     return null;
   }

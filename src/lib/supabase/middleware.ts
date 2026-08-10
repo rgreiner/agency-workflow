@@ -4,7 +4,7 @@
  * banco — aqui é só UX de rota. Não usa mais supabase/GoTrue.
  */
 import { NextResponse, type NextRequest } from 'next/server'
-import { COOKIE_TOKEN, verifyToken } from '@/lib/auth/jwt'
+import { COOKIE_TOKEN, RENOVAR_APOS_SEG, mintToken, opcoesCookie, verifyToken } from '@/lib/auth/jwt'
 
 export async function updateSession(request: NextRequest) {
   const claims = await verifyToken(request.cookies.get(COOKIE_TOKEN)?.value)
@@ -44,5 +44,19 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  return NextResponse.next({ request })
+  const res = NextResponse.next({ request })
+
+  // Sessão deslizante: enquanto a pessoa usa o Flow, o token é re-emitido e os
+  // 7 dias voltam a contar. Só cai no login quem passar 7 dias sem aparecer.
+  // Ainda vale o token que veio na request (o de baixo só chega no próximo
+  // request), então nada quebra no meio do caminho.
+  if (claims && Math.floor(Date.now() / 1000) - claims.iat > RENOVAR_APOS_SEG) {
+    res.cookies.set(
+      COOKIE_TOKEN,
+      await mintToken({ sub: claims.sub, email: claims.email }),
+      opcoesCookie(),
+    )
+  }
+
+  return res
 }
