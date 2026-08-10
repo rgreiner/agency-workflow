@@ -42,6 +42,9 @@ export async function POST(request: Request) {
     // system_errors, que só o admin lê; a tela recebe a versão em pt-BR.
     console.error('[guia/extract] falha', e)
     await logSystemError(await createClient(), { userId: user.id, context: 'financeiro:guia-extract', error: e })
-    return NextResponse.json({ error: mensagemErroIA(e, 'a guia') }, { status: 500 })
+    return NextResponse.json(
+      { error: mensagemErroIA(e, 'Não consegui ler a guia. O erro foi registrado para o administrador.') },
+      { status: 500 },
+    )
   }
 }

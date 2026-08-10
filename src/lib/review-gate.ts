@@ -7,6 +7,7 @@ import { driveConfigured, readRedacaoText, readReviewAssets } from '@/lib/google
 import { backendForRef } from '@/lib/task-folders'
 import { readReviewAssetsS3 } from '@/lib/s3-folders'
 import { reviewConfigured, reviewText, reviewArtwork, crossCheckRedacao, type ReviewError } from '@/lib/ai/review'
+import { mensagemErroIA } from '@/lib/ai/erro'
 import { logSystemError } from '@/lib/system-error'
 
 export type ReviewKind = 'redacao' | 'design' | 'finalizacao'
@@ -191,7 +192,10 @@ export function scheduleReview(params: {
         // O 529 "Overloaded" da API costuma passar em minutos. O comentário
         // precisa dizer que dá pra tentar de novo num clique — sem isso, quem lê
         // acha que só resta conferir tudo na mão (foi o que aconteceu em 03/08).
-        await comment(`⚠️ A revisão de ${label} não pôde ser concluída automaticamente — em geral é sobrecarga momentânea da IA. A tarefa seguiu. Use **Tentar de novo** no aviso da revisão, ou confira manualmente.`)
+        // O motivo, porém, muda o que adianta fazer: sobrecarga passa sozinha,
+        // saldo/chave não — em 10/08 a conta ficou sem crédito e o aviso mandou
+        // 8 vezes "tentar de novo" pra uma falha que só o admin resolvia.
+        await comment(`⚠️ A revisão de ${label} não pôde ser concluída automaticamente. ${mensagemErroIA(e, 'Foi uma falha momentânea da IA.')} A tarefa seguiu — use **Tentar de novo** no aviso da revisão, ou confira manualmente.`)
       } catch (e2) {
         console.error(`[review:${kind}] falha ao registrar o erro da revisão`, e2)
       }

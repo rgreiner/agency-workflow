@@ -8,7 +8,10 @@ import 'server-only'
  * texto pra tela. Quem subia uma guia no Financeiro levava um dump de API no
  * rosto. Aqui vira recado em pt-BR; o técnico vai pro system_errors (só admin).
  */
-export function mensagemErroIA(e: unknown, oQue = 'o documento'): string {
+export function mensagemErroIA(
+  e: unknown,
+  fallback = 'Não consegui concluir a leitura com a IA. O erro foi registrado para o administrador.',
+): string {
   const bruto = (e instanceof Error ? e.message : String(e ?? '')).toLowerCase()
   const status = typeof (e as { status?: unknown } | null)?.status === 'number'
     ? (e as { status: number }).status
@@ -30,5 +33,5 @@ export function mensagemErroIA(e: unknown, oQue = 'o documento'): string {
   if (bruto.includes('timeout') || bruto.includes('timed out') || bruto.includes('fetch failed') || bruto.includes('econnreset') || bruto.includes('connection error')) {
     return 'Não consegui falar com a IA (falha de rede). Tente de novo.'
   }
-  return `Não consegui ler ${oQue}. O erro foi registrado para o administrador.`
+  return fallback
 }

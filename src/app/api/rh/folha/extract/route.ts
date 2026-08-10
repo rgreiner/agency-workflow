@@ -39,6 +39,9 @@ export async function POST(request: Request) {
     // Mesmo tratamento da guia: dump técnico só no system_errors.
     console.error('[folha/extract] falha', e)
     await logSystemError(await createClient(), { userId: user.id, context: 'rh:folha-extract', error: e })
-    return NextResponse.json({ error: mensagemErroIA(e, 'a folha') }, { status: 500 })
+    return NextResponse.json(
+      { error: mensagemErroIA(e, 'Não consegui ler a folha. O erro foi registrado para o administrador.') },
+      { status: 500 },
+    )
   }
 }
