@@ -6,6 +6,9 @@ import { NextResponse } from 'next/server'
 import { getUsuario } from '@/lib/auth/server'
 import { getAccess } from '@/lib/auth/access'
 import { pdfToText, extrairFolha } from '@/lib/ai/folha'
+import { mensagemErroIA } from '@/lib/ai/erro'
+import { createClient } from '@/lib/supabase/server'
+import { logSystemError } from '@/lib/system-error'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -33,6 +36,9 @@ export async function POST(request: Request) {
     if (!folha.linhas.length) return NextResponse.json({ error: 'Nenhum trabalhador reconhecido no PDF' }, { status: 422 })
     return NextResponse.json(folha)
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Falha na extração' }, { status: 500 })
+    // Mesmo tratamento da guia: dump técnico só no system_errors.
+    console.error('[folha/extract] falha', e)
+    await logSystemError(await createClient(), { userId: user.id, context: 'rh:folha-extract', error: e })
+    return NextResponse.json({ error: mensagemErroIA(e, 'a folha') }, { status: 500 })
   }
 }

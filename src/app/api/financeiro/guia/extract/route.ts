@@ -8,6 +8,9 @@ import { getUsuario } from '@/lib/auth/server'
 import { getAccess } from '@/lib/auth/access'
 import { pdfToText } from '@/lib/ai/folha'
 import { extrairGuia } from '@/lib/ai/guia'
+import { mensagemErroIA } from '@/lib/ai/erro'
+import { createClient } from '@/lib/supabase/server'
+import { logSystemError } from '@/lib/system-error'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -35,6 +38,10 @@ export async function POST(request: Request) {
     if (!guia.valor || !guia.vencimento) return NextResponse.json({ error: 'Não reconheci valor e vencimento na guia — confira o PDF' }, { status: 422 })
     return NextResponse.json(guia)
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Falha na extração' }, { status: 500 })
+    // O detalhe técnico (dump do provedor, stack do pdftotext) fica no
+    // system_errors, que só o admin lê; a tela recebe a versão em pt-BR.
+    console.error('[guia/extract] falha', e)
+    await logSystemError(await createClient(), { userId: user.id, context: 'financeiro:guia-extract', error: e })
+    return NextResponse.json({ error: mensagemErroIA(e, 'a guia') }, { status: 500 })
   }
 }
