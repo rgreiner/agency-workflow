@@ -172,7 +172,7 @@ async function runReview(_provider: ReviewProvider, system: string, parts: Revie
     parts,
     schema: ERROS_SCHEMA,
     model: process.env.REVIEW_MODEL_GEMINI || process.env.REDACAO_REVIEW_MODEL_GEMINI,
-    maxOutputTokens: 8192,
+    maxOutputTokens: 16384,
   })
   return { model, list: normalizeErrors(data?.erros) }
 }

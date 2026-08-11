@@ -185,7 +185,8 @@ async function runGemini(userMsg: string): Promise<{ model: string; output: RawO
       },
     },
     model: process.env.BRIEFING_MODEL_GEMINI,
-    maxOutputTokens: 4096,
+    // Modelo de raciocínio divide este orçamento com o pensamento (ver lib/ai/gemini.ts).
+    maxOutputTokens: 8192,
   })
   return { model, output: data }
 }

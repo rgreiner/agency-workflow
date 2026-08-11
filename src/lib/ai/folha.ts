@@ -89,7 +89,9 @@ export async function extrairFolha(texto: string): Promise<FolhaExtraida | null>
     parts: [{ kind: 'text', text: `Extraia a folha abaixo.\n\n<folha>\n${texto.slice(0, 120000)}\n</folha>` }],
     schema: SCHEMA,
     model: process.env.FOLHA_MODEL_GEMINI,
-    maxOutputTokens: 8192,
+    // Uma folha de 30 pessoas × 14 campos já passa de 8k só de JSON, e o raciocínio
+    // divide o mesmo orçamento. Teto do modelo: 65.536.
+    maxOutputTokens: 32768,
   })
   if (!data) return null
 

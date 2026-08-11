@@ -63,7 +63,9 @@ export async function extrairGuia(texto: string): Promise<GuiaExtraida | null> {
     parts: [{ kind: 'text', text: `Extraia a guia abaixo.\n\n<guia>\n${texto.slice(0, 60000)}\n</guia>` }],
     schema: SCHEMA,
     model: process.env.GUIA_MODEL_GEMINI || process.env.FOLHA_MODEL_GEMINI,
-    maxOutputTokens: 1024,
+    // Folgado de propósito: o JSON da guia é minúsculo, mas o raciocínio do modelo
+    // sai do mesmo orçamento — 1024 (o número que servia no Claude) voltaria vazio.
+    maxOutputTokens: 8192,
   })
   if (!data) return null
   const i = data

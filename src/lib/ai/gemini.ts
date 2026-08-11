@@ -111,6 +111,13 @@ export interface GeminiJsonOpts {
 /**
  * Uma chamada, saída estruturada. Devolve o objeto já parseado (ou null quando o
  * modelo não produziu JSON válido) junto do modelo que respondeu.
+ *
+ * ⚠️ Os modelos em uso são de RACIOCÍNIO (`"thinking": true` na descrição do
+ * modelo — conferido na API): o pensamento gasta o MESMO orçamento de
+ * `maxOutputTokens` que a resposta. Orçamento apertado não devolve resposta
+ * curta: devolve resposta VAZIA com `finishReason: MAX_TOKENS`, que o parse leria
+ * como "o modelo não achou nada" — silencioso e errado. Por isso o default aqui é
+ * folgado (o teto dos modelos é 65.536) e o corte por token vira erro explícito.
  */
 export async function geminiJson<T>(opts: GeminiJsonOpts): Promise<{ model: string; data: T | null }> {
   const model = geminiModel(opts.model)
@@ -126,16 +133,31 @@ export async function geminiJson<T>(opts: GeminiJsonOpts): Promise<{ model: stri
     }],
     generationConfig: {
       temperature: opts.temperature ?? 0,
-      maxOutputTokens: opts.maxOutputTokens ?? 8192,
+      maxOutputTokens: opts.maxOutputTokens ?? 16384,
       responseMimeType: 'application/json',
       responseSchema: opts.schema,
     },
   }
 
   const res = await postComRetry(url, headers, JSON.stringify(body))
-  const data = await res.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[] }
-  const raw = data.candidates?.[0]?.content?.parts?.map(p => p.text ?? '').join('') ?? ''
-  return { model, data: parseJson<T>(raw) }
+  const json = await res.json() as {
+    candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[]
+    promptFeedback?: { blockReason?: string }
+  }
+  const cand = json.candidates?.[0]
+  const raw = cand?.content?.parts?.map(p => p.text ?? '').join('') ?? ''
+  const data = parseJson<T>(raw)
+
+  if (!data) {
+    const motivo = cand?.finishReason ?? json.promptFeedback?.blockReason
+    if (motivo === 'MAX_TOKENS') {
+      throw new ErroIA(0, 'Gemini: a resposta estourou o limite de tokens antes de terminar o JSON. Aumente maxOutputTokens ou reduza o documento.')
+    }
+    if (motivo && motivo !== 'STOP') {
+      throw new ErroIA(0, `Gemini interrompeu a resposta (${motivo}).`)
+    }
+  }
+  return { model, data }
 }
 
 /**
