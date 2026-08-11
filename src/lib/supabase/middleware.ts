@@ -23,6 +23,12 @@ export async function updateSession(request: NextRequest) {
   // JSON, que é o que o supabase-js sabe tratar. Redirecionar pro /login devolveria
   // HTML no lugar da resposta da API.
   const isRest = path.startsWith('/api/rest/')
+  // Recuperação de senha é, POR DEFINIÇÃO, para quem não tem sessão. Exigir cookie
+  // aqui devolvia 307 pro /login — ou seja, o "Esqueci a senha" do login levava de
+  // volta ao login, e o link mandado por e-mail/WhatsApp morria antes de abrir.
+  // Nunca esteve nesta lista: o reset nasceu inalcançável para exatamente quem
+  // precisa dele, e a única saída restante era o admin definir a senha na mão.
+  const isSenha = path === '/recuperar-senha' || path.startsWith('/redefinir-senha/')
   // Ativos do PWA e de link-preview: o navegador busca manifest e ícones SEM
   // cookie (fetch sem credenciais, por spec) e o /sw.js não pode ser
   // redirecionado (a resposta viraria o HTML do login e o registro falha).
@@ -30,7 +36,7 @@ export async function updateSession(request: NextRequest) {
   const isPwaAsset =
     path === '/manifest.webmanifest' || path === '/sw.js' || path === '/offline' ||
     path === '/icon' || path === '/apple-icon' || path === '/opengraph-image'
-  const isPublic = isAuthPage || isConvite || isCron || isPortal || isRest || isPwaAsset
+  const isPublic = isAuthPage || isConvite || isCron || isPortal || isRest || isPwaAsset || isSenha
 
   if (!claims && !isPublic) {
     const url = request.nextUrl.clone()
