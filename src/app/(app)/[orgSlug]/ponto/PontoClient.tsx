@@ -15,6 +15,9 @@ export interface PontoDia {
   // Marcação original, quando o RH ajustou o ponto via justificativa aprovada.
   ajuste_de?: { entrada?: string; intervalo_ini?: string; intervalo_fim?: string; saida?: string } | null
   ajuste_em?: string | null
+  /** Carga do dia. No dia em curso vem preenchida para a tela mostrar
+   *  progresso, enquanto `saldo_min` fica 0 (mig. 230). */
+  esperado_min?: number
   // Lista aberta de marcações do dia (N pares) + diagnóstico do almoço.
   marcacoes?: string[]
   intervalo_maior_min?: number | null
@@ -116,7 +119,20 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
 
         {d && !dentro && horas.length > 0 && (
           <div className="text-center pt-3 mt-3 border-t border-gray-100">
-            <p className="text-xs text-gray-500">Trabalhado: <b className="tabular-nums">{Math.floor(d.minutos / 60)}h{String(d.minutos % 60).padStart(2, '0')}</b> · saldo <b className={`tabular-nums ${d.saldo_min < 0 ? 'text-red-600' : d.saldo_min > 0 ? 'text-emerald-600' : 'text-gray-500'}`}>{saldoStr(d.saldo_min)}</b>{d.extra_status === 'pendente' && ' · extra aguardando o gestor'}</p>
+            {/* Hoje mostra PROGRESSO, nunca saldo: a jornada ainda está
+                acontecendo e "-4h30" no meio do dia lia como dívida. O saldo
+                do dia aparece amanhã, na lista de baixo (mig. 230). */}
+            <p className="text-xs text-gray-500">
+              Trabalhado hoje: <b className="tabular-nums">{Math.floor(d.minutos / 60)}h{String(d.minutos % 60).padStart(2, '0')}</b>
+              {(d.esperado_min ?? 0) > 0 && <> de {Math.floor((d.esperado_min ?? 0) / 60)}h</>}
+              {d.extra_status === 'pendente' && ' · extra aguardando o gestor'}
+            </p>
+            {(d.esperado_min ?? 0) > 0 && (
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mt-2 max-w-xs mx-auto">
+                <div className={`h-full rounded-full transition-all ${d.minutos >= (d.esperado_min ?? 0) ? 'bg-emerald-500' : 'bg-orange-500'}`}
+                  style={{ width: `${Math.min(100, (d.minutos / (d.esperado_min || 1)) * 100)}%` }} />
+              </div>
+            )}
             {d.intervalo_ok === false && (
               <p className="text-[11px] text-amber-700 mt-1 inline-flex items-center gap-1">
                 <Check className="w-3 h-3" /> Almoço de {Math.floor((d.intervalo_maior_min ?? 0) / 60)}h{String((d.intervalo_maior_min ?? 0) % 60).padStart(2, '0')} — abaixo de 1h, o RH vai revisar.

@@ -157,7 +157,9 @@ export interface Espelho {
   colaborador: { id: string; nome: string; cargo: string | null; cpf: string | null }
   jornada: { carga_min: number; entrada: string; saida: string; intervalo_min: number; dias_semana: number[]; tolerancia_min?: number }
   ini: string; fim: string; competencia: string
-  resumo: { hn_min: number; faltas_min: number; extra_min: number; saldo_min: number }
+  /** `ate` = último dia contado. O dia em curso fica de fora: a jornada ainda
+   *  está acontecendo (mig. 230). */
+  resumo: { hn_min: number; faltas_min: number; extra_min: number; saldo_min: number; ate?: string | null }
   dias: EspelhoDia[]
 }
 

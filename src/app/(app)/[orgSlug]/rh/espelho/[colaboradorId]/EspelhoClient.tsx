@@ -64,6 +64,12 @@ export function EspelhoClient({ orgSlug, colaboradorId, compInicial }: { orgSlug
             <div key={x.l} className="rounded-xl border border-gray-200 bg-white p-3">
               <div className="text-[11px] text-gray-400">{x.l}</div>
               <div className={`text-lg font-semibold tabular-nums ${x.c}`}>{x.v}</div>
+              {/* O dia de hoje fica fora da conta (mig. 230). */}
+              {x.l === 'Saldo do ciclo' && esp.resumo.ate && (
+                <div className="text-[10px] text-gray-400 mt-1 leading-tight">
+                  fechado até {esp.resumo.ate.slice(8, 10)}/{esp.resumo.ate.slice(5, 7)}
+                </div>
+              )}
               {/* O total de extras é o que foi TRABALHADO além da jornada. O que
                   entra na folha é só a parte aprovada — dizer isso aqui evita a
                   conversa de "mas o sistema mostrava X". */}
