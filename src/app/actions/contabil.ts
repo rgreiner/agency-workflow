@@ -36,11 +36,30 @@ export async function previewFechamento(orgSlug: string, competencia: string) {
   }
 }
 
+/** Planilha do mês, sem os OFX — pra conferir na tela antes de o e-mail sair. */
+export async function baixarPlanilhaFechamento(orgSlug: string, competencia: string) {
+  const { supabase, orgId } = await assertFinanceAccess(orgSlug)
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pacote = await montarPacoteContabil(supabase as any, orgId, competencia)
+    const planilha = pacote.anexos[0]
+    return { nome: planilha.filename, base64: planilha.content.toString('base64') }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Falha ao montar a planilha' }
+  }
+}
+
 /**
  * Confirma o fechamento e DISPARA o e-mail pra contabilidade. Só roda por ação
  * humana — o cron apenas abre o fechamento e avisa. Marca quem confirmou.
+ *
+ * `reenviar` é o caminho de volta pra quando a contabilidade devolve o pacote
+ * pedindo correção: sem ele, mês enviado é recusado (trava contra disparo em
+ * dobro, que é o erro comum). O e-mail sai marcado como correção.
  */
-export async function enviarFechamento(orgSlug: string, competencia: string) {
+export async function enviarFechamento(
+  orgSlug: string, competencia: string, opts?: { reenviar?: boolean },
+) {
   const { supabase, orgId } = await assertFinanceAccess(orgSlug)
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
@@ -48,9 +67,10 @@ export async function enviarFechamento(orgSlug: string, competencia: string) {
   const sb = supabase as any
 
   const { data: fech } = await sb.from('fechamento_contabil')
-    .select('id, status').eq('org_id', orgId).eq('competencia', competencia).maybeSingle()
+    .select('id, status, enviado_em').eq('org_id', orgId).eq('competencia', competencia).maybeSingle()
   if (!fech) return { error: 'Fechamento não encontrado para esta competência.' }
-  if (fech.status === 'enviado') return { error: 'Este mês já foi enviado à contabilidade.' }
+  const reenvio = fech.status === 'enviado'
+  if (reenvio && !opts?.reenviar) return { error: 'Este mês já foi enviado à contabilidade.' }
 
   const { data: cfg } = await sb.from('org_settings')
     .select('contabil_emails').eq('org_id', orgId).maybeSingle()
@@ -70,8 +90,13 @@ export async function enviarFechamento(orgSlug: string, competencia: string) {
         ? `transferência entre contas próprias, numerário em trânsito e estorno (${brl(r.transferenciasFora)})` : '',
     ].filter(Boolean).join(' e ')
 
+    const dataAnterior = fech.enviado_em
+      ? new Date(fech.enviado_em).toLocaleDateString('pt-BR') : null
+
     const html = `
       <p>Olá,</p>
+      ${reenvio ? `<p><strong>Versão corrigida</strong> — substitui o material
+         ${dataAnterior ? `enviado em ${dataAnterior}` : 'enviado antes'}.</p>` : ''}
       <p>Segue o material de <strong>${labelCompetencia(competencia)}</strong>
          (${ini.split('-').reverse().join('/')} a ${fim.split('-').reverse().join('/')}).</p>
       <ul>
@@ -85,7 +110,7 @@ export async function enviarFechamento(orgSlug: string, competencia: string) {
 
     const { error: mailErr } = await sendMail({
       to: destinatarios,
-      subject: `Contabilidade ${labelCompetencia(competencia)} — extrato e recebimentos`,
+      subject: `${reenvio ? '[Corrigido] ' : ''}Contabilidade ${labelCompetencia(competencia)} — extrato e recebimentos`,
       html,
       attachments: pacote.anexos,
     })

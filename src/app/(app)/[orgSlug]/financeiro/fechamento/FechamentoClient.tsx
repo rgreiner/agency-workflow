@@ -2,12 +2,15 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Loader2, Mail, Paperclip, Send, AlertTriangle, Plus, X, FileSpreadsheet } from 'lucide-react'
+import {
+  Check, Loader2, Mail, Paperclip, Send, AlertTriangle, Plus, X, FileSpreadsheet, Download,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import {
   previewFechamento, enviarFechamento, salvarConfigContabil, abrirFechamentoManual,
+  baixarPlanilhaFechamento,
 } from '@/app/actions/contabil'
 
 export interface Fechamento {
@@ -18,6 +21,7 @@ export interface Fechamento {
   enviado_em: string | null
   destinatarios: string[] | null
   erro: string | null
+  envios: number | null
 }
 export interface ConfigContabil {
   contabil_emails: string[]
@@ -52,6 +56,7 @@ export function FechamentoClient({ orgSlug, fechamentos, config, competenciaSuge
   const [ativo, setAtivo] = useState(config.contabil_ativo)
   const [preview, setPreview] = useState<Record<string, Preview | 'carregando'>>({})
   const [confirmar, setConfirmar] = useState<Fechamento | null>(null)
+  const [baixando, setBaixando] = useState<string | null>(null)
 
   const pendentes = fechamentos.filter(f => f.status !== 'enviado')
   const enviados = fechamentos.filter(f => f.status === 'enviado')
@@ -80,13 +85,33 @@ export function FechamentoClient({ orgSlug, fechamentos, config, competenciaSuge
     setPreview(p => ({ ...p, [f.competencia]: r as Preview }))
   }
 
+  /** Baixa só a planilha (sem os OFX) pra conferir antes de o e-mail sair. */
+  async function baixarPlanilha(f: Fechamento) {
+    setBaixando(f.competencia)
+    try {
+      const r = await baixarPlanilhaFechamento(orgSlug, f.competencia)
+      if ('error' in r) { toast.error(r.error ?? 'Falha ao montar a planilha'); return }
+      const bytes = Uint8Array.from(atob(r.base64), c => c.charCodeAt(0))
+      const url = URL.createObjectURL(new Blob([bytes], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }))
+      const a = document.createElement('a')
+      a.href = url; a.download = r.nome
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setBaixando(null)
+    }
+  }
+
   function enviar(f: Fechamento) {
+    const reenviar = f.status === 'enviado'
     setConfirmar(null)
     startTransition(async () => {
-      const r = await enviarFechamento(orgSlug, f.competencia)
+      const r = await enviarFechamento(orgSlug, f.competencia, { reenviar })
       if (r?.error) { toast.error(r.error); return }
       if (r?.aviso) toast.warning(r.aviso)
-      else toast.success(`Enviado para ${r?.destinatarios?.join(', ')}.`)
+      else toast.success(`${reenviar ? 'Reenviado' : 'Enviado'} para ${r?.destinatarios?.join(', ')}.`)
       router.refresh()
     })
   }
@@ -121,6 +146,7 @@ export function FechamentoClient({ orgSlug, fechamentos, config, competenciaSuge
                         <FileSpreadsheet className="w-4 h-4" /> Ver o que vai
                       </button>
                     )}
+                    <BotaoBaixar onClick={() => baixarPlanilha(f)} carregando={baixando === f.competencia} />
                     <button onClick={() => setConfirmar(f)} disabled={isPending || !config.contabil_emails.length}
                       title={config.contabil_emails.length ? undefined : 'Configure o e-mail da contabilidade abaixo'}
                       className="inline-flex items-center gap-1.5 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
@@ -245,7 +271,7 @@ export function FechamentoClient({ orgSlug, fechamentos, config, competenciaSuge
         </div>
       </section>
 
-      {/* Histórico */}
+      {/* Histórico — com caminho de volta: a contabilidade devolve pedindo correção. */}
       {enviados.length > 0 && (
         <section>
           <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2.5">Já enviados</h2>
@@ -257,7 +283,17 @@ export function FechamentoClient({ orgSlug, fechamentos, config, competenciaSuge
                 <span className="text-xs text-emerald-600 inline-flex items-center gap-1 shrink-0">
                   <Check className="w-3.5 h-3.5" />
                   {f.enviado_em ? new Date(f.enviado_em).toLocaleDateString('pt-BR') : 'enviado'}
+                  {(f.envios ?? 1) > 1 && (
+                    <span className="text-gray-400">· {f.envios} envios</span>
+                  )}
                 </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <BotaoBaixar onClick={() => baixarPlanilha(f)} carregando={baixando === f.competencia} compacto />
+                  <button onClick={() => setConfirmar(f)} disabled={isPending || !config.contabil_emails.length}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors">
+                    <Send className="w-3.5 h-3.5" /> Reenviar corrigido
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -266,13 +302,34 @@ export function FechamentoClient({ orgSlug, fechamentos, config, competenciaSuge
 
       <ConfirmDialog
         open={!!confirmar} loading={isPending}
-        title={`Enviar ${confirmar ? label(confirmar.competencia) : ''} à contabilidade`}
-        description={`O e-mail vai para ${config.contabil_emails.join(', ')} com a planilha e os OFX do período. Não dá para cancelar depois de enviado.`}
-        confirmLabel="Enviar agora"
+        title={`${confirmar?.status === 'enviado' ? 'Reenviar' : 'Enviar'} ${confirmar ? label(confirmar.competencia) : ''} à contabilidade`}
+        description={
+          `O e-mail vai para ${config.contabil_emails.join(', ')} com a planilha e os OFX do período. `
+          + (confirmar?.status === 'enviado'
+            ? 'Sai marcado como versão corrigida, dizendo que substitui o envio anterior.'
+            : 'Não dá para cancelar depois de enviado.')
+        }
+        confirmLabel={confirmar?.status === 'enviado' ? 'Reenviar agora' : 'Enviar agora'}
         onConfirm={() => confirmar && enviar(confirmar)}
         onCancel={() => setConfirmar(null)}
       />
     </div>
+  )
+}
+
+function BotaoBaixar({ onClick, carregando, compacto }: {
+  onClick: () => void; carregando: boolean; compacto?: boolean
+}) {
+  const icone = compacto ? 'w-3.5 h-3.5' : 'w-4 h-4'
+  return (
+    <button onClick={onClick} disabled={carregando} title="Baixar a planilha (sem os OFX)"
+      className={cn(
+        'inline-flex items-center gap-1.5 font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors',
+        compacto ? 'px-3 py-1.5 text-xs rounded-lg' : 'px-3 py-2 text-sm rounded-xl',
+      )}>
+      {carregando ? <Loader2 className={cn(icone, 'animate-spin')} /> : <Download className={icone} />}
+      Baixar planilha
+    </button>
   )
 }
 

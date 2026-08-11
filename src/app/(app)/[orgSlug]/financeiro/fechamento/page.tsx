@@ -24,7 +24,7 @@ export default async function FechamentoPage({ params }: { params: Promise<{ org
 
   const [resFech, resCfg] = await Promise.all([
     sb.from('fechamento_contabil')
-      .select('id, competencia, status, confirmado_em, enviado_em, destinatarios, erro')
+      .select('id, competencia, status, confirmado_em, enviado_em, destinatarios, erro, envios')
       .eq('org_id', orgId).order('competencia', { ascending: false }),
     sb.from('org_settings')
       .select('contabil_emails, contabil_dia, contabil_ativo')

@@ -16,8 +16,6 @@ import type { MailAttachment } from '@/lib/email/send'
  * agência emitiu.
  */
 
-const REALIZADO_EXTRATO = ['Conciliado', 'Quitado', 'Transferido']
-
 export interface ResumoContabil {
   contas: number
   movimentos: number
@@ -116,34 +114,34 @@ export async function montarPacoteContabil(sb: any, orgId: string, competencia: 
   const XLSX = await import('xlsx')
   const wb = XLSX.utils.book_new()
 
-  // ── Extrato por conta (só realizado — é o que a contabilidade lança) ───────
   const { data: contas } = await sb
     .from('contas_financeiras')
     .select('id, nome').eq('org_id', orgId).order('nome')
 
-  let totalMovimentos = 0
-  const linhasExtrato: Record<string, string | number>[] = []
-  for (const c of (contas ?? []) as { id: string; nome: string }[]) {
-    const { data: movs } = await sb
-      .from('extrato_importado')
-      .select('data_mov, contato, descricao, categoria, valor, situacao')
-      .eq('org_id', orgId).eq('conta', c.nome)
-      .in('situacao', REALIZADO_EXTRATO)
-      .gte('data_mov', ini).lte('data_mov', fim)
-      .order('data_mov', { ascending: true }).order('id', { ascending: true })
+  // ── Extrato consolidado (só realizado — é o que a contabilidade lança) ─────
+  // Fonte única `fin_movimentos` (185 + 231): o histórico do extrato da Conta
+  // Azul até o corte de 16/07/2026 E o livro-caixa do Flow depois dele, sem
+  // contar duas vezes o que existe nas duas pontas. Lendo `extrato_importado`
+  // direto, como era até aqui, agosto/2026 sairia com a aba vazia.
+  const { data: movs } = await sb
+    .from('fin_movimentos')
+    .select('data_mov, conta, contato, descricao, categoria, tipo, valor')
+    .eq('org_id', orgId).eq('situacao', 'realizado')
+    .gte('data_mov', ini).lte('data_mov', fim)
+    .order('conta', { ascending: true }).order('data_mov', { ascending: true })
 
-    for (const m of (movs ?? []) as Record<string, unknown>[]) {
-      linhasExtrato.push({
-        Conta: c.nome,
-        Data: fmtData(m.data_mov as string),
-        Contato: (m.contato as string) ?? '',
-        Histórico: (m.descricao as string) ?? '',
-        Categoria: (m.categoria as string) ?? '',
-        Valor: Number(m.valor ?? 0),
-      })
-      totalMovimentos++
-    }
-  }
+  const linhasExtrato = ((movs ?? []) as Record<string, unknown>[]).map(m => ({
+    Conta: (m.conta as string) ?? '',
+    Data: fmtData(m.data_mov as string),
+    Contato: (m.contato as string) ?? '',
+    Histórico: (m.descricao as string) ?? '',
+    Categoria: (m.categoria as string) ?? '',
+    // Sinal igual ao do extrato do banco: o que saiu vai negativo. A view
+    // normaliza em valor absoluto + tipo, então o sinal se remonta aqui.
+    Valor: (m.tipo === 'despesa' ? -1 : 1) * Math.abs(Number(m.valor ?? 0)),
+  }))
+  const totalMovimentos = linhasExtrato.length
+  const contasNoExtrato = new Set(linhasExtrato.map(l => l.Conta).filter(Boolean)).size
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(linhasExtrato), 'Extrato')
 
   // ── Recebimentos do mês (entradas com baixa na competência) ────────────────
@@ -273,14 +271,26 @@ export async function montarPacoteContabil(sb: any, orgId: string, competencia: 
     )
   }
 
-  // A aba Extrato sai de `extrato_importado`, que é a base da Conta Azul — fonte
-  // que parou de crescer. Mês sem nenhum movimento realizado ali não é
-  // necessariamente mês sem movimento: é a planilha que ficou cega, e só os OFX
-  // sustentam o extrato. Melhor dizer isso antes de o pacote sair.
   if (totalMovimentos === 0) {
     avisos.push(
-      'A aba Extrato saiu VAZIA — nenhum movimento realizado no período veio da base importada. '
-      + 'O extrato do mês vai só pelos arquivos OFX anexados.',
+      'A aba Extrato saiu VAZIA — nenhum movimento realizado no período, nem no livro-caixa '
+      + 'nem no histórico importado. Confira antes de enviar.',
+    )
+  }
+
+  // O extrato consolidado é o que o Flow conhece. Movimento que o banco mandou e
+  // ninguém conciliou não vira lançamento e, portanto, NÃO entra na planilha —
+  // some do pacote sem deixar rastro. Aqui ele tem nome antes do envio.
+  const { count: naoConciliados } = await sb
+    .from('btg_movements')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', orgId).eq('status', 'pendente')
+    .gte('data_mov', ini).lte('data_mov', fim)
+
+  if (naoConciliados) {
+    avisos.push(
+      `${naoConciliados} movimento(s) do banco no período ainda NÃO conciliados no Flow — `
+      + 'ficam de fora da planilha (aparecem só no OFX). Concilie em Financeiro → conta antes de enviar.',
     )
   }
 
@@ -292,7 +302,7 @@ export async function montarPacoteContabil(sb: any, orgId: string, competencia: 
   return {
     anexos,
     resumo: {
-      contas: (contas ?? []).length,
+      contas: contasNoExtrato,
       movimentos: totalMovimentos,
       recebimentos: linhasReceb.length,
       totalRecebido: Math.round(totalRecebido * 100) / 100,
