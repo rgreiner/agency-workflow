@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { solicitarReset } from '@/app/actions/auth'
 import { SubmitButton } from '@/components/ui/SubmitButton'
+import { FormComTrava } from '@/components/ui/FormComTrava'
+import { emailLembrado } from '@/lib/auth/ultimo-email'
 
 export default async function RecuperarSenhaPage({
   searchParams,
@@ -8,6 +10,7 @@ export default async function RecuperarSenhaPage({
   searchParams: Promise<{ erro?: string; enviado?: string }>
 }) {
   const { erro, enviado } = await searchParams
+  const email = await emailLembrado()
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -31,7 +34,7 @@ export default async function RecuperarSenhaPage({
             </Link>
           </div>
         ) : (
-          <form action={solicitarReset} className="space-y-4">
+          <FormComTrava action={solicitarReset} className="space-y-4">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                 E-mail
@@ -39,6 +42,7 @@ export default async function RecuperarSenhaPage({
               <input
                 id="email"
                 name="email"
+                defaultValue={email}
                 type="email"
                 autoComplete="email"
                 required
@@ -55,7 +59,7 @@ export default async function RecuperarSenhaPage({
             <Link href="/login" className="block text-center text-sm text-gray-500 hover:text-gray-700">
               Voltar para o login
             </Link>
-          </form>
+          </FormComTrava>
         )}
       </div>
     </div>

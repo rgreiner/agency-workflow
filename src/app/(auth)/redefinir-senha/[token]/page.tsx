@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redefinirSenha } from '@/app/actions/auth'
 import { tokenResetValido } from '@/lib/auth/reset'
 import { SubmitButton } from '@/components/ui/SubmitButton'
+import { FormComTrava } from '@/components/ui/FormComTrava'
 
 export default async function RedefinirSenhaPage({
   params,
@@ -35,7 +36,7 @@ export default async function RedefinirSenhaPage({
             </Link>
           </div>
         ) : (
-          <form action={redefinirSenha.bind(null, token)} className="space-y-4">
+          <FormComTrava action={redefinirSenha.bind(null, token)} className="space-y-4">
             <div>
               <label htmlFor="senha" className="block text-sm font-medium text-gray-700 mb-1">
                 Nova senha
@@ -79,7 +80,7 @@ export default async function RedefinirSenhaPage({
             <SubmitButton pendingLabel="Salvando…" className="w-full px-4 py-3 rounded-xl text-white font-medium bg-orange-600 hover:bg-orange-700 transition">
             Redefinir senha
           </SubmitButton>
-          </form>
+          </FormComTrava>
         )}
       </div>
     </div>

@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { login } from '@/app/actions/auth'
 import { SubmitButton } from '@/components/ui/SubmitButton'
+import { FormComTrava } from '@/components/ui/FormComTrava'
+import { emailLembrado } from '@/lib/auth/ultimo-email'
 
 export default async function LoginPage({
   searchParams,
@@ -8,6 +10,7 @@ export default async function LoginPage({
   searchParams: Promise<{ erro?: string; next?: string; reset?: string }>
 }) {
   const { erro, next, reset } = await searchParams
+  const email = await emailLembrado()
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -32,7 +35,7 @@ export default async function LoginPage({
           </div>
         )}
 
-        <form action={login} className="space-y-4">
+        <FormComTrava action={login} className="space-y-4">
           <input type="hidden" name="next" value={next ?? ''} />
 
           <div>
@@ -49,6 +52,7 @@ export default async function LoginPage({
               autoCorrect="off"
               spellCheck={false}
               required
+              defaultValue={email}
               className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
           </div>
@@ -68,6 +72,7 @@ export default async function LoginPage({
               type="password"
               autoComplete="current-password"
               required
+              autoFocus={!!email}
               className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
           </div>
@@ -86,7 +91,7 @@ export default async function LoginPage({
           >
             Entrar
           </SubmitButton>
-        </form>
+        </FormComTrava>
       </div>
     </div>
   )

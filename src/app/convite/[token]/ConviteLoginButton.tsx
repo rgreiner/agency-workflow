@@ -1,5 +1,6 @@
 import { entrarConvite } from '@/app/actions/auth'
 import { SubmitButton } from '@/components/ui/SubmitButton'
+import { FormComTrava } from '@/components/ui/FormComTrava'
 
 interface ConviteLoginButtonProps {
   token: string
@@ -17,7 +18,7 @@ export function ConviteLoginButton({ token, erro }: ConviteLoginButtonProps) {
   const action = entrarConvite.bind(null, token)
 
   return (
-    <form action={action} className="space-y-3">
+    <FormComTrava action={action} className="space-y-3">
       <input
         name="nome"
         type="text"
@@ -51,6 +52,6 @@ export function ConviteLoginButton({ token, erro }: ConviteLoginButtonProps) {
       >
         Entrar / criar conta
       </SubmitButton>
-    </form>
+    </FormComTrava>
   )
 }

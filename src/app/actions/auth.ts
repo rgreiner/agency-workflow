@@ -12,6 +12,7 @@ import { criarTokenReset, consumirTokenReset, redefinirSenhaUsuario } from '@/li
 import { limiteEstourado, registrarTentativa, registrarBloqueio } from '@/lib/auth/rate-limit'
 import { sendPasswordResetEmail } from '@/app/actions/email'
 import { iniciarSessao, encerrarSessao, getUsuario } from '@/lib/auth/server'
+import { lembrarEmail } from '@/lib/auth/ultimo-email'
 import { createClient } from '@/lib/supabase/server'
 import { logSystemError } from '@/lib/system-error'
 
@@ -22,6 +23,9 @@ export async function login(formData: FormData): Promise<void> {
   const senha = String(formData.get('senha') || '')
   const next = String(formData.get('next') || '')
   if (!email || !senha) redirect('/login?erro=campos')
+  // Antes de qualquer saída: o redirect interrompe a função, e é justamente no erro
+  // que a pessoa precisa reencontrar o e-mail já preenchido.
+  await lembrarEmail(email)
   if (await limiteEstourado('login', email)) {
     await registrarBloqueio('login', email)
     redirect('/login?erro=bloqueado')
@@ -51,6 +55,7 @@ export async function logout(): Promise<void> {
 export async function solicitarReset(formData: FormData): Promise<void> {
   const email = String(formData.get('email') || '').trim()
   if (!email) redirect('/recuperar-senha?erro=campos')
+  await lembrarEmail(email)
   // Estourou o limite? Segue a mesma resposta genérica de sempre — dizer
   // "bloqueado" já entregaria que o e-mail existe (ou não).
   if (await limiteEstourado('reset', email)) {
@@ -162,6 +167,7 @@ export async function entrarConvite(token: string, formData: FormData): Promise<
   const senha = normalizarSenha(String(formData.get('senha') || ''))
   const nome = String(formData.get('nome') || '').trim()
   if (!email || !senha) redirect(`/convite/${token}?erro=campos`)
+  await lembrarEmail(email)
   // O e-mail digitado aqui VIRA o login e o endereço de recuperação: typo em domínio
   // conhecido deixa a pessoa dependente do admin pra sempre (aconteceu em 03/08).
   if (dominioComTypo(email)) redirect(`/convite/${token}?erro=email`)
