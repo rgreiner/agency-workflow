@@ -17,7 +17,7 @@ import {
   iniciarSessaoPortal, encerrarSessaoPortal, sessaoPortal,
   verificarSenhaPortal, definirSenhaPortal,
 } from '@/lib/auth/portal'
-import { limiteEstourado, registrarTentativa } from '@/lib/auth/rate-limit'
+import { limiteEstourado, registrarTentativa, registrarBloqueio } from '@/lib/auth/rate-limit'
 import { sendMail } from '@/lib/email/send'
 import { emailLayout } from '@/lib/email/layout'
 
@@ -34,7 +34,10 @@ export async function solicitarAcessoPortal(formData: FormData): Promise<void> {
   if (!email) redirect('/portal?erro=campos')
   // Passou do limite? Devolve o mesmo "enviado" de sempre — a resposta genérica
   // é o que impede descobrir quais e-mails são contatos de cliente.
-  if (await limiteEstourado('portal_magic', email)) redirect('/portal?enviado=1')
+  if (await limiteEstourado('portal_magic', email)) {
+    await registrarBloqueio('portal_magic', email)
+    redirect('/portal?enviado=1')
+  }
   await registrarTentativa('portal_magic', email, true)
 
   // Um link POR cliente em que a pessoa é contato (normalmente só um).
@@ -83,7 +86,10 @@ export async function loginPortalSenha(formData: FormData): Promise<void> {
   const email = String(formData.get('email') || '').trim()
   const senha = String(formData.get('senha') || '')
   if (!email || !senha) redirect('/portal?erro=campos')
-  if (await limiteEstourado('portal', email)) redirect('/portal?erro=bloqueado')
+  if (await limiteEstourado('portal', email)) {
+    await registrarBloqueio('portal', email)
+    redirect('/portal?erro=bloqueado')
+  }
 
   const contato = await verificarSenhaPortal(email, senha)
   if (!contato) {

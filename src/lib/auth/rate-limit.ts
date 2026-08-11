@@ -68,6 +68,7 @@ export async function limiteEstourado(kind: TentativaKind, identifier: string): 
         count(*) filter (where ip = ${ip} and ${ip} <> '-')::int as por_ip
       from auth.login_attempts
       where kind = ${kind}
+        and bloqueado = false
         and created_at > now() - make_interval(mins => ${r.janelaMin})
         and (ok = false or ${r.contaSucesso})
         and (identifier = ${id} or ip = ${ip})
@@ -80,14 +81,31 @@ export async function limiteEstourado(kind: TentativaKind, identifier: string): 
   }
 }
 
+/**
+ * Registra o pedido BARRADO pelo limite. Fica fora da contagem (migration 233):
+ * se contasse, cada tentativa barrada renovaria a janela e o bloqueio não acabaria.
+ * Existe só para o histórico mostrar o que aconteceu — sem isto, quem foi bloqueado
+ * simplesmente sumia do log, e o incidente ficava impossível de reconstituir.
+ */
+export async function registrarBloqueio(kind: TentativaKind, identifier: string): Promise<void> {
+  try {
+    await sql`
+      insert into auth.login_attempts (kind, identifier, ip, ok, bloqueado)
+      values (${kind}, ${chave(identifier)}, ${await ipDoPedido()}, false, true)
+    `
+  } catch (e) {
+    console.error('[rate-limit] falha ao registrar bloqueio:', e)
+  }
+}
+
 /** Registra a tentativa (é também o log de auditoria). Nunca lança. */
 export async function registrarTentativa(
   kind: TentativaKind, identifier: string, ok: boolean,
 ): Promise<void> {
   try {
     await sql`
-      insert into auth.login_attempts (kind, identifier, ip, ok)
-      values (${kind}, ${chave(identifier)}, ${await ipDoPedido()}, ${ok})
+      insert into auth.login_attempts (kind, identifier, ip, ok, bloqueado)
+      values (${kind}, ${chave(identifier)}, ${await ipDoPedido()}, ${ok}, false)
     `
   } catch (e) {
     console.error('[rate-limit] falha ao registrar tentativa:', e)

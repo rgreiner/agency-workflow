@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { solicitarReset } from '@/app/actions/auth'
+import { SubmitButton } from '@/components/ui/SubmitButton'
 
 export default async function RecuperarSenhaPage({
   searchParams,
@@ -47,12 +48,9 @@ export default async function RecuperarSenhaPage({
 
             {erro === 'campos' && <p className="text-sm text-red-600">Informe o e-mail.</p>}
 
-            <button
-              type="submit"
-              className="w-full px-4 py-3 rounded-xl text-white font-medium bg-orange-600 hover:bg-orange-700 transition"
-            >
-              Enviar link
-            </button>
+            <SubmitButton pendingLabel="Enviando…" className="w-full px-4 py-3 rounded-xl text-white font-medium bg-orange-600 hover:bg-orange-700 transition">
+            Enviar link
+          </SubmitButton>
 
             <Link href="/login" className="block text-center text-sm text-gray-500 hover:text-gray-700">
               Voltar para o login

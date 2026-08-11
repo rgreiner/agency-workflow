@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { buscarUsuarioPorEmail } from '@/lib/auth/usuarios'
-import { verificarSenha } from '@/lib/auth/password'
+import { conferirSenha } from '@/lib/auth/password'
 import { TERMO_TEXTO } from '@/lib/rh/termo'
 
 /**
@@ -44,7 +44,7 @@ async function reautenticar(email: string, senha: string): Promise<boolean> {
   if (!senha) return false
   const u = await buscarUsuarioPorEmail(email)
   if (!u?.senha_hash) return false
-  return verificarSenha(senha, u.senha_hash)
+  return conferirSenha(senha, u.senha_hash)
 }
 
 async function origem() {

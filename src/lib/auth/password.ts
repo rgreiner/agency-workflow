@@ -27,3 +27,27 @@ export async function verificarSenha(senha: string, armazenado: string): Promise
   const derivado = await scryptAsync(senha, salt, esperado.length);
   return esperado.length === derivado.length && timingSafeEqual(esperado, derivado);
 }
+
+/**
+ * Senha como ela deve ser GRAVADA: sem espaço nas pontas.
+ *
+ * O caminho normal de uma senha nova aqui é o administrador definir e mandar por
+ * WhatsApp — e copiar de mensagem traz espaço no fim com frequência. Gravado com o
+ * espaço, o hash passa a exigir esse espaço para sempre: a pessoa digita a senha
+ * certa, na mão, e é recusada. Some do jeito mais confuso possível, porque a senha
+ * "está certa". Cortar na hora de gravar fecha a porta.
+ */
+export function normalizarSenha(senha: string): string {
+  return senha.trim();
+}
+
+/**
+ * Confere a senha tolerando espaço acidental nas pontas do que foi DIGITADO
+ * (mesma origem: colar de mensagem). Só tenta a segunda forma se ela for
+ * diferente da primeira — sem custo quando não há espaço.
+ */
+export async function conferirSenha(digitada: string, armazenado: string): Promise<boolean> {
+  if (await verificarSenha(digitada, armazenado)) return true;
+  const limpa = digitada.trim();
+  return limpa !== digitada ? verificarSenha(limpa, armazenado) : false;
+}

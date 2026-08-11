@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redefinirSenha } from '@/app/actions/auth'
 import { tokenResetValido } from '@/lib/auth/reset'
+import { SubmitButton } from '@/components/ui/SubmitButton'
 
 export default async function RedefinirSenhaPage({
   params,
@@ -75,12 +76,9 @@ export default async function RedefinirSenhaPage({
               </p>
             )}
 
-            <button
-              type="submit"
-              className="w-full px-4 py-3 rounded-xl text-white font-medium bg-orange-600 hover:bg-orange-700 transition"
-            >
-              Redefinir senha
-            </button>
+            <SubmitButton pendingLabel="Salvando…" className="w-full px-4 py-3 rounded-xl text-white font-medium bg-orange-600 hover:bg-orange-700 transition">
+            Redefinir senha
+          </SubmitButton>
           </form>
         )}
       </div>

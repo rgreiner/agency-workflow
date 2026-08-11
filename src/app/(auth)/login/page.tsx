@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { login } from '@/app/actions/auth'
+import { SubmitButton } from '@/components/ui/SubmitButton'
 
 export default async function LoginPage({
   searchParams,
@@ -42,7 +43,11 @@ export default async function LoginPage({
               id="email"
               name="email"
               type="email"
+              inputMode="email"
               autoComplete="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               required
               className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
@@ -70,17 +75,17 @@ export default async function LoginPage({
           {erro && (
             <p className="text-sm text-red-600">
               {erro === 'campos' ? 'Preencha e-mail e senha.'
-                : erro === 'bloqueado' ? 'Muitas tentativas. Espere alguns minutos e tente de novo.'
-                : 'E-mail ou senha inválidos.'}
+                : erro === 'bloqueado' ? 'Muitas tentativas seguidas. O acesso libera sozinho em 15 minutos — ou use “Esqueci a senha”.'
+                : 'E-mail ou senha inválidos. Confira o domínio do e-mail (@oneaone.com.br).'}
             </p>
           )}
 
-          <button
-            type="submit"
-            className="w-full px-4 py-3 rounded-xl text-[#fff] font-medium bg-orange-600 hover:bg-orange-700 transition"
+          <SubmitButton
+            pendingLabel="Entrando…"
+            className="w-full px-4 py-3 rounded-xl text-[#fff] font-medium bg-orange-600 hover:bg-orange-700"
           >
             Entrar
-          </button>
+          </SubmitButton>
         </form>
       </div>
     </div>

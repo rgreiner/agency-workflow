@@ -9,7 +9,7 @@ import 'server-only'
 import { createHash, randomBytes } from 'node:crypto'
 import { cookies } from 'next/headers'
 import { sql } from '@/lib/db'
-import { hashSenha, verificarSenha } from './password'
+import { hashSenha, conferirSenha, normalizarSenha } from './password'
 import {
   COOKIE_PORTAL, PORTAL_MAX_AGE_SEG, mintPortalToken, verifyPortalToken,
 } from './jwt'
@@ -126,7 +126,7 @@ export async function tokenSessaoPortal(): Promise<string | null> {
 
 /** Define/troca a senha do contato (scrypt). O cliente cria a própria no painel. */
 export async function definirSenhaPortal(portalUserId: string, senha: string): Promise<void> {
-  const hash = await hashSenha(senha)
+  const hash = await hashSenha(normalizarSenha(senha))
   await sql`update public.portal_users set senha_hash = ${hash} where id = ${portalUserId} and ativo`
 }
 
@@ -152,7 +152,7 @@ export async function verificarSenhaPortal(email: string, senha: string): Promis
     order by created_at
   `
   for (const r of rows) {
-    if (r.senha_hash && await verificarSenha(senha, r.senha_hash)) {
+    if (r.senha_hash && await conferirSenha(senha, r.senha_hash)) {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { senha_hash, ...user } = r
       return user
