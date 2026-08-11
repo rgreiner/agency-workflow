@@ -3,9 +3,14 @@ import 'server-only'
 /**
  * Extração ESTRUTURADA de uma guia de recolhimento (PDF texto) por IA — Darf/
  * DCTFweb, FGTS Digital, DAS, GPS, parcelamentos e boletos de tributo em geral.
- * Mesmo padrão da folha (lib/ai/folha.ts): pdftotext -layout + tool use com
- * schema fixo, conservador (só transcreve o que está no documento).
+ * Mesmo padrão da folha (lib/ai/folha.ts): pdftotext -layout + saída estruturada
+ * por schema fixo, conservador (só transcreve o que está no documento).
+ *
+ * ⚠️ Como a folha, só falava Claude até 11/08/2026 — e produção nunca teve a
+ * chave, então respondia 503 desde o primeiro dia. Agora usa lib/ai/gemini.ts.
  */
+
+import { geminiConfigured, geminiJson } from './gemini'
 
 export type GuiaTipo = 'darf' | 'fgts' | 'das' | 'gps' | 'parcelamento' | 'outro'
 
@@ -20,7 +25,7 @@ export interface GuiaExtraida {
   palavras_chave: string[]    // termos p/ casar com o lançamento provisionado
 }
 
-const TOOL_SCHEMA = {
+const SCHEMA = {
   type: 'object',
   properties: {
     tipo: {
@@ -46,26 +51,22 @@ const SYSTEM = `Você extrai dados de uma GUIA DE RECOLHIMENTO brasileira (texto
 - Converta valores do formato BR para decimal com ponto: "2.302,66" → 2302.66.
 - Datas sempre AAAA-MM-DD; competência/período de apuração AAAA-MM.
 - Se houver "Parcela N/M" ou menção a parcelamento, o tipo é "parcelamento".
-- Reporte pela ferramenta reportar_guia.`
+- Responda no formato JSON pedido.`
 
 /** Extrai a guia estruturada a partir do texto. Retorna null se não há IA configurada. */
 export async function extrairGuia(texto: string): Promise<GuiaExtraida | null> {
-  if (!process.env.ANTHROPIC_API_KEY) return null
-  const Anthropic = (await import('@anthropic-ai/sdk')).default
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 5, timeout: 120_000 })
-  const model = process.env.FOLHA_MODEL_CLAUDE || process.env.REVIEW_MODEL_CLAUDE || 'claude-sonnet-4-6'
+  if (!geminiConfigured()) return null
 
-  const msg = await client.messages.create({
-    model, max_tokens: 1024, temperature: 0, system: SYSTEM,
-    messages: [{ role: 'user', content: `Extraia a guia abaixo.\n\n<guia>\n${texto.slice(0, 60000)}\n</guia>` }],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    tools: [{ name: 'reportar_guia', description: 'Reporta os dados da guia.', input_schema: TOOL_SCHEMA as any }],
-    tool_choice: { type: 'tool', name: 'reportar_guia' },
-  })
-  const block = msg.content.find(b => b.type === 'tool_use')
-  if (!block || block.type !== 'tool_use') return null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const i = block.input as any
+  const { data } = await geminiJson<any>({
+    system: SYSTEM,
+    parts: [{ kind: 'text', text: `Extraia a guia abaixo.\n\n<guia>\n${texto.slice(0, 60000)}\n</guia>` }],
+    schema: SCHEMA,
+    model: process.env.GUIA_MODEL_GEMINI || process.env.FOLHA_MODEL_GEMINI,
+    maxOutputTokens: 1024,
+  })
+  if (!data) return null
+  const i = data
   const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
   const tipo: GuiaTipo = ['darf', 'fgts', 'das', 'gps', 'parcelamento', 'outro'].includes(i?.tipo) ? i.tipo : 'outro'
   const comp = str(i?.competencia)

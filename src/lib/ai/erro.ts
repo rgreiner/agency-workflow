@@ -1,12 +1,16 @@
 import 'server-only'
 
 /**
- * Traduz a falha do provedor de IA para uma frase que a pessoa entende.
+ * Traduz a falha da IA para uma frase que a pessoa entende.
  *
- * O SDK da Anthropic joga o corpo cru da resposta dentro de `message` — do tipo
- * `400 {"type":"error","error":{...}}` — e as rotas de extração repassavam esse
- * texto pra tela. Quem subia uma guia no Financeiro levava um dump de API no
- * rosto. Aqui vira recado em pt-BR; o técnico vai pro system_errors (só admin).
+ * O Gemini devolve o erro como JSON cru no corpo — do tipo
+ * `{"error":{"code":429,"message":"Your prepayment credits are depleted…"}}` — e as
+ * rotas de extração repassavam esse texto pra tela. Quem subia uma guia no
+ * Financeiro levava um dump de API no rosto. Aqui vira recado em pt-BR; o técnico
+ * vai pro system_errors (só admin).
+ *
+ * Distinguir SEM SALDO de LIMITE POR MINUTO importa: os dois chegam como 429 e a
+ * ação é oposta — um exige recarga, o outro só esperar.
  */
 export function mensagemErroIA(
   e: unknown,
@@ -17,20 +21,23 @@ export function mensagemErroIA(
     ? (e as { status: number }).status
     : null
 
-  // Saldo/billing: o mais comum, e o único que tem ação clara pro Rafael.
-  if (bruto.includes('credit balance') || bruto.includes('billing') || bruto.includes('quota')) {
-    return 'A IA está sem créditos. Um administrador precisa recarregar a conta da Anthropic (console.anthropic.com → Plans & Billing) e tentar de novo.'
+  // Saldo/billing: o mais comum, e o único que tem ação clara pro administrador.
+  if (bruto.includes('credit') || bruto.includes('billing') || bruto.includes('quota') || bruto.includes('exceeded')) {
+    return 'A IA está sem créditos. Um administrador precisa recarregar a conta do Google AI Studio (aistudio.google.com → Billing) — ou habilitar o faturamento do projeto, se estivermos usando o Vertex — e tentar de novo.'
   }
-  if (status === 401 || status === 403 || bruto.includes('authentication_error') || bruto.includes('invalid x-api-key')) {
-    return 'A chave da IA foi recusada. Um administrador precisa revisar a ANTHROPIC_API_KEY.'
+  if (status === 401 || status === 403 || bruto.includes('api key not valid') || bruto.includes('permission_denied')) {
+    return 'A chave da IA foi recusada. Um administrador precisa revisar a GEMINI_API_KEY (ou a conta de serviço do Vertex).'
   }
-  if (status === 429 || bruto.includes('rate_limit')) {
+  if (status === 404 || bruto.includes('no longer available') || bruto.includes('not found for api version')) {
+    return 'O modelo de IA configurado não existe mais. Um administrador precisa apontar GEMINI_MODEL para um modelo disponível.'
+  }
+  if (status === 429 || bruto.includes('rate limit') || bruto.includes('resource_exhausted')) {
     return 'A IA atingiu o limite de uso agora há pouco. Espere um minuto e tente de novo.'
   }
-  if (status === 529 || status === 503 || bruto.includes('overloaded')) {
+  if (status === 500 || status === 503 || bruto.includes('overloaded') || bruto.includes('unavailable')) {
     return 'A IA está sobrecarregada no momento. Tente de novo em instantes.'
   }
-  if (bruto.includes('timeout') || bruto.includes('timed out') || bruto.includes('fetch failed') || bruto.includes('econnreset') || bruto.includes('connection error')) {
+  if (bruto.includes('timeout') || bruto.includes('timed out') || bruto.includes('fetch failed') || bruto.includes('econnreset') || bruto.includes('falha de rede')) {
     return 'Não consegui falar com a IA (falha de rede). Tente de novo.'
   }
   return fallback

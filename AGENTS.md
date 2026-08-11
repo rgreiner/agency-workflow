@@ -13,7 +13,7 @@ Gestão de pauta/atividades da One a One (pode virar SaaS). Produção: **https:
 - **Postgres 17 + PostgREST self-hosted** (`https://flow-api.oneaone.com.br`). O `@supabase/supabase-js` é usado **de propósito como cliente HTTP do PostgREST** — NÃO sugerir remover nem "migrar pra Supabase". Não existe Supabase Cloud/GoTrue.
 - Auth própria: cookie JWT **`flow-jwt`** (HS256, `JWT_SECRET`, `src/lib/auth/*`); RLS no banco lê `request.jwt.claims`.
 - Conexão direta (`lib postgres`) só para `auth.users` — e sempre **lazy** (nunca conectar no import).
-- E-mail: Resend. IA (revisão de redação): `@anthropic-ai/sdk` (`npm run test:revisao`).
+- E-mail: Resend. IA: **Gemini e só** — tudo passa por `src/lib/ai/gemini.ts` (AI Studio por chave ou Vertex por service account). `npm run test:revisao` testa a chave.
 
 ## Comandos
 - `npm run dev` · `npm run build` · `npm run lint` · `npm run typecheck`

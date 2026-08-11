@@ -3,14 +3,20 @@ import 'server-only'
 /**
  * Extração ESTRUTURADA da folha de pagamento (PDF texto) por IA. O PDF vira texto
  * com `pdftotext -layout` (poppler, já instalado no servidor p/ o inventário) e o
- * Claude devolve os trabalhadores num schema fixo (tool use). Conservador: só
- * transcreve o que está no documento, converte moeda BR (1.234,56 → 1234.56).
+ * modelo devolve os trabalhadores num schema fixo. Conservador: só transcreve o
+ * que está no documento, converte moeda BR (1.234,56 → 1234.56).
+ *
+ * ⚠️ Até 11/08/2026 esta extração só falava Claude — e como produção nunca teve
+ * ANTHROPIC_API_KEY, ela respondia 503 "IA não configurada" desde que nasceu.
+ * Agora usa o mesmo Gemini do resto (lib/ai/gemini.ts).
  */
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { writeFile, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+
+import { geminiConfigured, geminiJson } from './gemini'
 
 const exec = promisify(execFile)
 
@@ -22,7 +28,7 @@ export interface FolhaLinha {
 }
 export interface FolhaExtraida { competencia: string | null; linhas: FolhaLinha[] }
 
-const TOOL_SCHEMA = {
+const SCHEMA = {
   type: 'object',
   properties: {
     competencia: { type: 'string', description: 'Competência da folha no formato AAAA-MM (ex.: 2026-06). Do cabeçalho "GERAL DE MM/AAAA".' },
@@ -59,7 +65,7 @@ const SYSTEM = `Você extrai dados de uma FOLHA DE PAGAMENTO brasileira (texto d
 - Um item por TRABALHADOR (linhas que começam com "Trab:"). Ignore o bloco "TOTAL GERAL".
 - Converta valores do formato BR para número decimal com ponto: "4.291,46" → 4291.46; "1.621,00" → 1621.
 - Descontos que não existirem para o trabalhador = 0.
-- Reporte tudo pela ferramenta reportar_folha.`
+- Responda no formato JSON pedido.`
 
 /** pdftotext -layout do PDF (bytes) → texto. */
 export async function pdfToText(bytes: Buffer): Promise<string> {
@@ -76,25 +82,18 @@ export async function pdfToText(bytes: Buffer): Promise<string> {
 
 /** Extrai a folha estruturada a partir do texto. Retorna null se não há IA configurada. */
 export async function extrairFolha(texto: string): Promise<FolhaExtraida | null> {
-  if (!process.env.ANTHROPIC_API_KEY) return null
-  const Anthropic = (await import('@anthropic-ai/sdk')).default
-  // maxRetries acima do padrão (2): 529 "Overloaded" é sobrecarga momentânea da
-  // API e o backoff exponencial do SDK costuma resolver sem custo nenhum.
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 5, timeout: 120_000 })
-  const model = process.env.FOLHA_MODEL_CLAUDE || process.env.REVIEW_MODEL_CLAUDE || 'claude-sonnet-4-6'
+  if (!geminiConfigured()) return null
 
-  const msg = await client.messages.create({
-    model, max_tokens: 8192, temperature: 0, system: SYSTEM,
-    messages: [{ role: 'user', content: `Extraia a folha abaixo.\n\n<folha>\n${texto.slice(0, 120000)}\n</folha>` }],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    tools: [{ name: 'reportar_folha', description: 'Reporta os trabalhadores da folha.', input_schema: TOOL_SCHEMA as any }],
-    tool_choice: { type: 'tool', name: 'reportar_folha' },
+  const { data } = await geminiJson<{ competencia?: unknown; trabalhadores?: unknown }>({
+    system: SYSTEM,
+    parts: [{ kind: 'text', text: `Extraia a folha abaixo.\n\n<folha>\n${texto.slice(0, 120000)}\n</folha>` }],
+    schema: SCHEMA,
+    model: process.env.FOLHA_MODEL_GEMINI,
+    maxOutputTokens: 8192,
   })
-  const block = msg.content.find(b => b.type === 'tool_use')
-  if (!block || block.type !== 'tool_use') return null
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const input = block.input as any
-  const comp: string | null = typeof input?.competencia === 'string' ? input.competencia : null
-  const linhas: FolhaLinha[] = Array.isArray(input?.trabalhadores) ? input.trabalhadores : []
+  if (!data) return null
+
+  const comp = typeof data.competencia === 'string' ? data.competencia : null
+  const linhas: FolhaLinha[] = Array.isArray(data.trabalhadores) ? data.trabalhadores as FolhaLinha[] : []
   return { competencia: comp && /^\d{4}-\d{2}$/.test(comp) ? comp : null, linhas }
 }

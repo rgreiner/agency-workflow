@@ -1,5 +1,6 @@
 import 'server-only'
-import { configuredProvider, geminiEndpoint, type ReviewProvider } from './review'
+import { type ReviewProvider } from './review'
+import { geminiConfigured, geminiJson } from './gemini'
 
 /**
  * Otimização de briefing — a "GEM Briefing" do atendimento, dentro do Flow.
@@ -9,8 +10,8 @@ import { configuredProvider, geminiEndpoint, type ReviewProvider } from './revie
  * vago demais para alguém executar, em vez de estruturar o modelo devolve a
  * lista de perguntas que precisam ser respondidas (`faltando`).
  *
- * Provider segue a mesma seleção da revisão (chave presente no ambiente);
- * modelo por env: BRIEFING_MODEL_CLAUDE / BRIEFING_MODEL_GEMINI.
+ * Roda no Gemini como o resto (lib/ai/gemini.ts); modelo por env:
+ * BRIEFING_MODEL_GEMINI, senão GEMINI_MODEL.
  */
 
 export interface BriefingOtimizado {
@@ -147,30 +148,15 @@ CHECKLIST ANTES DE ENTREGAR
 
 Sua função é TRADUZIR, não INVENTAR.`
 
-const BRIEFING_TOOL_SCHEMA = {
-  type: 'object' as const,
-  properties: {
-    briefing: {
-      type: 'string' as const,
-      description: 'Briefing estruturado em texto puro. Omitir quando faltar informação crítica.',
-    },
-    faltando: {
-      type: 'array' as const,
-      items: { type: 'string' as const },
-      description: 'Perguntas objetivas quando falta informação crítica. Vazio quando o briefing foi estruturado.',
-    },
-  },
-}
-
 /** Estrutura o rascunho no padrão da casa. Retorna null se nenhum provider tem chave. */
 export async function otimizarBriefing(rascunho: string): Promise<BriefingOtimizado | null> {
-  const provider = configuredProvider()
-  if (!provider) return null
+  if (!geminiConfigured()) return null
+  const provider: ReviewProvider = 'gemini'
   const texto = (rascunho ?? '').trim().slice(0, MAX_CHARS)
   if (!texto) return null
 
   const userMsg = `Rascunho do atendimento:\n\n--- INÍCIO ---\n${texto}\n--- FIM ---`
-  const raw = provider === 'claude' ? await runClaude(userMsg) : await runGemini(userMsg)
+  const raw = await runGemini(userMsg)
   return normalize(provider, raw.model, raw.output)
 }
 
@@ -187,49 +173,19 @@ function normalize(provider: ReviewProvider, model: string, out: RawOutput | nul
   return { provider, model, briefing: faltando.length ? null : briefing, faltando }
 }
 
-async function runClaude(userMsg: string): Promise<{ model: string; output: RawOutput | null }> {
-  const Anthropic = (await import('@anthropic-ai/sdk')).default
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 5, timeout: 60_000 })
-  const model = process.env.BRIEFING_MODEL_CLAUDE || 'claude-sonnet-5'
-
-  const msg = await client.messages.create({
-    model,
-    max_tokens: 4096,
-    system: SYSTEM,
-    tools: [{ name: 'entregar_briefing', description: 'Entrega o briefing estruturado ou as perguntas faltantes.', input_schema: BRIEFING_TOOL_SCHEMA }],
-    tool_choice: { type: 'tool', name: 'entregar_briefing' },
-    messages: [{ role: 'user', content: userMsg }],
-  })
-
-  const block = msg.content.find(b => b.type === 'tool_use')
-  return { model, output: (block && 'input' in block ? block.input : null) as RawOutput | null }
-}
-
 async function runGemini(userMsg: string): Promise<{ model: string; output: RawOutput | null }> {
-  const model = process.env.BRIEFING_MODEL_GEMINI || process.env.REVIEW_MODEL_GEMINI || 'gemini-2.5-flash'
-  const { url, headers } = await geminiEndpoint(model)
-
-  const body = {
-    systemInstruction: { parts: [{ text: SYSTEM }] },
-    contents: [{ role: 'user', parts: [{ text: userMsg }] }],
-    generationConfig: {
-      temperature: 0,
-      maxOutputTokens: 4096,
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: 'object',
-        properties: {
-          briefing: { type: 'string' },
-          faltando: { type: 'array', items: { type: 'string' } },
-        },
+  const { model, data } = await geminiJson<RawOutput>({
+    system: SYSTEM,
+    parts: [{ kind: 'text', text: userMsg }],
+    schema: {
+      type: 'object',
+      properties: {
+        briefing: { type: 'string' },
+        faltando: { type: 'array', items: { type: 'string' } },
       },
     },
-  }
-
-  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) })
-  if (!res.ok) throw new Error(`Gemini ${res.status}: ${await res.text().catch(() => res.statusText)}`)
-  const data = await res.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[] }
-  const raw = data.candidates?.[0]?.content?.parts?.map(p => p.text ?? '').join('') ?? ''
-  try { return { model, output: JSON.parse(raw.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '')) } }
-  catch { return { model, output: null } }
+    model: process.env.BRIEFING_MODEL_GEMINI,
+    maxOutputTokens: 4096,
+  })
+  return { model, output: data }
 }

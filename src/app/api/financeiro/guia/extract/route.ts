@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     const texto = await pdfToText(Buffer.from(await file.arrayBuffer()))
     if (texto.trim().length < 30) return NextResponse.json({ error: 'Não consegui ler texto do PDF (é digitalizado?)' }, { status: 422 })
     const guia = await extrairGuia(texto)
-    if (!guia) return NextResponse.json({ error: 'IA não configurada (ANTHROPIC_API_KEY)' }, { status: 503 })
+    if (!guia) return NextResponse.json({ error: 'IA não configurada (GEMINI_API_KEY)' }, { status: 503 })
     if (!guia.valor || !guia.vencimento) return NextResponse.json({ error: 'Não reconheci valor e vencimento na guia — confira o PDF' }, { status: 422 })
     return NextResponse.json(guia)
   } catch (e) {

@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     const texto = await pdfToText(Buffer.from(await file.arrayBuffer()))
     if (texto.trim().length < 50) return NextResponse.json({ error: 'Não consegui ler texto do PDF (é digitalizado?)' }, { status: 422 })
     const folha = await extrairFolha(texto)
-    if (!folha) return NextResponse.json({ error: 'IA não configurada (ANTHROPIC_API_KEY)' }, { status: 503 })
+    if (!folha) return NextResponse.json({ error: 'IA não configurada (GEMINI_API_KEY)' }, { status: 503 })
     if (!folha.linhas.length) return NextResponse.json({ error: 'Nenhum trabalhador reconhecido no PDF' }, { status: 422 })
     return NextResponse.json(folha)
   } catch (e) {

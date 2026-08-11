@@ -37,7 +37,8 @@ if (!apiKey) {
   process.exit(1)
 }
 
-const model = process.env.REDACAO_REVIEW_MODEL_GEMINI || 'gemini-2.5-flash'
+// Mesma cadeia de env do app (lib/ai/gemini.ts), pra o teste valer pro que roda em produção.
+const model = process.env.REVIEW_MODEL_GEMINI || process.env.REDACAO_REVIEW_MODEL_GEMINI || process.env.GEMINI_MODEL || 'gemini-3.6-flash'
 
 const SYSTEM_PROMPT = `Você é um revisor de português (pt-BR) de peças publicitárias.
 
@@ -95,7 +96,8 @@ const body = {
   },
 }
 
-const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+// Chave no header, não na query: URL com segredo vaza em log de proxy.
+const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
 
 console.log('\n→ Chamando o Gemini…')
 
@@ -106,7 +108,7 @@ let res
 try {
   res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify(body),
     signal: controller.signal,
   })

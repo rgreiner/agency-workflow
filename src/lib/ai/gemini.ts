@@ -1,0 +1,183 @@
+import 'server-only'
+
+/**
+ * ÚNICO ponto de contato do Flow com a IA. Decisão de 11/08/2026: um provedor só
+ * (Gemini). Antes havia dois caminhos vivos — Claude no `review`/`briefing` e
+ * Claude EXCLUSIVO na extração de folha e de guia —, e o resultado era o pior dos
+ * dois mundos: em produção não existe ANTHROPIC_API_KEY, então a extração de folha
+ * e de guia respondia 503 "IA não configurada" desde sempre, enquanto a revisão
+ * caía no Gemini por acaso, não por escolha.
+ *
+ * Dois backends, mesma chamada:
+ *   • AI Studio — GEMINI_API_KEY (ou GOOGLE_GENAI_API_KEY). Créditos pré-pagos.
+ *   • Vertex    — GOOGLE_VERTEX_PROJECT + GOOGLE_SERVICE_ACCOUNT_KEY. Billing do
+ *                 projeto no Google Cloud.
+ * GEMINI_BACKEND=studio|vertex força um deles; sem ela, usa a chave do AI Studio
+ * quando existir e cai no Vertex quando não.
+ *
+ * Modelo: GEMINI_MODEL para todo mundo, com override por uso
+ * (REVIEW_MODEL_GEMINI, BRIEFING_MODEL_GEMINI, FOLHA_MODEL_GEMINI, GUIA_MODEL_GEMINI).
+ */
+
+/** Parte de entrada — texto ou mídia (imagem/PDF) em base64. */
+export type IAPart =
+  | { kind: 'text'; text: string }
+  | { kind: 'media'; mimeType: string; base64: string }
+
+/** Erro de IA com o status HTTP preservado (lib/ai/erro.ts traduz pela pessoa). */
+export class ErroIA extends Error {
+  status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'ErroIA'
+    this.status = status
+  }
+}
+
+const DEFAULT_MODEL = 'gemini-3.6-flash'
+
+/** Modelo do uso pedido, com fallback pro geral e pro default da casa. */
+export function geminiModel(override?: string | null): string {
+  return override || process.env.GEMINI_MODEL || DEFAULT_MODEL
+}
+
+export function geminiConfigured(): boolean {
+  return !!(
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_GENAI_API_KEY ||
+    (process.env.GOOGLE_VERTEX_PROJECT && process.env.GOOGLE_SERVICE_ACCOUNT_KEY)
+  )
+}
+
+/** URL + headers do backend em uso. */
+export async function geminiEndpoint(model: string): Promise<{ url: string; headers: Record<string, string> }> {
+  const backend = (process.env.GEMINI_BACKEND || 'auto').toLowerCase()
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY
+
+  if (backend !== 'vertex' && apiKey) {
+    return {
+      // A chave vai no header, não na query: URL com segredo vaza em log de proxy.
+      url: `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+    }
+  }
+
+  const project = process.env.GOOGLE_VERTEX_PROJECT
+  if (!project) {
+    throw new ErroIA(503, backend === 'vertex'
+      ? 'GEMINI_BACKEND=vertex exige GOOGLE_VERTEX_PROJECT.'
+      : 'Gemini não configurado (falta GEMINI_API_KEY ou GOOGLE_VERTEX_PROJECT).')
+  }
+  const location = process.env.GOOGLE_VERTEX_LOCATION || 'us-central1'
+  const token = await vertexAccessToken()
+  return {
+    url: `https://${location}-aiplatform.googleapis.com/v1/projects/${project}/locations/${location}/publishers/google/models/${model}:generateContent`,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+  }
+}
+
+async function vertexAccessToken(): Promise<string> {
+  const { google } = await import('googleapis')
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
+  if (!raw) throw new ErroIA(503, 'Vertex AI requer GOOGLE_SERVICE_ACCOUNT_KEY.')
+  const creds = parseServiceAccount(raw)
+  const auth = new google.auth.JWT({
+    email: creds.client_email,
+    key: creds.private_key,
+    scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+  })
+  const { access_token } = await auth.authorize()
+  if (!access_token) throw new ErroIA(503, 'Falha ao obter token de acesso do Vertex AI.')
+  return access_token
+}
+
+function parseServiceAccount(raw: string): { client_email: string; private_key: string } {
+  const txt = raw.trim()
+  try { return JSON.parse(txt) } catch { /* tenta base64 */ }
+  try { return JSON.parse(Buffer.from(txt, 'base64').toString('utf8')) } catch { /* inválida */ }
+  throw new ErroIA(503, 'GOOGLE_SERVICE_ACCOUNT_KEY inválida (esperado JSON ou base64).')
+}
+
+export interface GeminiJsonOpts {
+  system: string
+  parts: IAPart[]
+  /** JSON Schema da resposta (subset do Gemini: type/properties/items/required/enum/description). */
+  schema: unknown
+  model?: string | null
+  maxOutputTokens?: number
+  temperature?: number
+}
+
+/**
+ * Uma chamada, saída estruturada. Devolve o objeto já parseado (ou null quando o
+ * modelo não produziu JSON válido) junto do modelo que respondeu.
+ */
+export async function geminiJson<T>(opts: GeminiJsonOpts): Promise<{ model: string; data: T | null }> {
+  const model = geminiModel(opts.model)
+  const { url, headers } = await geminiEndpoint(model)
+
+  const body = {
+    systemInstruction: { parts: [{ text: opts.system }] },
+    contents: [{
+      role: 'user',
+      parts: opts.parts.map(p => p.kind === 'text'
+        ? { text: p.text }
+        : { inlineData: { mimeType: p.mimeType, data: p.base64 } }),
+    }],
+    generationConfig: {
+      temperature: opts.temperature ?? 0,
+      maxOutputTokens: opts.maxOutputTokens ?? 8192,
+      responseMimeType: 'application/json',
+      responseSchema: opts.schema,
+    },
+  }
+
+  const res = await postComRetry(url, headers, JSON.stringify(body))
+  const data = await res.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[] }
+  const raw = data.candidates?.[0]?.content?.parts?.map(p => p.text ?? '').join('') ?? ''
+  return { model, data: parseJson<T>(raw) }
+}
+
+/**
+ * 429/500/503 do Gemini costumam ser passageiros e o retry resolve de graça — MENOS
+ * quando o 429 é falta de crédito/cota, que não melhora esperando: aí levanta na hora
+ * pra pessoa ver o recado certo em vez de encarar 3 tentativas de espera.
+ */
+async function postComRetry(url: string, headers: Record<string, string>, body: string): Promise<Response> {
+  const TENTATIVAS = 3
+  let ultimo: ErroIA | null = null
+
+  for (let i = 0; i < TENTATIVAS; i++) {
+    let res: Response
+    try {
+      res = await fetch(url, { method: 'POST', headers, body })
+    } catch (e) {
+      ultimo = new ErroIA(0, `Falha de rede ao falar com o Gemini: ${e instanceof Error ? e.message : String(e)}`)
+      if (i === TENTATIVAS - 1) throw ultimo
+      await espera(i)
+      continue
+    }
+    if (res.ok) return res
+
+    const texto = await res.text().catch(() => res.statusText)
+    const erro = new ErroIA(res.status, `Gemini ${res.status}: ${texto.slice(0, 400)}`)
+    const semSaldo = /credit|billing|quota|exceeded/i.test(texto)
+    const vaiMelhorar = (res.status === 429 && !semSaldo) || res.status === 500 || res.status === 503
+    if (!vaiMelhorar || i === TENTATIVAS - 1) throw erro
+    ultimo = erro
+    await espera(i)
+  }
+  throw ultimo ?? new ErroIA(0, 'Gemini: falha desconhecida.')
+}
+
+const espera = (tentativa: number) => new Promise(r => setTimeout(r, 800 * 2 ** tentativa))
+
+/** Parsing tolerante: o modelo às vezes embrulha o JSON em ```json. */
+export function parseJson<T>(raw: string): T | null {
+  if (!raw) return null
+  const limpo = raw.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
+  try { return JSON.parse(limpo) as T } catch { /* tenta achar o objeto no meio */ }
+  const m = limpo.match(/[[{][\s\S]*[\]}]/)
+  if (!m) return null
+  try { return JSON.parse(m[0]) as T } catch { return null }
+}
