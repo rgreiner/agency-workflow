@@ -32,6 +32,18 @@ const csp = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  /**
+   * Aba aberta antes do deploy ficava MUDA: cada deploy troca os ids das Server
+   * Actions, e o clique numa aba velha morria com "Failed to find Server Action"
+   * no servidor e nada na tela (75 desses em 11/08, todos de uma aba de antes do
+   * push). Com o deploymentId, o cliente compara o id na resposta e faz um
+   * reload de verdade em vez de falhar em silêncio.
+   *
+   * SOURCE_COMMIT é o SHA que o Coolify injeta a cada build. Ausente (dev, build
+   * local), fica undefined e nada muda.
+   */
+  deploymentId: process.env.SOURCE_COMMIT || undefined,
+
   async headers() {
     return [
       {
