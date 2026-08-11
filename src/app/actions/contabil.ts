@@ -62,13 +62,22 @@ export async function enviarFechamento(orgSlug: string, competencia: string) {
     const { ini, fim } = limitesCompetencia(competencia)
     const r = pacote.resumo
 
+    // A contabilidade confere o total dos recebimentos contra o extrato: o que
+    // ficou de fora precisa vir com nome, senão parece receita faltando.
+    const fora = [
+      r.rendimentosFora > 0 ? `rendimento de aplicação (${brl(r.rendimentosFora)})` : '',
+      r.transferenciasFora > 0
+        ? `transferência entre contas próprias, numerário em trânsito e estorno (${brl(r.transferenciasFora)})` : '',
+    ].filter(Boolean).join(' e ')
+
     const html = `
       <p>Olá,</p>
       <p>Segue o material de <strong>${labelCompetencia(competencia)}</strong>
          (${ini.split('-').reverse().join('/')} a ${fim.split('-').reverse().join('/')}).</p>
       <ul>
         <li><strong>Extrato bancário</strong> — ${r.movimentos} movimento(s) em ${r.contas} conta(s)${r.ofxAnexados ? `, mais ${r.ofxAnexados} arquivo(s) OFX original(is) do banco` : ''}.</li>
-        <li><strong>Recebimentos</strong> — ${r.recebimentos} recebimento(s), total de ${brl(r.totalRecebido)}.</li>
+        <li><strong>Recebimentos</strong> — ${r.recebimentos} recebimento(s), total de ${brl(r.totalRecebido)}, com o número da NF em cada linha.</li>
+        ${fora ? `<li><strong>Fora dos recebimentos</strong> — ${fora}. Seguem no extrato, como movimento bancário.</li>` : ''}
       </ul>
       <p>A planilha anexa tem duas abas: <em>Extrato</em> e <em>Recebimentos</em>.</p>
       <p>Qualquer divergência, é só responder este e-mail.</p>

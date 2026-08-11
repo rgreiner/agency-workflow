@@ -26,7 +26,10 @@ export interface ConfigContabil {
 }
 
 interface Preview {
-  resumo?: { contas: number; movimentos: number; recebimentos: number; totalRecebido: number; ofxAnexados: number }
+  resumo?: {
+    contas: number; movimentos: number; recebimentos: number; totalRecebido: number; ofxAnexados: number
+    semNF: number; transferenciasFora: number; rendimentosFora: number
+  }
   avisos?: string[]
   anexos?: { nome: string; kb: number }[]
   destinatarios?: string[]

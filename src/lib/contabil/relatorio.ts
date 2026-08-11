@@ -10,13 +10,31 @@ import type { MailAttachment } from '@/lib/email/send'
  * - o OFX ORIGINAL do banco, que é o documento que eles aceitam;
  * - uma planilha legível gerada daqui, que cobre todas as contas e também o
  *   período anterior a passarmos a guardar o arquivo original.
+ *
+ * Duas regras do escritório (11/08/2026) moldam a aba Recebimentos: rendimento
+ * de aplicação não entra no cálculo, e toda linha precisa do número da NF que a
+ * agência emitiu.
  */
 
 const REALIZADO_EXTRATO = ['Conciliado', 'Quitado', 'Transferido']
 
+export interface ResumoContabil {
+  contas: number
+  movimentos: number
+  recebimentos: number
+  totalRecebido: number
+  ofxAnexados: number
+  /** Recebimentos que foram pra planilha sem o número da NF da agência. */
+  semNF: number
+  /** Valor deixado de fora por não ser receita de cliente (transferência, estorno…). */
+  transferenciasFora: number
+  /** Valor de rendimento de aplicação deixado de fora. */
+  rendimentosFora: number
+}
+
 export interface PacoteContabil {
   anexos: MailAttachment[]
-  resumo: { contas: number; movimentos: number; recebimentos: number; totalRecebido: number; ofxAnexados: number }
+  resumo: ResumoContabil
   avisos: string[]
 }
 
@@ -58,6 +76,37 @@ function categoriasForaDaReceita(finance_categorias: any): Set<string> {
     }
   }
   return nomes
+}
+
+/**
+ * Rendimento da conta remunerada NÃO entra no cálculo da contabilidade
+ * (contador, 11/08/2026). É crédito do próprio banco, não venda: o escritório
+ * lança pelo extrato, e as 15 linhas de centavos que a importação de OFX cria
+ * por mês só sujavam a planilha de recebimentos.
+ *
+ * Fica no Extrato e no OFX anexado — sai só da base de receita.
+ */
+const ehRendimento = (l: Record<string, unknown>) => /rendimento/i.test(String(l.categoria ?? ''))
+
+interface DocFiscal { tipo?: string; numero?: string; emitente?: string }
+
+/**
+ * Número da NF que a AGÊNCIA emitiu — a contabilidade pede em toda linha de
+ * recebimento (contador, 11/08/2026).
+ *
+ * Só aceita documento marcado com `emitente: 'agencia'`. Um recebimento de
+ * comissão carrega TAMBÉM a NF do fornecedor contra o cliente (entra como
+ * referência, sem valor): mandar esse número como se fosse o nosso é pior que
+ * mandar vazio. Sem a marcação, a linha vai em branco e vira aviso na tela
+ * antes do envio.
+ */
+function nfDaAgencia(anexos: unknown): string {
+  const docs = (Array.isArray(anexos) ? anexos : []) as DocFiscal[]
+  const numeros = docs
+    .filter(d => /^nf/i.test(String(d?.tipo ?? '')) && d?.emitente === 'agencia')
+    .map(d => String(d?.numero ?? '').trim())
+    .filter(Boolean)
+  return [...new Set(numeros)].join(' / ')
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -102,7 +151,7 @@ export async function montarPacoteContabil(sb: any, orgId: string, competencia: 
   // aberto. É a leitura fiscal — receita realizada no período.
   const { data: receb } = await sb
     .from('lancamentos')
-    .select('data_liquidacao, vencimento, contato_nome, descricao, categoria, valor, valor_realizado, conta_id, origem_tipo')
+    .select('data_liquidacao, vencimento, contato_nome, descricao, categoria, valor, valor_realizado, conta_id, origem_tipo, anexos')
     .eq('org_id', orgId).eq('tipo', 'entrada')
     .in('situacao', ['recebido', 'pago'])
     .gte('data_liquidacao', ini).lte('data_liquidacao', fim)
@@ -125,17 +174,26 @@ export async function montarPacoteContabil(sb: any, orgId: string, competencia: 
 
   let totalRecebido = 0
   let transferenciasFora = 0
+  let rendimentosFora = 0
+  const semNF: string[] = []
   const linhasReceb = ((receb ?? []) as Record<string, unknown>[])
     .filter(l => {
-      if (!ehTransferencia(l)) return true
-      transferenciasFora += Number(l.valor_realizado ?? l.valor ?? 0)
-      return false
+      const v = Number(l.valor_realizado ?? l.valor ?? 0)
+      if (ehTransferencia(l)) { transferenciasFora += v; return false }
+      if (ehRendimento(l)) { rendimentosFora += v; return false }
+      return true
     })
     .map(l => {
     const v = Number(l.valor_realizado ?? l.valor ?? 0)
     totalRecebido += v
+    const nf = nfDaAgencia(l.anexos)
+    if (!nf) {
+      const quem = (l.contato_nome as string) || (l.descricao as string) || 'sem contato'
+      semNF.push(`${quem} (${brlAviso(v)}, ${fmtData(l.data_liquidacao as string)})`)
+    }
     return {
       Data: fmtData(l.data_liquidacao as string),
+      NF: nf,
       Cliente: (l.contato_nome as string) ?? '',
       Descrição: (l.descricao as string) ?? '',
       Categoria: (l.categoria as string) ?? '',
@@ -161,12 +219,25 @@ export async function montarPacoteContabil(sb: any, orgId: string, competencia: 
     .order('periodo_fim')
 
   const root = process.env.UPLOAD_DIR || '/app/uploads'
-  for (const a of (arquivos ?? []) as { nome: string; caminho: string }[]) {
+  // O BTG entrega todo OFX com o MESMO nome (50_004564883.ofx) — julho/2026 tem 7.
+  // Sete anexos homônimos no e-mail é impossível de conferir: prefixa com o
+  // período, que também deixa a lista em ordem cronológica.
+  const nomesUsados = new Set<string>()
+  const nomeAnexo = (nome: string, periodoFim: string | null, i: number) => {
+    const prefixo = (periodoFim ?? '').slice(0, 10) || String(i + 1).padStart(2, '0')
+    let candidato = `${prefixo} ${nome}`
+    for (let n = 2; nomesUsados.has(candidato); n++) candidato = `${prefixo} (${n}) ${nome}`
+    nomesUsados.add(candidato)
+    return candidato
+  }
+
+  const listaOfx = (arquivos ?? []) as { nome: string; caminho: string; periodo_fim: string | null }[]
+  for (const [i, a] of listaOfx.entries()) {
     try {
       // caminho é relativo e validado na gravação; resolve e confere que não escapou.
       const abs = path.resolve(root, a.caminho)
       if (!abs.startsWith(path.resolve(root) + path.sep)) { avisos.push(`Caminho suspeito ignorado: ${a.nome}`); continue }
-      anexos.push({ filename: a.nome, content: await readFile(abs) })
+      anexos.push({ filename: nomeAnexo(a.nome, a.periodo_fim, i), content: await readFile(abs) })
     } catch {
       avisos.push(`OFX "${a.nome}" está registrado mas o arquivo não foi encontrado no servidor.`)
     }
@@ -179,6 +250,37 @@ export async function montarPacoteContabil(sb: any, orgId: string, competencia: 
       `${brlAviso(transferenciasFora)} ficaram FORA dos recebimentos: transferência entre contas `
       + 'próprias, numerário em trânsito e estorno não são receita de cliente. Continuam no Extrato, '
       + 'como movimento bancário.',
+    )
+  }
+
+  if (rendimentosFora > 0) {
+    avisos.push(
+      `${brlAviso(rendimentosFora)} de rendimento de aplicação ficaram FORA dos recebimentos — `
+      + 'a contabilidade não considera rendimento no cálculo. Continua no extrato do banco '
+      + '(OFX anexado), como crédito da conta remunerada.',
+    )
+  }
+
+  // A contabilidade pede o número da NF em TODA linha de recebimento. Quem manda
+  // é a marcação do documento no lançamento (emitente: agência) — sem ela a
+  // planilha sai com a coluna vazia e o escritório devolve o fechamento.
+  if (semNF.length) {
+    const mostra = semNF.slice(0, 4).join('; ')
+    const resto = semNF.length > 4 ? ` e mais ${semNF.length - 4}` : ''
+    avisos.push(
+      `${semNF.length} recebimento(s) vão SEM o número da NF: ${mostra}${resto}. `
+      + 'Marque a NF no lançamento com emitente "Agência" antes de enviar.',
+    )
+  }
+
+  // A aba Extrato sai de `extrato_importado`, que é a base da Conta Azul — fonte
+  // que parou de crescer. Mês sem nenhum movimento realizado ali não é
+  // necessariamente mês sem movimento: é a planilha que ficou cega, e só os OFX
+  // sustentam o extrato. Melhor dizer isso antes de o pacote sair.
+  if (totalMovimentos === 0) {
+    avisos.push(
+      'A aba Extrato saiu VAZIA — nenhum movimento realizado no período veio da base importada. '
+      + 'O extrato do mês vai só pelos arquivos OFX anexados.',
     )
   }
 
@@ -195,6 +297,9 @@ export async function montarPacoteContabil(sb: any, orgId: string, competencia: 
       recebimentos: linhasReceb.length,
       totalRecebido: Math.round(totalRecebido * 100) / 100,
       ofxAnexados,
+      semNF: semNF.length,
+      transferenciasFora: Math.round(transferenciasFora * 100) / 100,
+      rendimentosFora: Math.round(rendimentosFora * 100) / 100,
     },
     avisos,
   }
