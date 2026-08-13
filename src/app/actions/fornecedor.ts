@@ -10,6 +10,8 @@ function readData(formData: FormData) {
   return {
     name: get('name'), tipo: get('tipo'), tax_id: get('tax_id'), notes: get('notes'),
     enderecos: j('enderecos'), telefones: j('telefones'), emails: j('emails'), contas_bancarias: j('contas_bancarias'),
+    // A RPC só mexe em `tags` quando a chave vem no payload (migration 235).
+    tags: j('tags'),
   }
 }
 

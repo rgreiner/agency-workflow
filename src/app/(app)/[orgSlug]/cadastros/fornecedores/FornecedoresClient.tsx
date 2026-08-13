@@ -1,19 +1,25 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, X, Check, Loader2, Archive, ArchiveRestore, Pencil, Truck, Search } from 'lucide-react'
+import { Plus, X, Check, Loader2, Archive, ArchiveRestore, Pencil, Truck, Search, Tag } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { createFornecedor, updateFornecedor, setFornecedorArchived } from '@/app/actions/fornecedor'
 import { ContatoBlocks, type ContatoData } from '@/components/ui/ContatoBlocks'
 import { buscarCnpj } from '@/app/actions/lookup'
+import { TagInput } from '@/components/ui/TagInput'
 
 export interface Fornecedor {
   id: string; name: string; tipo: string | null; tax_id: string | null; notes: string | null; archived: boolean
+  /** Serviços/especialidades (migration 235) — complementa o `tipo` único. */
+  tags?: string[] | null
   enderecos?: ContatoData['enderecos']; telefones?: ContatoData['telefones']; emails?: ContatoData['emails']; contas_bancarias?: ContatoData['contas_bancarias']
 }
+
+/** Sem acento e sem caixa: quem busca "grafica" tem que achar "Gráfica". */
+const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim()
 
 const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
@@ -25,6 +31,42 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
   const [editing, setEditing] = useState<Fornecedor | null>(null)
   const [creating, setCreating] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const [busca, setBusca] = useState('')
+  const [tagsAtivas, setTagsAtivas] = useState<string[]>([])
+
+  // Tags que existem na org, por frequência — as mais usadas viram os primeiros chips.
+  const tagsDaOrg = useMemo(() => {
+    const cont = new Map<string, number>()
+    for (const f of fornecedores) for (const t of f.tags ?? []) cont.set(t, (cont.get(t) ?? 0) + 1)
+    return [...cont.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pt-BR'))
+  }, [fornecedores])
+
+  const tiposDaOrg = useMemo(
+    () => [...new Set(fornecedores.map(f => (f.tipo ?? '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+    [fornecedores],
+  )
+
+  /**
+   * Busca em TUDO que identifica o fornecedor — nome, tipo, tag, CNPJ, observação,
+   * e-mail, telefone e cidade. São 394 cadastros: procurar por "camiseta" ou pelo
+   * telefone que apareceu no WhatsApp é mais frequente do que lembrar o nome exato.
+   * Filtro em memória porque a página já carrega a lista inteira.
+   */
+  const lista = useMemo(() => {
+    const q = norm(busca)
+    return fornecedores.filter(f => {
+      // Várias tags = interseção: quem faz gráfica E brinde.
+      if (tagsAtivas.length && !tagsAtivas.every(t => (f.tags ?? []).some(x => norm(x) === norm(t)))) return false
+      if (!q) return true
+      const campos = [
+        f.name, f.tipo, f.tax_id, f.notes, ...(f.tags ?? []),
+        ...(f.emails ?? []).map(e => e.email),
+        ...(f.telefones ?? []).map(t => t.numero),
+        ...(f.enderecos ?? []).map(e => `${e.cidade ?? ''} ${e.uf ?? ''}`),
+      ]
+      return campos.some(c => c && norm(String(c)).includes(q))
+    })
+  }, [fornecedores, busca, tagsAtivas])
 
   function archive(f: Fornecedor) {
     startTransition(async () => { await setFornecedorArchived(orgSlug, f.id, !f.archived); router.refresh() })
@@ -50,7 +92,53 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
         </div>
       </div>
 
-      {fornecedores.length > 0 ? (
+      <div className="mb-3 space-y-2">
+        <div className="relative">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            placeholder="Buscar por nome, tipo, tag, CNPJ, e-mail, telefone, cidade ou observação"
+            className="w-full pl-9 pr-9 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+          {busca && (
+            <button onClick={() => setBusca('')} aria-label="Limpar busca"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {tagsDaOrg.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Tag className="w-3.5 h-3.5 text-gray-300 shrink-0" />
+            {tagsDaOrg.map(([t, n]) => {
+              const ativa = tagsAtivas.includes(t)
+              return (
+                <button key={t}
+                  onClick={() => setTagsAtivas(a => ativa ? a.filter(x => x !== t) : [...a, t])}
+                  className={cn('inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors active:scale-[0.97]',
+                    ativa ? 'bg-gray-900 text-[#fff] border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300')}>
+                  {t}
+                  <span className={cn('text-[10px] font-semibold', ativa ? 'text-white/70' : 'text-gray-400')}>{n}</span>
+                </button>
+              )
+            })}
+            {tagsAtivas.length > 0 && (
+              <button onClick={() => setTagsAtivas([])} className="text-xs text-gray-400 hover:text-gray-600 transition-colors ml-1">limpar</button>
+            )}
+          </div>
+        )}
+
+        {(busca || tagsAtivas.length > 0) && (
+          <p className="text-xs text-gray-400">
+            {lista.length} de {fornecedores.length} fornecedor(es)
+            {tagsAtivas.length > 1 && ' · quem tem todas as tags marcadas'}
+          </p>
+        )}
+      </div>
+
+      {lista.length > 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
           <table className="w-full min-w-[560px]">
             <thead>
@@ -62,10 +150,21 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {fornecedores.map(f => (
+              {lista.map(f => (
                 <tr key={f.id} className="hover:bg-gray-50/50 transition">
                   <td className="px-4 py-3">
                     <p className="text-sm font-medium text-gray-900">{f.name}</p>
+                    {(f.tags?.length ?? 0) > 0 && (
+                      <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                        {f.tags!.map(t => (
+                          <button key={t} onClick={() => setTagsAtivas(a => a.includes(t) ? a : [...a, t])}
+                            title={`Filtrar por ${t}`}
+                            className="px-1.5 py-0.5 rounded-md bg-orange-50 text-orange-700 text-[10px] font-medium hover:bg-orange-100 transition-colors">
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     {f.notes && <p className="text-xs text-gray-400 truncate max-w-xs">{f.notes}</p>}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{f.tipo || '—'}</td>
@@ -86,25 +185,39 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
       ) : (
         <div className="text-center py-24 bg-white rounded-xl border border-gray-200">
           <Truck className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-          <h3 className="text-gray-900 font-medium">{archivedView ? 'Nenhum fornecedor arquivado' : 'Nenhum fornecedor ainda'}</h3>
-          <p className="text-gray-500 text-sm mt-1">{archivedView ? 'Fornecedores arquivados aparecem aqui.' : 'Cadastre o primeiro fornecedor.'}</p>
+          <h3 className="text-gray-900 font-medium">
+            {busca || tagsAtivas.length
+              ? 'Nada encontrado'
+              : archivedView ? 'Nenhum fornecedor arquivado' : 'Nenhum fornecedor ainda'}
+          </h3>
+          <p className="text-gray-500 text-sm mt-1">
+            {busca || tagsAtivas.length
+              ? 'Ajuste a busca ou tire alguma tag do filtro.'
+              : archivedView ? 'Fornecedores arquivados aparecem aqui.' : 'Cadastre o primeiro fornecedor.'}
+          </p>
         </div>
       )}
 
       {(creating || editing) && (
-        <FornecedorModal orgSlug={orgSlug} fornecedor={editing} onClose={() => { setCreating(false); setEditing(null) }} />
+        <FornecedorModal orgSlug={orgSlug} fornecedor={editing}
+          tagsSugeridas={tagsDaOrg.map(([t]) => t)} tiposSugeridos={tiposDaOrg}
+          onClose={() => { setCreating(false); setEditing(null) }} />
       )}
     </div>
   )
 }
 
-function FornecedorModal({ orgSlug, fornecedor, onClose }: { orgSlug: string; fornecedor: Fornecedor | null; onClose: () => void }) {
+function FornecedorModal({ orgSlug, fornecedor, tagsSugeridas, tiposSugeridos, onClose }: {
+  orgSlug: string; fornecedor: Fornecedor | null
+  tagsSugeridas: string[]; tiposSugeridos: string[]; onClose: () => void
+}) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
   const [form, setForm] = useState({
     name: fornecedor?.name ?? '', tipo: fornecedor?.tipo ?? '', tax_id: fornecedor?.tax_id ?? '', notes: fornecedor?.notes ?? '',
   })
+  const [tags, setTags] = useState<string[]>(fornecedor?.tags ?? [])
   const [contato, setContato] = useState<ContatoData>({
     enderecos: fornecedor?.enderecos ?? [], telefones: fornecedor?.telefones ?? [], emails: fornecedor?.emails ?? [], contas_bancarias: fornecedor?.contas_bancarias ?? [],
   })
@@ -136,6 +249,7 @@ function FornecedorModal({ orgSlug, fornecedor, onClose }: { orgSlug: string; fo
     fd.set('name', form.name); fd.set('tipo', form.tipo); fd.set('tax_id', form.tax_id); fd.set('notes', form.notes)
     fd.set('enderecos', JSON.stringify(contato.enderecos)); fd.set('telefones', JSON.stringify(contato.telefones))
     fd.set('emails', JSON.stringify(contato.emails)); fd.set('contas_bancarias', JSON.stringify(contato.contas_bancarias))
+    fd.set('tags', JSON.stringify(tags))
     startTransition(async () => {
       const res = fornecedor ? await updateFornecedor(orgSlug, fornecedor.id, fd) : await createFornecedor(orgSlug, fd)
       if (res?.error) { setError(res.error); return }
@@ -155,7 +269,12 @@ function FornecedorModal({ orgSlug, fornecedor, onClose }: { orgSlug: string; fo
           <div><label className={labelCls}>Nome <span className="text-red-500">*</span></label>
             <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={inputCls} required /></div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className={labelCls}>Tipo</label><input value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))} placeholder="Gráfica, brindes…" className={inputCls} /></div>
+            <div>
+              <label className={labelCls}>Tipo</label>
+              {/* datalist: sugere os tipos já usados sem impedir um novo */}
+              <input list="fornecedor-tipos" value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))} placeholder="Gráfica, brindes…" className={inputCls} />
+              <datalist id="fornecedor-tipos">{tiposSugeridos.map(t => <option key={t} value={t} />)}</datalist>
+            </div>
             <div><label className={labelCls}>CNPJ</label>
               <div className="flex gap-2">
                 <input value={form.tax_id} onChange={e => setForm(f => ({ ...f, tax_id: e.target.value }))} placeholder="00.000.000/0000-00" className={inputCls} />
@@ -165,6 +284,10 @@ function FornecedorModal({ orgSlug, fornecedor, onClose }: { orgSlug: string; fo
                 </button>
               </div>
             </div>
+          </div>
+          <div>
+            <label className={labelCls}>Tags <span className="text-gray-400 font-normal">— tudo que este fornecedor faz</span></label>
+            <TagInput value={tags} onChange={setTags} sugestoes={tagsSugeridas} placeholder="camiseta, adesivo, banner…" />
           </div>
           <div><label className={labelCls}>Observações</label><textarea rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className={cn(inputCls, 'resize-none')} /></div>
           <div className="border-t border-gray-100 pt-4"><ContatoBlocks value={contato} onChange={setContato} /></div>
