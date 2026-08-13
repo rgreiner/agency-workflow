@@ -22,7 +22,14 @@ export interface AbertoItem {
   lancamentoId: string | null
   tipo: 'entrada' | 'saida'
   contato: string
-  workspaceId: string | null
+  /**
+   * Cliente do Flow ligado a ESTA GRAFIA de contato, por alias explícito
+   * (cliente_aliases). Só isto agrupa e só isto habilita cobrança — o cliente do
+   * documento de origem NÃO entra aqui: ele é centro de custo, não devedor.
+   */
+  clienteId: string | null
+  /** Cliente do job (centro de custo), quando difere de quem paga. Só contexto. */
+  centroCusto: string | null
   descricao: string | null
   categoria: string | null
   vencimento: string | null
@@ -85,11 +92,14 @@ export function InadimplentesClient({ orgSlug, itens, today, clientes, regua }: 
       if (q && !`${i.contato} ${i.descricao ?? ''} ${i.categoria ?? ''}`.toLowerCase().includes(q)) return false
       return true
     })
-    // Agrupa pelo CLIENTE quando o título está vinculado — as cinco parcelas da
-    // Opera viram um grupo só mesmo tendo grafias diferentes no extrato.
+    // Agrupa por QUEM PAGA. Antes agrupava pelo cliente do documento de origem, e aí
+    // uma comissão de produção devida pela Positiva aparecia como se fosse dívida da
+    // Comil — a Comil é o centro de custo do job, não a devedora. O único caminho que
+    // troca o nome do grupo é o alias explícito (contato "Opera Ltda" → cliente
+    // "Opera"), que é a pessoa dizendo que as duas grafias são o mesmo pagador.
     const map = new Map<string, Grupo>()
     for (const i of filtrados) {
-      const cliente = i.workspaceId ? clientePorId.get(i.workspaceId) ?? null : null
+      const cliente = i.clienteId ? clientePorId.get(i.clienteId) ?? null : null
       const chave = cliente ? `ws:${cliente.id}` : `nome:${i.contato}`
       const g = map.get(chave) ?? {
         chave, contato: cliente?.nome ?? i.contato, cliente,
@@ -380,6 +390,12 @@ function GrupoCard({ orgSlug, g, today, isReceber, aberto, onToggle, onCobrar, o
                       <span className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-700 bg-violet-50 rounded-full px-1.5 py-0.5"
                         title={i.promessaObs ?? undefined}>
                         <CalendarClock className="w-3 h-3" /> promete {formatDateBR(i.promessaData)}
+                      </span>
+                    )}
+                    {i.centroCusto && (
+                      <span className="inline-flex items-center text-[10px] font-medium text-gray-500 bg-gray-100 rounded-full px-1.5 py-0.5"
+                        title="Cliente do job (centro de custo) — quem deve é o contato do título">
+                        {i.centroCusto}
                       </span>
                     )}
                     {!i.lancamentoId && (

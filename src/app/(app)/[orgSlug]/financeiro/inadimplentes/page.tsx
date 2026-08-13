@@ -23,12 +23,29 @@ export default async function InadimplentesPage({ params }: { params: Promise<{ 
     .select('id, tipo, contato_nome, descricao, categoria, vencimento, valor, valor_realizado, situacao, origem_tipo, origem_ref, workspace_id, promessa_data, promessa_obs')
     .eq('org_id', orgId).eq('situacao', 'em_aberto')
 
-  const [resClientes, resAvisos, resCfg] = await Promise.all([
+  const [resClientes, resAvisos, resCfg, resAliases] = await Promise.all([
     sb.from('workspaces').select('id, name, finance_email, cobranca_auto')
       .eq('org_id', orgId).eq('archived', false).order('name'),
     sb.from('cobranca_avisos').select('lancamento_id, bucket, canal, sent_at, email').eq('org_id', orgId),
     sb.from('org_settings').select('payment_info, cobranca_ativa, cobranca_regua').eq('org_id', orgId).maybeSingle(),
+    // Quem paga ≠ cliente do job. O `workspace_id` do lançamento vem do documento de
+    // origem (a PP da Comil), e isso é CENTRO DE CUSTO — usá-lo para agrupar fazia a
+    // dívida da Positiva aparecer no nome da Comil. O único vínculo que diz "esta
+    // grafia é este cliente" é o alias, criado à mão no botão "Vincular cliente".
+    sb.from('cliente_aliases').select('alias, workspace_id').eq('org_id', orgId),
   ])
+
+  // Mesma normalização do banco (fin_norm_nome): trim + lower + sem acento.
+  const norm = (v: string | null | undefined) =>
+    (v ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim()
+
+  const aliasParaCliente = new Map<string, string>(
+    ((resAliases?.data ?? []) as { alias: string; workspace_id: string }[])
+      .map(a => [norm(a.alias), a.workspace_id]),
+  )
+  const nomeDoWorkspace = new Map<string, string>(
+    ((resClientes?.data ?? []) as { id: string; name: string }[]).map(w => [w.id, w.name]),
+  )
 
   // Extrato importado (Conta Azul) em aberto e ainda não promovido (mesma dedup do
   // Lançamentos). O filtro de situação é feito NO BANCO: das ~6,9 mil linhas, só as
@@ -88,6 +105,13 @@ export default async function InadimplentesPage({ params }: { params: Promise<{ 
     ultimoAviso.set(a.lancamento_id, { data: a.sent_at, canal: a.canal, bucket: a.bucket })
   }
 
+  /** Nome do cliente do job — só quando difere de quem paga (senão é repetição). */
+  const centroDeCusto = (wsId: string | null, contato: string | null): string | null => {
+    if (!wsId) return null
+    const nome = nomeDoWorkspace.get(wsId)
+    return nome && norm(nome) !== norm(contato) ? nome : null
+  }
+
   const itens: AbertoItem[] = []
   for (const l of lanc) {
     // Baixa parcial: o que ainda falta é o valor cheio MENOS o já realizado. A
@@ -101,7 +125,8 @@ export default async function InadimplentesPage({ params }: { params: Promise<{ 
       lancamentoId: l.id,
       tipo: l.tipo === 'saida' ? 'saida' : 'entrada',
       contato: (l.contato_nome as string)?.trim() || 'Sem contato',
-      workspaceId: l.workspace_id,
+      clienteId: aliasParaCliente.get(norm(l.contato_nome)) ?? null,
+      centroCusto: centroDeCusto(l.workspace_id, l.contato_nome),
       descricao: l.descricao ?? null,
       categoria: l.categoria ?? null,
       vencimento: l.vencimento ?? null,
@@ -128,7 +153,8 @@ export default async function InadimplentesPage({ params }: { params: Promise<{ 
       lancamentoId: null,
       tipo,
       contato: (e.contato as string)?.trim() || 'Sem contato',
-      workspaceId: null,
+      clienteId: aliasParaCliente.get(norm(e.contato)) ?? null,
+      centroCusto: null,
       descricao: e.descricao ?? null,
       categoria: e.categoria ?? null,
       // data_prevista = data real/repactuada (ver page.tsx do Lançamentos).
