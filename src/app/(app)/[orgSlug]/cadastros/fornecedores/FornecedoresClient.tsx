@@ -33,6 +33,9 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
   const [isPending, startTransition] = useTransition()
   const [busca, setBusca] = useState('')
   const [tagsAtivas, setTagsAtivas] = useState<string[]>([])
+  // Filtros de LACUNA: o cadastro só melhora se der pra ver o que falta nele.
+  const [semTipo, setSemTipo] = useState(false)
+  const [semTag, setSemTag] = useState(false)
 
   // Tags que existem na org, por frequência — as mais usadas viram os primeiros chips.
   const tagsDaOrg = useMemo(() => {
@@ -40,6 +43,11 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
     for (const f of fornecedores) for (const t of f.tags ?? []) cont.set(t, (cont.get(t) ?? 0) + 1)
     return [...cont.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pt-BR'))
   }, [fornecedores])
+
+  const faltando = useMemo(() => ({
+    tipo: fornecedores.filter(f => !(f.tipo ?? '').trim()).length,
+    tag: fornecedores.filter(f => !(f.tags?.length)).length,
+  }), [fornecedores])
 
   const tiposDaOrg = useMemo(
     () => [...new Set(fornecedores.map(f => (f.tipo ?? '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
@@ -55,6 +63,8 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
   const lista = useMemo(() => {
     const q = norm(busca)
     return fornecedores.filter(f => {
+      if (semTipo && (f.tipo ?? '').trim()) return false
+      if (semTag && (f.tags?.length ?? 0) > 0) return false
       // Várias tags = interseção: quem faz gráfica E brinde.
       if (tagsAtivas.length && !tagsAtivas.every(t => (f.tags ?? []).some(x => norm(x) === norm(t)))) return false
       if (!q) return true
@@ -66,7 +76,7 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
       ]
       return campos.some(c => c && norm(String(c)).includes(q))
     })
-  }, [fornecedores, busca, tagsAtivas])
+  }, [fornecedores, busca, tagsAtivas, semTipo, semTag])
 
   function archive(f: Fornecedor) {
     startTransition(async () => { await setFornecedorArchived(orgSlug, f.id, !f.archived); router.refresh() })
@@ -130,10 +140,26 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
           </div>
         )}
 
-        {(busca || tagsAtivas.length > 0) && (
+        {/* O que falta preencher. Separado das tags por uma barra: não é "que serviço
+            faz", é "este cadastro está pela metade". */}
+        {(faltando.tipo > 0 || faltando.tag > 0) && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="w-3.5 shrink-0" />
+            <span className="text-[11px] text-gray-400 mr-1">falta preencher:</span>
+            {faltando.tipo > 0 && (
+              <ChipLacuna label="sem tipo" n={faltando.tipo} ativo={semTipo} onClick={() => setSemTipo(v => !v)} />
+            )}
+            {faltando.tag > 0 && (
+              <ChipLacuna label="sem tag" n={faltando.tag} ativo={semTag} onClick={() => setSemTag(v => !v)} />
+            )}
+          </div>
+        )}
+
+        {(busca || tagsAtivas.length > 0 || semTipo || semTag) && (
           <p className="text-xs text-gray-400">
             {lista.length} de {fornecedores.length} fornecedor(es)
             {tagsAtivas.length > 1 && ' · quem tem todas as tags marcadas'}
+            {semTipo && semTag && ' · sem tipo e sem tag'}
           </p>
         )}
       </div>
@@ -204,6 +230,18 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
           onClose={() => { setCreating(false); setEditing(null) }} />
       )}
     </div>
+  )
+}
+
+function ChipLacuna({ label, n, ativo, onClick }: { label: string; n: number; ativo: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick}
+      title={`Mostrar só os ${n} fornecedor(es) ${label}`}
+      className={cn('inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border border-dashed transition-colors active:scale-[0.97]',
+        ativo ? 'bg-amber-500 text-[#fff] border-amber-500' : 'bg-white text-amber-700 border-amber-300 hover:bg-amber-50')}>
+      {label}
+      <span className={cn('text-[10px] font-semibold', ativo ? 'text-white/80' : 'text-amber-500')}>{n}</span>
+    </button>
   )
 }
 
