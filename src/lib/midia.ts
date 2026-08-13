@@ -72,13 +72,33 @@ export const PRODUCAO_SITUACAO_OPTIONS = MIDIA_SITUACAO_OPTIONS.map(o =>
   o.value === 'aprovado' ? { ...o, label: 'Em produção' } : o)
 
 /**
- * Orçamento tem um estado terminal próprio: gerou as PPs, o trabalho virou produção e
- * o ciclo DELE acabou. Sem isso o orçamento ficava eternamente "Em produção" e o botão
- * "Gerar PPs" seguia disponível, duplicando pedidos a cada clique.
+ * Orçamento fala TRÊS estados e só (decisão do Rafael, 12/08/2026): em aberto →
+ * aprovado → gera a PP e é arquivado; cancelado é a outra saída.
+ *
+ * Aqui 'aprovado' é aprovado PELO CLIENTE — diferente do PRODUCAO_*, onde o mesmo
+ * valor significa "entrou em produção". Quem entra em produção é a PP, não o
+ * orçamento: manter o rótulo "Em produção" nos dois era metade da confusão de ver o
+ * mesmo job vivo em duas telas.
+ *
+ * 'A Faturar'/'Faturado' saíram da lista: orçamento não vai pro Financeiro — quem vai
+ * é a PP que ele gera (nenhum orçamento em produção jamais esteve nesses estados).
  */
 export const ORCAMENTO_SITUACAO_OPTIONS = [
-  ...PRODUCAO_SITUACAO_OPTIONS,
+  { value: 'em_aberto', label: 'Em Aberto' },
+  { value: 'aprovado',  label: 'Aprovado' },
+  { value: 'cancelado', label: 'Cancelado' },
+]
+
+/**
+ * Rótulos só para EXIBIR. O seletor oferece três; a pílula ainda precisa saber
+ * escrever o 'concluido' dos 4 orçamentos anteriores a esta mudança — sem isto a
+ * tela mostraria a string crua do banco.
+ */
+export const ORCAMENTO_SITUACAO_LABELS = [
+  ...ORCAMENTO_SITUACAO_OPTIONS,
   { value: 'concluido', label: 'Concluído' },
+  { value: 'faturar',   label: 'A Faturar' },
+  { value: 'faturado',  label: 'Faturado' },
 ]
 
 // Situações que TIRAM o documento da aba "Ativos" (viram "como se fosse arquivado").

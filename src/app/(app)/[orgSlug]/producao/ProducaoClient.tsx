@@ -20,7 +20,7 @@ export interface ProducaoRow {
 
 export function ProducaoClient({
   orgSlug, items, archivedView, basePath, title, subtitle, addLabel, gerarPedidos = false, gerarDocs = false, showPrint = true,
-  situacaoOptions = PRODUCAO_SITUACAO_OPTIONS,
+  situacaoOptions = PRODUCAO_SITUACAO_OPTIONS, situacaoLabels, mostrarFiltros = true,
 }: {
   orgSlug: string; items: ProducaoRow[]; archivedView: boolean
   basePath: string; title: string; subtitle: string; addLabel: string
@@ -32,8 +32,21 @@ export function ProducaoClient({
   showPrint?: boolean
   /** Estados disponíveis no seletor de situação (fee usa um conjunto reduzido). */
   situacaoOptions?: SelectOption[]
+  /**
+   * Rótulos para exibir, quando a tela mostra estados que o seletor não oferece
+   * (ex.: o 'concluido' dos orçamentos antigos). Default: os próprios do seletor.
+   */
+  situacaoLabels?: SelectOption[]
+  /**
+   * Chips de filtro por situação. O orçamento desliga: com três estados e a lista
+   * agrupada por cliente, o filtro só escondia registro — e esconder orçamento em
+   * aberto é exatamente o que fazia o job parecer que não existia. Na fila das PPs,
+   * que é longa e tem estado de verdade, ele continua valendo.
+   */
+  mostrarFiltros?: boolean
 }) {
   const router = useRouter()
+  const rotulos = situacaoLabels ?? situacaoOptions
   const [isPending, startTransition] = useTransition()
   const [situacao, setSituacaoFiltro] = useState<string | null>(null)
   const base = `/${orgSlug}/${basePath}`
@@ -90,12 +103,12 @@ export function ProducaoClient({
       </div>
 
       {/* Filtro por situação */}
-      {situacoes.length > 1 && (
+      {mostrarFiltros && situacoes.length > 1 && (
         <div className="flex items-center gap-1.5 flex-wrap mb-3">
           <Chip label="Todas" active={situacao === null} onClick={() => setSituacaoFiltro(null)} count={items.length} />
           {situacoes.map(([s, n]) => {
             const cor = MIDIA_SITUACAO_COLORS[s]
-            return <Chip key={s} label={labelOf(situacaoOptions, s)} count={n} active={situacao === s} onClick={() => setSituacaoFiltro(situacao === s ? null : s)} dot={cor?.text} />
+            return <Chip key={s} label={labelOf(rotulos, s)} count={n} active={situacao === s} onClick={() => setSituacaoFiltro(situacao === s ? null : s)} dot={cor?.text} />
           })}
         </div>
       )}
@@ -132,7 +145,7 @@ export function ProducaoClient({
                         <td className="px-4 py-1.5">
                           {archivedView || !situacaoOptions.some(o => o.value === r.situacao) ? (
                             // Situação terminal (ex.: Fee 'faturado' pelo Financeiro) não é editável pelo dropdown.
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: cor?.bg, color: cor?.text }}>{labelOf(PRODUCAO_SITUACAO_OPTIONS, r.situacao)}</span>
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: cor?.bg, color: cor?.text }}>{labelOf(rotulos, r.situacao)}</span>
                           ) : (
                             <Select size="sm" value={r.situacao} onChange={v => changeSituacao(r.id, v)} options={situacaoOptions} />
                           )}

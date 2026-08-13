@@ -121,7 +121,7 @@ export async function gerarPedidosDoOrcamento(orgSlug: string, orcamentoId: stri
     grupos.set(sel.fornecedor_id, g)
   }
 
-  let count = 0
+  const criados: string[] = []
   for (const [fornecedor_id, g] of grupos) {
     // Título: um item mantém "Orçamento - Item"; vários itens ficam só com o do orçamento.
     const titulo = g.itens.length === 1 && g.itens[0].nome ? `${orc.titulo} - ${g.itens[0].nome}` : orc.titulo
@@ -148,22 +148,30 @@ export async function gerarPedidosDoOrcamento(orgSlug: string, orcamentoId: stri
         parcelas: [],
       },
     }
+    // create_producao devolve o uuid — é o que leva a pessoa direto pra PP nova.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any).rpc('create_producao', { p_user_id: user.id, p_org_id: org.id, p_data: payload })
+    const { data: novoId, error } = await (supabase as any).rpc('create_producao', { p_user_id: user.id, p_org_id: org.id, p_data: payload })
     if (error) return { error: error.message }
-    count++
+    if (novoId) criados.push(novoId as string)
   }
 
-  if (count === 0) return { error: 'Nenhum item com opção/fornecedor escolhido neste orçamento.' }
+  if (criados.length === 0) return { error: 'Nenhum item com opção/fornecedor escolhido neste orçamento.' }
 
-  // Fim do ciclo: o orçamento virou produção. Sai da aba Ativos e fica consultável em
-  // Arquivados, com o histórico intacto.
+  // Fim do ciclo: o orçamento virou produção e sai da lista de Ativos ARQUIVADO —
+  // não mais com um estado 'concluído' próprio. O orçamento tem três estados e
+  // pronto (ver ORCAMENTO_SITUACAO_OPTIONS); ele continua "aprovado", que é o que de
+  // fato aconteceu com ele, e o arquivamento é que tira da frente. Sem isso o mesmo
+  // job aparecia em aberto no Orçamento e em produção na PP, e a equipe se perdia.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).rpc('concluir_orcamento', { p_user_id: user.id, p_orcamento_id: orcamentoId })
+  await (supabase as any).rpc('set_producao_archived', { p_user_id: user.id, p_producao_id: orcamentoId, p_archived: true })
 
   revalidatePath(`/${orgSlug}/producao/orcamento`)
   revalidatePath(`/${orgSlug}/producao/pedido`)
-  redirect(`/${orgSlug}/producao/pedido`)
+  // Uma PP: abre ela. Várias (um fornecedor cada): a lista, que é onde dá pra ver as
+  // duas ou três de uma vez.
+  redirect(criados.length === 1
+    ? `/${orgSlug}/producao/pedido/${criados[0]}`
+    : `/${orgSlug}/producao/pedido`)
 }
 
 /** Gera rascunhos (mídia/pedido/fee) a partir dos itens aprovados de uma Proposta. */

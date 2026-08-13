@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { filtrarPorAba, SITUACOES_FORA_ORCAMENTO, ORCAMENTO_SITUACAO_OPTIONS } from '@/lib/midia'
+import { filtrarPorAba, SITUACOES_FORA_ORCAMENTO, ORCAMENTO_SITUACAO_OPTIONS, ORCAMENTO_SITUACAO_LABELS } from '@/lib/midia'
 import { ProducaoClient, type ProducaoRow } from '../ProducaoClient'
 
 export default async function OrcamentoPage({
@@ -20,7 +20,8 @@ export default async function OrcamentoPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any
 
-  // Saem da aba Ativos quando faturado, cancelado ou concluído (= já virou PP).
+  // Saem da aba Ativos quando arquivado (é o que 'Gerar PPs' faz agora), cancelado,
+  // ou no 'concluido' dos orçamentos gerados antes de 12/08/2026.
   const baseQ = sb
     .from('producao')
     .select('id, numero, serie, titulo, valor, situacao, archived, workspaces(name)')
@@ -53,7 +54,10 @@ export default async function OrcamentoPage({
       orgSlug={orgSlug} items={items} archivedView={archivedView}
       basePath="producao/orcamento" title="Liberação de Produção — Orçamento"
       subtitle="Cotações de fornecedores para aprovação do cliente" addLabel="Adicionar Orçamento"
-      gerarPedidos situacaoOptions={ORCAMENTO_SITUACAO_OPTIONS}
+      gerarPedidos
+      situacaoOptions={ORCAMENTO_SITUACAO_OPTIONS}
+      situacaoLabels={ORCAMENTO_SITUACAO_LABELS}
+      mostrarFiltros={false}
     />
   )
 }
