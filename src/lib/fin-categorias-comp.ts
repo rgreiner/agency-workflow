@@ -71,6 +71,9 @@ export interface PontoMes {
 export interface SerieCategorias {
   pontos: PontoMes[]
   categorias: FatiaCat[]
+  /** Desligadas na legenda: ficam fora de tudo (total, %, gráfico e tabela) e
+   *  voltam como chip apagado para poder religar. */
+  ocultas: { nome: string; totalAno: number }[]
   total: number
   totalRealizado: number
   totalPrevisto: number
@@ -91,9 +94,13 @@ export function serieCategorias(
     foco: Foco
     categorias: CategoriaGrupoLike[]
     mesFoco?: number | null
+    /** Nomes desligados na legenda — saem da conta ANTES do top-N, então o
+     *  percentual passa a ser sobre o que sobrou (é esse o ponto de desligar). */
+    ocultas?: string[]
   },
 ): SerieCategorias {
   const { ano, tipo, visao, foco, categorias, mesFoco = null } = opts
+  const ocultasSet = new Set(opts.ocultas ?? [])
   const macro = macroPorCategoria(categorias, tipo === 'receita' ? 'entrada' : 'saida')
 
   // categoria → [realizado[12], previsto[12]]
@@ -121,7 +128,7 @@ export function serieCategorias(
   const somaAno = (arr: number[]) => arr.reduce((s, v) => s + v, 0)
   const somaFoco = (arr: number[]) => (mesFoco == null ? somaAno(arr) : arr[mesFoco])
 
-  const todas = [...acc.entries()]
+  const todasComOcultas = [...acc.entries()]
     .map(([nome, e]) => ({
       key: '',
       nome,
@@ -134,6 +141,11 @@ export function serieCategorias(
     }))
     .filter(f => f.totalAno > 0.005)
     .sort((a, b) => b.totalAno - a.totalAno)
+
+  const todas = todasComOcultas.filter(f => !ocultasSet.has(f.nome))
+  const ocultas = todasComOcultas
+    .filter(f => ocultasSet.has(f.nome))
+    .map(f => ({ nome: f.nome, totalAno: f.totalAno }))
 
   // Top N + "Outros" — inclusive no gráfico, para o empilhamento não virar sopa.
   const visiveis = todas.slice(0, TOP_CATEGORIAS)
@@ -166,13 +178,17 @@ export function serieCategorias(
       if (v > 0.005) p[f.key] = v
       p.total += v
     }
-    for (const [, e] of acc) { p.realizado += e.real[mi]; p.previsto += e.prev[mi] }
+    for (const [nome, e] of acc) {
+      if (ocultasSet.has(nome)) continue
+      p.realizado += e.real[mi]; p.previsto += e.prev[mi]
+    }
     pontos.push(p)
   }
 
   return {
     pontos,
     categorias: fatias,
+    ocultas,
     total,
     totalRealizado: fatias.reduce((s, f) => s + f.realizado, 0),
     totalPrevisto: fatias.reduce((s, f) => s + f.previsto, 0),

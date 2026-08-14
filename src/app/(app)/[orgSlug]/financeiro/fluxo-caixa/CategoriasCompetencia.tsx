@@ -42,15 +42,23 @@ export function CategoriasCompetencia({ rows, categorias }: {
   const [foco, setFoco] = useState<Foco>('tudo')
   // Mês em foco (0–11): recorta os totais/percentuais; o gráfico segue no ano.
   const [mesFoco, setMesFoco] = useState<number | null>(null)
+  // Categorias desligadas na legenda, por natureza (os nomes não se repetem
+  // entre receita e despesa, e o macro de uma não é o da outra).
+  const [ocultas, setOcultas] = useState<{ receita: string[]; despesa: string[] }>({ receita: [], despesa: [] })
+  const alterna = (nat: 'receita' | 'despesa', nome: string) =>
+    setOcultas(prev => ({
+      ...prev,
+      [nat]: prev[nat].includes(nome) ? prev[nat].filter(n => n !== nome) : [...prev[nat], nome],
+    }))
 
   const anoOpts = [...new Set([...anos, anoAtual])].sort((a, b) => b - a).map(a => ({ value: String(a), label: String(a) }))
 
   const receita = useMemo(
-    () => serieCategorias(rows, { ano, tipo: 'receita', visao, foco, categorias, mesFoco }),
-    [rows, ano, visao, foco, categorias, mesFoco])
+    () => serieCategorias(rows, { ano, tipo: 'receita', visao, foco, categorias, mesFoco, ocultas: ocultas.receita }),
+    [rows, ano, visao, foco, categorias, mesFoco, ocultas.receita])
   const despesa = useMemo(
-    () => serieCategorias(rows, { ano, tipo: 'despesa', visao, foco, categorias, mesFoco }),
-    [rows, ano, visao, foco, categorias, mesFoco])
+    () => serieCategorias(rows, { ano, tipo: 'despesa', visao, foco, categorias, mesFoco, ocultas: ocultas.despesa }),
+    [rows, ano, visao, foco, categorias, mesFoco, ocultas.despesa])
 
   const mesCorrente = ano === anoAtual ? new Date().getMonth() : null
 
@@ -79,7 +87,7 @@ export function CategoriasCompetencia({ rows, categorias }: {
 
         <div className="inline-flex bg-gray-100 rounded-xl p-0.5">
           {([['macro', 'Macro'], ['detalhe', 'Detalhada']] as const).map(([v, label]) => (
-            <button key={v} onClick={() => setVisao(v)} aria-pressed={visao === v}
+            <button key={v} onClick={() => { setVisao(v); setOcultas({ receita: [], despesa: [] }) }} aria-pressed={visao === v}
               className={`px-3 py-1.5 text-sm font-medium rounded-[10px] transition-colors ${visao === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
               {label}
             </button>
@@ -88,20 +96,23 @@ export function CategoriasCompetencia({ rows, categorias }: {
       </div>
 
       <GraficoCategoria titulo="Receitas por categoria" serie={receita} categorias={categorias}
-        ano={ano} mesFoco={mesFoco} onMes={setMesFoco} mesCorrente={mesCorrente} tom="emerald" />
+        ano={ano} mesFoco={mesFoco} onMes={setMesFoco} mesCorrente={mesCorrente} tom="emerald"
+        onAlterna={n => alterna('receita', n)} onMostrarTudo={() => setOcultas(p => ({ ...p, receita: [] }))} />
       <GraficoCategoria titulo="Despesas por categoria" serie={despesa} categorias={categorias}
-        ano={ano} mesFoco={mesFoco} onMes={setMesFoco} mesCorrente={mesCorrente} tom="red" />
+        ano={ano} mesFoco={mesFoco} onMes={setMesFoco} mesCorrente={mesCorrente} tom="red"
+        onAlterna={n => alterna('despesa', n)} onMostrarTudo={() => setOcultas(p => ({ ...p, despesa: [] }))} />
 
       <p className="text-[11px] text-gray-400">
         Por competência (o mês a que o valor se refere), não pela data em que o dinheiro andou.
         Inclui o histórico importado da Conta Azul (realizado até 16/07/2026) e o livro-caixa do Flow.
-        Transferência entre contas fica de fora. Clique numa barra para isolar o mês.
+        Transferência entre contas fica de fora. Clique numa barra para isolar o mês e na legenda
+        para desligar uma categoria — total e percentual recalculam sobre o que sobrou.
       </p>
     </div>
   )
 }
 
-function GraficoCategoria({ titulo, serie, categorias, ano, mesFoco, onMes, mesCorrente, tom }: {
+function GraficoCategoria({ titulo, serie, categorias, ano, mesFoco, onMes, mesCorrente, tom, onAlterna, onMostrarTudo }: {
   titulo: string
   serie: SerieCategorias
   categorias: CategoriaGrupoLike[]
@@ -110,6 +121,8 @@ function GraficoCategoria({ titulo, serie, categorias, ano, mesFoco, onMes, mesC
   onMes: (mi: number | null) => void
   mesCorrente: number | null
   tom: 'emerald' | 'red'
+  onAlterna: (nome: string) => void
+  onMostrarTudo: () => void
 }) {
   const cores = useMemo(() => coresDeFatias(serie.categorias, categorias), [serie.categorias, categorias])
   const nomePorKey = useMemo(() => new Map(serie.categorias.map(f => [f.key, f.nome])), [serie.categorias])
@@ -132,11 +145,15 @@ function GraficoCategoria({ titulo, serie, categorias, ano, mesFoco, onMes, mesC
         </div>
       </div>
 
-      {serie.total === 0 && serie.pontos.every(p => p.total === 0) ? (
-        <p className="text-sm text-gray-400 py-10 text-center">Sem movimento nesta natureza em {ano}.</p>
+      {visiveis.length === 0 ? (
+        <p className="text-sm text-gray-400 py-10 text-center">
+          {serie.ocultas.length > 0
+            ? 'Todas as categorias estão desligadas.'
+            : `Sem movimento nesta natureza em ${rotulo}.`}
+        </p>
       ) : (
         mesFoco != null ? (
-          <MesIsolado fatias={visiveis} cores={cores} />
+          <MesIsolado fatias={visiveis} cores={cores} onAlterna={onAlterna} />
         ) : (
         <div className="grid lg:grid-cols-[1fr_300px] gap-5">
           <div className="h-72 min-w-0">
@@ -168,23 +185,45 @@ function GraficoCategoria({ titulo, serie, categorias, ano, mesFoco, onMes, mesC
           <ul className="space-y-2 min-w-0 self-start">
             {visiveis.map(f => (
               <li key={f.key} className="min-w-0">
-                <div className="flex items-baseline justify-between gap-2 mb-0.5">
-                  <span className="text-xs text-gray-600 truncate inline-flex items-center gap-1.5" title={f.nome}>
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cores.get(f.key) }} />
-                    {f.nome}
-                  </span>
-                  <span className="text-[11px] text-gray-500 tabular-nums shrink-0">
-                    {formatBRL(f.total)} <span className="text-gray-300">·</span> {pct(f.pct)}
-                  </span>
-                </div>
-                <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                  <div className="h-full rounded-full" style={{ width: `${Math.max(f.pct, 2)}%`, backgroundColor: cores.get(f.key) }} />
-                </div>
+                {/* a legenda É o controle: clicar desliga a categoria e o resto recalcula */}
+                <button onClick={() => onAlterna(f.nome)} title={`${f.nome} — clique para desligar`}
+                  className="w-full text-left group cursor-pointer">
+                  <div className="flex items-baseline justify-between gap-2 mb-0.5">
+                    <span className="text-xs text-gray-600 group-hover:text-gray-900 truncate inline-flex items-center gap-1.5 transition-colors">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cores.get(f.key) }} />
+                      {f.nome}
+                    </span>
+                    <span className="text-[11px] text-gray-500 tabular-nums shrink-0">
+                      {formatBRL(f.total)} <span className="text-gray-300">·</span> {pct(f.pct)}
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                    <div className="h-full rounded-full transition-opacity group-hover:opacity-60"
+                      style={{ width: `${Math.max(f.pct, 2)}%`, backgroundColor: cores.get(f.key) }} />
+                  </div>
+                </button>
               </li>
             ))}
           </ul>
         </div>
         )
+      )}
+
+      {serie.ocultas.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap mt-4">
+          <span className="text-[11px] text-gray-400 mr-0.5">Desligadas:</span>
+          {serie.ocultas.map(o => (
+            <button key={o.nome} onClick={() => onAlterna(o.nome)} title="Religar"
+              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-gray-100 text-[11px] text-gray-400 line-through hover:bg-gray-200 hover:text-gray-600 transition-colors">
+              <span className="w-2 h-2 rounded-full bg-gray-300 shrink-0" />
+              {o.nome}
+            </button>
+          ))}
+          <button onClick={onMostrarTudo}
+            className="px-2 py-1 rounded-lg text-[11px] font-medium text-orange-600 hover:bg-orange-50 transition-colors">
+            mostrar tudo
+          </button>
+        </div>
       )}
 
       {visiveis.length > 0 && <TabelaMesCategoria serie={serie} cores={cores} mesFoco={mesFoco} onMes={onMes} />}
@@ -197,7 +236,9 @@ function GraficoCategoria({ titulo, serie, categorias, ano, mesFoco, onMes, mesC
  * realizado × a realizar dentro de cada barra. É a leitura criteriosa — no
  * gráfico do ano as fatias finas do mês somem no empilhamento.
  */
-function MesIsolado({ fatias, cores }: { fatias: FatiaCat[]; cores: Map<string, string> }) {
+function MesIsolado({ fatias, cores, onAlterna }: {
+  fatias: FatiaCat[]; cores: Map<string, string>; onAlterna: (nome: string) => void
+}) {
   const dados = useMemo(
     () => [...fatias].sort((a, b) => b.total - a.total).map(f => ({
       key: f.key, nome: f.nome, realizado: f.realizado, previsto: f.previsto,
@@ -210,6 +251,7 @@ function MesIsolado({ fatias, cores }: { fatias: FatiaCat[]; cores: Map<string, 
   const max = Math.max(...dados.map(d => d.total))
 
   return (
+    <>
     <div style={{ height: Math.max(180, dados.length * 38 + 24) }}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={dados} layout="vertical" margin={{ top: 4, right: 130, left: 8, bottom: 4 }} barCategoryGap="22%">
@@ -230,6 +272,17 @@ function MesIsolado({ fatias, cores }: { fatias: FatiaCat[]; cores: Map<string, 
         </BarChart>
       </ResponsiveContainer>
     </div>
+    {/* legenda: aqui ela é o único jeito de desligar (o eixo não é clicável) */}
+    <div className="flex items-center gap-1.5 flex-wrap mt-3">
+      {dados.map(d => (
+        <button key={d.key} onClick={() => onAlterna(d.nome)} title={`${d.nome} — clique para desligar`}
+          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] text-gray-600 hover:bg-gray-100 transition-colors">
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cores.get(d.key) }} />
+          {d.nome}
+        </button>
+      ))}
+    </div>
+    </>
   )
 }
 
