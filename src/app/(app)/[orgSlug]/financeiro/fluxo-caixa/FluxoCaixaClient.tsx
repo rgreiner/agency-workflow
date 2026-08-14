@@ -12,6 +12,9 @@ import { Select, MultiSelect } from '@/components/ui/Select'
 import {
   fluxoDiario, fluxoMensal, contasDistintas, anosDisponiveis, type FluxoRow,
 } from '@/lib/fluxo-caixa'
+import type { CatCompRow } from '@/lib/fin-categorias-comp'
+import type { CategoriaGrupoLike } from '@/lib/finance-categorias'
+import { CategoriasCompetencia } from './CategoriasCompetencia'
 
 const MESES_NOME = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const MESES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
@@ -23,8 +26,25 @@ const compactBRL = (v: number) => {
 
 const C = { receb: '#22c55e', pag: '#ef4444', recebL: '#a7f3d0', pagL: '#fecaca', atraso: '#f59e0b', saldoR: '#1e3a5f', saldoP: '#94a3b8' }
 
-export function FluxoCaixaClient({ orgSlug, rows }: { orgSlug: string; rows: FluxoRow[] }) {
-  const [modo, setModo] = useState<'diario' | 'mensal'>('diario')
+type Modo = 'diario' | 'mensal' | 'categorias'
+const MODOS: { value: Modo; label: string }[] = [
+  { value: 'diario', label: 'Diário' },
+  { value: 'mensal', label: 'Mensal' },
+  { value: 'categorias', label: 'Categorias' },
+]
+const TITULO: Record<Modo, string> = {
+  diario: 'Fluxo de caixa diário',
+  mensal: 'Fluxo de caixa mensal',
+  categorias: 'Receitas e despesas por categoria',
+}
+
+export function FluxoCaixaClient({ orgSlug, rows, catRows, categorias }: {
+  orgSlug: string
+  rows: FluxoRow[]
+  catRows: CatCompRow[]
+  categorias: CategoriaGrupoLike[]
+}) {
+  const [modo, setModo] = useState<Modo>('diario')
 
   // Contas selecionadas por modo (vazio = todas). Persistido por org no localStorage —
   // assim dá pra deixar os ativos de baixa liquidez fora do Diário e incluir no Mensal.
@@ -39,12 +59,14 @@ export function FluxoCaixaClient({ orgSlug, rows }: { orgSlug: string; rows: Flu
   }, [SEL_KEY])
   function setContasDoModo(vals: string[]) {
     setContaSel(prev => {
-      const next = { ...prev, [modo]: vals }
+      const next = { ...prev, [modo === 'categorias' ? 'mensal' : modo]: vals }
       try { localStorage.setItem(SEL_KEY, JSON.stringify(next)) } catch {}
       return next
     })
   }
-  const contasModo = contaSel[modo]
+  // A aba Categorias não filtra por conta (competência não é caixa: o mesmo
+  // custo pode ser pago por qualquer conta, e a agregação nem carrega a conta).
+  const contasModo = modo === 'categorias' ? [] : contaSel[modo]
 
   const contas = useMemo(() => contasDistintas(rows), [rows])
   const anos = useMemo(() => anosDisponiveis(rows), [rows])
@@ -96,91 +118,95 @@ export function FluxoCaixaClient({ orgSlug, rows }: { orgSlug: string; rows: Flu
   return (
     <div className="p-6 space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-lg font-semibold text-gray-900">
-          Fluxo de caixa {modo === 'diario' ? 'diário' : 'mensal'}
-        </h1>
-        {/* toggle Diário / Mensal */}
+        <h1 className="text-lg font-semibold text-gray-900">{TITULO[modo]}</h1>
+        {/* toggle Diário / Mensal / Categorias */}
         <div className="inline-flex bg-gray-100 rounded-xl p-0.5">
-          {(['diario', 'mensal'] as const).map(m => (
-            <button key={m} onClick={() => setModo(m)} aria-pressed={modo === m}
-              className={`px-4 py-1.5 text-sm font-medium rounded-[10px] transition-colors ${modo === m ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-              {m === 'diario' ? 'Diário' : 'Mensal'}
+          {MODOS.map(m => (
+            <button key={m.value} onClick={() => setModo(m.value)} aria-pressed={modo === m.value}
+              className={`px-4 py-1.5 text-sm font-medium rounded-[10px] transition-colors ${modo === m.value ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+              {m.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* controles */}
-      <div className="flex items-center gap-3 flex-wrap">
-        {modo === 'diario' ? (
-          <div className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded-xl px-1 py-1">
-            <button onClick={() => shiftMes(-1)} className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 transition" aria-label="Mês anterior"><ChevronLeft className="w-4 h-4" /></button>
-            <span className="text-sm font-medium text-gray-800 min-w-[140px] text-center">{MESES_NOME[ymM - 1]} de {ymY}</span>
-            <button onClick={() => shiftMes(1)} className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 transition" aria-label="Próximo mês"><ChevronRight className="w-4 h-4" /></button>
+      {modo === 'categorias' ? (
+        <CategoriasCompetencia rows={catRows} categorias={categorias} />
+      ) : (
+        <>
+        {/* controles */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {modo === 'diario' ? (
+            <div className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded-xl px-1 py-1">
+              <button onClick={() => shiftMes(-1)} className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 transition" aria-label="Mês anterior"><ChevronLeft className="w-4 h-4" /></button>
+              <span className="text-sm font-medium text-gray-800 min-w-[140px] text-center">{MESES_NOME[ymM - 1]} de {ymY}</span>
+              <button onClick={() => shiftMes(1)} className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 transition" aria-label="Próximo mês"><ChevronRight className="w-4 h-4" /></button>
+            </div>
+          ) : (
+            <div className="w-32"><Select value={String(ano)} onChange={v => setAno(Number(v))} options={anoOpts} /></div>
+          )}
+          <div className="w-64">
+            <MultiSelect values={contasModo} onChange={setContasDoModo} options={contaOpts} allLabel="Todas as contas" />
           </div>
-        ) : (
-          <div className="w-32"><Select value={String(ano)} onChange={v => setAno(Number(v))} options={anoOpts} /></div>
-        )}
-        <div className="w-64">
-          <MultiSelect values={contasModo} onChange={setContasDoModo} options={contaOpts} allLabel="Todas as contas" />
         </div>
-      </div>
 
-      {/* gráfico */}
-      <section className="bg-white border border-gray-200 rounded-xl p-4">
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            {modo === 'diario' ? (
-              <ComposedChart data={dadosDia} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis dataKey="dia" tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={{ stroke: '#e2e8f0' }} interval="preserveStartEnd" minTickGap={14} />
-                <YAxis tickFormatter={compactBRL} tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} width={44} />
-                <Tooltip content={<FluxoTooltip modo="diario" />} />
-                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-                <ReferenceLine y={0} stroke="#cbd5e1" />
-                {hojeDiaMarker && (
-                  <ReferenceLine x={hojeDiaMarker} stroke="#f59e0b" strokeDasharray="3 3"
-                    label={{ value: 'Hoje', position: 'top', fontSize: 10, fill: '#f59e0b' }} />
-                )}
-                {/* realizado (sólido) na base, previsto (claro) e atrasado (âmbar) empilhados por cima */}
-                <Bar dataKey="recebimentos" name="Recebimentos" stackId="rec" fill={C.receb} radius={[3, 3, 0, 0]} maxBarSize={20} />
-                <Bar dataKey="recebPrevisto" name="A receber" stackId="rec" fill={C.recebL} radius={[3, 3, 0, 0]} maxBarSize={20} />
-                <Bar dataKey="recebAtrasado" name="Atrasado" stackId="rec" fill={C.atraso} radius={[3, 3, 0, 0]} maxBarSize={20} />
-                <Bar dataKey="pagamentos" name="Pagamentos" stackId="pag" fill={C.pag} radius={[0, 0, 3, 3]} maxBarSize={20} />
-                <Bar dataKey="pagPrevisto" name="A pagar" stackId="pag" fill={C.pagL} radius={[0, 0, 3, 3]} maxBarSize={20} />
-                <Bar dataKey="pagAtrasado" name="Atrasado" stackId="pag" fill={C.atraso} legendType="none" radius={[0, 0, 3, 3]} maxBarSize={20} />
-                <Line dataKey="saldoProjetado" name="Saldo projetado" type="monotone" stroke={C.saldoP} strokeWidth={2} strokeDasharray="4 3" dot={false} />
-                <Line dataKey="saldo" name="Saldo" type="monotone" stroke={C.saldoR} strokeWidth={2} dot={{ r: 2 }} />
-              </ComposedChart>
-            ) : (
-              <ComposedChart data={dadosMes} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={{ stroke: '#e2e8f0' }} interval="preserveStartEnd" minTickGap={8} />
-                <YAxis tickFormatter={compactBRL} tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} width={44} />
-                <Tooltip content={<FluxoTooltip modo="mensal" />} />
-                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-                <ReferenceLine y={0} stroke="#cbd5e1" />
-                {hojeMesMarker && (
-                  <ReferenceLine x={hojeMesMarker} stroke="#f59e0b" strokeDasharray="3 3"
-                    label={{ value: 'Hoje', position: 'top', fontSize: 10, fill: '#f59e0b' }} />
-                )}
-                {/* realizado na base, previsto e atrasado empilhados por cima (coluna única por mês) */}
-                <Bar dataKey="recRealizado" name="Receb. realizado" stackId="rec" fill={C.receb} radius={[3, 3, 0, 0]} maxBarSize={26} />
-                <Bar dataKey="recPrevisto" name="Receb. previsto" stackId="rec" fill={C.recebL} radius={[3, 3, 0, 0]} maxBarSize={26} />
-                <Bar dataKey="recAtrasado" name="Atrasado" stackId="rec" fill={C.atraso} radius={[3, 3, 0, 0]} maxBarSize={26} />
-                <Bar dataKey="pagRealizado" name="Pagto realizado" stackId="pag" fill={C.pag} radius={[0, 0, 3, 3]} maxBarSize={26} />
-                <Bar dataKey="pagPrevisto" name="Pagto previsto" stackId="pag" fill={C.pagL} radius={[0, 0, 3, 3]} maxBarSize={26} />
-                <Bar dataKey="pagAtrasado" name="Atrasado" stackId="pag" fill={C.atraso} legendType="none" radius={[0, 0, 3, 3]} maxBarSize={26} />
-                <Line dataKey="saldoPrevisto" name="Saldo previsto" type="monotone" stroke={C.saldoP} strokeWidth={2} strokeDasharray="4 3" dot={false} />
-                <Line dataKey="saldoRealizado" name="Saldo realizado" type="monotone" stroke={C.saldoR} strokeWidth={2} dot={{ r: 2 }} />
-              </ComposedChart>
-            )}
-          </ResponsiveContainer>
-        </div>
-      </section>
+        {/* gráfico */}
+        <section className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              {modo === 'diario' ? (
+                <ComposedChart data={dadosDia} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <XAxis dataKey="dia" tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={{ stroke: '#e2e8f0' }} interval="preserveStartEnd" minTickGap={14} />
+                  <YAxis tickFormatter={compactBRL} tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} width={44} />
+                  <Tooltip content={<FluxoTooltip modo="diario" />} />
+                  <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                  <ReferenceLine y={0} stroke="#cbd5e1" />
+                  {hojeDiaMarker && (
+                    <ReferenceLine x={hojeDiaMarker} stroke="#f59e0b" strokeDasharray="3 3"
+                      label={{ value: 'Hoje', position: 'top', fontSize: 10, fill: '#f59e0b' }} />
+                  )}
+                  {/* realizado (sólido) na base, previsto (claro) e atrasado (âmbar) empilhados por cima */}
+                  <Bar dataKey="recebimentos" name="Recebimentos" stackId="rec" fill={C.receb} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                  <Bar dataKey="recebPrevisto" name="A receber" stackId="rec" fill={C.recebL} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                  <Bar dataKey="recebAtrasado" name="Atrasado" stackId="rec" fill={C.atraso} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                  <Bar dataKey="pagamentos" name="Pagamentos" stackId="pag" fill={C.pag} radius={[0, 0, 3, 3]} maxBarSize={20} />
+                  <Bar dataKey="pagPrevisto" name="A pagar" stackId="pag" fill={C.pagL} radius={[0, 0, 3, 3]} maxBarSize={20} />
+                  <Bar dataKey="pagAtrasado" name="Atrasado" stackId="pag" fill={C.atraso} legendType="none" radius={[0, 0, 3, 3]} maxBarSize={20} />
+                  <Line dataKey="saldoProjetado" name="Saldo projetado" type="monotone" stroke={C.saldoP} strokeWidth={2} strokeDasharray="4 3" dot={false} />
+                  <Line dataKey="saldo" name="Saldo" type="monotone" stroke={C.saldoR} strokeWidth={2} dot={{ r: 2 }} />
+                </ComposedChart>
+              ) : (
+                <ComposedChart data={dadosMes} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={{ stroke: '#e2e8f0' }} interval="preserveStartEnd" minTickGap={8} />
+                  <YAxis tickFormatter={compactBRL} tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} width={44} />
+                  <Tooltip content={<FluxoTooltip modo="mensal" />} />
+                  <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                  <ReferenceLine y={0} stroke="#cbd5e1" />
+                  {hojeMesMarker && (
+                    <ReferenceLine x={hojeMesMarker} stroke="#f59e0b" strokeDasharray="3 3"
+                      label={{ value: 'Hoje', position: 'top', fontSize: 10, fill: '#f59e0b' }} />
+                  )}
+                  {/* realizado na base, previsto e atrasado empilhados por cima (coluna única por mês) */}
+                  <Bar dataKey="recRealizado" name="Receb. realizado" stackId="rec" fill={C.receb} radius={[3, 3, 0, 0]} maxBarSize={26} />
+                  <Bar dataKey="recPrevisto" name="Receb. previsto" stackId="rec" fill={C.recebL} radius={[3, 3, 0, 0]} maxBarSize={26} />
+                  <Bar dataKey="recAtrasado" name="Atrasado" stackId="rec" fill={C.atraso} radius={[3, 3, 0, 0]} maxBarSize={26} />
+                  <Bar dataKey="pagRealizado" name="Pagto realizado" stackId="pag" fill={C.pag} radius={[0, 0, 3, 3]} maxBarSize={26} />
+                  <Bar dataKey="pagPrevisto" name="Pagto previsto" stackId="pag" fill={C.pagL} radius={[0, 0, 3, 3]} maxBarSize={26} />
+                  <Bar dataKey="pagAtrasado" name="Atrasado" stackId="pag" fill={C.atraso} legendType="none" radius={[0, 0, 3, 3]} maxBarSize={26} />
+                  <Line dataKey="saldoPrevisto" name="Saldo previsto" type="monotone" stroke={C.saldoP} strokeWidth={2} strokeDasharray="4 3" dot={false} />
+                  <Line dataKey="saldoRealizado" name="Saldo realizado" type="monotone" stroke={C.saldoR} strokeWidth={2} dot={{ r: 2 }} />
+                </ComposedChart>
+              )}
+            </ResponsiveContainer>
+          </div>
+        </section>
 
-      {/* tabela */}
-      {modo === 'diario' ? <TabelaDiaria dados={dadosDia} /> : <TabelaMensal dados={dadosMes} />}
+        {/* tabela */}
+        {modo === 'diario' ? <TabelaDiaria dados={dadosDia} /> : <TabelaMensal dados={dadosMes} />}
+        </>
+      )}
     </div>
   )
 }

@@ -1,5 +1,7 @@
 import { assertFinanceAccess } from '@/lib/finance'
 import type { FluxoRow } from '@/lib/fluxo-caixa'
+import type { CatCompRow } from '@/lib/fin-categorias-comp'
+import type { CategoriaGrupoLike } from '@/lib/finance-categorias'
 import { FluxoCaixaClient } from './FluxoCaixaClient'
 
 export const metadata = { title: 'Financeiro — Fluxo de caixa' }
@@ -23,18 +25,28 @@ export default async function FluxoCaixaPage({ params }: { params: Promise<{ org
   // requisições viraram 1.875 em 2. A soma bate ao centavo com a view.
   //
   // PostgREST limita o nº de linhas por request — pagina até esgotar.
-  const rows: FluxoRow[] = []
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await sb
-      .rpc('fin_fluxo_agregado', { p_org: orgId })
-      .range(from, from + PAGE - 1)
-    // Falha de query não pode virar "tela vazia" num painel de caixa: sem dado
-    // nenhum a leitura é "não tem nada a receber", que é uma decisão errada.
-    if (error) throw new Error(`Falha ao carregar o fluxo de caixa: ${error.message}`)
-    if (!data || data.length === 0) break
-    rows.push(...(data as FluxoRow[]))
-    if (data.length < PAGE) break
+  // Falha de query não pode virar "tela vazia" num painel de caixa: sem dado
+  // nenhum a leitura é "não tem nada a receber", que é uma decisão errada.
+  async function paginado<T>(rpc: string, rotulo: string): Promise<T[]> {
+    const out: T[] = []
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await sb.rpc(rpc, { p_org: orgId }).range(from, from + PAGE - 1)
+      if (error) throw new Error(`Falha ao carregar ${rotulo}: ${error.message}`)
+      if (!data || data.length === 0) break
+      out.push(...(data as T[]))
+      if (data.length < PAGE) break
+    }
+    return out
   }
 
-  return <FluxoCaixaClient orgSlug={orgSlug} rows={rows} />
+  // A aba Categorias lê por COMPETÊNCIA, não por caixa — agregação própria
+  // (migration 232), ~1,5 mil grupos contra as 7 mil linhas da view.
+  const [rows, catRows, resSettings] = await Promise.all([
+    paginado<FluxoRow>('fin_fluxo_agregado', 'o fluxo de caixa'),
+    paginado<CatCompRow>('fin_categorias_competencia', 'as categorias por competência'),
+    sb.from('org_settings').select('finance_categorias').eq('org_id', orgId).maybeSingle(),
+  ])
+  const categorias = (resSettings?.data?.finance_categorias ?? []) as CategoriaGrupoLike[]
+
+  return <FluxoCaixaClient orgSlug={orgSlug} rows={rows} catRows={catRows} categorias={categorias} />
 }
