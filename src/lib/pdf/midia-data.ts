@@ -6,6 +6,7 @@
 // que buscam do banco.
 
 import { loadOrgDocs } from '@/lib/agency'
+import { imagemParaPdf } from './imagem'
 import { labelOf, parseMoney, MIDIA_TIPO_OPTIONS, MIDIA_PRAZO_OPTIONS, MIDIA_FATURAMENTO_OPTIONS } from '@/lib/midia'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -92,7 +93,7 @@ export async function loadMidiaDoc(supabase: any, orgId: string, midiaId: string
     numero: m.numero ?? null, serie: m.serie ?? null, tipoLabel,
     nomeArquivo: `${[m.serie, m.numero].filter(Boolean).join(' ')} | ${m.titulo ?? ''}`.trim(),
     agencia: agency,
-    logoUrl: settings?.logo_url ?? null,
+    logoUrl: await imagemParaPdf(settings?.logo_url),
     veiculo: {
       nome: veic?.name ?? '—',
       endereco: enderecoVeiculo,

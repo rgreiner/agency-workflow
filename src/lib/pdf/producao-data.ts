@@ -4,6 +4,7 @@
 // no que buscam do banco. Uma definição só do documento (lib/pdf/ProducaoDoc).
 
 import { loadOrgDocs } from '@/lib/agency'
+import { imagemParaPdf } from './imagem'
 import { parseMoney, MIDIA_PRAZO_OPTIONS } from '@/lib/midia'
 import type { Agencia } from './kit'
 
@@ -97,7 +98,7 @@ export async function loadProducaoDoc(supabase: any, orgId: string, producaoId: 
     tipoLabel: TIPO_LABEL[p.tipo] ?? p.tipo,
     numero: p.numero ?? null, serie: p.serie ?? null,
     nomeArquivo: `${[p.serie, p.numero].filter(Boolean).join(' ')} | ${p.titulo ?? ''}`.trim(),
-    agencia: agency, logoUrl: settings?.logo_url ?? null,
+    agencia: agency, logoUrl: await imagemParaPdf(settings?.logo_url),
     cliente, campanha, titulo: p.titulo ?? '',
     observacao: (p.observacao ?? '').trim(), textoLegal: (p.texto_legal ?? '').trim(),
     emissao: p.emissao ?? null, emissaoExtenso: dataExtenso(agency.cidade, p.emissao ?? null), cidade: agency.cidade,
@@ -166,8 +167,10 @@ export async function loadProducaoDoc(supabase: any, orgId: string, producaoId: 
   // orçamento
   const { data: fornRaw } = await supabase.from('fornecedores').select('id, name').eq('org_id', orgId)
   const fornMap = new Map<string, string>((fornRaw ?? []).map((f: any) => [f.id, f.name]))
-  const itens: OrcItem[] = (Array.isArray(det.itens) ? det.itens : []).map((it: any) => ({
-    nome: it?.nome ?? '', descricao: it?.descricao ?? '', imagem: it?.imagem || null,
+  const itens: OrcItem[] = await Promise.all((Array.isArray(det.itens) ? det.itens : []).map(async (it: any) => ({
+    nome: it?.nome ?? '', descricao: it?.descricao ?? '',
+    // Do volume e em PNG — a URL exige cookie e o arquivo é WebP (ver lib/pdf/imagem).
+    imagem: await imagemParaPdf(it?.imagem),
     opcoes: (Array.isArray(it?.opcoes) ? it.opcoes : []).map((o: any) => {
       const total = (parseInt(o?.quant || '1', 10) || 0) * money(o?.valor_unit)
       return {
@@ -176,6 +179,6 @@ export async function loadProducaoDoc(supabase: any, orgId: string, producaoId: 
         valorUnit: money(o?.valor_unit), total, selecionado: !!o?.selecionado,
       }
     }),
-  }))
+  })))
   return { ...base, tipo: 'orcamento', orcamento: { itens, notas: nfNotes } }
 }

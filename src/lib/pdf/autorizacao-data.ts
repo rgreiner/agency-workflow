@@ -23,6 +23,7 @@
 // nunca mais apareceria, já que a competência dele não volta.
 
 import { loadOrgDocs, type AgencyInfo } from '@/lib/agency'
+import { imagemParaPdf } from './imagem'
 import { labelOf, MIDIA_PRAZO_OPTIONS } from '@/lib/midia'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -159,7 +160,7 @@ export async function loadAutorizacao(
 
   return {
     agencia: orgDocs.agency,
-    logoUrl: (cfgRes?.data?.logo_url as string | null) ?? null,
+    logoUrl: await imagemParaPdf(cfgRes?.data?.logo_url as string | null),
     cliente,
     competencia,
     competenciaLabel: competenciaLabel(competencia),
