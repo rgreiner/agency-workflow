@@ -1,6 +1,9 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { toast } from 'sonner'
+import { Loader2 } from 'lucide-react'
+import { carregarCategoriasPorContato } from '@/app/actions/financeiro'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell, LabelList } from 'recharts'
 import { formatBRL } from '@/lib/midia'
 import { Select } from '@/components/ui/Select'
@@ -31,7 +34,8 @@ const pct = (v: number) => `${v < 10 ? v.toFixed(1) : Math.round(v)}%`
  * categoria. Realizado e a realizar entram juntos por padrão: em competência o
  * mês corrente é sempre parte um, parte outro.
  */
-export function CategoriasCompetencia({ rows, categorias }: {
+export function CategoriasCompetencia({ orgSlug, rows, categorias }: {
+  orgSlug: string
   rows: CatCompRow[]
   categorias: CategoriaGrupoLike[]
 }) {
@@ -45,6 +49,27 @@ export function CategoriasCompetencia({ rows, categorias }: {
   // Categorias desligadas na legenda, por natureza (os nomes não se repetem
   // entre receita e despesa, e o macro de uma não é o da outra).
   const [ocultas, setOcultas] = useState<{ receita: string[]; despesa: string[] }>({ receita: [], despesa: [] })
+  // Visão Hiper: as linhas com fornecedor só descem quando ela é ligada.
+  const [hiperRows, setHiperRows] = useState<CatCompRow[] | null>(null)
+  const [carregando, setCarregando] = useState(false)
+
+  async function trocaVisao(v: Visao) {
+    setVisao(v)
+    setOcultas({ receita: [], despesa: [] })
+    if (v !== 'hiper' || hiperRows || carregando) return
+    setCarregando(true)
+    const r = await carregarCategoriasPorContato(orgSlug)
+    setCarregando(false)
+    if ('error' in r && r.error) {
+      toast.error(`Não foi possível carregar por fornecedor: ${r.error}`)
+      setVisao('detalhe')
+      return
+    }
+    setHiperRows((r.rows ?? []) as CatCompRow[])
+  }
+
+  // useMemo: o `?? []` criaria um array novo a cada render e reagregaria tudo.
+  const linhas = useMemo(() => (visao === 'hiper' ? (hiperRows ?? []) : rows), [visao, hiperRows, rows])
   const alterna = (nat: 'receita' | 'despesa', nome: string) =>
     setOcultas(prev => ({
       ...prev,
@@ -54,11 +79,11 @@ export function CategoriasCompetencia({ rows, categorias }: {
   const anoOpts = [...new Set([...anos, anoAtual])].sort((a, b) => b - a).map(a => ({ value: String(a), label: String(a) }))
 
   const receita = useMemo(
-    () => serieCategorias(rows, { ano, tipo: 'receita', visao, foco, categorias, mesFoco, ocultas: ocultas.receita }),
-    [rows, ano, visao, foco, categorias, mesFoco, ocultas.receita])
+    () => serieCategorias(linhas, { ano, tipo: 'receita', visao, foco, categorias, mesFoco, ocultas: ocultas.receita }),
+    [linhas, ano, visao, foco, categorias, mesFoco, ocultas.receita])
   const despesa = useMemo(
-    () => serieCategorias(rows, { ano, tipo: 'despesa', visao, foco, categorias, mesFoco, ocultas: ocultas.despesa }),
-    [rows, ano, visao, foco, categorias, mesFoco, ocultas.despesa])
+    () => serieCategorias(linhas, { ano, tipo: 'despesa', visao, foco, categorias, mesFoco, ocultas: ocultas.despesa }),
+    [linhas, ano, visao, foco, categorias, mesFoco, ocultas.despesa])
 
   const mesCorrente = ano === anoAtual ? new Date().getMonth() : null
 
@@ -86,20 +111,26 @@ export function CategoriasCompetencia({ rows, categorias }: {
         </div>
 
         <div className="inline-flex bg-gray-100 rounded-xl p-0.5">
-          {([['macro', 'Macro'], ['detalhe', 'Detalhada']] as const).map(([v, label]) => (
-            <button key={v} onClick={() => { setVisao(v); setOcultas({ receita: [], despesa: [] }) }} aria-pressed={visao === v}
-              className={`px-3 py-1.5 text-sm font-medium rounded-[10px] transition-colors ${visao === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+          {([['macro', 'Macro'], ['detalhe', 'Detalhada'], ['hiper', 'Por fornecedor']] as const).map(([v, label]) => (
+            <button key={v} onClick={() => trocaVisao(v)} aria-pressed={visao === v} disabled={carregando}
+              className={`px-3 py-1.5 text-sm font-medium rounded-[10px] transition-colors inline-flex items-center gap-1.5 disabled:opacity-60 ${visao === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+              {v === 'hiper' && carregando && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               {label}
             </button>
           ))}
         </div>
       </div>
 
+      {carregando && (
+        <p className="text-sm text-gray-400 py-10 text-center bg-white border border-gray-200 rounded-xl">
+          Carregando por fornecedor…
+        </p>
+      )}
       <GraficoCategoria titulo="Receitas por categoria" serie={receita} categorias={categorias}
-        ano={ano} mesFoco={mesFoco} onMes={setMesFoco} mesCorrente={mesCorrente} tom="emerald"
+        ano={ano} mesFoco={mesFoco} onMes={setMesFoco} mesCorrente={mesCorrente} tom="emerald" visao={visao}
         onAlterna={n => alterna('receita', n)} onMostrarTudo={() => setOcultas(p => ({ ...p, receita: [] }))} />
       <GraficoCategoria titulo="Despesas por categoria" serie={despesa} categorias={categorias}
-        ano={ano} mesFoco={mesFoco} onMes={setMesFoco} mesCorrente={mesCorrente} tom="red"
+        ano={ano} mesFoco={mesFoco} onMes={setMesFoco} mesCorrente={mesCorrente} tom="red" visao={visao}
         onAlterna={n => alterna('despesa', n)} onMostrarTudo={() => setOcultas(p => ({ ...p, despesa: [] }))} />
 
       <p className="text-[11px] text-gray-400">
@@ -112,7 +143,7 @@ export function CategoriasCompetencia({ rows, categorias }: {
   )
 }
 
-function GraficoCategoria({ titulo, serie, categorias, ano, mesFoco, onMes, mesCorrente, tom, onAlterna, onMostrarTudo }: {
+function GraficoCategoria({ titulo, serie, categorias, ano, mesFoco, onMes, mesCorrente, tom, onAlterna, onMostrarTudo, visao }: {
   titulo: string
   serie: SerieCategorias
   categorias: CategoriaGrupoLike[]
@@ -123,6 +154,7 @@ function GraficoCategoria({ titulo, serie, categorias, ano, mesFoco, onMes, mesC
   tom: 'emerald' | 'red'
   onAlterna: (nome: string) => void
   onMostrarTudo: () => void
+  visao: Visao
 }) {
   const cores = useMemo(() => coresDeFatias(serie.categorias, categorias), [serie.categorias, categorias])
   const nomePorKey = useMemo(() => new Map(serie.categorias.map(f => [f.key, f.nome])), [serie.categorias])
@@ -135,7 +167,10 @@ function GraficoCategoria({ titulo, serie, categorias, ano, mesFoco, onMes, mesC
       <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
         <div>
           <h2 className="text-sm font-semibold text-gray-900">{titulo}</h2>
-          <p className="text-[11px] text-gray-400">{rotulo} · {visiveis.length} categoria{visiveis.length === 1 ? '' : 's'}</p>
+          <p className="text-[11px] text-gray-400">
+            {rotulo} · {visiveis.length} {visao === 'hiper' ? (visiveis.length === 1 ? 'linha' : 'linhas') : (visiveis.length === 1 ? 'categoria' : 'categorias')}
+            {visao === 'hiper' && ' (categoria · fornecedor)'}
+          </p>
         </div>
         <div className="text-right">
           <p className={`text-lg font-semibold ${accent}`}>{formatBRL(serie.total)}</p>
@@ -153,7 +188,7 @@ function GraficoCategoria({ titulo, serie, categorias, ano, mesFoco, onMes, mesC
         </p>
       ) : (
         mesFoco != null ? (
-          <MesIsolado fatias={visiveis} cores={cores} onAlterna={onAlterna} />
+          <MesIsolado fatias={visiveis} cores={cores} onAlterna={onAlterna} nomeLargo={visao === 'hiper'} />
         ) : (
         <div className="grid lg:grid-cols-[1fr_300px] gap-5">
           <div className="h-72 min-w-0">
@@ -226,7 +261,7 @@ function GraficoCategoria({ titulo, serie, categorias, ano, mesFoco, onMes, mesC
         </div>
       )}
 
-      {visiveis.length > 0 && <TabelaMesCategoria serie={serie} cores={cores} mesFoco={mesFoco} onMes={onMes} />}
+      {visiveis.length > 0 && <TabelaMesCategoria serie={serie} cores={cores} mesFoco={mesFoco} onMes={onMes} nomeLargo={visao === 'hiper'} />}
     </section>
   )
 }
@@ -236,8 +271,10 @@ function GraficoCategoria({ titulo, serie, categorias, ano, mesFoco, onMes, mesC
  * realizado × a realizar dentro de cada barra. É a leitura criteriosa — no
  * gráfico do ano as fatias finas do mês somem no empilhamento.
  */
-function MesIsolado({ fatias, cores, onAlterna }: {
+function MesIsolado({ fatias, cores, onAlterna, nomeLargo }: {
   fatias: FatiaCat[]; cores: Map<string, string>; onAlterna: (nome: string) => void
+  /** "Categoria · Fornecedor" não cabe na faixa de rótulo padrão. */
+  nomeLargo?: boolean
 }) {
   const dados = useMemo(
     () => [...fatias].sort((a, b) => b.total - a.total).map(f => ({
@@ -258,7 +295,10 @@ function MesIsolado({ fatias, cores, onAlterna }: {
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
           <XAxis type="number" domain={[0, max * 1.02]} tickFormatter={compactBRL}
             tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} />
-          <YAxis type="category" dataKey="nome" width={170} tick={{ fontSize: 11, fill: '#475569' }}
+          {/* `width` no tick faz o recharts quebrar o rótulo em vez de transbordar
+              sobre o gráfico — "Categoria · Fornecedor" passa de 40 caracteres. */}
+          <YAxis type="category" dataKey="nome" width={nomeLargo ? 260 : 170}
+            tick={{ fontSize: nomeLargo ? 10 : 11, fill: '#475569', width: nomeLargo ? 248 : 160 }}
             tickLine={false} axisLine={false} interval={0} />
           <Tooltip cursor={{ fill: '#f8fafc' }} content={<MesTooltip />} />
           {/* mesma cor da categoria nos dois; o que falta acontecer vem esmaecido */}
@@ -300,11 +340,12 @@ function MesTooltip({ active, payload }: { active?: boolean; payload?: MesToolti
 }
 
 /** Categoria × mês do ano: o mesmo dado do gráfico, para conferir número a número. */
-function TabelaMesCategoria({ serie, cores, mesFoco, onMes }: {
+function TabelaMesCategoria({ serie, cores, mesFoco, onMes, nomeLargo }: {
   serie: SerieCategorias
   cores: Map<string, string>
   mesFoco: number | null
   onMes: (mi: number | null) => void
+  nomeLargo?: boolean
 }) {
   const totalAno = serie.categorias.reduce((s, f) => s + f.porMes.reduce((a, b) => a + b, 0), 0)
   return (
@@ -325,7 +366,7 @@ function TabelaMesCategoria({ serie, cores, mesFoco, onMes }: {
             const soma = f.porMes.reduce((a, b) => a + b, 0)
             return (
               <tr key={f.key} className="hover:bg-gray-50/50">
-                <td className="px-5 py-1.5 text-gray-600 truncate max-w-[200px] sticky left-0 bg-white" title={f.nome}>
+                <td className={`px-5 py-1.5 text-gray-600 truncate sticky left-0 bg-white ${nomeLargo ? 'max-w-[320px]' : 'max-w-[200px]'}`} title={f.nome}>
                   <span className="inline-flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cores.get(f.key) }} />
                     {f.nome}

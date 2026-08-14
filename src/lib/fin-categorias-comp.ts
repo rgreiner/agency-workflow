@@ -14,18 +14,29 @@ export interface CatCompRow {
   tipo: string | null         // 'receita' | 'despesa'
   situacao: string | null     // 'realizado' | 'previsto'
   categoria: string | null
+  /** Só na visão Hiper (RPC `fin_categorias_contato`, migration 233). */
+  contato?: string | null
   valor: number | string | null
 }
 
 /** O que entra na conta: tudo, só o que já aconteceu, ou só o que falta acontecer. */
 export type Foco = 'tudo' | 'realizado' | 'previsto'
-/** Agrupar pelo macro-grupo da config (ex.: "Simples Nacional - DAS" → "Impostos e Taxas") ou pela categoria crua. */
-export type Visao = 'macro' | 'detalhe'
+/**
+ * Nível de agrupamento:
+ * · `macro`   — o grupo da DRE ("Impostos e Taxas")
+ * · `detalhe` — a categoria vinculada ao lançamento ("Simples Nacional - DAS")
+ * · `hiper`   — a categoria + o fornecedor/cliente ("Software / Licença de Uso · Google"),
+ *               que responde "subiu por causa de quem". Exige as linhas da RPC
+ *               `fin_categorias_contato`, carregadas sob demanda.
+ */
+export type Visao = 'macro' | 'detalhe' | 'hiper'
 
 export const MESES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 
-/** Acima disso o gráfico vira sopa: o resto some em "Outros" (em produção há mês com 30 categorias de despesa). */
+/** Acima disso o gráfico vira sopa: o resto some em "Outros" (em produção há mês com 30 categorias de despesa).
+ *  Na Hiper cabe mais linha: cada fatia é mais fina e o ponto do modo é justamente a cauda. */
 export const TOP_CATEGORIAS = 8
+export const TOP_HIPER = 12
 /** Rótulo do bucket do resto. Leva a contagem porque o cadastro TEM uma categoria
  *  chamada "Outros" — duas linhas com o mesmo nome no gráfico não se distinguem. */
 export const outrosLabel = (n: number) => `Outros (${n})`
@@ -116,7 +127,11 @@ export function serieCategorias(
     const mi = Number(r.mes.slice(5, 7)) - 1
     if (mi < 0 || mi > 11) continue
     const crua = r.categoria || '(sem categoria)'
-    const nome = visao === 'macro' ? (macro.get(crua.toLowerCase()) || crua) : crua
+    const nome = visao === 'macro'
+      ? (macro.get(crua.toLowerCase()) || crua)
+      : visao === 'hiper'
+        ? `${crua} · ${r.contato || '(sem fornecedor)'}`
+        : crua
     let e = acc.get(nome)
     if (!e) { e = zeros(); acc.set(nome, e) }
     ;(previsto ? e.prev : e.real)[mi] += num(r.valor)
@@ -148,8 +163,9 @@ export function serieCategorias(
     .map(f => ({ nome: f.nome, totalAno: f.totalAno }))
 
   // Top N + "Outros" — inclusive no gráfico, para o empilhamento não virar sopa.
-  const visiveis = todas.slice(0, TOP_CATEGORIAS)
-  const resto = todas.slice(TOP_CATEGORIAS)
+  const topN = visao === 'hiper' ? TOP_HIPER : TOP_CATEGORIAS
+  const visiveis = todas.slice(0, topN)
+  const resto = todas.slice(topN)
   const soma = (fs: typeof todas, campo: 'total' | 'realizado' | 'previsto' | 'totalAno') =>
     fs.reduce((s, f) => s + f[campo], 0)
   const fatias: FatiaCat[] = resto.length

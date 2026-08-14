@@ -1,8 +1,32 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { assertFinanceAccess } from '@/lib/finance'
 import { getUsuario } from '@/lib/auth/server'
 import { revalidatePath } from 'next/cache'
+
+/**
+ * Aba Categorias → visão Hiper: as somas por (mês, tipo, situação, categoria,
+ * contato). Sob demanda porque é o dobro das linhas da visão por categoria
+ * (3.653 contra 1.515 em produção) e o modo quase sempre fica desligado.
+ */
+export async function carregarCategoriasPorContato(orgSlug: string) {
+  const { supabase, orgId } = await assertFinanceAccess(orgSlug)
+  const PAGE = 1000
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any
+  const rows: unknown[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await sb.rpc('fin_categorias_contato', { p_org: orgId }).range(from, from + PAGE - 1)
+    // Devolve o erro para a tela avisar: lista vazia aqui se leria como "não
+    // teve custo com ninguém", que é uma decisão errada.
+    if (error) return { error: error.message }
+    if (!data || data.length === 0) break
+    rows.push(...data)
+    if (data.length < PAGE) break
+  }
+  return { rows }
+}
 
 /** Faturamento → "Lançar": cria o lançamento de uma mídia conferida. */
 /** Classificação escolhida na conferência do Faturamento (grava no lançamento). */

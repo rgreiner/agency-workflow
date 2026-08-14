@@ -131,7 +131,7 @@ export function FluxoCaixaClient({ orgSlug, rows, catRows, categorias }: {
       </div>
 
       {modo === 'categorias' ? (
-        <CategoriasCompetencia rows={catRows} categorias={categorias} />
+        <CategoriasCompetencia orgSlug={orgSlug} rows={catRows} categorias={categorias} />
       ) : (
         <>
         {/* controles */}
