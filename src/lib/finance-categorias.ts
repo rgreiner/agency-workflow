@@ -22,10 +22,18 @@ export interface CategoriaGrupoLike {
  * Mapa `nome-da-categoria (lower) → nome do macro-grupo` para agregar por macro
  * (ex.: "Simples Nacional - DAS" → "Impostos e Taxas"). Categoria de topo sem
  * filhos mapeia para si mesma. Usado nos gráficos do painel.
+ *
+ * `direcao` não é enfeite: o mesmo nome de categoria existe nos dois lados
+ * ("Empréstimos de Bancos" é filho de "Receita Não Operacional" e também de um
+ * grupo de saída). Sem filtrar, o último grupo do array vencia e a DESPESA
+ * aparecia dentro de um macro chamado "Receita Não Operacional".
  */
-export function macroPorCategoria(grupos: CategoriaGrupoLike[]): Map<string, string> {
+export function macroPorCategoria(
+  grupos: CategoriaGrupoLike[], direcao?: 'entrada' | 'saida',
+): Map<string, string> {
   const m = new Map<string, string>()
   for (const g of grupos) {
+    if (direcao && !grupoServeA(g, direcao)) continue
     const filhos = g.filhos ?? []
     if (filhos.length === 0) m.set(g.nome.toLowerCase(), g.nome)
     else for (const f of filhos) m.set(f.nome.toLowerCase(), g.nome)

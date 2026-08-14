@@ -80,7 +80,8 @@ export function PainelAnalise({ lancamentos, categorias, centros }: {
       ? periodoCorrente
       : (periodos.find(p => p <= periodoCorrente) ?? periodos[0] ?? '')
 
-  const macroMap = useMemo(() => macroPorCategoria(categorias), [categorias])
+  // 'saida': o macro do custo tem que sair de um grupo de saída (ver macroPorCategoria).
+  const macroMap = useMemo(() => macroPorCategoria(categorias, 'saida'), [categorias])
   const cores = useMemo(() => coresPorNome(categorias), [categorias])
   const coresCentro = useMemo(() => {
     const m = new Map<string, string>()

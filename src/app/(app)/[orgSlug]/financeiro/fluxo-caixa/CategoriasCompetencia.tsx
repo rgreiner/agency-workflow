@@ -1,14 +1,16 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell, LabelList } from 'recharts'
 import { formatBRL } from '@/lib/midia'
 import { Select } from '@/components/ui/Select'
 import type { CategoriaGrupoLike } from '@/lib/finance-categorias'
 import {
   serieCategorias, coresDeFatias, anosDisponiveis, MESES_ABBR,
-  type CatCompRow, type Foco, type Visao, type SerieCategorias,
+  type CatCompRow, type Foco, type Visao, type SerieCategorias, type FatiaCat,
 } from '@/lib/fin-categorias-comp'
+
+const MESES_NOME = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
 const FOCOS: { value: Foco; label: string }[] = [
   { value: 'tudo', label: 'Tudo' },
@@ -55,7 +57,16 @@ export function CategoriasCompetencia({ rows, categorias }: {
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="w-28"><Select value={String(ano)} onChange={v => { setAno(Number(v)); setMesFoco(null) }} options={anoOpts} /></div>
+        <div className="w-28"><Select value={String(ano)} onChange={v => setAno(Number(v))} options={anoOpts} /></div>
+
+        {/* Isolar o mês: o gráfico deixa de ser o ano e passa a ser a composição
+            daquele mês, categoria por categoria. */}
+        <div className="w-44">
+          <Select value={mesFoco == null ? 'ano' : String(mesFoco)}
+            onChange={v => setMesFoco(v === 'ano' ? null : Number(v))}
+            options={[{ value: 'ano', label: 'Ano todo' },
+              ...MESES_NOME.map((m, i) => ({ value: String(i), label: m }))]} />
+        </div>
 
         <div className="inline-flex bg-gray-100 rounded-xl p-0.5">
           {FOCOS.map(f => (
@@ -74,13 +85,6 @@ export function CategoriasCompetencia({ rows, categorias }: {
             </button>
           ))}
         </div>
-
-        {mesFoco != null && (
-          <button onClick={() => setMesFoco(null)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-xl bg-orange-50 text-orange-700 hover:bg-orange-100 transition-colors">
-            {MESES_ABBR[mesFoco]}/{String(ano).slice(2)} · limpar mês
-          </button>
-        )}
       </div>
 
       <GraficoCategoria titulo="Receitas por categoria" serie={receita} categorias={categorias}
@@ -90,7 +94,8 @@ export function CategoriasCompetencia({ rows, categorias }: {
 
       <p className="text-[11px] text-gray-400">
         Por competência (o mês a que o valor se refere), não pela data em que o dinheiro andou.
-        Transferência entre contas fica de fora. Clique numa barra para ver só aquele mês.
+        Inclui o histórico importado da Conta Azul (realizado até 16/07/2026) e o livro-caixa do Flow.
+        Transferência entre contas fica de fora. Clique numa barra para isolar o mês.
       </p>
     </div>
   )
@@ -109,7 +114,7 @@ function GraficoCategoria({ titulo, serie, categorias, ano, mesFoco, onMes, mesC
   const cores = useMemo(() => coresDeFatias(serie.categorias, categorias), [serie.categorias, categorias])
   const nomePorKey = useMemo(() => new Map(serie.categorias.map(f => [f.key, f.nome])), [serie.categorias])
   const visiveis = serie.categorias.filter(f => f.total > 0.005)
-  const rotulo = mesFoco != null ? `${MESES_ABBR[mesFoco]}/${String(ano).slice(2)}` : String(ano)
+  const rotulo = mesFoco != null ? `${MESES_NOME[mesFoco]} de ${ano}` : String(ano)
   const accent = tom === 'emerald' ? 'text-emerald-600' : 'text-red-600'
 
   return (
@@ -130,6 +135,9 @@ function GraficoCategoria({ titulo, serie, categorias, ano, mesFoco, onMes, mesC
       {serie.total === 0 && serie.pontos.every(p => p.total === 0) ? (
         <p className="text-sm text-gray-400 py-10 text-center">Sem movimento nesta natureza em {ano}.</p>
       ) : (
+        mesFoco != null ? (
+          <MesIsolado fatias={visiveis} cores={cores} />
+        ) : (
         <div className="grid lg:grid-cols-[1fr_300px] gap-5">
           <div className="h-72 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
@@ -137,7 +145,7 @@ function GraficoCategoria({ titulo, serie, categorias, ano, mesFoco, onMes, mesC
                 onClick={next => {
                   // recharts tipa activeTooltipIndex como number | string | null
                   const i = Number(next?.activeTooltipIndex)
-                  if (Number.isInteger(i)) onMes(mesFoco === i ? null : i)
+                  if (Number.isInteger(i)) onMes(i)
                 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                 <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={{ stroke: '#e2e8f0' }} />
@@ -150,20 +158,14 @@ function GraficoCategoria({ titulo, serie, categorias, ano, mesFoco, onMes, mesC
                 )}
                 {serie.categorias.map((f, i) => (
                   <Bar key={f.key} dataKey={f.key} name={f.nome} stackId="cat"
-                    fill={cores.get(f.key)} maxBarSize={34}
-                    radius={i === serie.categorias.length - 1 ? [3, 3, 0, 0] : undefined}>
-                    {/* mês fora do foco fica apagado — a leitura vai para o mês escolhido */}
-                    {serie.pontos.map(p => (
-                      <Cell key={p.mi} cursor="pointer" fillOpacity={mesFoco == null || mesFoco === p.mi ? 1 : 0.3} />
-                    ))}
-                  </Bar>
+                    fill={cores.get(f.key)} maxBarSize={34} cursor="pointer"
+                    radius={i === serie.categorias.length - 1 ? [3, 3, 0, 0] : undefined} />
                 ))}
               </BarChart>
             </ResponsiveContainer>
           </div>
 
           <ul className="space-y-2 min-w-0 self-start">
-            {visiveis.length === 0 && <li className="text-sm text-gray-400">Sem movimento em {rotulo}.</li>}
             {visiveis.map(f => (
               <li key={f.key} className="min-w-0">
                 <div className="flex items-baseline justify-between gap-2 mb-0.5">
@@ -178,19 +180,69 @@ function GraficoCategoria({ titulo, serie, categorias, ano, mesFoco, onMes, mesC
                 <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
                   <div className="h-full rounded-full" style={{ width: `${Math.max(f.pct, 2)}%`, backgroundColor: cores.get(f.key) }} />
                 </div>
-                {f.previsto > 0.005 && f.realizado > 0.005 && (
-                  <p className="text-[10px] text-gray-400 mt-0.5 tabular-nums">
-                    realizado {formatBRL(f.realizado)} · a realizar {formatBRL(f.previsto)}
-                  </p>
-                )}
               </li>
             ))}
           </ul>
         </div>
+        )
       )}
 
       {visiveis.length > 0 && <TabelaMesCategoria serie={serie} cores={cores} mesFoco={mesFoco} onMes={onMes} />}
     </section>
+  )
+}
+
+/**
+ * Mês isolado: a composição daquele mês, categoria por categoria, com a divisão
+ * realizado × a realizar dentro de cada barra. É a leitura criteriosa — no
+ * gráfico do ano as fatias finas do mês somem no empilhamento.
+ */
+function MesIsolado({ fatias, cores }: { fatias: FatiaCat[]; cores: Map<string, string> }) {
+  const dados = useMemo(
+    () => [...fatias].sort((a, b) => b.total - a.total).map(f => ({
+      key: f.key, nome: f.nome, realizado: f.realizado, previsto: f.previsto,
+      total: f.total, pct: f.pct,
+      rotulo: `${formatBRL(f.total)}  ${pct(f.pct)}`,
+    })),
+    [fatias])
+  if (dados.length === 0) return <p className="text-sm text-gray-400 py-10 text-center">Sem movimento neste mês.</p>
+  // Sobra à direita para o rótulo de valor + % não ser cortado.
+  const max = Math.max(...dados.map(d => d.total))
+
+  return (
+    <div style={{ height: Math.max(180, dados.length * 38 + 24) }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={dados} layout="vertical" margin={{ top: 4, right: 130, left: 8, bottom: 4 }} barCategoryGap="22%">
+          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+          <XAxis type="number" domain={[0, max * 1.02]} tickFormatter={compactBRL}
+            tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} />
+          <YAxis type="category" dataKey="nome" width={170} tick={{ fontSize: 11, fill: '#475569' }}
+            tickLine={false} axisLine={false} interval={0} />
+          <Tooltip cursor={{ fill: '#f8fafc' }} content={<MesTooltip />} />
+          {/* mesma cor da categoria nos dois; o que falta acontecer vem esmaecido */}
+          <Bar dataKey="realizado" name="Realizado" stackId="m" maxBarSize={26}>
+            {dados.map(d => <Cell key={d.key} fill={cores.get(d.key)} />)}
+          </Bar>
+          <Bar dataKey="previsto" name="A realizar" stackId="m" maxBarSize={26} radius={[0, 3, 3, 0]}>
+            {dados.map(d => <Cell key={d.key} fill={cores.get(d.key)} fillOpacity={0.35} />)}
+            <LabelList dataKey="rotulo" position="right" fontSize={11} fill="#64748b" />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+interface MesTooltipItem { payload?: { nome: string; realizado: number; previsto: number; total: number; pct: number } }
+function MesTooltip({ active, payload }: { active?: boolean; payload?: MesTooltipItem[] }) {
+  const d = payload?.[0]?.payload
+  if (!active || !d) return null
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
+      <p className="font-semibold text-gray-900 mb-1">{d.nome}</p>
+      <p className="text-gray-700">{formatBRL(d.total)} <span className="text-gray-400">· {pct(d.pct)} do mês</span></p>
+      <p className="text-gray-500 mt-0.5">realizado {formatBRL(d.realizado)} · a realizar {formatBRL(d.previsto)}</p>
+    </div>
   )
 }
 

@@ -26,7 +26,9 @@ export const MESES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago
 
 /** Acima disso o gráfico vira sopa: o resto some em "Outros" (em produção há mês com 30 categorias de despesa). */
 export const TOP_CATEGORIAS = 8
-export const OUTROS = 'Outros'
+/** Rótulo do bucket do resto. Leva a contagem porque o cadastro TEM uma categoria
+ *  chamada "Outros" — duas linhas com o mesmo nome no gráfico não se distinguem. */
+export const outrosLabel = (n: number) => `Outros (${n})`
 
 const num = (v: number | string | null) => Math.abs(Number(v ?? 0))
 
@@ -50,6 +52,8 @@ export interface FatiaCat {
   pct: number
   /** valor por mês do ano, índice 0 = janeiro. */
   porMes: number[]
+  /** é o bucket "Outros (N)", não uma categoria de verdade. */
+  resto?: boolean
 }
 
 export interface PontoMes {
@@ -90,7 +94,7 @@ export function serieCategorias(
   },
 ): SerieCategorias {
   const { ano, tipo, visao, foco, categorias, mesFoco = null } = opts
-  const macro = macroPorCategoria(categorias)
+  const macro = macroPorCategoria(categorias, tipo === 'receita' ? 'entrada' : 'saida')
 
   // categoria → [realizado[12], previsto[12]]
   const acc = new Map<string, { real: number[]; prev: number[] }>()
@@ -139,7 +143,8 @@ export function serieCategorias(
   const fatias: FatiaCat[] = resto.length
     ? [...visiveis, {
         key: '',
-        nome: OUTROS,
+        resto: true,
+        nome: outrosLabel(resto.length),
         totalAno: soma(resto, 'totalAno'),
         total: soma(resto, 'total'),
         realizado: soma(resto, 'realizado'),
@@ -179,7 +184,7 @@ export function coresDeFatias(fatias: FatiaCat[], categorias: CategoriaGrupoLike
   const cfg = coresPorNome(categorias)
   const m = new Map<string, string>()
   for (const f of fatias) {
-    m.set(f.key, f.nome === OUTROS ? '#cbd5e1' : (cfg.get(f.nome.toLowerCase()) ?? PALETA[hash(f.nome) % PALETA.length]))
+    m.set(f.key, f.resto ? '#cbd5e1' : (cfg.get(f.nome.toLowerCase()) ?? PALETA[hash(f.nome) % PALETA.length]))
   }
   return m
 }
