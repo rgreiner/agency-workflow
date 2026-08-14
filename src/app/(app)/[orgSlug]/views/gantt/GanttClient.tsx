@@ -29,6 +29,7 @@ const ZOOM_OPTIONS = [
 ]
 const SCRUB_PX_PER_DAY = 64   // px de scroll horizontal por dia (menos sensível que a largura do dia)
 const SCRUB_MAX_STEP   = 4    // máx. de dias por evento de wheel (tira o overshoot da inércia)
+const DRAG_MIN_PX      = 5    // abaixo disso é clique (abre a tarefa), não arrasto
 
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -159,7 +160,9 @@ export function GanttClient({ activities, semPrazo = [], campMap, profiles, work
   // ── Bandeja "sem prazo": arrastar a pílula até a régua dá a data ───────
   // Guarda o retângulo da linha no pointerdown: o dia é o índice da coluna sob o
   // cursor, e a linha não muda de lugar durante o arrasto.
-  const agendarRef = useRef<{ id: string; rect: DOMRect; dia: number | null } | null>(null)
+  // `x0`/`moveu`: a mesma pílula serve para arrastar (dar prazo) e para clicar
+  // (abrir a tarefa) — sem o limiar, um clique com tremida vira agendamento.
+  const agendarRef = useRef<{ id: string; rect: DOMRect; dia: number | null; x0: number; y0: number; moveu: boolean } | null>(null)
   const [agendar, setAgendar] = useState<{ id: string; dia: number | null } | null>(null)
   const [bandejaAberta, setBandejaAberta] = useState(true)
 
@@ -319,9 +322,8 @@ export function GanttClient({ activities, semPrazo = [], campMap, profiles, work
     setDrag(null)
 
     // Click (no significant movement) → open activity page
-    if (Math.abs(d.deltaX) < 5) {
-      const camp = campMap[a.campaign_id]
-      router.push(`/${orgSlug}/workspaces/${camp.workspaceId}/campaigns/${a.campaign_id}/activities/${a.id}?from=${encodeURIComponent(`/${orgSlug}/views/gantt`)}`)
+    if (Math.abs(d.deltaX) < DRAG_MIN_PX) {
+      abrirAtividade(a)
       return
     }
 
@@ -548,6 +550,13 @@ export function GanttClient({ activities, semPrazo = [], campMap, profiles, work
 
   /** Grava a data escolhida na bandeja. Só o PRAZO: o início segue nulo (a barra
    *  vira um dia), a não ser que a tarefa já tivesse início anterior. */
+  /** Abre a tarefa (modal interceptado) guardando a volta para o Gantt. */
+  function abrirAtividade(a: Activity) {
+    const camp = campMap[a.campaign_id]
+    if (!camp) return
+    router.push(`/${orgSlug}/workspaces/${camp.workspaceId}/campaigns/${a.campaign_id}/activities/${a.id}?from=${encodeURIComponent(`/${orgSlug}/views/gantt`)}`)
+  }
+
   function darPrazo(a: Activity, ymd: string) {
     const inicio = a.start_date?.slice(0, 10) ?? null
     startTransition(async () => {
@@ -563,13 +572,18 @@ export function GanttClient({ activities, semPrazo = [], campMap, profiles, work
     const linha = (e.currentTarget as Element).closest('[data-linha-sem-prazo]')
     if (!linha) return
     ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
-    agendarRef.current = { id: a.id, rect: linha.getBoundingClientRect(), dia: null }
+    agendarRef.current = { id: a.id, rect: linha.getBoundingClientRect(), dia: null, x0: e.clientX, y0: e.clientY, moveu: false }
     setAgendar({ id: a.id, dia: null })
   }
 
   function onPilulaMove(e: React.PointerEvent, a: Activity) {
     const st = agendarRef.current
     if (!st || st.id !== a.id) return
+    // Só vira arrasto depois do limiar: antes disso ainda é um clique.
+    if (!st.moveu) {
+      if (Math.abs(e.clientX - st.x0) < DRAG_MIN_PX && Math.abs(e.clientY - st.y0) < DRAG_MIN_PX) return
+      st.moveu = true
+    }
     const i = Math.floor((e.clientX - st.rect.left) / DAY_W)
     const dia = i >= 0 && i < DAYS ? i : null
     if (dia === st.dia) return
@@ -581,9 +595,12 @@ export function GanttClient({ activities, semPrazo = [], campMap, profiles, work
     const st = agendarRef.current
     if (!st || st.id !== a.id) return
     ;(e.currentTarget as Element).releasePointerCapture(e.pointerId)
-    const dia = st.dia
+    const { dia, moveu } = st
     agendarRef.current = null
     setAgendar(null)
+    // Clique seco abre a tarefa: sem o contexto dela não dá para escolher o
+    // prazo, e era justamente para isso que a fila existia.
+    if (!moveu) { abrirAtividade(a); return }
     if (dia == null) return                       // soltou fora da régua: nada acontece
     darPrazo(a, toYMD(days[dia]))
   }
@@ -617,11 +634,11 @@ export function GanttClient({ activities, semPrazo = [], campMap, profiles, work
             onPointerMove={e => onPilulaMove(e, a)}
             onPointerUp={e => onPilulaUp(e, a)}
             onPointerCancel={() => { agendarRef.current = null; setAgendar(null) }}
-            title="Arraste até o dia do prazo"
+            title="Clique para abrir · arraste até o dia do prazo"
             className={cn(
               'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium truncate select-none',
               'bg-amber-50 text-amber-800 border border-amber-300 shadow-sm',
-              st ? 'cursor-grabbing ring-2 ring-amber-400' : 'cursor-grab hover:bg-amber-100'
+              st?.dia != null ? 'cursor-grabbing ring-2 ring-amber-400' : 'cursor-pointer hover:bg-amber-100'
             )}
             style={{ touchAction: 'none' }}>
             <GripVertical className="w-3 h-3 shrink-0 opacity-60" />
@@ -853,7 +870,7 @@ export function GanttClient({ activities, semPrazo = [], campMap, profiles, work
               <span className="text-sm font-semibold text-amber-800">Sem prazo</span>
               <span className="text-xs text-amber-700">{semPrazoFiltradas.length}</span>
               <span className="text-[11px] text-amber-600/80 hidden sm:inline">
-                {bandejaAberta ? '— arraste até o dia do prazo' : '— clique para abrir'}
+                {bandejaAberta ? '— clique para abrir · arraste até o dia do prazo' : '— clique para expandir'}
               </span>
               <ChevronRight className={cn('w-3.5 h-3.5 text-amber-600 transition-transform', bandejaAberta && 'rotate-90')} />
             </button>
