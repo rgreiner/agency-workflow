@@ -30,6 +30,7 @@ export async function createPosition(orgSlug: string, formData: FormData) {
     p_op_ver_tudo: formData.get('op_ver_tudo') === 'true',
     p_op_midias: formData.get('op_midias') === 'true',
     p_op_producao: formData.get('op_producao') === 'true',
+    p_op_midia_hub: formData.get('op_midia_hub') === 'true',
   })
 
   if (error) return { error: error.message }
@@ -56,6 +57,7 @@ export async function updatePosition(orgSlug: string, positionId: string, formDa
     p_op_ver_tudo: formData.get('op_ver_tudo') === 'true',
     p_op_midias: formData.get('op_midias') === 'true',
     p_op_producao: formData.get('op_producao') === 'true',
+    p_op_midia_hub: formData.get('op_midia_hub') === 'true',
   })
 
   if (error) return { error: error.message }

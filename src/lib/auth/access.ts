@@ -16,6 +16,9 @@ export interface OperacionalAccess {
   listaGlobal: boolean
   midias: boolean
   producao: boolean
+  /** Hub de Mídia (operação): toggle PRÓPRIO do cargo — `midias` é o comercial
+   *  (PI/MX) e está ligado também na Revisão. */
+  midiaHub: boolean
   financeiro: boolean
   cadastros: boolean
   rh: boolean
@@ -24,7 +27,7 @@ export interface OperacionalAccess {
   positionName: string | null
 }
 
-type PosRow = { name?: string | null; op_ver_tudo?: boolean | null; op_midias?: boolean | null; op_producao?: boolean | null }
+type PosRow = { name?: string | null; op_ver_tudo?: boolean | null; op_midias?: boolean | null; op_producao?: boolean | null; op_midia_hub?: boolean | null }
 export interface MembershipRow {
   role: string
   can_finance?: boolean | null
@@ -34,7 +37,7 @@ export interface MembershipRow {
 }
 
 /** Colunas a selecionar em organization_members para computar o acesso. */
-export const ACCESS_SELECT = 'role, can_finance, can_vendas, can_rh, org_positions(name, op_ver_tudo, op_midias, op_producao)'
+export const ACCESS_SELECT = 'role, can_finance, can_vendas, can_rh, org_positions(name, op_ver_tudo, op_midias, op_producao, op_midia_hub)'
 
 export function computeAccess(m: MembershipRow): OperacionalAccess {
   const isAdmin = m.role === 'owner' || m.role === 'admin'
@@ -44,14 +47,16 @@ export function computeAccess(m: MembershipRow): OperacionalAccess {
   const canVendas = !!m.can_vendas
   const midias = verTudo || (canVendas && !!pos?.op_midias)
   const producao = verTudo || (canVendas && !!pos?.op_producao)
+  // Hub de Mídia NÃO herda de can_vendas: é a operação da mídia, não a venda.
+  const midiaHub = verTudo || !!pos?.op_midia_hub
   const financeiro = verTudo || canFinance
   const cadastros = verTudo || canVendas || canFinance
   // RH é sensível: só owner/admin OU can_rh explícito (não herda de vendas/finance).
   const rh = verTudo || !!m.can_rh
   return {
-    verTudo, midias, producao, financeiro, cadastros, rh,
+    verTudo, midias, producao, midiaHub, financeiro, cadastros, rh,
     listaGlobal: isAdmin || m.role === 'manager' || verTudo,
-    operacional: midias || producao || financeiro || cadastros || rh,
+    operacional: midias || producao || midiaHub || financeiro || cadastros || rh,
     isOwner: m.role === 'owner',
     positionName: pos?.name ?? null,
   }

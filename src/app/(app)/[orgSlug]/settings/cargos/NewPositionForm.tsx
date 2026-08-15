@@ -33,6 +33,7 @@ export function NewPositionForm({ orgSlug }: Props) {
   const [verTudo, setVerTudo] = useState(false)
   const [midias, setMidias] = useState(false)
   const [producao, setProducao] = useState(false)
+  const [midiaHub, setMidiaHub] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
 
@@ -61,6 +62,7 @@ export function NewPositionForm({ orgSlug }: Props) {
     selected.forEach(s => fd.append('statuses', s))
     fd.append('op_ver_tudo', String(verTudo))
     fd.append('op_midias', String(midias))
+    fd.append('op_midia_hub', String(midiaHub))
     fd.append('op_producao', String(producao))
     startTransition(async () => {
       const res = await createPosition(orgSlug, fd)
@@ -140,8 +142,8 @@ export function NewPositionForm({ orgSlug }: Props) {
 
         {/* Acesso ao Operacional */}
         <OperacionalToggles
-          verTudo={verTudo} midias={midias} producao={producao}
-          setVerTudo={setVerTudo} setMidias={setMidias} setProducao={setProducao}
+          verTudo={verTudo} midias={midias} producao={producao} midiaHub={midiaHub}
+          setVerTudo={setVerTudo} setMidias={setMidias} setProducao={setProducao} setMidiaHub={setMidiaHub}
         />
 
         {/* Status checkboxes */}

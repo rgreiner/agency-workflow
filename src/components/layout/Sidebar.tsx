@@ -24,6 +24,7 @@ import {
   PenTool,
   Search,
   Megaphone,
+  Radio,
   ClipboardList,
   Clock,
   ClipboardCheck,
@@ -66,6 +67,7 @@ interface SidebarProps {
   positionName?: string | null
   /** Permissão para ver "Liberação de mídias". */
   canMidias?: boolean
+  canMidiaHub?: boolean
   /** Permissão para ver "Liberação de Produção". */
   canProducao?: boolean
   /** Permissão para ver/operar o grupo Financeiro. */
@@ -90,6 +92,10 @@ interface NavGroupDef { id: string; label: string; icon: LucideIcon; items: NavI
 
 // Grupos do módulo comercial/financeiro (SigaSW → One a One).
 const COMERCIAL_GROUPS: NavGroupDef[] = [
+  { id: 'midia_hub', label: 'Operação', icon: Radio, items: [
+    { label: 'Painel',             href: 'midia' },
+    { label: 'Clientes e rotinas', href: 'midia/clientes' },
+  ] },
   { id: 'midias', label: 'Liberação de mídias', icon: Megaphone, items: [
     { label: 'Simplificada', href: 'midias/simplificada' },
     { label: 'Impressa',     href: 'midias/impressa' },
@@ -204,11 +210,14 @@ const VIEWS = [
  * conciliação), a lista virou uma pilha em que achar as coisas custava rolagem.
  * Agora cada um é um contexto próprio (pedido do Rafael, 05/08).
  */
-type SidebarMode = 'trabalho' | 'comercial' | 'rh' | 'financeiro'
+type SidebarMode = 'trabalho' | 'comercial' | 'midia' | 'rh' | 'financeiro'
 
 /** A que modo cada grupo do menu pertence. */
 const GRUPO_MODO: Record<string, SidebarMode> = {
-  midias: 'comercial', producao: 'comercial', cadastros: 'comercial',
+  // Mídia é um contexto só: a operação (Hub) e a liberação de PI/MX moram
+  // juntas, porque é a mesma pessoa fazendo as duas coisas.
+  midia_hub: 'midia', midias: 'midia',
+  producao: 'comercial', cadastros: 'comercial',
   rh: 'rh', financeiro: 'financeiro',
 }
 
@@ -216,7 +225,10 @@ const GRUPO_MODO: Record<string, SidebarMode> = {
 function modeForPath(path: string, base: string): SidebarMode | null {
   if (path.startsWith(`${base}/rh`)) return 'rh'
   if (path.startsWith(`${base}/financeiro`)) return 'financeiro'
-  if (['midias', 'producao', 'cadastros', 'relatorios', 'solicitacoes', 'documentos']
+  // `/midia` (Hub) antes de `/midias` (comercial) seria ambíguo pelo prefixo —
+  // os dois caem no mesmo modo, então a ordem aqui não muda o resultado.
+  if (path.startsWith(`${base}/midia`)) return 'midia'
+  if (['producao', 'cadastros', 'relatorios', 'solicitacoes', 'documentos']
       .some(p => path.startsWith(`${base}/${p}`))) return 'comercial'
   if (['dashboard', 'views', 'docs', 'boards'].some(p => path.startsWith(`${base}/${p}`))) return 'trabalho'
   // `workspaces` fica NEUTRA de propósito: é "Espaços" no Trabalho e "Clientes"
@@ -229,6 +241,7 @@ function modeForPath(path: string, base: string): SidebarMode | null {
 const MODE_TABS: { m: SidebarMode; Icon: LucideIcon; label: string }[] = [
   { m: 'trabalho',   Icon: SquareKanban, label: 'Trabalho' },
   { m: 'comercial',  Icon: Building2,    label: 'Comercial' },
+  { m: 'midia',      Icon: Radio,        label: 'Mídia' },
   { m: 'financeiro', Icon: Wallet,       label: 'Financeiro' },
   { m: 'rh',         Icon: UserCog,      label: 'RH' },
 ]
@@ -236,6 +249,7 @@ const MODE_TABS: { m: SidebarMode; Icon: LucideIcon; label: string }[] = [
 export function Sidebar({
   orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#f97316', canManage,
   positionName, canMidias = false, canProducao = false, canFinance = false, canCadastros = false, canRh = false,
+  canMidiaHub = false,
   canListaGlobal = false,
   onboardingPendente = 0, collapsed, onCollapse, onExpand,
 }: SidebarProps) {
@@ -248,7 +262,7 @@ export function Sidebar({
   // Grupos do Operacional: cada seção aparece conforme cargo × toggles (ver
   // computeAccess). Mídias/Produção dependem do cargo; Financeiro do can_finance;
   // Cadastros de can_vendas OU can_finance.
-  const groupVisible: Record<string, boolean> = { midias: canMidias, producao: canProducao, financeiro: canFinance, cadastros: canCadastros, rh: canRh }
+  const groupVisible: Record<string, boolean> = { midia_hub: canMidiaHub, midias: canMidias, producao: canProducao, financeiro: canFinance, cadastros: canCadastros, rh: canRh }
   const comercialGroups = COMERCIAL_GROUPS.filter(g => groupVisible[g.id])
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   useEffect(() => {
@@ -275,10 +289,11 @@ export function Sidebar({
   // Modo da sidebar: "Trabalho" (visões + espaços) × "Operacional" (mídia/produção/
   // financeiro/cadastros) — um contexto por vez p/ reduzir a poluição. O switcher só
   // aparece com permissão; ao navegar, o modo acompanha a página atual.
-  const canComercial = canMidias || canProducao || canCadastros
-  const canOperacional = canComercial || canFinance || canRh
+  const canComercial = canProducao || canCadastros
+  const canMidiaModo = canMidiaHub || canMidias
+  const canOperacional = canComercial || canMidiaModo || canFinance || canRh
   const modoPermitido: Record<SidebarMode, boolean> = {
-    trabalho: true, comercial: canComercial, financeiro: canFinance, rh: canRh,
+    trabalho: true, comercial: canComercial, midia: canMidiaModo, financeiro: canFinance, rh: canRh,
   }
   // Só mostra a aba de quem pode entrar nela: quem não tem RH nunca vê a aba RH.
   const abas = MODE_TABS.filter(a => modoPermitido[a.m])

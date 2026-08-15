@@ -142,6 +142,7 @@ export default async function OrgLayout({
         canFinance={access.financeiro}
         canCadastros={access.cadastros}
         canRh={access.rh}
+        canMidiaHub={access.midiaHub}
         canManage={access.isOwner}
         canListaGlobal={access.listaGlobal}
         onboardingPendente={onboardingPendente}

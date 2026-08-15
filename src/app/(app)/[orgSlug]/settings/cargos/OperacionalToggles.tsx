@@ -7,14 +7,17 @@ import { cn } from '@/lib/utils'
  * Marcadores de acesso ao Operacional de um cargo. "Vê tudo" (Diretoria) sobrepõe
  * os demais — quando ligado, Mídias/Produção ficam desabilitados (implícitos).
  */
-export function OperacionalToggles({ verTudo, midias, producao, setVerTudo, setMidias, setProducao }: {
-  verTudo: boolean; midias: boolean; producao: boolean
-  setVerTudo: (v: boolean) => void; setMidias: (v: boolean) => void; setProducao: (v: boolean) => void
+export function OperacionalToggles({ verTudo, midias, producao, midiaHub, setVerTudo, setMidias, setProducao, setMidiaHub }: {
+  verTudo: boolean; midias: boolean; producao: boolean; midiaHub: boolean
+  setVerTudo: (v: boolean) => void; setMidias: (v: boolean) => void
+  setProducao: (v: boolean) => void; setMidiaHub: (v: boolean) => void
 }) {
   const rows = [
     { checked: verTudo, onChange: setVerTudo, disabled: false, label: 'Vê tudo (Diretoria)', hint: 'Enxerga todas as seções, ignora os toggles do usuário' },
     { checked: midias, onChange: setMidias, disabled: verTudo, label: 'Libera Mídias', hint: 'Com Vendas ligado no usuário, mostra Liberação de mídias' },
     { checked: producao, onChange: setProducao, disabled: verTudo, label: 'Libera Produção', hint: 'Com Vendas ligado no usuário, mostra Liberação de Produção' },
+    // Não depende de Vendas: é a OPERAÇÃO da mídia (rotinas, clientes), não a venda.
+    { checked: midiaHub, onChange: setMidiaHub, disabled: verTudo, label: 'Opera a Mídia (Hub)', hint: 'Painel da mídia, clientes e rotinas — independe do toggle Vendas' },
   ]
   return (
     <div>

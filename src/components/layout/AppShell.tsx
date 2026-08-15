@@ -23,6 +23,7 @@ interface Props {
   positionName?: string | null
   /** Permissão para ver "Liberação de mídias". */
   canMidias?: boolean
+  canMidiaHub?: boolean
   /** Permissão para ver "Liberação de Produção". */
   canProducao?: boolean
   /** Permissão para ver/operar o grupo Financeiro. */
@@ -44,7 +45,7 @@ interface Props {
  * a própria Sidebar mostra um botão flutuante para reabrir.
  */
 export function AppShell({
-  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, canMidias, canProducao, canFinance, canCadastros, canRh, canManage, canListaGlobal, onboardingPendente, children,
+  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, canMidias, canMidiaHub, canProducao, canFinance, canCadastros, canRh, canManage, canListaGlobal, onboardingPendente, children,
 }: Props) {
   const [collapsed, setCollapsedState] = useState(false)
 
@@ -70,6 +71,7 @@ export function AppShell({
         accentColor={accentColor}
         positionName={positionName}
         canMidias={canMidias}
+        canMidiaHub={canMidiaHub}
         canProducao={canProducao}
         canFinance={canFinance}
         canCadastros={canCadastros}

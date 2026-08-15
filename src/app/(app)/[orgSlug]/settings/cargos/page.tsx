@@ -28,9 +28,9 @@ export default async function CargosPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: positions } = await (supabase as any)
     .from('org_positions')
-    .select('id, name, color, allowed_statuses, op_ver_tudo, op_midias, op_producao')
+    .select('id, name, color, allowed_statuses, op_ver_tudo, op_midias, op_producao, op_midia_hub')
     .eq('org_id', org.id)
-    .order('name') as { data: { id: string; name: string; color: string; allowed_statuses: string[]; op_ver_tudo: boolean; op_midias: boolean; op_producao: boolean }[] | null }
+    .order('name') as { data: { id: string; name: string; color: string; allowed_statuses: string[]; op_ver_tudo: boolean; op_midias: boolean; op_producao: boolean; op_midia_hub: boolean }[] | null }
 
   return (
     <div className="max-w-5xl">
@@ -47,7 +47,7 @@ export default async function CargosPage({
             position={pos as {
               id: string; name: string; color: string
               allowed_statuses: string[]
-              op_ver_tudo: boolean; op_midias: boolean; op_producao: boolean
+              op_ver_tudo: boolean; op_midias: boolean; op_producao: boolean; op_midia_hub: boolean
             }}
             orgSlug={orgSlug}
           />

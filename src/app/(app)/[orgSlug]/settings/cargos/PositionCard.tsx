@@ -17,6 +17,7 @@ interface Props {
     op_ver_tudo: boolean
     op_midias: boolean
     op_producao: boolean
+    op_midia_hub: boolean
   }
   orgSlug: string
 }
@@ -42,6 +43,7 @@ export function PositionCard({ position, orgSlug }: Props) {
   const [verTudo, setVerTudo] = useState(position.op_ver_tudo)
   const [midias, setMidias] = useState(position.op_midias)
   const [producao, setProducao] = useState(position.op_producao)
+  const [midiaHub, setMidiaHub] = useState(position.op_midia_hub)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -52,6 +54,7 @@ export function PositionCard({ position, orgSlug }: Props) {
     verTudo !== position.op_ver_tudo ||
     midias !== position.op_midias ||
     producao !== position.op_producao ||
+    midiaHub !== position.op_midia_hub ||
     JSON.stringify([...selected].sort()) !== JSON.stringify([...position.allowed_statuses].sort())
 
   function toggleStatus(val: string) {
@@ -79,6 +82,7 @@ export function PositionCard({ position, orgSlug }: Props) {
     selected.forEach(s => fd.append('statuses', s))
     fd.append('op_ver_tudo', String(verTudo))
     fd.append('op_midias', String(midias))
+    fd.append('op_midia_hub', String(midiaHub))
     fd.append('op_producao', String(producao))
     startTransition(async () => {
       const res = await updatePosition(orgSlug, position.id, fd)
@@ -171,8 +175,8 @@ export function PositionCard({ position, orgSlug }: Props) {
 
           {/* Acesso ao Operacional */}
           <OperacionalToggles
-            verTudo={verTudo} midias={midias} producao={producao}
-            setVerTudo={setVerTudo} setMidias={setMidias} setProducao={setProducao}
+            verTudo={verTudo} midias={midias} producao={producao} midiaHub={midiaHub}
+            setVerTudo={setVerTudo} setMidias={setMidias} setProducao={setProducao} setMidiaHub={setMidiaHub}
           />
 
           {/* Status checkboxes */}
