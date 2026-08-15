@@ -95,6 +95,7 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
   { id: 'midia_hub', label: 'Operação', icon: Radio, items: [
     { label: 'Painel',             href: 'midia' },
     { label: 'Clientes e rotinas', href: 'midia/clientes' },
+    { label: 'Entregas',           href: 'midia/entregas' },
   ] },
   { id: 'midias', label: 'Liberação de mídias', icon: Megaphone, items: [
     { label: 'Simplificada', href: 'midias/simplificada' },

@@ -1,8 +1,9 @@
 import Link from 'next/link'
-import { CalendarClock, Inbox, Users } from 'lucide-react'
+import { CalendarClock, Inbox, Truck, Users } from 'lucide-react'
 import { assertMidiaAccess, statusDaMidia } from '@/lib/midia-hub'
 import { unwrap } from '@/lib/supabase/unwrap'
 import { PainelMidia, type PedidoRow, type RotinaRow } from './PainelMidia'
+import { EntregasResumo, type EntregaResumoRow } from './EntregasResumo'
 
 export const metadata = { title: 'Mídia — Painel' }
 
@@ -23,11 +24,15 @@ export default async function MidiaPainelPage({ params }: { params: Promise<{ or
 
   // Campanhas de operação (as rotinas) x resto da pauta (os pedidos): a fila da
   // mídia é o que o time MANDOU para ela, não o que ela mesma agendou.
-  const [resOper, resStatus] = await Promise.all([
+  const [resOper, resStatus, resEntregas] = await Promise.all([
     sb.from('midia_cliente')
       .select('id, ano, campaign_id, workspace_id, workspaces(name), midia_cliente_rotina(id, ativo, activity_id, midia_rotina(nome, frequencia))')
       .eq('org_id', orgId).eq('ativo', true),
     sb.from('org_status').select('valor, label, bg, txt').eq('org_id', orgId),
+    sb.from('midia_entrega_view')
+      .select('id, titulo, cliente, veiculo, prazo_envio, situacao, conflito_prazo, tarefa_titulo, tarefa_status, tarefa_prazo')
+      .eq('org_id', orgId).eq('situacao', 'aguardando')
+      .order('prazo_envio', { ascending: true, nullsFirst: false }),
   ])
   const operacoes = unwrap<{
     id: string; ano: number; campaign_id: string | null; workspace_id: string
@@ -35,6 +40,11 @@ export default async function MidiaPainelPage({ params }: { params: Promise<{ or
     midia_cliente_rotina: { id: string; ativo: boolean; activity_id: string | null; midia_rotina: { nome: string; frequencia: string } | null }[]
   }>(resOper, 'operações de mídia')
   const statusCfg = unwrap<{ valor: string; label: string; bg: string; txt: string }>(resStatus, 'status')
+  const entregasRaw = unwrap<{
+    id: string; titulo: string; cliente: string; veiculo: string | null
+    prazo_envio: string | null; situacao: string; conflito_prazo: boolean | null
+    tarefa_titulo: string | null; tarefa_status: string | null; tarefa_prazo: string | null
+  }>(resEntregas, 'entregas')
 
   const campanhasOperacao = new Set(operacoes.map(o => o.campaign_id).filter(Boolean) as string[])
   const rotinaActivityIds = operacoes.flatMap(o =>
@@ -79,6 +89,14 @@ export default async function MidiaPainelPage({ params }: { params: Promise<{ or
     }
   }
   rotinas.sort((a, b) => (a.prazo ?? '9999').localeCompare(b.prazo ?? '9999'))
+
+  const entregas: EntregaResumoRow[] = entregasRaw.map(e => ({
+    id: e.id, titulo: e.titulo, cliente: e.cliente, veiculo: e.veiculo,
+    prazoEnvio: e.prazo_envio, conflito: !!e.conflito_prazo,
+    tarefaTitulo: e.tarefa_titulo,
+    // Material pronto = a tarefa já chegou num status que a mídia opera.
+    materialPronto: !e.tarefa_titulo || (!!e.tarefa_status && statuses.includes(e.tarefa_status)),
+  }))
   void rotinaActivityIds
 
   return (
@@ -96,11 +114,14 @@ export default async function MidiaPainelPage({ params }: { params: Promise<{ or
         </Link>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-4">
+      <div className="grid md:grid-cols-4 gap-4">
         <Resumo icon={<Inbox className="w-4 h-4" />} label="Pedidos na fila" valor={pedidos.length} />
         <Resumo icon={<CalendarClock className="w-4 h-4" />} label="Rotinas ativas" valor={rotinas.length} />
+        <Resumo icon={<Truck className="w-4 h-4" />} label="Entregas pendentes" valor={entregas.length} />
         <Resumo icon={<Users className="w-4 h-4" />} label="Clientes com mídia" valor={operacoes.length} />
       </div>
+
+      <EntregasResumo orgSlug={orgSlug} entregas={entregas} />
 
       <PainelMidia orgSlug={orgSlug} pedidos={pedidos} rotinas={rotinas} statusCfg={statusCfg} />
     </div>

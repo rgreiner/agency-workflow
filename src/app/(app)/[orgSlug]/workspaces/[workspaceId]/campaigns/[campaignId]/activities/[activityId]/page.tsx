@@ -7,6 +7,7 @@ import { cn, formatDate, isOverdue } from '@/lib/utils'
 import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink, X, Target, Flag } from 'lucide-react'
 import Link from 'next/link'
 import { DriveProvisioningNotice } from './DriveProvisioningNotice'
+import { EntregaMidiaAviso } from './EntregaMidiaAviso'
 import { StatusChanger } from './StatusChanger'
 import { MobileStatusBar } from './MobileStatusBar'
 import { ReviewBanner } from './ReviewBanner'
@@ -521,6 +522,9 @@ export default async function ActivityPage({
             <div className="mt-8">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Campos</p>
               {drivePending && <div className="mb-3"><DriveProvisioningNotice /></div>}
+
+              {/* Prazo do veículo, quando a mídia está esperando esta peça. */}
+              <EntregaMidiaAviso orgSlug={orgSlug} activityId={activityId} />
               <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100">
 
                 {/* Complexity */}
