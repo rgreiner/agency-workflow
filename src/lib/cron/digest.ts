@@ -4,7 +4,17 @@ import { sendMail } from '@/lib/email/send'
 import type { CronJob } from './jobs'
 
 interface DigestTask { id: string; title: string; due: string; campaign: string | null; cliente: string | null }
-interface DigestUser { email: string; name: string | null; org_slug: string; atrasadas: DigestTask[]; hoje: DigestTask[]; proximas: DigestTask[] }
+/** Entrega de mídia: prazo do VEÍCULO, não da tarefa (ver migration 236). */
+interface DigestEntrega {
+  id: string; titulo: string; prazo: string; cliente: string | null
+  veiculo: string | null; com_criacao: boolean
+}
+interface DigestUser {
+  email: string; name: string | null; org_slug: string
+  atrasadas: DigestTask[]; hoje: DigestTask[]; proximas: DigestTask[]
+  /** Só quem opera o Hub de Mídia recebe — os demais vêm com lista vazia. */
+  entregas?: DigestEntrega[]
+}
 
 const BASE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://flow.oneaone.com.br'
 const esc = (s: string | null) => (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -23,12 +33,36 @@ function section(title: string, color: string, tasks: DigestTask[], orgSlug: str
   </div>`
 }
 
+/** Seção da mídia: prazo de veículo é dinheiro, então vem antes das próximas datas. */
+function sectionEntregas(entregas: DigestEntrega[], orgSlug: string, hoje: string): string {
+  if (!entregas.length) return ''
+  const rows = entregas.map(e => {
+    const atrasada = e.prazo < hoje
+    const cor = atrasada ? '#dc2626' : '#ea580c'
+    const marca = e.com_criacao
+      ? '<span style="font-size:11px;color:#b45309;background:#fef3c7;padding:1px 6px;border-radius:99px;">com a criação</span>'
+      : ''
+    return `
+    <a href="${BASE}/${orgSlug}/midia/entregas" style="display:block;text-decoration:none;color:#111827;padding:11px 13px;border:1px solid #eef0f2;border-radius:10px;margin-bottom:8px;">
+      <span style="font-weight:600;font-size:14px;color:#111827;">${esc(e.titulo)}</span><br>
+      <span style="font-size:12px;color:#6b7280;">${[esc(e.cliente), esc(e.veiculo)].filter(Boolean).join(' · ')} — envio ${fmtDue(e.prazo)}</span>
+      <span style="font-size:12px;color:${cor};font-weight:600;">${atrasada ? ' · vencido' : ''}</span> ${marca}
+    </a>`
+  }).join('')
+  return `<div style="margin-top:22px;">
+    <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#0f766e;margin:0 0 10px;">📡 Entregas de mídia · ${entregas.length}</p>
+    ${rows}
+  </div>`
+}
+
 function buildDigestHtml(u: DigestUser): string {
   const primeiro = (u.name ?? '').trim().split(' ')[0]
+  const hoje = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10)
   const body =
     `<p style="margin:0 0 4px;">${primeiro ? `Bom dia, ${esc(primeiro)}!` : 'Bom dia!'} Aqui está o seu dia no Flow.</p>` +
     section('⚠️ O que ficou atrasado', '#dc2626', u.atrasadas, u.org_slug, true) +
     section('🎯 O que fazer hoje', '#ea580c', u.hoje, u.org_slug, false) +
+    sectionEntregas(u.entregas ?? [], u.org_slug, hoje) +
     section('🗓️ Próximas datas', '#6b7280', u.proximas, u.org_slug, true)
   return emailLayout({ heading: 'Seu resumo do dia', bodyHtml: body, footerNote: 'Resumo diário do Flow · desligue em Meu Perfil' })
 }
