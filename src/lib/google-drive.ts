@@ -31,6 +31,12 @@ function getDrive(): drive_v3.Drive {
   return _drive
 }
 
+/** Cliente cru do Drive, para módulos que falam com OUTRO drive compartilhado
+ *  (ex.: o Hub de Mídia, em lib/midia-drive.ts). Mesma conta de serviço. */
+export function getDriveClient(): drive_v3.Drive {
+  return getDrive()
+}
+
 export function driveConfigured(): boolean {
   return !!process.env.GOOGLE_SERVICE_ACCOUNT_KEY
 }

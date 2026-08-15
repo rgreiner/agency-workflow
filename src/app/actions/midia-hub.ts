@@ -204,3 +204,113 @@ export async function ativarRotinaCatalogo(orgSlug: string, id: string, ativo: b
   revalidatePath(`/${orgSlug}/midia/clientes`)
   return {}
 }
+
+// ── Pastas no drive "Mídia" (lib/midia-drive) ────────────────────────────────
+
+/** Pastas de cliente do drive Mídia, para vincular à mão (os nomes não batem
+ *  com os do Flow: "É O Amor" aqui é "É o Amor - Condomínio Fazenda" lá). */
+export async function listarPastasDoDrive(orgSlug: string) {
+  await assertMidiaAccess(orgSlug)
+  try {
+    const { pastasDeClientes } = await import('@/lib/midia-drive')
+    return { pastas: await pastasDeClientes() }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Falha ao ler o drive Mídia' }
+  }
+}
+
+/** Grava a pasta do cliente no drive Mídia. */
+export async function vincularPastaCliente(orgSlug: string, midiaClienteId: string, folderId: string) {
+  const { supabase } = await assertMidiaAccess(orgSlug)
+  const { error } = await (supabase as any).rpc('midia_atualizar_cliente', {
+    p_id: midiaClienteId,
+    p_plano_url: null, p_specs_url: null, p_crm_url: null,
+    p_drive_folder_id: folderId, p_observacao: null,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/midia/clientes`)
+  return {}
+}
+
+/**
+ * Cria (ou reusa) a pasta do mês da rotina e a deixa vinculada na tarefa —
+ * assim quem abre a tarefa na pauta chega na pasta certa do mês corrente.
+ *
+ * A pasta da ROTINA nunca é criada às cegas: se o casamento com as grafias
+ * existentes falhar, devolve as opções para a pessoa escolher (e a escolha
+ * fica gravada no vínculo, virando decisão em vez de heurística).
+ */
+export async function abrirPastaDoMes(orgSlug: string, vinculoRotinaId: string, mes?: number) {
+  const { supabase, orgId } = await assertMidiaAccess(orgSlug)
+  const sb = supabase as any
+
+  const { data, error } = await sb
+    .from('midia_cliente_rotina')
+    .select('id, activity_id, pasta_folder_id, midia_rotina(nome, pasta), midia_cliente(ano, drive_folder_id)')
+    .eq('id', vinculoRotinaId).eq('org_id', orgId).maybeSingle()
+  if (error) return { error: error.message }
+  if (!data) return { error: 'Rotina não encontrada' }
+
+  const pastaCanonica = data.midia_rotina?.pasta as string | undefined
+  const clienteFolderId = data.midia_cliente?.drive_folder_id as string | undefined
+  if (!pastaCanonica) return { error: 'Esta rotina não tem pasta definida no catálogo.' }
+  if (!clienteFolderId) return { error: 'Vincule primeiro a pasta do cliente no drive Mídia.' }
+
+  const agora = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+  const alvoMes = mes ?? Number(agora.slice(5, 7))
+  const ano = (data.midia_cliente?.ano as number) ?? Number(agora.slice(0, 4))
+
+  try {
+    const { resolverPastaRotina, garantirPastaDoMes } = await import('@/lib/midia-drive')
+
+    let rotinaFolderId = data.pasta_folder_id as string | null
+    if (!rotinaFolderId) {
+      const r = await resolverPastaRotina({ clienteFolderId, ano, pastaCanonica })
+      if ('opcoes' in r) {
+        return {
+          precisaEscolher: true as const,
+          canonica: pastaCanonica,
+          anoFolderId: r.anoFolderId,
+          opcoes: r.opcoes,
+        }
+      }
+      rotinaFolderId = r.id
+      await sb.rpc('midia_rotina_pasta', { p_vinculo: vinculoRotinaId, p_folder_id: rotinaFolderId })
+    }
+
+    const pasta = await garantirPastaDoMes({ rotinaFolderId, mes: alvoMes, rotulo: `${ano}/${pastaCanonica}` })
+
+    // A tarefa recorrente aponta sempre para a pasta do mês em curso.
+    if (data.activity_id) {
+      await sb.from('activities').update({ drive_folder_url: pasta.link }).eq('id', data.activity_id)
+    }
+    revalidatePath(`/${orgSlug}/midia/clientes`)
+    return { link: pasta.link, caminho: pasta.caminho, criadas: pasta.criadas }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Falha ao criar a pasta no drive' }
+  }
+}
+
+/** Registra qual pasta do drive é a desta rotina neste cliente (ou cria a
+ *  canônica, quando a pessoa escolhe "criar"). */
+export async function definirPastaRotina(
+  orgSlug: string, vinculoRotinaId: string,
+  escolha: { folderId?: string; criarEm?: { anoFolderId: string; nome: string } },
+) {
+  const { supabase } = await assertMidiaAccess(orgSlug)
+  const sb = supabase as any
+  try {
+    let folderId = escolha.folderId
+    if (!folderId && escolha.criarEm) {
+      const { criarPastaRotina } = await import('@/lib/midia-drive')
+      folderId = await criarPastaRotina(escolha.criarEm.anoFolderId, escolha.criarEm.nome)
+    }
+    if (!folderId) return { error: 'Escolha uma pasta ou peça para criar.' }
+    const { error } = await sb.rpc('midia_rotina_pasta', { p_vinculo: vinculoRotinaId, p_folder_id: folderId })
+    if (error) return { error: error.message }
+    revalidatePath(`/${orgSlug}/midia/clientes`)
+    return { folderId }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Falha ao definir a pasta' }
+  }
+}

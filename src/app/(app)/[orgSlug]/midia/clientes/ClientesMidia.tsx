@@ -5,12 +5,15 @@ import Link from 'next/link'
 import { toast } from 'sonner'
 import {
   Check, ChevronRight, Loader2, Plus, Repeat, Link2, Power, CalendarClock,
+  FolderOpen, FolderPlus,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
+import { Modal, ModalHeader } from '@/components/ui/Modal'
 import {
   ativarClienteMidia, aplicarRotinas, desativarRotina, salvarDadosOperacao,
-  marcarImplantacao, type EstadoImplantacao,
+  marcarImplantacao, listarPastasDoDrive, vincularPastaCliente, abrirPastaDoMes,
+  definirPastaRotina, type EstadoImplantacao,
 } from '@/app/actions/midia-hub'
 
 export interface RotinaCatalogo {
@@ -210,6 +213,10 @@ function CardCliente({ orgSlug, cliente, rotinas, itensImplantacao, pessoas, abe
                         <CalendarClock className="w-3 h-3" /> {fmtPrazo(v.prazo)}
                       </Link>
                     )}
+                    {v && r.pasta && (
+                      <BotaoPastaDoMes orgSlug={orgSlug} vinculoId={v.vinculoId}
+                        temPastaCliente={!!op.driveFolderId} pasta={r.pasta} />
+                    )}
                     {v ? (
                       <button onClick={() => desligar(v.vinculoId)} disabled={pending} title="Desligar rotina"
                         className="text-gray-300 hover:text-red-600 transition-colors shrink-0">
@@ -229,6 +236,8 @@ function CardCliente({ orgSlug, cliente, rotinas, itensImplantacao, pessoas, abe
 
           <Implantacao orgSlug={orgSlug} workspaceId={cliente.workspaceId}
             itens={itensImplantacao} estados={cliente.implantacao} />
+
+          <PastaDoCliente orgSlug={orgSlug} op={op} cliente={cliente.nome} />
 
           <LinksOperacao orgSlug={orgSlug} op={op} />
         </div>
@@ -376,5 +385,147 @@ function Implantacao({ orgSlug, workspaceId, itens, estados }: {
         })}
       </div>
     </div>
+  )
+}
+
+/** Vincula a pasta do cliente no drive Mídia. Escolha em lista, não link colado:
+ *  os nomes de lá não batem com os do Flow ("É O Amor" × "É o Amor - Condomínio
+ *  Fazenda"), e digitar ID é onde o erro nasce. */
+function PastaDoCliente({ orgSlug, op, cliente }: {
+  orgSlug: string
+  op: NonNullable<ClienteRow['operacao']>
+  cliente: string
+}) {
+  const [pending, start] = useTransition()
+  const [pastas, setPastas] = useState<{ id: string; nome: string }[] | null>(null)
+  const [carregando, setCarregando] = useState(false)
+
+  async function carregar() {
+    if (pastas || carregando) return
+    setCarregando(true)
+    const r = await listarPastasDoDrive(orgSlug)
+    setCarregando(false)
+    if ('error' in r && r.error) { toast.error(r.error); return }
+    setPastas(r.pastas ?? [])
+  }
+
+  function vincular(folderId: string) {
+    start(async () => {
+      const r = await vincularPastaCliente(orgSlug, op.id, folderId)
+      if (r?.error) toast.error(r.error)
+      else toast.success('Pasta do cliente vinculada.')
+    })
+  }
+
+  const atual = pastas?.find(p => p.id === op.driveFolderId)
+
+  return (
+    <div>
+      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 inline-flex items-center gap-1.5">
+        <FolderOpen className="w-3.5 h-3.5" /> Pasta no drive Mídia
+      </h3>
+      {op.driveFolderId ? (
+        <div className="flex items-center gap-2 flex-wrap">
+          <a href={`https://drive.google.com/drive/folders/${op.driveFolderId}`} target="_blank" rel="noopener noreferrer"
+            className="text-[12px] text-gray-600 hover:text-orange-600 transition-colors inline-flex items-center gap-1">
+            <FolderOpen className="w-3.5 h-3.5" /> {atual?.nome ?? 'abrir a pasta do cliente'}
+          </a>
+          <button onClick={carregar} disabled={carregando}
+            className="text-[11px] font-medium text-gray-400 hover:text-gray-700 transition-colors">
+            {carregando ? 'carregando…' : 'trocar'}
+          </button>
+        </div>
+      ) : (
+        <button onClick={carregar} disabled={carregando}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-60">
+          {carregando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderOpen className="w-3.5 h-3.5" />}
+          Vincular a pasta de {cliente}
+        </button>
+      )}
+
+      {pastas && (
+        <div className="mt-2 w-full sm:w-80">
+          <Select size="sm" value={op.driveFolderId ?? ''} onChange={vincular}
+            options={pastas.map(p => ({ value: p.id, label: p.nome }))}
+            placeholder={pending ? 'salvando…' : 'Escolha a pasta no drive Mídia'} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Cria (ou reusa) a pasta do mês da rotina e deixa o link na tarefa. Quando o
+ *  Flow não reconhece a pasta da rotina, PERGUNTA em vez de criar outra grafia. */
+function BotaoPastaDoMes({ orgSlug, vinculoId, temPastaCliente, pasta }: {
+  orgSlug: string; vinculoId: string; temPastaCliente: boolean; pasta: string
+}) {
+  const [pending, start] = useTransition()
+  const [escolha, setEscolha] = useState<{ canonica: string; anoFolderId: string; opcoes: { id: string; nome: string }[] } | null>(null)
+
+  function abrir() {
+    if (!temPastaCliente) { toast.error('Vincule primeiro a pasta do cliente no drive Mídia.'); return }
+    start(async () => {
+      const r = await abrirPastaDoMes(orgSlug, vinculoId)
+      if ('error' in r && r.error) { toast.error(r.error); return }
+      if ('precisaEscolher' in r && r.precisaEscolher) {
+        setEscolha({ canonica: r.canonica!, anoFolderId: r.anoFolderId!, opcoes: r.opcoes ?? [] })
+        return
+      }
+      toast.success(r.criadas?.length ? `Pasta criada: ${r.caminho}` : `Pasta do mês: ${r.caminho}`)
+      if (r.link) window.open(r.link, '_blank', 'noopener')
+    })
+  }
+
+  function definir(folderId?: string, criar?: boolean) {
+    if (!escolha) return
+    start(async () => {
+      const r = await definirPastaRotina(orgSlug, vinculoId,
+        criar ? { criarEm: { anoFolderId: escolha.anoFolderId, nome: escolha.canonica } } : { folderId })
+      if ('error' in r && r.error) { toast.error(r.error); return }
+      setEscolha(null)
+      const r2 = await abrirPastaDoMes(orgSlug, vinculoId)
+      if ('error' in r2 && r2.error) { toast.error(r2.error); return }
+      toast.success(`Pasta do mês: ${r2.caminho}`)
+      if (r2.link) window.open(r2.link, '_blank', 'noopener')
+    })
+  }
+
+  return (
+    <>
+      <button onClick={abrir} disabled={pending} title={`Pasta do mês em ${pasta}`}
+        className="text-gray-300 hover:text-orange-600 transition-colors shrink-0 disabled:opacity-60">
+        {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderPlus className="w-3.5 h-3.5" />}
+      </button>
+
+      {escolha && (
+        <Modal open onClose={() => setEscolha(null)} size="lg" label="Qual pasta é esta?" dismissable={!pending}>
+          <ModalHeader title="Qual pasta é esta?" onClose={() => setEscolha(null)} />
+          <div className="px-6 py-5 space-y-3">
+            <p className="text-sm text-gray-600">
+              Não encontrei <b>{escolha.canonica}</b> neste cliente. Escolha a pasta que já é usada para
+              isso — assim o Flow não cria mais uma grafia ao lado das que existem.
+            </p>
+            <ul className="space-y-1 max-h-64 overflow-y-auto">
+              {escolha.opcoes.map(o => (
+                <li key={o.id}>
+                  <button onClick={() => definir(o.id)} disabled={pending}
+                    className="w-full text-left px-3 py-2 rounded-xl border border-gray-200 hover:border-orange-300 hover:bg-orange-50/50 transition-colors text-sm text-gray-700 disabled:opacity-60">
+                    {o.nome}
+                  </button>
+                </li>
+              ))}
+              {escolha.opcoes.length === 0 && (
+                <li className="text-sm text-gray-400">Este ano ainda não tem nenhuma subpasta.</li>
+              )}
+            </ul>
+            <button onClick={() => definir(undefined, true)} disabled={pending}
+              className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-xl bg-orange-600 text-[#fff] hover:bg-orange-700 transition-colors disabled:opacity-60">
+              {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderPlus className="w-4 h-4" />}
+              Criar &ldquo;{escolha.canonica}&rdquo;
+            </button>
+          </div>
+        </Modal>
+      )}
+    </>
   )
 }
