@@ -1,10 +1,13 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { CalendarClock, ExternalLink, FolderOpen, Inbox, Repeat } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import { CalendarClock, Check, ExternalLink, FolderOpen, Inbox, Loader2, Repeat } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MachinePath } from '@/components/ui/MachinePath'
+import { concluirTarefaMidia } from '@/app/actions/midia-hub'
 
 export interface PedidoRow {
   id: string; titulo: string; status: string; prazo: string | null
@@ -125,6 +128,8 @@ export function PainelMidia({ orgSlug, pedidos, rotinas, statusCfg }: {
                         <span className={cn('text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0 inline-flex items-center gap-1', TOM[p.tom])}>
                           <CalendarClock className="w-3 h-3" /> {p.texto}
                         </span>
+                        <BotaoFeito orgSlug={orgSlug} id={item.id}
+                          recorrente={'frequencia' in item && !!item.frequencia} />
                       </div>
 
                       {/* Os atalhos que ela abria a tarefa para procurar. */}
@@ -160,5 +165,38 @@ function Atalho({ url, label, icon }: { url: string | null; label: string; icon?
       className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-50 text-[11px] font-medium text-gray-600 hover:bg-orange-50 hover:text-orange-700 transition-colors">
       {icon ? <FolderOpen className="w-3 h-3" /> : <ExternalLink className="w-3 h-3" />} {label}
     </a>
+  )
+}
+
+/**
+ * "Feito": conclui a tarefa. Rotina volta para a fila com o próximo prazo,
+ * tarefa única fica concluída — o toast diz qual dos dois aconteceu, porque
+ * o desfazer de cada um é diferente.
+ */
+function BotaoFeito({ orgSlug, id, recorrente }: { orgSlug: string; id: string; recorrente: boolean }) {
+  const [pending, start] = useTransition()
+  const router = useRouter()
+
+  function concluir() {
+    start(async () => {
+      const r = await concluirTarefaMidia(orgSlug, id)
+      if ('error' in r && r.error) { toast.error(r.error); return }
+      if (r.recorreu) {
+        const d = r.novoPrazo
+        toast.success(d ? `Feito. Volta em ${d.slice(8, 10)}/${d.slice(5, 7)}.` : 'Feito. Volta no próximo ciclo.')
+      } else {
+        toast.success('Concluída.')
+      }
+      router.refresh()
+    })
+  }
+
+  return (
+    <button onClick={concluir} disabled={pending}
+      title={recorrente ? 'Concluir este ciclo — a rotina volta com o próximo prazo' : 'Concluir'}
+      className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-gray-100 text-gray-600 hover:bg-emerald-100 hover:text-emerald-700 transition-colors disabled:opacity-60">
+      {pending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+      Feito
+    </button>
   )
 }

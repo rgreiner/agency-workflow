@@ -4,6 +4,8 @@
 // `midia_can` — a tela nunca escreve direto nas tabelas.
 
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
+import { dispatchPushNotificacoes } from '@/lib/push'
 import { assertMidiaAccess } from '@/lib/midia-hub'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -429,4 +431,52 @@ export async function origensDeMigracao(orgSlug: string) {
     cont.set(w.id, atual)
   }
   return { origens: [...cont.values()].sort((a, b) => b.total - a.total) }
+}
+
+// ── Concluir do painel ───────────────────────────────────────────────────────
+
+/**
+ * "Feito" direto no painel da mídia.
+ *
+ * Rotina recorrente volta para a fila com o próximo prazo; tarefa de execução
+ * única fica concluída. As duas coisas saem do MESMO gesto — quem opera não
+ * precisa saber qual é qual.
+ *
+ * A recorrência roda AQUI, síncrona, e não pelo `after()` do caminho canônico:
+ * a tela precisa dizer na hora para quando a rotina voltou, e um refresh
+ * disparado antes do trabalho de fundo terminar mostraria a rotina "concluída"
+ * por um instante — piscada que faz a pessoa clicar de novo.
+ *
+ * O gate de revisão por IA não entra na conta porque ele só dispara saindo de
+ * Redação/Design/Finalização, e a fila da mídia nunca está nesses status.
+ */
+export async function concluirTarefaMidia(orgSlug: string, activityId: string) {
+  const { supabase, orgId, userId } = await assertMidiaAccess(orgSlug)
+  const sb = supabase as any
+
+  const { data: st } = await sb.from('org_status')
+    .select('valor').eq('org_id', orgId).eq('papel', 'conclusao').maybeSingle()
+  const concluido = (st?.valor as string) ?? 'concluido'
+
+  const { error } = await sb.rpc('update_activity_status', {
+    p_user_id: userId, p_activity_id: activityId,
+    p_new_status: concluido, p_comment: '',
+  })
+  if (error) return { error: error.message }
+
+  // Devolve false quando não há recorrência (ou acabaram as repetições).
+  const { data: recorreu, error: e2 } = await sb.rpc('recur_activity', {
+    p_user_id: userId, p_activity_id: activityId,
+  })
+  if (e2) return { error: e2.message }
+
+  let novoPrazo: string | null = null
+  if (recorreu) {
+    const { data } = await sb.from('activities').select('due_date').eq('id', activityId).maybeSingle()
+    novoPrazo = (data?.due_date as string) ?? null
+  }
+
+  after(() => dispatchPushNotificacoes().catch(() => {}))
+  revalidatePath(`/${orgSlug}/midia`)
+  return { recorreu: !!recorreu, novoPrazo }
 }
