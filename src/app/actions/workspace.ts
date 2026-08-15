@@ -75,6 +75,17 @@ export async function createWorkspace(orgSlug: string, formData: FormData) {
   })
   if (e2) return { error: e2.message }
 
+  // Cliente novo já nasce com a operação de mídia, quando quem cadastra pediu.
+  // Falha aqui NÃO derruba o cadastro: o cliente já existe, e ativar a mídia é
+  // um clique reversível na tela do Hub. Quem não opera mídia nem vê a opção —
+  // e se tentar, a RPC recusa e o cadastro segue de pé.
+  if (formData.get('ativar_midia') === 'true') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: e3 } = await (supabase as any)
+      .rpc('midia_ativar_cliente', { p_workspace_id: workspaceId, p_ano: null })
+    if (e3) console.error('[workspace] falha ao ativar a mídia no cliente novo', e3.message)
+  }
+
   redirect(`/${orgSlug}/workspaces`)
 }
 

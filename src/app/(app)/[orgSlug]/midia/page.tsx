@@ -4,6 +4,7 @@ import { assertMidiaAccess, statusDaMidia } from '@/lib/midia-hub'
 import { unwrap } from '@/lib/supabase/unwrap'
 import { PainelMidia, type PedidoRow, type RotinaRow } from './PainelMidia'
 import { EntregasResumo, type EntregaResumoRow } from './EntregasResumo'
+import { ImplantacaoResumo, type ImplantacaoRow } from './ImplantacaoResumo'
 
 export const metadata = { title: 'Mídia — Painel' }
 
@@ -24,7 +25,7 @@ export default async function MidiaPainelPage({ params }: { params: Promise<{ or
 
   // Campanhas de operação (as rotinas) x resto da pauta (os pedidos): a fila da
   // mídia é o que o time MANDOU para ela, não o que ela mesma agendou.
-  const [resOper, resStatus, resEntregas] = await Promise.all([
+  const [resOper, resStatus, resEntregas, resItens, resEstados] = await Promise.all([
     sb.from('midia_cliente')
       .select('id, ano, campaign_id, workspace_id, workspaces(name), midia_cliente_rotina(id, ativo, activity_id, midia_rotina(nome, frequencia))')
       .eq('org_id', orgId).eq('ativo', true),
@@ -33,6 +34,8 @@ export default async function MidiaPainelPage({ params }: { params: Promise<{ or
       .select('id, titulo, cliente, veiculo, prazo_envio, situacao, conflito_prazo, tarefa_titulo, tarefa_status, tarefa_prazo')
       .eq('org_id', orgId).eq('situacao', 'aguardando')
       .order('prazo_envio', { ascending: true, nullsFirst: false }),
+    sb.from('midia_implantacao_item').select('id').eq('org_id', orgId).eq('ativo', true),
+    sb.from('midia_implantacao_estado').select('workspace_id, item_id, estado').eq('org_id', orgId),
   ])
   const operacoes = unwrap<{
     id: string; ano: number; campaign_id: string | null; workspace_id: string
@@ -45,6 +48,8 @@ export default async function MidiaPainelPage({ params }: { params: Promise<{ or
     prazo_envio: string | null; situacao: string; conflito_prazo: boolean | null
     tarefa_titulo: string | null; tarefa_status: string | null; tarefa_prazo: string | null
   }>(resEntregas, 'entregas')
+  const itens = unwrap<{ id: string }>(resItens, 'itens de implantação')
+  const estados = unwrap<{ workspace_id: string; item_id: string; estado: string }>(resEstados, 'implantação')
 
   const campanhasOperacao = new Set(operacoes.map(o => o.campaign_id).filter(Boolean) as string[])
   const rotinaActivityIds = operacoes.flatMap(o =>
@@ -90,6 +95,25 @@ export default async function MidiaPainelPage({ params }: { params: Promise<{ or
   }
   rotinas.sort((a, b) => (a.prazo ?? '9999').localeCompare(b.prazo ?? '9999'))
 
+  // Implantação por cliente com mídia ativa: 'na' (não se aplica) sai do
+  // denominador — item que nunca vai existir naquele cliente não pode segurar
+  // o percentual para sempre.
+  const totalItens = itens.length
+  const implantacoes: ImplantacaoRow[] = operacoes.map(o => {
+    const doCliente = estados.filter(e => e.workspace_id === o.workspace_id)
+    const na = doCliente.filter(e => e.estado === 'na').length
+    const ok = doCliente.filter(e => e.estado === 'ok').length
+    const perdidos = doCliente.filter(e => e.estado === 'perdido').length
+    const vale = Math.max(totalItens - na, 0)
+    return {
+      workspaceId: o.workspace_id,
+      cliente: o.workspaces?.name ?? '—',
+      pct: vale ? Math.round((ok / vale) * 100) : 100,
+      ok, vale, perdidos,
+    }
+  }).filter(i => i.pct < 100 || i.perdidos > 0)
+    .sort((a, b) => (b.perdidos - a.perdidos) || (a.pct - b.pct))
+
   const entregas: EntregaResumoRow[] = entregasRaw.map(e => ({
     id: e.id, titulo: e.titulo, cliente: e.cliente, veiculo: e.veiculo,
     prazoEnvio: e.prazo_envio, conflito: !!e.conflito_prazo,
@@ -122,6 +146,8 @@ export default async function MidiaPainelPage({ params }: { params: Promise<{ or
       </div>
 
       <EntregasResumo orgSlug={orgSlug} entregas={entregas} />
+
+      <ImplantacaoResumo orgSlug={orgSlug} clientes={implantacoes} />
 
       <PainelMidia orgSlug={orgSlug} pedidos={pedidos} rotinas={rotinas} statusCfg={statusCfg} />
     </div>

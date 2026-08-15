@@ -1,31 +1,13 @@
-'use client'
+import { getAccess } from '@/lib/auth/access'
+import { redirect } from 'next/navigation'
+import { NovoClienteForm } from './NovoClienteForm'
 
-import { useParams, useRouter } from 'next/navigation'
-import { createWorkspace } from '@/app/actions/workspace'
-import { ArrowLeft } from 'lucide-react'
-import { ClientForm } from '../ClientForm'
+export default async function NewWorkspacePage({ params }: { params: Promise<{ orgSlug: string }> }) {
+  const { orgSlug } = await params
+  const r = await getAccess(orgSlug)
+  if (!r) redirect('/')
 
-export default function NewWorkspacePage() {
-  const { orgSlug } = useParams<{ orgSlug: string }>()
-  const router = useRouter()
-
-  return (
-    <div className="p-6 max-w-2xl">
-      <button
-        onClick={() => router.back()}
-        className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition mb-5"
-      >
-        <ArrowLeft className="w-4 h-4" /> Voltar
-      </button>
-
-      <h1 className="text-xl font-semibold text-gray-900 mb-1">Novo cliente</h1>
-      <p className="text-gray-500 text-sm mb-6">Cadastre os dados do cliente. Só o nome é obrigatório.</p>
-
-      <ClientForm
-        submitLabel="Criar cliente"
-        onSubmit={(fd) => createWorkspace(orgSlug, fd)}
-        onCancel={() => router.back()}
-      />
-    </div>
-  )
+  // A opção "já ativar a mídia" só aparece para quem opera o Hub — para os
+  // demais, um checkbox que a RPC recusaria seria só uma promessa quebrada.
+  return <NovoClienteForm orgSlug={orgSlug} podeMidia={r.access.midiaHub} />
 }

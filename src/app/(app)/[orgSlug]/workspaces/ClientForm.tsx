@@ -57,9 +57,11 @@ interface Props {
   onCancel?: () => void
   /** Ações extras à esquerda do rodapé (ex.: arquivar/excluir no modo edição). */
   footerLeft?: React.ReactNode
+  /** Bloco extra antes do rodapé (ex.: "ativar mídia" na criação). */
+  extra?: React.ReactNode
 }
 
-export function ClientForm({ initial, initialContato, submitLabel = 'Salvar', onSubmit, onSuccess, onCancel, footerLeft }: Props) {
+export function ClientForm({ initial, initialContato, submitLabel = 'Salvar', onSubmit, onSuccess, onCancel, footerLeft, extra }: Props) {
   const [form, setForm] = useState<ClientFormValues>({ ...EMPTY, ...initial })
   const [contato, setContato] = useState<ContatoData>(initialContato ?? emptyContato())
   const [isPending, startTransition] = useTransition()
@@ -255,6 +257,8 @@ export function ClientForm({ initial, initialContato, submitLabel = 'Salvar', on
       <div className="border-t border-gray-100 pt-4">
         <ContatoBlocks value={contato} onChange={setContato} />
       </div>
+
+      {extra}
 
       {/* Rodapé */}
       <div className="flex items-center justify-between pt-2">
