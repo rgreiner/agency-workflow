@@ -19,7 +19,9 @@ export default async function MidiaClientesPage({ params }: { params: Promise<{ 
     sb.from('midia_rotina').select('id, nome, descricao, frequencia, dia_mes, dia_semana, pasta, padrao, ordem, ativo')
       .eq('org_id', orgId).eq('ativo', true).order('ordem'),
     sb.from('organization_members')
-      .select('user_id, arquivado, profiles(id, full_name)')
+      // `profiles!user_id`: organization_members tem mais de uma FK para
+      // profiles, e sem dizer qual o PostgREST recusa o embed inteiro.
+      .select('user_id, arquivado, profiles!user_id(id, full_name)')
       .eq('org_id', orgId).eq('arquivado', false),
     sb.from('midia_implantacao_item').select('id, bloco, nome, ordem')
       .eq('org_id', orgId).eq('ativo', true).order('bloco').order('ordem'),
