@@ -158,3 +158,49 @@ export async function marcarImplantacao(
   revalidatePath(`/${orgSlug}/midia`)
   return {}
 }
+
+// ── Catálogo de rotinas (migration 240) ──────────────────────────────────────
+
+export interface RotinaInput {
+  id?: string | null
+  nome: string
+  descricao?: string | null
+  frequencia: string
+  diaMes?: number | null
+  diaSemana?: number | null
+  statusRetorno?: string | null
+  pasta?: string | null
+  padrao?: boolean
+  ordem?: number | null
+}
+
+export async function salvarRotina(orgSlug: string, r: RotinaInput) {
+  const { supabase, orgId } = await assertMidiaAccess(orgSlug)
+  const { data, error } = await (supabase as any).rpc('midia_rotina_salvar', {
+    p_id: r.id || null,
+    p_org: orgId,
+    p_nome: r.nome,
+    p_descricao: r.descricao || null,
+    p_frequencia: r.frequencia,
+    p_dia_mes: r.diaMes ?? null,
+    p_dia_semana: r.diaSemana ?? null,
+    p_status_retorno: r.statusRetorno || null,
+    p_pasta: r.pasta || null,
+    p_padrao: r.padrao ?? true,
+    p_ordem: r.ordem ?? null,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/midia/rotinas`)
+  revalidatePath(`/${orgSlug}/midia/clientes`)
+  return { id: data as string }
+}
+
+/** Desativar tira das sugestões; as tarefas já criadas continuam vivas. */
+export async function ativarRotinaCatalogo(orgSlug: string, id: string, ativo: boolean) {
+  const { supabase } = await assertMidiaAccess(orgSlug)
+  const { error } = await (supabase as any).rpc('midia_rotina_ativo', { p_id: id, p_ativo: ativo })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/midia/rotinas`)
+  revalidatePath(`/${orgSlug}/midia/clientes`)
+  return {}
+}
