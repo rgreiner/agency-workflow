@@ -314,3 +314,119 @@ export async function definirPastaRotina(
     return { error: e instanceof Error ? e.message : 'Falha ao definir a pasta' }
   }
 }
+
+// ── Migração do cliente-balde (migration 243) ────────────────────────────────
+
+export interface CandidataMigracao {
+  id: string
+  titulo: string
+  recorrencia: string | null
+  prazo: string | null
+  status: string
+  responsaveis: string[]
+  campanha: string
+  clienteSugerido: string | null
+  rotinaSugerida: string | null
+  sugestaoFraca: boolean
+  /** Já migrada: id da tarefa nova no cliente real. */
+  migradaPara: string | null
+}
+
+/**
+ * As tarefas recorrentes de um workspace-balde, com as sugestões de cliente e
+ * rotina. Sugerir é seguro; decidir não — nada migra sem confirmação na tela.
+ */
+export async function carregarMigracao(orgSlug: string, origemWorkspaceId: string) {
+  const { supabase, orgId } = await assertMidiaAccess(orgSlug)
+  const sb = supabase as any
+
+  const [resAtiv, resWs, resRot, resFeitas] = await Promise.all([
+    sb.from('activities')
+      .select('id, title, status, due_date, recurrence, campaign_id, campaigns!inner(id, name, workspace_id), activity_assignees(profiles!user_id(full_name))')
+      .eq('campaigns.workspace_id', origemWorkspaceId)
+      .eq('archived', false)
+      .not('recurrence', 'is', null)
+      .order('title'),
+    sb.from('workspaces').select('id, name, archived').eq('org_id', orgId),
+    sb.from('midia_rotina').select('id, nome, descricao').eq('org_id', orgId).eq('ativo', true).order('ordem'),
+    sb.from('midia_cliente_rotina').select('origem_activity_id, activity_id').eq('org_id', orgId).not('origem_activity_id', 'is', null),
+  ])
+  if (resAtiv.error) return { error: resAtiv.error.message }
+  if (resWs.error) return { error: resWs.error.message }
+  if (resRot.error) return { error: resRot.error.message }
+
+  const { sugerirCliente, sugerirRotina } = await import('@/lib/midia-migracao')
+  const clientes = ((resWs.data ?? []) as { id: string; name: string; archived: boolean }[])
+    .filter(w => !w.archived && w.id !== origemWorkspaceId)
+    .map(w => ({ id: w.id, nome: w.name }))
+  const rotinas = ((resRot.data ?? []) as { id: string; nome: string; descricao: string | null }[])
+    .map(r => ({ id: r.id, nome: r.nome, descricao: r.descricao }))
+  const feitas = new Map<string, string>(
+    ((resFeitas.data ?? []) as { origem_activity_id: string; activity_id: string | null }[])
+      .map(f => [f.origem_activity_id, f.activity_id ?? '']))
+
+  const candidatas: CandidataMigracao[] = ((resAtiv.data ?? []) as any[]).map(a => {
+    const rot = sugerirRotina(a.title, rotinas)
+    return {
+      id: a.id,
+      titulo: a.title,
+      recorrencia: a.recurrence,
+      prazo: a.due_date,
+      status: a.status,
+      responsaveis: (a.activity_assignees ?? [])
+        .map((x: any) => x.profiles?.full_name).filter(Boolean),
+      campanha: a.campaigns?.name ?? '',
+      clienteSugerido: sugerirCliente(a.title, clientes),
+      rotinaSugerida: rot?.id ?? null,
+      sugestaoFraca: rot ? !rot.forte : false,
+      migradaPara: feitas.get(a.id) ?? null,
+    }
+  })
+
+  return { candidatas, clientes, rotinas }
+}
+
+/** Copia a tarefa para o cliente real. A original fica INTACTA. */
+export async function migrarRotina(
+  orgSlug: string, origemId: string, workspaceId: string, rotinaId: string,
+) {
+  const { supabase } = await assertMidiaAccess(orgSlug)
+  const { data, error } = await (supabase as any).rpc('midia_migrar_rotina', {
+    p_origem: origemId, p_workspace: workspaceId, p_rotina: rotinaId,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/midia/migrar`)
+  revalidatePath(`/${orgSlug}/midia/clientes`)
+  return { id: data as string }
+}
+
+/** Arquiva a tarefa antiga — passo à parte, só depois de conferir a cópia. */
+export async function arquivarOrigem(orgSlug: string, origemId: string) {
+  const { supabase } = await assertMidiaAccess(orgSlug)
+  const { error } = await (supabase as any).rpc('midia_arquivar_origem', { p_origem: origemId })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/midia/migrar`)
+  return {}
+}
+
+/** Workspaces que ainda têm rotina de mídia morando neles (o balde e afins). */
+export async function origensDeMigracao(orgSlug: string) {
+  const { supabase, orgId } = await assertMidiaAccess(orgSlug)
+  const sb = supabase as any
+  const { data, error } = await sb
+    .from('activities')
+    .select('id, campaigns!inner(workspace_id, workspaces!inner(id, name, org_id))')
+    .eq('campaigns.workspaces.org_id', orgId)
+    .eq('archived', false)
+    .not('recurrence', 'is', null)
+  if (error) return { error: error.message }
+  const cont = new Map<string, { id: string; nome: string; total: number }>()
+  for (const a of (data ?? []) as any[]) {
+    const w = a.campaigns?.workspaces
+    if (!w) continue
+    const atual = cont.get(w.id) ?? { id: w.id, nome: w.name, total: 0 }
+    atual.total++
+    cont.set(w.id, atual)
+  }
+  return { origens: [...cont.values()].sort((a, b) => b.total - a.total) }
+}
