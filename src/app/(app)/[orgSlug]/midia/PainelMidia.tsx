@@ -1,13 +1,15 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { CalendarClock, Check, ExternalLink, FolderOpen, Inbox, Loader2, Repeat } from 'lucide-react'
+import {
+  CalendarClock, Check, CheckCircle2, ExternalLink, FolderOpen, Inbox, Loader2, Repeat, Undo2,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MachinePath } from '@/components/ui/MachinePath'
-import { concluirTarefaMidia } from '@/app/actions/midia-hub'
+import { concluirTarefaMidia, concluidasRecentes, reabrirTarefaMidia } from '@/app/actions/midia-hub'
 
 export interface PedidoRow {
   id: string; titulo: string; status: string; prazo: string | null
@@ -57,7 +59,7 @@ export function PainelMidia({ orgSlug, pedidos, rotinas, statusCfg }: {
   rotinas: RotinaRow[]
   statusCfg: StatusCfg[]
 }) {
-  const [aba, setAba] = useState<'pedidos' | 'rotinas'>('pedidos')
+  const [aba, setAba] = useState<'pedidos' | 'rotinas' | 'feitas'>('pedidos')
   const cfg = useMemo(() => new Map(statusCfg.map(s => [s.valor, s])), [statusCfg])
 
   // Um cliente por bloco: é assim que ela trabalha (resolve tudo de um cliente
@@ -79,19 +81,24 @@ export function PainelMidia({ orgSlug, pedidos, rotinas, statusCfg }: {
     <section className="bg-white border border-gray-200 rounded-xl">
       <div className="flex items-center gap-2 p-4 border-b border-gray-100">
         {([['pedidos', 'Pedidos do time', <Inbox key="i" className="w-4 h-4" />],
-           ['rotinas', 'Rotinas', <Repeat key="r" className="w-4 h-4" />]] as const).map(([v, label, icon]) => (
+           ['rotinas', 'Rotinas', <Repeat key="r" className="w-4 h-4" />],
+           ['feitas', 'Feitas', <CheckCircle2 key="f" className="w-4 h-4" />]] as const).map(([v, label, icon]) => (
           <button key={v} onClick={() => setAba(v)} aria-pressed={aba === v}
             className={cn('inline-flex items-center gap-2 px-3.5 py-1.5 text-sm font-medium rounded-xl transition-colors',
               aba === v ? 'bg-gray-900 text-[#fff]' : 'text-gray-500 hover:bg-gray-100')}>
             {icon} {label}
-            <span className={cn('tabular-nums text-xs', aba === v ? 'text-gray-300' : 'text-gray-400')}>
-              {v === 'pedidos' ? pedidos.length : rotinas.length}
-            </span>
+            {v !== 'feitas' && (
+              <span className={cn('tabular-nums text-xs', aba === v ? 'text-gray-300' : 'text-gray-400')}>
+                {v === 'pedidos' ? pedidos.length : rotinas.length}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
-      {vazio ? (
+      {aba === 'feitas' ? (
+        <Feitas orgSlug={orgSlug} />
+      ) : vazio ? (
         <p className="text-sm text-gray-400 text-center py-16">
           {aba === 'pedidos'
             ? 'Nada na fila. Quando o time mandar uma tarefa para a mídia, ela aparece aqui.'
@@ -198,5 +205,82 @@ function BotaoFeito({ orgSlug, id, recorrente }: { orgSlug: string; id: string; 
       {pending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
       Feito
     </button>
+  )
+}
+
+/**
+ * O que a mídia fechou nos últimos 7 dias. É rastro, não arquivo: o
+ * arquivamento das concluídas continua sendo em lote na Lista, com o Rafael —
+ * quebrar isso em dois lugares tornaria impossível saber o que já foi tratado.
+ */
+function Feitas({ orgSlug }: { orgSlug: string }) {
+  const [itens, setItens] = useState<{
+    id: string; titulo: string; cliente: string; workspaceId: string; campaignId: string
+    quando: string; quem: string | null; voltarPara: string
+  }[] | null>(null)
+  const [pending, start] = useTransition()
+  const router = useRouter()
+
+  useEffect(() => {
+    let vivo = true
+    const buscar = async () => {
+      const r = await concluidasRecentes(orgSlug)
+      if (!vivo) return
+      if ('error' in r && r.error) { toast.error(r.error); setItens([]); return }
+      setItens(r.itens ?? [])
+    }
+    void buscar()
+    return () => { vivo = false }
+  }, [orgSlug])
+
+  function reabrir(id: string, destino: string) {
+    start(async () => {
+      const r = await reabrirTarefaMidia(orgSlug, id, destino)
+      if (r?.error) { toast.error(r.error); return }
+      toast.success('Voltou para a fila.')
+      setItens(prev => (prev ?? []).filter(i => i.id !== id))
+      router.refresh()
+    })
+  }
+
+  if (itens === null) return <p className="text-sm text-gray-400 text-center py-16">Carregando…</p>
+  if (itens.length === 0) {
+    return (
+      <p className="text-sm text-gray-400 text-center py-16">
+        Nada concluído nos últimos 7 dias.
+      </p>
+    )
+  }
+
+  return (
+    <div>
+      <ul className="divide-y divide-gray-50">
+        {itens.map(i => {
+          const d = i.quando.slice(0, 10)
+          return (
+            <li key={i.id} className="flex items-center gap-3 px-4 py-2.5 flex-wrap">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <Link href={`/${orgSlug}/workspaces/${i.workspaceId}/campaigns/${i.campaignId}/activities/${i.id}?from=${encodeURIComponent(`/${orgSlug}/midia`)}`}
+                className="text-sm text-gray-700 hover:text-orange-600 transition-colors min-w-0 flex-1 truncate">
+                {i.titulo}
+              </Link>
+              <span className="text-[11px] text-gray-400 shrink-0">{i.cliente}</span>
+              <span className="text-[11px] text-gray-400 shrink-0 tabular-nums">
+                {d.slice(8, 10)}/{d.slice(5, 7)}{i.quem ? ` · ${i.quem.split(' ')[0]}` : ''}
+              </span>
+              <button onClick={() => reabrir(i.id, i.voltarPara)} disabled={pending}
+                title="Voltar para a fila"
+                className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors disabled:opacity-60">
+                {pending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Undo2 className="w-3 h-3" />}
+                Reabrir
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+      <p className="text-[11px] text-gray-400 px-4 py-3 border-t border-gray-50">
+        Arquivar continua na Lista, em lote — este bloco é só o rastro dos últimos 7 dias.
+      </p>
+    </div>
   )
 }

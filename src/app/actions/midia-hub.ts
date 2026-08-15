@@ -480,3 +480,71 @@ export async function concluirTarefaMidia(orgSlug: string, activityId: string) {
   revalidatePath(`/${orgSlug}/midia`)
   return { recorreu: !!recorreu, novoPrazo }
 }
+
+/**
+ * O que a mídia fechou nos últimos dias — memória curta do painel, não uma
+ * segunda caixa de arquivamento.
+ *
+ * Quem arquiva concluídas é o Rafael, em lote, na Lista (régua da casa). Criar
+ * um arquivamento paralelo aqui partiria esse processo em dois lugares. O que
+ * faltava era só a mídia enxergar o próprio rastro depois de clicar em Feito —
+ * e poder desfazer um clique errado.
+ *
+ * A fonte é o HISTÓRICO (activity_history), não o status atual: é ele que sabe
+ * que a tarefa veio de um status da mídia, e é o único jeito de não listar
+ * conclusão de outra área.
+ */
+export async function concluidasRecentes(orgSlug: string, dias = 7) {
+  const { supabase, orgId } = await assertMidiaAccess(orgSlug)
+  const sb = supabase as any
+  const { statusDaMidia } = await import('@/lib/midia-hub')
+  const statuses = await statusDaMidia(sb, orgId)
+
+  const desde = new Date(Date.now() - dias * 86400_000).toISOString()
+  const { data, error } = await sb
+    .from('activity_history')
+    .select('id, activity_id, from_status, to_status, changed_at, profiles!changed_by(full_name), activities!activity_id(id, title, status, archived, campaign_id, campaigns!inner(id, name, workspace_id, workspaces!inner(id, name, org_id)))')
+    .eq('to_status', 'concluido')
+    .in('from_status', statuses)
+    .gte('changed_at', desde)
+    .order('changed_at', { ascending: false })
+    .limit(60)
+  if (error) return { error: error.message }
+
+  const vistas = new Set<string>()
+  const itens = ((data ?? []) as any[])
+    .filter(h => {
+      const a = h.activities
+      if (!a || a.archived) return false
+      if (a.campaigns?.workspaces?.org_id !== orgId) return false
+      // Rotina que recorreu já voltou para a fila: não é "concluída".
+      if (a.status !== 'concluido') return false
+      if (vistas.has(a.id)) return false
+      vistas.add(a.id)
+      return true
+    })
+    .map(h => ({
+      id: h.activities.id as string,
+      titulo: h.activities.title as string,
+      cliente: h.activities.campaigns?.workspaces?.name as string,
+      workspaceId: h.activities.campaigns?.workspaces?.id as string,
+      campaignId: h.activities.campaign_id as string,
+      quando: h.changed_at as string,
+      quem: (h.profiles?.full_name ?? null) as string | null,
+      voltarPara: (h.from_status ?? 'midia') as string,
+    }))
+
+  return { itens }
+}
+
+/** Desfaz o "Feito" — devolve a tarefa ao status em que estava. Não arquiva nada. */
+export async function reabrirTarefaMidia(orgSlug: string, activityId: string, statusDestino: string) {
+  const { supabase, userId } = await assertMidiaAccess(orgSlug)
+  const { error } = await (supabase as any).rpc('update_activity_status', {
+    p_user_id: userId, p_activity_id: activityId,
+    p_new_status: statusDestino, p_comment: '',
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/midia`)
+  return {}
+}
