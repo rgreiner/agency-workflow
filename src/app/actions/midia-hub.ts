@@ -139,3 +139,22 @@ export async function tarefasDoCliente(orgSlug: string, workspaceId: string) {
     })),
   }
 }
+
+// ── Implantação (migration 237) ──────────────────────────────────────────────
+
+export type EstadoImplantacao = 'pendente' | 'ok' | 'na' | 'perdido'
+
+/** Marca o estado de um item de implantação. Estado REGRIDE — 'ok' hoje pode
+ *  virar 'perdido' amanhã, e isso é o comportamento esperado. */
+export async function marcarImplantacao(
+  orgSlug: string, workspaceId: string, itemId: string, estado: EstadoImplantacao, nota?: string | null,
+) {
+  const { supabase } = await assertMidiaAccess(orgSlug)
+  const { error } = await (supabase as any).rpc('midia_implantacao_marcar', {
+    p_workspace_id: workspaceId, p_item_id: itemId, p_estado: estado, p_nota: nota ?? null,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/midia/clientes`)
+  revalidatePath(`/${orgSlug}/midia`)
+  return {}
+}

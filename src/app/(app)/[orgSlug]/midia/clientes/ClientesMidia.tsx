@@ -8,7 +8,10 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
-import { ativarClienteMidia, aplicarRotinas, desativarRotina, salvarDadosOperacao } from '@/app/actions/midia-hub'
+import {
+  ativarClienteMidia, aplicarRotinas, desativarRotina, salvarDadosOperacao,
+  marcarImplantacao, type EstadoImplantacao,
+} from '@/app/actions/midia-hub'
 
 export interface RotinaCatalogo {
   id: string; nome: string; descricao: string | null
@@ -16,9 +19,15 @@ export interface RotinaCatalogo {
   pasta: string | null; padrao: boolean; ordem: number; ativo: boolean
 }
 
+export interface ItemImplantacao {
+  id: string; bloco: 'acessos' | 'documentos' | 'social' | 'pixel_crm'; nome: string; ordem: number
+}
+
 export interface ClienteRow {
   workspaceId: string
   nome: string
+  /** item_id → estado. Sem chave = pendente (não existe seed por cliente). */
+  implantacao: Record<string, { estado: string; nota: string | null }>
   operacao: {
     id: string; ano: number; ativo: boolean; campaignId: string | null
     planoUrl: string | null; specsUrl: string | null; crmUrl: string | null
@@ -42,10 +51,11 @@ function quando(r: RotinaCatalogo): string {
 }
 const fmtPrazo = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '—')
 
-export function ClientesMidia({ orgSlug, clientes, rotinas, pessoas, anoCorrente }: {
+export function ClientesMidia({ orgSlug, clientes, rotinas, itensImplantacao, pessoas, anoCorrente }: {
   orgSlug: string
   clientes: ClienteRow[]
   rotinas: RotinaCatalogo[]
+  itensImplantacao: ItemImplantacao[]
   pessoas: { id: string; nome: string }[]
   anoCorrente: number
 }) {
@@ -74,7 +84,8 @@ export function ClientesMidia({ orgSlug, clientes, rotinas, pessoas, anoCorrente
         ) : (
           <div className="space-y-2">
             {ativos.map(c => (
-              <CardCliente key={c.workspaceId} orgSlug={orgSlug} cliente={c} rotinas={rotinas} pessoas={pessoas}
+              <CardCliente key={c.workspaceId} orgSlug={orgSlug} cliente={c} rotinas={rotinas}
+                itensImplantacao={itensImplantacao} pessoas={pessoas}
                 aberto={aberto === c.workspaceId} onToggle={() => setAberto(aberto === c.workspaceId ? null : c.workspaceId)} />
             ))}
           </div>
@@ -114,10 +125,11 @@ function LinhaInativa({ orgSlug, cliente }: { orgSlug: string; cliente: ClienteR
   )
 }
 
-function CardCliente({ orgSlug, cliente, rotinas, pessoas, aberto, onToggle }: {
+function CardCliente({ orgSlug, cliente, rotinas, itensImplantacao, pessoas, aberto, onToggle }: {
   orgSlug: string
   cliente: ClienteRow
   rotinas: RotinaCatalogo[]
+  itensImplantacao: ItemImplantacao[]
   pessoas: { id: string; nome: string }[]
   aberto: boolean
   onToggle: () => void
@@ -152,6 +164,7 @@ function CardCliente({ orgSlug, cliente, rotinas, pessoas, aberto, onToggle }: {
         <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 shrink-0 tabular-nums">
           {op.rotinas.filter(r => r.viva).length} rotina{op.rotinas.filter(r => r.viva).length === 1 ? '' : 's'}
         </span>
+        <ProgressoImplantacao itens={itensImplantacao} estados={cliente.implantacao} />
       </button>
 
       {aberto && (
@@ -214,6 +227,9 @@ function CardCliente({ orgSlug, cliente, rotinas, pessoas, aberto, onToggle }: {
             </ul>
           </div>
 
+          <Implantacao orgSlug={orgSlug} workspaceId={cliente.workspaceId}
+            itens={itensImplantacao} estados={cliente.implantacao} />
+
           <LinksOperacao orgSlug={orgSlug} op={op} />
         </div>
       )}
@@ -260,6 +276,105 @@ function LinksOperacao({ orgSlug, op }: { orgSlug: string; op: NonNullable<Clien
         className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-60">
         {pending && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Salvar links
       </button>
+    </div>
+  )
+}
+
+const BLOCOS: { id: ItemImplantacao['bloco']; label: string }[] = [
+  { id: 'acessos', label: 'Acessos' },
+  { id: 'documentos', label: 'Documentos' },
+  { id: 'social', label: 'Social' },
+  { id: 'pixel_crm', label: 'Pixel e CRM' },
+]
+
+/** % de implantação: 'na' (não se aplica) sai do denominador — item que nunca
+ *  vai existir naquele cliente não pode segurar o cliente em 80% para sempre. */
+function calcula(itens: ItemImplantacao[], estados: ClienteRow['implantacao']) {
+  let vale = 0, ok = 0, perdidos = 0
+  for (const i of itens) {
+    const e = estados[i.id]?.estado ?? 'pendente'
+    if (e === 'na') continue
+    vale++
+    if (e === 'ok') ok++
+    if (e === 'perdido') perdidos++
+  }
+  return { pct: vale ? Math.round((ok / vale) * 100) : 100, ok, vale, perdidos }
+}
+
+function ProgressoImplantacao({ itens, estados }: { itens: ItemImplantacao[]; estados: ClienteRow['implantacao'] }) {
+  const { pct, perdidos } = calcula(itens, estados)
+  if (itens.length === 0) return null
+  return (
+    <span className={cn('text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0 tabular-nums',
+      perdidos > 0 ? 'bg-red-50 text-red-700' : pct === 100 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700')}>
+      implantação {pct}%{perdidos > 0 ? ` · ${perdidos} perdido${perdidos > 1 ? 's' : ''}` : ''}
+    </span>
+  )
+}
+
+const ESTADOS: { v: EstadoImplantacao; label: string; cls: string }[] = [
+  { v: 'ok', label: 'ok', cls: 'bg-emerald-100 text-emerald-700' },
+  { v: 'pendente', label: 'pendente', cls: 'bg-gray-100 text-gray-500' },
+  { v: 'perdido', label: 'perdido', cls: 'bg-red-100 text-red-700' },
+  { v: 'na', label: 'n/a', cls: 'bg-gray-100 text-gray-400' },
+]
+
+/** Checklist de ESTADO — não é uma lista de tarefas a concluir: o item volta
+ *  para 'perdido' quando o acesso cai, e é esse o ponto de existir. */
+function Implantacao({ orgSlug, workspaceId, itens, estados }: {
+  orgSlug: string
+  workspaceId: string
+  itens: ItemImplantacao[]
+  estados: ClienteRow['implantacao']
+}) {
+  const [pending, start] = useTransition()
+  const { pct, ok, vale } = calcula(itens, estados)
+  if (itens.length === 0) return null
+
+  function marcar(itemId: string, estado: EstadoImplantacao) {
+    start(async () => {
+      const r = await marcarImplantacao(orgSlug, workspaceId, itemId, estado)
+      if (r?.error) toast.error(r.error)
+    })
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Implantação</h3>
+        <span className="text-[11px] text-gray-400 tabular-nums">{ok} de {vale} · {pct}%</span>
+      </div>
+      <div className="grid sm:grid-cols-2 gap-3">
+        {BLOCOS.map(b => {
+          const doBloco = itens.filter(i => i.bloco === b.id)
+          if (doBloco.length === 0) return null
+          return (
+            <div key={b.id} className="border border-gray-100 rounded-xl p-3">
+              <p className="text-[11px] font-semibold text-gray-500 mb-1.5">{b.label}</p>
+              <ul className="space-y-1">
+                {doBloco.map(i => {
+                  const atual = (estados[i.id]?.estado ?? 'pendente') as EstadoImplantacao
+                  return (
+                    <li key={i.id} className="flex items-center gap-2">
+                      <span className="text-[12px] text-gray-700 min-w-0 flex-1 truncate" title={i.nome}>{i.nome}</span>
+                      <span className="flex items-center gap-0.5 shrink-0">
+                        {ESTADOS.map(e => (
+                          <button key={e.v} onClick={() => marcar(i.id, e.v)} disabled={pending}
+                            title={e.label}
+                            className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-md transition-colors disabled:opacity-60',
+                              atual === e.v ? e.cls : 'text-gray-300 hover:bg-gray-100')}>
+                            {e.label}
+                          </button>
+                        ))}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
