@@ -14,7 +14,7 @@ export default async function MidiaClientesPage({ params }: { params: Promise<{ 
   const [resWs, resOper, resRot, resMembros, resItens, resEstados] = await Promise.all([
     sb.from('workspaces').select('id, name, archived').eq('org_id', orgId),
     sb.from('midia_cliente')
-      .select('id, ano, ativo, workspace_id, campaign_id, plano_url, specs_url, crm_url, drive_folder_id, observacao, midia_cliente_rotina(id, ativo, rotina_id, activity_id, activities(id, title, due_date, status, archived))')
+      .select('id, ano, ativo, workspace_id, campaign_id, plano_url, specs_url, crm_url, drive_folder_id, observacao, midia_cliente_rotina(id, ativo, rotina_id, activity_id, activities!activity_id(id, title, due_date, status, archived))')
       .eq('org_id', orgId),
     sb.from('midia_rotina').select('id, nome, descricao, frequencia, dia_mes, dia_semana, pasta, padrao, ordem, ativo')
       .eq('org_id', orgId).eq('ativo', true).order('ordem'),
