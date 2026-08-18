@@ -25,6 +25,12 @@ export function mensagemErroIA(
   if (bruto.includes('credit') || bruto.includes('billing') || bruto.includes('quota') || bruto.includes('exceeded')) {
     return 'A IA está sem créditos. Um administrador precisa recarregar a conta do Google AI Studio (aistudio.google.com → Billing) — ou habilitar o faturamento do projeto, se estivermos usando o Vertex — e tentar de novo.'
   }
+  // 403 "project has been denied access" NÃO é chave errada: a chave autentica
+  // (listar modelos responde 200) e só o generateContent é negado — quem bloqueou
+  // foi o Google, no projeto. Mandar o admin conferir a chave manda pro lugar errado.
+  if (bruto.includes('denied access')) {
+    return 'O projeto de IA no Google AI Studio está bloqueado (acesso negado pelo Google). Um administrador precisa resolver com o Google — ou apontar o Flow para o Vertex.'
+  }
   if (status === 401 || status === 403 || bruto.includes('api key not valid') || bruto.includes('permission_denied')) {
     return 'A chave da IA foi recusada. Um administrador precisa revisar a GEMINI_API_KEY (ou a conta de serviço do Vertex).'
   }

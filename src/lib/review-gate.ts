@@ -48,9 +48,12 @@ const espera = (ms: number) => new Promise(r => setTimeout(r, ms))
  * repetir só gastaria tempo e daria o mesmo resultado.
  */
 function ehTransiente(e: unknown): boolean {
+  const msg = String((e as Error)?.message ?? e)
+  // Sem crédito / projeto bloqueado chega como 429 ou 403 e NÃO melhora esperando:
+  // retentar só faz a pessoa encarar 45s a mais pro mesmo recado.
+  if (/credit|billing|prepay|depleted|denied access|permission_denied/i.test(msg)) return false
   const status = (e as { status?: number })?.status
   if (typeof status === 'number') return status === 408 || status === 429 || status >= 500
-  const msg = String((e as Error)?.message ?? e)
   // O caminho do Gemini não é SDK: o erro chega como texto ("Gemini 503: …"),
   // então o código HTTP no começo da mensagem também vale como sinal.
   return /^\D{0,20}\b(408|429|5\d\d)\b/.test(msg)
