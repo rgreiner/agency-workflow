@@ -120,8 +120,7 @@ export interface GeminiJsonOpts {
  * folgado (o teto dos modelos é 65.536) e o corte por token vira erro explícito.
  */
 export async function geminiJson<T>(opts: GeminiJsonOpts): Promise<{ model: string; data: T | null }> {
-  const model = geminiModel(opts.model)
-  const { url, headers } = await geminiEndpoint(model)
+  const pedido = geminiModel(opts.model)
 
   const body = {
     systemInstruction: { parts: [{ text: opts.system }] },
@@ -139,7 +138,7 @@ export async function geminiJson<T>(opts: GeminiJsonOpts): Promise<{ model: stri
     },
   }
 
-  const res = await postComRetry(url, headers, JSON.stringify(body))
+  const { model, res } = await postNoModelo(pedido, JSON.stringify(body))
   const json = await res.json() as {
     candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[]
     promptFeedback?: { blockReason?: string }
@@ -158,6 +157,36 @@ export async function geminiJson<T>(opts: GeminiJsonOpts): Promise<{ model: stri
     }
   }
   return { model, data }
+}
+
+/**
+ * O Google APOSENTA modelo: `gemini-2.5-flash` virou 404 em 19/08/2026 com o recado
+ * "no longer available to new users. Please update your code to use
+ * models/gemini-3.6-flash". Quem morre nisso não é o código (o default da casa já é
+ * o modelo novo) e sim uma env var velha no Coolify — e o efeito é a revisão inteira
+ * parar até alguém mexer no painel. Então: 404 de modelo NÃO é fim de linha. Tenta de
+ * novo com o substituto que o próprio Google indica na mensagem (ou com o default da
+ * casa) e segue o trabalho, deixando o aviso no log pra env ser corrigida.
+ */
+async function postNoModelo(pedido: string, body: string): Promise<{ model: string; res: Response }> {
+  const { url, headers } = await geminiEndpoint(pedido)
+  try {
+    return { model: pedido, res: await postComRetry(url, headers, body) }
+  } catch (e) {
+    if (!(e instanceof ErroIA) || e.status !== 404) throw e
+    const substituto = modeloSubstituto(e.message, pedido)
+    if (!substituto) throw e
+    console.warn(`[gemini] modelo "${pedido}" não existe mais; usando "${substituto}". Corrija GEMINI_MODEL/REVIEW_MODEL_GEMINI no Coolify.`)
+    const alt = await geminiEndpoint(substituto)
+    return { model: substituto, res: await postComRetry(alt.url, alt.headers, body) }
+  }
+}
+
+/** Modelo sugerido pelo próprio 404 ("use models/X"), senão o default da casa. */
+function modeloSubstituto(mensagem: string, pedido: string): string | null {
+  const sugerido = mensagem.match(/use\s+models\/([A-Za-z0-9.\-_]+)/)?.[1]
+  const alvo = sugerido || DEFAULT_MODEL
+  return alvo === pedido ? null : alvo
 }
 
 /**
