@@ -12,7 +12,7 @@ import { parseMoney } from '@/lib/midia'
  * Faturamento, que é outra rota e não seria revalidada sozinha.
  */
 function revalidarProducao(orgSlug: string) {
-  for (const t of ['orcamento', 'pedido', 'fee', 'proposta']) {
+  for (const t of ['orcamento', 'pedido', 'fee', 'proposta', 'venda']) {
     revalidatePath(`/${orgSlug}/producao/${t}`)
   }
   revalidatePath(`/${orgSlug}/financeiro/faturamento`)

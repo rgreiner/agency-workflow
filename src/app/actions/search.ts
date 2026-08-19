@@ -68,7 +68,7 @@ const MIDIA_ROUTE: Record<string, string> = {
   impressa_jornal: 'impressa', impressa_revista: 'impressa',
   eletronica: 'eletronica', externa: 'externas', digital: 'digitais',
 }
-const PROD_ROUTES = new Set(['orcamento', 'pedido', 'fee', 'proposta'])
+const PROD_ROUTES = new Set(['orcamento', 'pedido', 'fee', 'proposta', 'venda'])
 
 export async function searchExtras(
   orgSlug: string,

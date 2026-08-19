@@ -52,6 +52,16 @@ export function FaturamentoFeesTable({ orgSlug, fees, ...cat }: { orgSlug: strin
   )
 }
 
+/** Categoria sugerida na conferência, por tipo de documento. */
+const CATEGORIA_PADRAO: Record<string, string> = { fee: 'Fee', venda: 'Receitas de Vendas' }
+
+/** A Receita de Venda não tem PDF (é registro interno) — abre o próprio documento. */
+function hrefDoc(orgSlug: string, fee: FeeView): string {
+  return fee.tipo === 'venda'
+    ? `/${orgSlug}/producao/venda/${fee.id}`
+    : `/${orgSlug}/producao/${fee.tipo}/${fee.id}/print`
+}
+
 function FeeRow({ orgSlug, fee, cat }: { orgSlug: string; fee: FeeView; cat: CatalogosProps }) {
   // Já nasce expandido — a conferência (datas + documentos) fica clara de cara.
   const [open, setOpen] = useState(true)
@@ -59,7 +69,7 @@ function FeeRow({ orgSlug, fee, cat }: { orgSlug: string; fee: FeeView; cat: Cat
   const [, startTransition] = useTransition()
   // Pré-preenchido: centro = cliente, categoria pelo tipo (Fee/Job), conta = padrão.
   const [cls, setCls] = useState<Classificacao>({
-    conta: cat.defaultConta, categoria: fee.tipo === 'fee' ? 'Fee' : 'Job', centro: fee.cliente, forma: '',
+    conta: cat.defaultConta, categoria: CATEGORIA_PADRAO[fee.tipo] ?? 'Job', centro: fee.cliente, forma: '',
   })
   const n = fee.parcelas.length
   const temComissao = fee.parcelas.some(p => p.comissao)
@@ -77,7 +87,7 @@ function FeeRow({ orgSlug, fee, cat }: { orgSlug: string; fee: FeeView; cat: Cat
     <Fragment>
       <tr className={cn('transition', open ? 'bg-orange-50/40' : 'hover:bg-gray-50/50')}>
         <td className="px-4 py-3 whitespace-nowrap">
-          <Link href={`/${orgSlug}/producao/${fee.tipo}/${fee.id}/print`} target="_blank"
+          <Link href={hrefDoc(orgSlug, fee)} target="_blank"
             title="Abrir o documento em nova aba (somente leitura; não altera o status)"
             className="group/lnk inline-flex items-center gap-1 text-sm text-gray-500 hover:text-orange-600 tabular-nums transition-colors">
             {docNumero(fee.serie, fee.numero)}

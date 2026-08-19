@@ -113,6 +113,7 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Orçamento',          href: 'producao/orcamento' },
     { label: 'Pedido de produção', href: 'producao/pedido' },
     { label: 'FEE',                href: 'producao/fee' },
+    { label: 'Receita de Venda',   href: 'producao/venda' },
     { label: 'Proposta',           href: 'producao/proposta' },
     { label: 'Relatório de autorização', href: 'relatorios/autorizacao' },
   ] },

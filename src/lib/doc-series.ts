@@ -14,6 +14,7 @@ export const SERIE_LABELS: Record<string, string> = {
   PP: 'Pedido de Produção',
   PR: 'Projeto/Proposta',
   FEE: 'Fee',
+  RV: 'Receita de Venda',
   MX: 'Mídia Externa',
   ME: 'Mídia Eletrônica',
   MI: 'Mídia Impressa',

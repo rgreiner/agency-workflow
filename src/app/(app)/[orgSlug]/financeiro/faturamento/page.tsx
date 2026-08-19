@@ -203,7 +203,7 @@ export default async function FaturamentoPage({
     .from('producao')
     .select(`id, numero, serie, titulo, tipo, valor, bv_pct, honorarios_pct, detalhe, anexos, workspaces(${WS_CONTATO})`)
     .eq('org_id', orgId).eq('archived', false)
-    .eq('situacao', 'faturar').in('tipo', ['fee', 'pedido', 'proposta'])
+    .eq('situacao', 'faturar').in('tipo', ['fee', 'pedido', 'proposta', 'venda'])
     .order('numero', { ascending: false }), 'produção a faturar')
   // Parcelas que viram lançamento a receber (o que a agência realmente fatura).
   const RECEBER_TIPOS = ['receber_bv', 'receber_honorarios', 'receber_cliente']
@@ -224,7 +224,7 @@ export default async function FaturamentoPage({
     // Valor que a agência fatura (verde): comissão+honorários no pedido; valor cheio no fee.
     const aFaturar = somaReceber > 0
       ? somaReceber
-      : (f.tipo === 'pedido'
+      : (f.tipo === 'pedido' || f.tipo === 'venda'
           ? valorCheio * ((Number(f.bv_pct ?? 0) + Number(f.honorarios_pct ?? 0)) / 100)
           : valorCheio)
     // Mostra as parcelas a receber (fallback p/ dados antigos sem tipo).
