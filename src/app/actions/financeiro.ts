@@ -865,3 +865,103 @@ export async function enviarFaturamentoEmail(
   revalidatePath(`/${orgSlug}/financeiro/faturamento`)
   return {}
 }
+
+// ── Análise: drilldown da célula ──────────────────────────────────────────────
+
+/** Filtro já RESOLVIDO pelo cliente (macro-grupo virou lista de categorias). */
+export interface FiltroDrill {
+  base: 'caixa' | 'competencia'
+  de: string            // 'YYYY-MM-DD' (1º dia)
+  ate: string           // 'YYYY-MM-DD' (último dia)
+  tipos: string[]       // ['despesa'] | ['receita'] | ambos
+  situacoes: string[]   // ['realizado', 'previsto']
+  categorias: string[]  // [] = todas
+  centros: string[]
+  contatos: string[]
+  contas: string[]
+}
+
+export interface MovimentoDrill {
+  data: string | null
+  situacao: string
+  tipo: string
+  descricao: string | null
+  contato: string | null
+  categoria: string | null
+  centro_custo: string | null
+  conta: string | null
+  valor: number
+}
+
+const CAMPOS_DRILL =
+  'situacao, tipo, valor, data_mov, data_prevista, competencia, categoria, centro_custo, contato, conta, descricao'
+
+/**
+ * Lançamentos por trás de uma célula da tabela dinâmica.
+ *
+ * A data de CAIXA é `data_mov` no realizado e `data_prevista` no previsto — a
+ * view não tem essa coluna pronta, e um `coalesce` não se escreve em filtro do
+ * PostgREST. Por isso são duas consultas, uma por situação, cada uma filtrando
+ * pela coluna que existe naquele lado. Competência é uma coluna só.
+ *
+ * O resto (categoria/centro/contato/conta) é filtrado aqui em JS com a MESMA
+ * normalização do cubo (migration 248): o placeholder "(sem categoria)" não é um
+ * valor no banco, é vazio — `in.()` nunca casaria com ele.
+ */
+export async function carregarMovimentosDrill(orgSlug: string, f: FiltroDrill) {
+  const { supabase, orgId } = await assertFinanceAccess(orgSlug)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any
+
+  const colunaData = (situacao: string) =>
+    f.base === 'competencia' ? 'competencia' : situacao === 'previsto' ? 'data_prevista' : 'data_mov'
+
+  const brutas: Record<string, unknown>[] = []
+  for (const situacao of f.situacoes) {
+    const col = colunaData(situacao)
+    const { data, error } = await sb
+      .from('fin_movimentos')
+      .select(CAMPOS_DRILL)
+      .eq('org_id', orgId)
+      .eq('situacao', situacao)
+      .eq('transferencia', false)
+      .in('tipo', f.tipos)
+      .gte(col, f.de)
+      .lte(col, f.ate)
+      .limit(2000)
+    // Lista vazia por falha se leria como "não teve lançamento nenhum", que é
+    // exatamente a conclusão errada numa conferência de custo.
+    if (error) return { error: error.message }
+    brutas.push(...((data ?? []) as Record<string, unknown>[]))
+  }
+
+  const txt = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+  const casa = (sel: string[], valor: string, vazio: string) =>
+    sel.length === 0 || sel.includes(valor === '' ? vazio : valor)
+
+  const linhas: MovimentoDrill[] = []
+  for (const m of brutas) {
+    const categoria = txt(m.categoria)
+    const centro = txt(m.centro_custo)
+    const contato = txt(m.contato)
+    const conta = txt(m.conta)
+    if (!casa(f.categorias, categoria, '(sem categoria)')) continue
+    if (!casa(f.centros, centro, '(sem centro de custo)')) continue
+    if (!casa(f.contatos, contato, '(não informado)')) continue
+    if (!casa(f.contas, conta, '(sem conta)')) continue
+    const situacao = String(m.situacao)
+    linhas.push({
+      data: (m[colunaData(situacao)] as string) ?? null,
+      situacao,
+      tipo: String(m.tipo),
+      descricao: (m.descricao as string) ?? null,
+      contato: contato || null,
+      categoria: categoria || null,
+      centro_custo: centro || null,
+      conta: conta || null,
+      valor: Math.abs(Number(m.valor ?? 0)),
+    })
+  }
+  linhas.sort((a, b) => (b.data ?? '').localeCompare(a.data ?? ''))
+  return { linhas }
+}

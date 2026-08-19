@@ -119,6 +119,7 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
   { id: 'financeiro', label: 'Financeiro', icon: Wallet, finance: true, items: [
     { label: 'Painel',         href: 'financeiro/painel' },
     { label: 'Fluxo de caixa', href: 'financeiro/fluxo-caixa' },
+    { label: 'Análise',        href: 'financeiro/analise' },
     { label: 'Lançamentos',    href: 'financeiro/lancamentos' },
     { label: 'Inadimplentes',  href: 'financeiro/inadimplentes' },
     { label: 'Faturamento',    href: 'financeiro/faturamento' },
