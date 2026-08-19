@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, FileText, Receipt, Check, RotateCcw, AlertTr
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
 import { Select } from '@/components/ui/Select'
+import { InputSugestao } from '@/components/ui/InputSugestao'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { DocChip } from '@/components/ui/DocChip'
 import { docNumero } from '@/lib/doc-series'
@@ -101,9 +102,11 @@ const parseBR = (s: string) => { const t = s.trim().replace(/\./g, '').replace('
 const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 
-export function LancamentosClient({ orgSlug, lancamentos, importadas = [], contas, contaPadrao = '', categorias, centros, today }: {
+export function LancamentosClient({ orgSlug, lancamentos, importadas = [], contas, contaPadrao = '', categorias, centros, today, sugestoesContato = [] }: {
   orgSlug: string; lancamentos: Lancamento[]; importadas?: Lancamento[]; contas: ContaRef[]
   contaPadrao?: string; categorias: FinanceCategoriaGrupo[]; centros: FinanceCentro[]; today: string
+  /** Nomes já em uso (cadastro + lançamentos) para o campo Contato sugerir. */
+  sugestoesContato?: string[]
 }) {
   const [periodo, setPeriodo] = useState<Periodo>({ tipo: 'mes', ano: Number(today.slice(0, 4)), mes: Number(today.slice(5, 7)) })
   const { start: perStart, end: perEnd } = useMemo(() => periodoRange(periodo), [periodo])
@@ -415,7 +418,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
 
       {(creating || editing) && (
         <LancamentoModal orgSlug={orgSlug} lancamento={editing} contas={contas} contaPadrao={contaPadrao} categorias={categorias} centros={centros}
-          foco={editFoco}
+          sugestoesContato={sugestoesContato} foco={editFoco}
           onClose={() => { setCreating(false); setEditing(null); setEditFoco(null) }} />
       )}
       {baixa && (
@@ -836,9 +839,10 @@ const FORMA_OPTIONS = [
   { value: 'dinheiro', label: 'Dinheiro' },
 ]
 
-function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', categorias, centros, foco, onClose }: {
+function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', categorias, centros, sugestoesContato = [], foco, onClose }: {
   orgSlug: string; lancamento: Lancamento | null; contas: ContaRef[]; contaPadrao?: string
   categorias: FinanceCategoriaGrupo[]; centros: FinanceCentro[]
+  sugestoesContato?: string[]
   foco?: 'vencimento' | null; onClose: () => void
 }) {
   const router = useRouter()
@@ -1038,9 +1042,14 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls}>Contato</label>
-            <input type="text" value={form.contato_nome} disabled={readonly}
-              onChange={e => setForm(f => ({ ...f, contato_nome: e.target.value }))}
-              placeholder="Cliente / fornecedor" className={cn(inputCls, readonly && 'opacity-60')} />
+            {/* Texto livre COM sugestão: fornecedor novo ainda entra digitando, mas
+                reusar a grafia existente vira um clique — nome escrito de dois
+                jeitos parte o mesmo cliente em duas linhas na Análise. */}
+            <InputSugestao
+              value={form.contato_nome} disabled={readonly}
+              onChange={v => setForm(f => ({ ...f, contato_nome: v }))}
+              sugestoes={sugestoesContato}
+              placeholder="Cliente / fornecedor" />
           </div>
           <div>
             <label className={labelCls}>Valor (R$)</label>

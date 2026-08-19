@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { assertFinanceAccess } from '@/lib/finance'
-import { chaveNome } from '@/lib/fin-cubo'
+import { chaveNome } from '@/lib/nomes'
 import { getUsuario } from '@/lib/auth/server'
 import { revalidatePath } from 'next/cache'
 

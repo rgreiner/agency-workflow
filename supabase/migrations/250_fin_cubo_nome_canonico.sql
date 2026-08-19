@@ -26,7 +26,7 @@ returns text language sql immutable strict as $$
     'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC');
 $$;
 
-/* Chave de agrupamento de nome. Espelhada em `chaveNome` (src/lib/fin-cubo.ts):
+/* Chave de agrupamento de nome. Espelhada em `chaveNome` (src/lib/nomes.ts):
    o drilldown filtra em JS e as duas réguas TÊM que casar, senão clicar na célula
    traria só metade dos lançamentos. */
 create or replace function fin_chave_nome(t text)

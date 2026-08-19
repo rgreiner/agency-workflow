@@ -1,4 +1,5 @@
 import { assertFinanceAccess, fetchDescartados } from '@/lib/finance'
+import { sugestoesDeNome } from '@/lib/nomes'
 import { isRealizado, isIgnorado } from '@/lib/extrato'
 import { LancamentosClient, type Lancamento, type ContaRef } from './LancamentosClient'
 import type { FinanceCategoriaGrupo, FinanceCentro } from '@/app/actions/financeiro'
@@ -62,7 +63,7 @@ export default async function LancamentosPage({
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any
-  const [{ data: raw, error: lancErr }, { data: contasRaw }, { data: settings }] = await Promise.all([
+  const [{ data: raw, error: lancErr }, { data: contasRaw }, { data: settings }, { data: fornRaw }, { data: cliRaw }] = await Promise.all([
     // lancamentos_doc = lancamentos + série/número do documento de origem (migration 135).
     sb.from('lancamentos_doc')
       .select('id, tipo, origem_tipo, origem_ref, origem_id, transferencia_id, doc_serie, doc_numero, doc_origem, doc_producao_tipo, parcela_num, parcela_total, contato_nome, descricao, valor, valor_realizado, vencimento, competencia, situacao, nf_emitida, boleto_gerado, revisar, conta_id, categoria, centro_custo, data_liquidacao, forma_pagamento, observacao, juros, multa, desconto, tarifa, anexos')
@@ -76,6 +77,10 @@ export default async function LancamentosPage({
       .select('finance_categorias, finance_centros_custo')
       .eq('org_id', orgId)
       .maybeSingle(),
+    // Cadastros: a grafia OFICIAL do fornecedor e do cliente. É ela que o campo
+    // Contato sugere primeiro — quem digita à mão é que inventa variante.
+    sb.from('fornecedores').select('name').eq('org_id', orgId).eq('archived', false),
+    sb.from('workspaces').select('name').eq('org_id', orgId).eq('archived', false),
   ])
 
   // Falhar ALTO. Esta consulta ficou 8 dias devolvendo 400 ("column lancamentos.revisar
@@ -134,6 +139,16 @@ export default async function LancamentosPage({
     .filter((e: any) => !e.import_ref || (!promovidos.has(e.import_ref as string) && !descartados.has(e.import_ref as string)))
     .map(e => extratoToLancamento(e, contaIdByName))
 
+  // Sugestões do campo Contato: cadastro + nomes já usados, com as variantes de
+  // grafia colapsadas na melhor ("É O AMOR" e "É o Amor" viram uma sugestão só).
+  // Sem query nova: os lançamentos e o extrato já estão em mãos aqui.
+  const sugestoesContato = sugestoesDeNome([
+    ...((fornRaw ?? []) as { name: string }[]).map(f => ({ nome: f.name, cadastro: true })),
+    ...((cliRaw ?? []) as { name: string }[]).map(c => ({ nome: c.name, cadastro: true })),
+    ...lancamentos.map(l => ({ nome: l.contato_nome ?? '', peso: 1 })),
+    ...importadas.map(l => ({ nome: l.contato_nome ?? '', peso: 1 })),
+  ])
+
   return (
     <LancamentosClient
       orgSlug={orgSlug}
@@ -144,6 +159,7 @@ export default async function LancamentosPage({
       categorias={categorias}
       centros={centros}
       today={today}
+      sugestoesContato={sugestoesContato}
     />
   )
 }

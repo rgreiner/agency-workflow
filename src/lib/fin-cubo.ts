@@ -142,22 +142,6 @@ export function limitesDoCubo(rows: CuboRow[], base: Base): { min: string; max: 
   return { min, max }
 }
 
-/* Chave de agrupamento de nome — espelha `fin_chave_nome` (migration 250) caractere
-   a caractere. NÃO trocar por `normalize('NFD')`: o Postgres traduz uma tabela fixa
-   de acentos e o NFD trataria também ñ, ů e afins, então as duas réguas passariam a
-   divergir — e o drilldown, que filtra em JS, traria só metade dos lançamentos. */
-const ACENTOS = 'áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ'
-const SEM_ACENTO = 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC'
-
-export function chaveNome(s: string): string {
-  let out = ''
-  for (const ch of (s ?? '').trim()) {
-    const i = ACENTOS.indexOf(ch)
-    out += i >= 0 ? SEM_ACENTO[i] : ch
-  }
-  return out.toLowerCase()
-}
-
 const inclui = (sel: string[], v: string) => sel.length === 0 || sel.includes(v)
 
 /** Recorte de período + tipo + situação — o que define o UNIVERSO da tela. */
