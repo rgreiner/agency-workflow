@@ -59,13 +59,32 @@ export function mesDe(r: CuboRow, base: Base): string {
   return d.slice(0, 7)
 }
 
-export const rotuloMes = (ym: string) => `${MESES_ABREV[Number(ym.slice(5, 7)) - 1]}/${ym.slice(2, 4)}`
+/**
+ * 'ago/26'. Ano fora de 2000–2099 sai por extenso ('jan/0005'): existe lançamento
+ * com competência corrompida na importação, e abreviar o ano faria o ano 5 se
+ * passar por 2005 — o erro tem que ficar visível, não disfarçado.
+ */
+export function rotuloMes(ym: string): string {
+  const y = Number(ym.slice(0, 4))
+  const mes = MESES_ABREV[Number(ym.slice(5, 7)) - 1] ?? ym.slice(5, 7)
+  return y >= 2000 && y <= 2099 ? `${mes}/${ym.slice(2, 4)}` : `${mes}/${ym.slice(0, 4)}`
+}
 
-/** 'YYYY-MM' somando n meses (n negativo anda para trás). */
+/**
+ * 'YYYY-MM' somando n meses (n negativo anda para trás).
+ *
+ * Aritmética pura, sem `Date`: `Date.UTC(5, 0, 1)` NÃO é o ano 5, é 1905 (o
+ * mapeamento legado de ano de dois dígitos do JS). Com um lançamento de
+ * competência 0005-01 em produção, andar para trás mês a mês descia até o ano
+ * 100, pulava para 1999 e recomeçava — laço infinito que travava a aba.
+ */
 export function addMes(ym: string, n: number): string {
-  const [y, m] = ym.split('-').map(Number)
-  const d = new Date(Date.UTC(y, m - 1 + n, 1))
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+  const y = Number(ym.slice(0, 4))
+  const m = Number(ym.slice(5, 7))
+  const total = y * 12 + (m - 1) + n
+  const ano = Math.floor(total / 12)
+  const mes = total - ano * 12 + 1
+  return `${String(ano).padStart(4, '0')}-${String(mes).padStart(2, '0')}`
 }
 
 export type Preset =
@@ -341,10 +360,14 @@ export interface Drill {
   colunaKey: string | null
 }
 
-/** 'YYYY-MM' → 'YYYY-MM-DD' do último dia (sem conversão de fuso). */
+const DIAS_NO_MES = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+const bissexto = (y: number) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0
+
+/** 'YYYY-MM' → 'YYYY-MM-DD' do último dia. Sem `Date` pelo mesmo motivo de `addMes`. */
 export function fimDoMes(ym: string): string {
-  const [y, m] = ym.split('-').map(Number)
-  const ultimo = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  const y = Number(ym.slice(0, 4))
+  const m = Number(ym.slice(5, 7))
+  const ultimo = m === 2 && bissexto(y) ? 29 : (DIAS_NO_MES[m - 1] ?? 31)
   return `${ym}-${String(ultimo).padStart(2, '0')}`
 }
 
@@ -360,4 +383,18 @@ export function categoriasDoMacro(
   const out = new Set<string>()
   for (const r of rows) if (chaveDim(r, 'macro', base, macros) === macro) out.add(r.categoria)
   return [...out]
+}
+
+/**
+ * Meses que existem de fato no cubo, do mais recente para o mais antigo.
+ *
+ * O seletor de período personalizado sai DAQUI e não de um laço entre o menor e o
+ * maior mês: enumerar o intervalo deixa a tela refém de uma data corrompida — um
+ * lançamento com competência no ano 5 gerava 24 mil opções (quando não travava de
+ * vez). Aqui o teto é o próprio dado.
+ */
+export function mesesDoCubo(rows: CuboRow[], base: Base): string[] {
+  const set = new Set<string>()
+  for (const r of rows) set.add(mesDe(r, base))
+  return [...set].sort((a, b) => b.localeCompare(a))
 }

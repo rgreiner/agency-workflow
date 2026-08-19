@@ -8,7 +8,7 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { formatBRL, formatDateBR } from '@/lib/midia'
 import { coresPorNome, type CategoriaGrupoLike } from '@/lib/finance-categorias'
 import {
-  aplicaFiltros, categoriasDoMacro, fimDoMes, limitesDoCubo, opcoesDeFiltro, pivot,
+  aplicaFiltros, categoriasDoMacro, fimDoMes, limitesDoCubo, mesesDoCubo, opcoesDeFiltro, pivot,
   rangeDoPreset, rotuloMes, totalDe, DIMENSOES, DIMENSOES_COLUNA, PRESETS,
   type Base, type Celula, type CuboRow, type Dim, type Filtros, type Preset, type TipoFiltro,
 } from '@/lib/fin-cubo'
@@ -121,12 +121,13 @@ export function AnaliseClient({ orgSlug, rows, categorias, centros }: {
   const geral = totalDe(p.total)
   const mostraSplit = prefs.situacoes.length > 1
 
-  // Meses disponíveis para o período personalizado.
-  const mesesOpts = useMemo(() => {
-    const out: { value: string; label: string }[] = []
-    for (let m = limites.max; m >= limites.min; m = addMesLocal(m, -1)) out.push({ value: m, label: rotuloMes(m) })
-    return out
-  }, [limites])
+  // Meses disponíveis para o período personalizado: os que EXISTEM no cubo. Ver
+  // `mesesDoCubo` — enumerar o intervalo travava a tela por causa de um lançamento
+  // com competência corrompida.
+  const mesesOpts = useMemo(
+    () => mesesDoCubo(rows, prefs.base).map(m => ({ value: m, label: rotuloMes(m) })),
+    [rows, prefs.base],
+  )
 
   function limpar() {
     setSelCategorias([]); setSelCentros([]); setSelContatos([]); setSelContas([])
@@ -408,13 +409,6 @@ export function AnaliseClient({ orgSlug, rows, categorias, centros }: {
       </Modal>
     </div>
   )
-}
-
-/** 'YYYY-MM' + n meses — cópia local para não importar o módulo inteiro no loop. */
-function addMesLocal(ym: string, n: number): string {
-  const [y, m] = ym.split('-').map(Number)
-  const d = new Date(Date.UTC(y, m - 1 + n, 1))
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
 /** Sem centavos: numa tabela de 14 colunas o centavo só rouba largura. */
