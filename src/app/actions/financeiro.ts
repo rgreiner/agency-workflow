@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { assertFinanceAccess } from '@/lib/finance'
+import { chaveNome } from '@/lib/fin-cubo'
 import { getUsuario } from '@/lib/auth/server'
 import { revalidatePath } from 'next/cache'
 
@@ -936,8 +937,14 @@ export async function carregarMovimentosDrill(orgSlug: string, f: FiltroDrill) {
   }
 
   const txt = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
-  const casa = (sel: string[], valor: string, vazio: string) =>
-    sel.length === 0 || sel.includes(valor === '' ? vazio : valor)
+  // Compara pela chave normalizada, não pelo texto: o cubo agrupa "É O Amor" sob
+  // "É o Amor" (migration 250) e é a grafia canônica que chega aqui — comparar
+  // literal traria só os lançamentos de uma das grafias.
+  const casa = (sel: string[], valor: string, vazio: string) => {
+    if (sel.length === 0) return true
+    const alvo = chaveNome(valor === '' ? vazio : valor)
+    return sel.some(s => chaveNome(s) === alvo)
+  }
 
   const linhas: MovimentoDrill[] = []
   for (const m of brutas) {
