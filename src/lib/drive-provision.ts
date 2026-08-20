@@ -5,6 +5,29 @@ import type { Database } from '@/types/database'
 import { createTaskFolders, moveTaskFolder, inspectTaskFolder, completarSubpastas, folderConfigured, resolvePathPrefix, backendForRef, refIncompativel } from '@/lib/task-folders'
 import { logSystemError } from '@/lib/system-error'
 
+/**
+ * Grava o vínculo assim que a pasta-mãe nasce, antes das subpastas. A provisão em
+ * lote só salvava no FIM (pasta + 5 subpastas + caminho): qualquer corte no meio
+ * — rede, restart do container, `after()` interrompido — deixava a pasta criada no
+ * Drive e a tarefa SEM vínculo. Aí o próximo clique em "Gerar/Re-vincular" criava
+ * uma SEGUNDA pasta de mesmo nome, e o time passava a cair na vazia pelo caminho
+ * local. A varredura de 20/08/2026 achou 8 pastas órfãs assim em 34 campanhas.
+ */
+async function gravarVinculoCedo(
+  supabase: SupabaseClient<Database>, userId: string, activityId: string, folder: { id: string; link: string },
+) {
+  await supabase.rpc('set_activity_drive', {
+    p_user_id: userId,
+    p_activity_id: activityId,
+    p_drive_folder_id: folder.id,
+    p_drive_path: null,
+    p_drive_folder_url: folder.link || null,
+    p_redacao_url: null,
+    p_finalizacao_url: null,
+    p_preview_url: null,
+  })
+}
+
 function joinLocalPath(prefix: string, drivePath: string): string {
   const p = prefix.replace(/[\\/]+$/, '')   // remove barra final
   return `${p}\\${drivePath}\\`
@@ -63,7 +86,10 @@ export async function provisionActivitiesDrive(
   after(async () => {
     for (const it of params.items) {
       try {
-        const r = await createTaskFolders(cfg.folderId, taskFolderName(it.title, it.date), { forceNew: params.forceNew ?? true })
+        const r = await createTaskFolders(cfg.folderId, taskFolderName(it.title, it.date), {
+          forceNew: params.forceNew ?? true,
+          onCreated: f => gravarVinculoCedo(supabase, params.userId, it.activityId, f),
+        })
         await supabase.rpc('set_activity_drive', {
           p_user_id: params.userId,
           p_activity_id: it.activityId,
@@ -98,7 +124,10 @@ export async function regenerateActivityDrive(
   const refCampanha = refIncompativel(cfg.folderId)
   if (refCampanha) return { ok: false, error: refCampanha }
   try {
-    const r = await createTaskFolders(cfg.folderId, taskFolderName(params.title, params.date), { forceNew: true })
+    const r = await createTaskFolders(cfg.folderId, taskFolderName(params.title, params.date), {
+      forceNew: true,
+      onCreated: f => gravarVinculoCedo(supabase, params.userId, params.activityId, f),
+    })
     await supabase.rpc('set_activity_drive', {
       p_user_id: params.userId,
       p_activity_id: params.activityId,

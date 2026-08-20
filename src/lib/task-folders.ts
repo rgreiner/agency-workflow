@@ -11,7 +11,7 @@ import * as s3 from '@/lib/s3-folders'
  * do provider: ID do Drive OU caminho no bucket ("IMDM/2026/Institucional").
  */
 
-export type { TaskFoldersResult } from '@/lib/google-drive'
+export type { TaskFoldersResult, CreateTaskFoldersOpts } from '@/lib/google-drive'
 
 export type FolderProvider = 's3' | 'drive'
 
@@ -103,7 +103,7 @@ export function extractCampaignFolderRef(input: string | null): string | null {
 }
 
 export async function createTaskFolders(
-  campaignRef: string, taskName: string, opts?: { forceNew?: boolean },
+  campaignRef: string, taskName: string, opts?: drive.CreateTaskFoldersOpts,
 ): Promise<drive.TaskFoldersResult> {
   return backendForRef(campaignRef) === 's3'
     ? s3.createTaskFoldersS3(campaignRef, taskName, opts)

@@ -3,7 +3,7 @@ import {
   S3Client, PutObjectCommand, ListObjectsV2Command, CopyObjectCommand, DeleteObjectsCommand,
   GetObjectCommand,
 } from '@aws-sdk/client-s3'
-import type { TaskFoldersResult, FolderFile, DriveAsset } from '@/lib/google-drive'
+import type { TaskFoldersResult, FolderFile, DriveAsset, CreateTaskFoldersOpts } from '@/lib/google-drive'
 
 /**
  * Pastas de tarefa no bucket S3 (Cloudflare R2) — o disco que o time monta como F:.
@@ -88,7 +88,7 @@ async function ensureFolder(path: string): Promise<{ id: string; link: string }>
 export async function createTaskFoldersS3(
   campaignPath: string,
   taskName: string,
-  opts?: { forceNew?: boolean },
+  opts?: CreateTaskFoldersOpts,
 ): Promise<TaskFoldersResult> {
   const safeName = taskName.trim().replace(/[\\/]/g, '-') || 'Tarefa'
   let path = `${campaignPath}/${safeName}`
@@ -98,6 +98,8 @@ export async function createTaskFoldersS3(
     }
   }
   const task = await ensureFolder(path)
+  // Vínculo gravado assim que a pasta existe (ver a nota em google-drive.ts).
+  if (opts?.onCreated) await opts.onCreated({ id: task.id, link: '' })
   const sub: Record<string, { id: string; link: string }> = {}
   for (const name of SUBFOLDERS) {
     sub[name] = await ensureFolder(`${path}/${name}`)

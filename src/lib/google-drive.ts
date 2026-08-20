@@ -80,6 +80,25 @@ async function ensureFolder(parentId: string, name: string): Promise<{ id: strin
   return createFolder(parentId, name)
 }
 
+/**
+ * Nome ainda livre dentro do pai — "Tarefa", "Tarefa (2)", "Tarefa (3)"…
+ *
+ * O Drive ACEITA duas pastas de mesmo nome no mesmo pai; o Google Drive Desktop
+ * não (o Finder/Explorer não tem como mostrar as duas), então ele renomeia uma
+ * pra "… (1)" só no computador. Aí o `drive_path` que o Flow grava — montado
+ * pelos NOMES — vira ambíguo: o link do navegador abre a pasta certa e o caminho
+ * colado no Finder abre a OUTRA (normalmente a vazia). Foi o que aconteceu em
+ * 21-23/07/2026 na campanha Bons Tempos. Batizar a segunda como "(2)" na criação
+ * mantém nome real e caminho local sempre iguais. O backend S3 já fazia assim.
+ */
+async function nomeLivre(parentId: string, name: string): Promise<string> {
+  for (let n = 1; n <= 50; n++) {
+    const tentativa = n === 1 ? name : `${name} (${n})`
+    if (!(await findFolder(parentId, tentativa))) return tentativa
+  }
+  return `${name} (${Date.now()})`
+}
+
 /** Reconstrói o caminho da pasta no Drive (ex.: "Clientes\One a One\2026\Institucional\<tarefa>"). */
 async function buildDrivePath(folderId: string): Promise<string> {
   const drive = getDrive()
@@ -105,6 +124,14 @@ async function buildDrivePath(folderId: string): Promise<string> {
   return parts.join('\\')
 }
 
+/** Opções da criação da pasta da tarefa (as duas implementações honram). */
+export interface CreateTaskFoldersOpts {
+  /** Cria pasta NOVA em vez de reaproveitar homônima (default do provisionamento). */
+  forceNew?: boolean
+  /** Chamado assim que a pasta-mãe nasce, antes das subpastas. */
+  onCreated?: (folder: { id: string; link: string }) => Promise<void>
+}
+
 export interface TaskFoldersResult {
   taskFolderId: string
   taskFolderLink: string
@@ -121,14 +148,19 @@ export interface TaskFoldersResult {
 export async function createTaskFolders(
   campaignFolderId: string,
   taskName: string,
-  opts?: { forceNew?: boolean },
+  opts?: CreateTaskFoldersOpts,
 ): Promise<TaskFoldersResult> {
   // O Drive aceita acentos e a maioria dos símbolos no nome — manter igual ao título.
   // Só troco barras (\ /) por "-", que quebrariam o caminho (buildDrivePath usa "\").
   const safeName = taskName.trim().replace(/[\\/]/g, '-') || 'Tarefa'
   const task = opts?.forceNew
-    ? await createFolder(campaignFolderId, safeName)
+    ? await createFolder(campaignFolderId, await nomeLivre(campaignFolderId, safeName))
     : await ensureFolder(campaignFolderId, safeName)
+  // A pasta já existe no Drive: avisa AGORA pra quem chamou gravar o vínculo. Se o
+  // processo morrer daqui pra frente (rede, restart, `after()` cortado), a tarefa
+  // aponta pra ela e o "Re-vincular" completa o que faltou — em vez de nascer uma
+  // segunda pasta de mesmo nome no próximo clique.
+  if (opts?.onCreated) await opts.onCreated({ id: task.id, link: task.link })
   const sub: Record<string, { id: string; link: string }> = {}
   for (const name of SUBFOLDERS) {
     sub[name] = await ensureFolder(task.id, name)
