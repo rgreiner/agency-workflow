@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { BarChart3, Users, TrendingUp, Clock, RotateCcw, CalendarCheck, ClipboardCheck, Info } from 'lucide-react'
+import { BarChart3, Users, TrendingUp, Clock, RotateCcw, Undo2, CalendarCheck, ClipboardCheck, Info } from 'lucide-react'
 import { Select } from '@/components/ui/Select'
 
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
@@ -26,10 +26,15 @@ interface Dash {
   ponto: { mes: string; dias: number; horas: number; extras_aprovadas_h: number; extras_pendentes_h: number; importado: boolean }[]
   fluxo: {
     retrabalho: { de: string; para: string; n: number }[]
+    // Volta atribuída a quem responde pela etapa de DESTINO (cargo × status, mig. 251).
+    retrabalho_pessoa?: { user_id: string; nome: string; avatar_url: string | null; cargo: string | null; n: number; pares: Par[] }[]
+    retrabalho_sem_dono?: { n: number; etapas: { para: string; n: number }[] }
     prazo: { concluidas: number; no_prazo: number; atrasadas: number }
   }
   avaliacao: { ciclo_id: string; ciclo: string; media: number | null; respostas: number }[]
 }
+
+interface Par { de: string; para: string; cor: string; n: number }
 
 const FAIXA_LABEL: Record<string, string> = {
   ate_1_ano: 'até 1 ano', de_1_a_2: '1 a 2 anos', de_2_a_5: '2 a 5 anos', mais_de_5: 'mais de 5',
@@ -43,6 +48,21 @@ export function PainelClient({ orgSlug, meses, d }: { orgSlug: string; meses: nu
   const prazo = d.fluxo.prazo
   const pctPrazo = prazo.concluidas > 0 ? Math.round((prazo.no_prazo / prazo.concluidas) * 100) : null
   const folhaAtual = d.folha.serie[d.folha.serie.length - 1]
+
+  // Retrabalho por pessoa: segmentos coloridos pela etapa que DEVOLVEU, na mesma
+  // ordem em todas as barras (a da legenda), para a cor ser comparável entre linhas.
+  const porPessoa = d.fluxo.retrabalho_pessoa ?? []
+  const semDono = d.fluxo.retrabalho_sem_dono ?? { n: 0, etapas: [] }
+  const maxPessoa = Math.max(porPessoa[0]?.n ?? 0, 1)
+  const legenda = (() => {
+    const m = new Map<string, { de: string; cor: string; n: number }>()
+    for (const p of porPessoa) for (const s of p.pares) {
+      const cur = m.get(s.de)
+      if (cur) cur.n += s.n; else m.set(s.de, { de: s.de, cor: s.cor, n: s.n })
+    }
+    return [...m.values()].sort((a, b) => b.n - a.n)
+  })()
+  const ordemOrigem = new Map(legenda.map((l, i) => [l.de, i]))
 
   return (
     <div className="p-6 max-w-5xl">
@@ -193,8 +213,7 @@ export function PainelClient({ orgSlug, meses, d }: { orgSlug: string; meses: nu
       {/* ── Fluxo ── */}
       <Bloco titulo="Onde o trabalho volta" icone={RotateCcw}>
         <p className="text-[11px] text-gray-500 mb-3">
-          Retrabalho medido por <b>etapa</b>, não por pessoa: o histórico registra quem devolveu a tarefa
-          (o revisor), não quem errou. A pergunta que o dado responde é onde o fluxo trava.
+          Retrabalho por <b>etapa</b>: onde o fluxo trava. Reabertura automática de tarefa recorrente não entra.
         </p>
         {d.fluxo.retrabalho.length === 0 ? (
           <p className="text-sm text-gray-400">Nenhuma volta de etapa registrada no período.</p>
@@ -213,6 +232,57 @@ export function PainelClient({ orgSlug, meses, d }: { orgSlug: string; meses: nu
               )
             })}
           </div>
+        )}
+      </Bloco>
+
+      {/* ── De quem é o trabalho que volta ── */}
+      <Bloco titulo="De quem é o trabalho que volta" icone={Undo2}>
+        <p className="text-[11px] text-gray-500 mb-3">
+          Cada volta conta para quem estava na tarefa e cujo cargo cobre a etapa de <b>destino</b>: voltou
+          para Redação, é da redatora; para Design, do diretor de arte. Se ninguém na tarefa cobre a etapa,
+          conta para quem a entregou por último. Quem devolveu (o revisor) fica de fora.
+        </p>
+        {porPessoa.length === 0 ? (
+          <p className="text-sm text-gray-400">Nenhuma volta atribuída a uma pessoa no período.</p>
+        ) : (
+          <>
+            <div className="space-y-1.5">
+              {porPessoa.map(p => (
+                <div key={p.user_id} className="flex items-center gap-2">
+                  <span className="text-[11px] text-gray-600 w-52 shrink-0 truncate"
+                    title={p.cargo ? `${p.nome} · ${p.cargo}` : p.nome}>
+                    {p.nome.split(' ').slice(0, 2).join(' ')}
+                    {p.cargo && <span className="text-gray-400"> · {p.cargo}</span>}
+                  </span>
+                  <div className="flex-1 h-4 bg-gray-100 rounded overflow-hidden flex">
+                    {[...p.pares].sort((a, b) => (ordemOrigem.get(a.de) ?? 99) - (ordemOrigem.get(b.de) ?? 99)).map((s, i) => (
+                      <div key={i} className="h-full opacity-80 hover:opacity-100 transition-opacity"
+                        title={`${s.de} → ${s.para} · ${s.n}`}
+                        style={{ width: `${(s.n / maxPessoa) * 100}%`, backgroundColor: s.cor }} />
+                    ))}
+                  </div>
+                  <span className="text-[11px] text-gray-600 tabular-nums w-8 text-right">{p.n}</span>
+                </div>
+              ))}
+            </div>
+            {legenda.length > 0 && (
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-gray-500 mt-3 pt-3 border-t border-gray-100">
+                <span className="text-gray-400">Devolvido de:</span>
+                {legenda.slice(0, 8).map(l => (
+                  <span key={l.de} className="inline-flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-sm opacity-80" style={{ backgroundColor: l.cor }} /> {l.de}
+                  </span>
+                ))}
+              </div>
+            )}
+            {semDono.n > 0 && (
+              <p className="text-[11px] text-gray-400 mt-2">
+                Mais <b className="tabular-nums">{semDono.n}</b> sem dono: voltaram para etapa que ninguém na tarefa
+                cobre pelo cargo ({semDono.etapas.slice(0, 3).map(e => `${e.para} ${e.n}`).join(', ')}).
+                Associar a pessoa certa à tarefa resolve daqui pra frente.
+              </p>
+            )}
+          </>
         )}
       </Bloco>
 
