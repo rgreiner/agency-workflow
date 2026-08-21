@@ -2,11 +2,25 @@
 
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { BarChart3, Users, TrendingUp, Clock, RotateCcw, Undo2, CalendarCheck, ClipboardCheck, Info } from 'lucide-react'
+import { BarChart3, Users, TrendingUp, Clock, RotateCcw, Undo2, CalendarCheck, ClipboardCheck, Info, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Select } from '@/components/ui/Select'
 
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
 const mesBR = (m: string) => { const [a, b] = m.split('-'); return `${b}/${a.slice(2)}` }
+
+// Período = janela de N meses terminando em `ate` (YYYY-MM; null = mês corrente).
+const MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+const mesAtual = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
+const addMeses = (ym: string, n: number) => {
+  const [a, m] = ym.split('-').map(Number)
+  const t = a * 12 + (m - 1) + n
+  return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, '0')}`
+}
+const mesCurto = (ym: string) => { const [a, m] = ym.split('-'); return `${MES[Number(m) - 1]}/${a.slice(2)}` }
+const JANELAS = [
+  { value: '1', label: 'Mês' }, { value: '3', label: '3 meses' }, { value: '6', label: '6 meses' },
+  { value: '12', label: '12 meses' }, { value: '24', label: '24 meses' },
+]
 
 interface Dash {
   de: string; ate: string
@@ -40,8 +54,16 @@ const FAIXA_LABEL: Record<string, string> = {
   ate_1_ano: 'até 1 ano', de_1_a_2: '1 a 2 anos', de_2_a_5: '2 a 5 anos', mais_de_5: 'mais de 5',
 }
 
-export function PainelClient({ orgSlug, meses, d }: { orgSlug: string; meses: number; d: Dash | null }) {
+export function PainelClient({ orgSlug, meses, ate, d }: { orgSlug: string; meses: number; ate: string | null; d: Dash | null }) {
   const router = useRouter()
+  const atual = mesAtual()
+  const fim = ate ?? atual
+  const ini = addMeses(fim, -(meses - 1))
+  const rotulo = meses === 1 ? mesCurto(fim) : `${mesCurto(ini)} – ${mesCurto(fim)}`
+  const ir = (m: number, a: string | null) => router.push(`/${orgSlug}/rh/painel?meses=${m}${a ? `&ate=${a}` : ''}`)
+  // As setas andam uma JANELA por vez (mês a mês quando a janela é "Mês").
+  const anterior = () => ir(meses, addMeses(fim, -meses))
+  const seguinte = () => { const f = addMeses(fim, meses); ir(meses, f >= atual ? null : f) }
   if (!d) return <div className="p-6 text-sm text-gray-500">Sem dados.</div>
 
   const maxHead = Math.max(...d.quadro.serie.map(s => s.n), 1)
@@ -73,12 +95,25 @@ export function PainelClient({ orgSlug, meses, d }: { orgSlug: string; meses: nu
           </h1>
           <p className="text-gray-500 text-sm">Quadro, custo, carga e fluxo — o que o dado do Flow já sustenta.</p>
         </div>
-        <div className="w-40">
-          <Select value={String(meses)} onChange={v => router.push(`/${orgSlug}/rh/painel?meses=${v}`)} options={[
-            { value: '6', label: 'Últimos 6 meses' },
-            { value: '12', label: 'Últimos 12 meses' },
-            { value: '24', label: 'Últimos 24 meses' },
-          ]} />
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center rounded-xl bg-gray-100 p-0.5">
+            <button type="button" onClick={anterior} aria-label="Período anterior"
+              className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-white transition-colors active:scale-[0.97]">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="px-1.5 text-sm text-gray-700 tabular-nums text-center min-w-[7.5rem]">{rotulo}</span>
+            <button type="button" onClick={seguinte} disabled={!ate} aria-label="Período seguinte"
+              className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-white transition-colors active:scale-[0.97] disabled:opacity-30 disabled:pointer-events-none">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+          {ate && (
+            <button type="button" onClick={() => ir(meses, null)}
+              className="text-xs font-medium text-orange-600 hover:text-orange-700 transition-colors">Atual</button>
+          )}
+          <div className="w-32">
+            <Select value={String(meses)} onChange={v => ir(Number(v), ate)} options={JANELAS} />
+          </div>
         </div>
       </div>
 
@@ -91,7 +126,7 @@ export function PainelClient({ orgSlug, meses, d }: { orgSlug: string; meses: nu
           rodape={folhaAtual ? `líquido + encargos · ${mesBR(folhaAtual.mes)}` : 'importe a folha'} />
         <Card icon={CalendarCheck} label="Entregas no prazo"
           valor={pctPrazo != null ? `${pctPrazo}%` : '—'}
-          rodape={prazo.concluidas > 0 ? `${prazo.no_prazo} de ${prazo.concluidas} concluídas` : undefined}
+          rodape={prazo.concluidas > 0 ? `${prazo.no_prazo} de ${prazo.concluidas} concluídas no período` : 'nenhuma concluída no período'}
           alerta={pctPrazo != null && pctPrazo < 60} />
         <Card icon={RotateCcw} label="Voltas de etapa"
           valor={String(d.fluxo.retrabalho.reduce((s, r) => s + r.n, 0))}
@@ -131,10 +166,17 @@ export function PainelClient({ orgSlug, meses, d }: { orgSlug: string; meses: nu
       <Bloco titulo="Custo de folha" icone={TrendingUp}>
         {!d.folha.tem_evolucao ? (
           <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-[12.5px] text-amber-900 mb-3">
-            <b>Só {d.folha.competencias === 0 ? 'nenhuma' : 'uma'} competência importada.</b> A evolução salarial precisa
-            de pelo menos duas para virar linha. Importe as anteriores em{' '}
-            <Link href={`/${orgSlug}/rh/folha`} className="underline font-medium">RH → Folha</Link> — o histórico já
-            existe em PDF, e cada competência nova entra aqui automaticamente.
+            {d.folha.competencias === 0 ? (
+              <><b>Nenhuma competência de folha no período.</b> Importe em{' '}
+                <Link href={`/${orgSlug}/rh/folha`} className="underline font-medium">RH → Folha</Link> — o histórico já
+                existe em PDF, e cada competência nova entra aqui automaticamente.</>
+            ) : meses === 1 ? (
+              <><b>Um mês só não faz linha.</b> Amplie o período para ver a evolução da folha.</>
+            ) : (
+              <><b>Só uma competência no período.</b> A evolução precisa de pelo menos duas para virar linha.
+                Importe as anteriores em{' '}
+                <Link href={`/${orgSlug}/rh/folha`} className="underline font-medium">RH → Folha</Link>.</>
+            )}
           </div>
         ) : (
           <div className="flex items-end gap-1.5 h-24 mb-4">
