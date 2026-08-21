@@ -94,6 +94,7 @@ interface NavGroupDef { id: string; label: string; icon: LucideIcon; items: NavI
 const COMERCIAL_GROUPS: NavGroupDef[] = [
   { id: 'midia_hub', label: 'Operação', icon: Radio, items: [
     { label: 'Painel',             href: 'midia' },
+    { label: 'Agenda do mês',      href: 'midia/agenda' },
     { label: 'Clientes e rotinas', href: 'midia/clientes' },
     { label: 'Entregas',           href: 'midia/entregas' },
     { label: 'Catálogo de rotinas', href: 'midia/rotinas' },

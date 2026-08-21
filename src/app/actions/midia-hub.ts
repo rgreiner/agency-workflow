@@ -548,3 +548,35 @@ export async function reabrirTarefaMidia(orgSlug: string, activityId: string, st
   revalidatePath(`/${orgSlug}/midia`)
   return {}
 }
+
+// ── Agenda e ciclo do mês (migration 248) ────────────────────────────────────
+
+export interface CoberturaRow {
+  workspace_id: string; cliente: string
+  rotina_id: string; rotina: string; frequencia: string
+  activity_id: string | null; prazo: string | null; status: string | null
+  esperado: number; feitas: number; ultima_conclusao: string | null
+}
+
+export interface AgendaRow {
+  dia: string; tipo: 'prazo' | 'feito' | 'entrega' | 'pedido'
+  titulo: string; cliente: string
+  activity_id: string | null; workspace_id: string | null
+  campaign_id: string | null; frequencia: string | null
+}
+
+/** Cobertura + agenda do período, numa chamada só (as duas telas do ciclo). */
+export async function carregarCicloMidia(orgSlug: string, ini: string, fim: string) {
+  const { supabase, orgId } = await assertMidiaAccess(orgSlug)
+  const sb = supabase as any
+  const [cob, age] = await Promise.all([
+    sb.rpc('midia_cobertura', { p_org: orgId, p_ini: ini, p_fim: fim }),
+    sb.rpc('midia_agenda', { p_org: orgId, p_ini: ini, p_fim: fim }),
+  ])
+  if (cob.error) return { error: cob.error.message }
+  if (age.error) return { error: age.error.message }
+  return {
+    cobertura: (cob.data ?? []) as CoberturaRow[],
+    agenda: (age.data ?? []) as AgendaRow[],
+  }
+}

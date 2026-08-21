@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { CalendarClock, Inbox, Truck, Users } from 'lucide-react'
+import { CalendarClock, CalendarDays, Inbox, Truck, Users } from 'lucide-react'
 import { assertMidiaAccess, statusDaMidia } from '@/lib/midia-hub'
 import { unwrap } from '@/lib/supabase/unwrap'
 import { PainelMidia, type PedidoRow, type RotinaRow } from './PainelMidia'
@@ -132,10 +132,16 @@ export default async function MidiaPainelPage({ params }: { params: Promise<{ or
             O que o time mandou para a mídia e as rotinas de cada cliente.
           </p>
         </div>
-        <Link href={`/${orgSlug}/midia/clientes`}
-          className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
-          <Users className="w-4 h-4" /> Clientes e rotinas
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href={`/${orgSlug}/midia/agenda`}
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-xl bg-orange-600 text-[#fff] hover:bg-orange-700 transition-colors">
+            <CalendarDays className="w-4 h-4" /> Agenda do mês
+          </Link>
+          <Link href={`/${orgSlug}/midia/clientes`}
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
+            <Users className="w-4 h-4" /> Clientes e rotinas
+          </Link>
+        </div>
       </div>
 
       <div className="grid md:grid-cols-4 gap-4">
