@@ -52,24 +52,54 @@ export function extractFolderId(input: string): string | null {
   return null
 }
 
+/**
+ * Repete a chamada quando o Drive responde "passageiro".
+ *
+ * O `googleapis` NÃO repete POST/PATCH por conta própria, e o Drive devolve
+ * `403 User rate limit exceeded` em rajada mesmo com pouco volume — provisionar
+ * UMA tarefa são ~20 chamadas (1 create + 5×(list+create) + a subida da árvore do
+ * caminho), e basta uma delas azedar pra derrubar a provisão inteira. Foi o que
+ * aconteceu em 21/08/2026 na tarefa "260821 - Folder Comercial": as subpastas
+ * ficaram pela metade e alguém teve que clicar em "Re-vincular" pra completar.
+ *
+ * Só volta a tentar no que melhora esperando: limite de taxa (403 com recado de
+ * rate/quota), 429 e 5xx. Permissão negada e "não encontrado" sobem na hora.
+ */
+async function comRetry<T>(fn: () => Promise<T>, tentativas = 4): Promise<T> {
+  for (let i = 0; ; i++) {
+    try {
+      return await fn()
+    } catch (e) {
+      const err = e as { status?: number; code?: number | string; message?: string }
+      const status = typeof err?.status === 'number' ? err.status : Number(err?.code)
+      const msg = err?.message ?? ''
+      const passageiro =
+        (status === 403 && /rate limit|quota|userRateLimitExceeded|rateLimitExceeded/i.test(msg)) ||
+        status === 429 || (status >= 500 && status < 600)
+      if (!passageiro || i >= tentativas - 1) throw e
+      await new Promise(r => setTimeout(r, 800 * 2 ** i + Math.floor(Math.random() * 400)))
+    }
+  }
+}
+
 async function findFolder(parentId: string, name: string): Promise<string | null> {
   const drive = getDrive()
   const q = `'${parentId}' in parents and name = '${name.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
-  const r = await drive.files.list({
+  const r = await comRetry(() => drive.files.list({
     q, fields: 'files(id)', pageSize: 1,
     supportsAllDrives: true, includeItemsFromAllDrives: true,
-  })
+  }))
   return r.data.files?.[0]?.id ?? null
 }
 
-/** Cria a pasta (ou reusa se já existir uma com o mesmo nome no pai). */
+/** Cria a pasta, sempre nova (quem reusa homônima é o `ensureFolder`). */
 async function createFolder(parentId: string, name: string): Promise<{ id: string; link: string }> {
   const drive = getDrive()
-  const res = await drive.files.create({
+  const res = await comRetry(() => drive.files.create({
     requestBody: { name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] },
     fields: 'id, webViewLink',
     supportsAllDrives: true,
-  })
+  }))
   const id = res.data.id!
   return { id, link: res.data.webViewLink ?? folderLink(id) }
 }
@@ -108,7 +138,7 @@ async function buildDrivePath(folderId: string): Promise<string> {
   let guard = 0
   while (cur && guard++ < 30) {
     const data: drive_v3.Schema$File =
-      (await drive.files.get({ fileId: cur, fields: 'id, name, parents, driveId', supportsAllDrives: true })).data
+      (await comRetry(() => drive.files.get({ fileId: cur!, fields: 'id, name, parents, driveId', supportsAllDrives: true }))).data
     driveId = data.driveId ?? driveId
     if (driveId && data.id === driveId) break   // raiz do Drive Compartilhado (nome vem do drives.get)
     if (data.name) parts.unshift(data.name)
@@ -117,7 +147,7 @@ async function buildDrivePath(folderId: string): Promise<string> {
   // Nome canônico do Drive Compartilhado (a raiz via files.get às vezes volta como "Drive")
   if (driveId) {
     try {
-      const d = (await drive.drives.get({ driveId, fields: 'name' })).data
+      const d = (await comRetry(() => drive.drives.get({ driveId, fields: 'name' }))).data
       if (d.name) parts.unshift(d.name)
     } catch { /* sem permissão de listar o drive — ignora */ }
   }
@@ -177,15 +207,15 @@ export async function createTaskFolders(
  */
 export async function moveTaskFolder(taskFolderId: string, newParentId: string): Promise<{ drivePath: string }> {
   const drive = getDrive()
-  const cur = (await drive.files.get({ fileId: taskFolderId, fields: 'parents', supportsAllDrives: true })).data
+  const cur = (await comRetry(() => drive.files.get({ fileId: taskFolderId, fields: 'parents', supportsAllDrives: true }))).data
   const removeParents = (cur.parents ?? []).join(',')
-  await drive.files.update({
+  await comRetry(() => drive.files.update({
     fileId: taskFolderId,
     addParents: newParentId,
     removeParents: removeParents || undefined,
     fields: 'id, parents',
     supportsAllDrives: true,
-  })
+  }))
   const drivePath = await buildDrivePath(taskFolderId)
   return { drivePath }
 }
