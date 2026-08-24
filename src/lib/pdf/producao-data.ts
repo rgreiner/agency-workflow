@@ -46,7 +46,7 @@ interface Base {
 export interface FeeParcela { vencimento: string | null; valor: number }
 export interface PagamentoParcela { vencimento: string | null; valor: number }
 export interface PropostaItem { tipoLabel: string; nome: string; quantidade: string; total: number }
-export interface PedidoItem { nome: string; descricao: string; nOrc: string; quant: string; valor: number }
+export interface PedidoItem { nome: string; descricao: string; nOrc: string; quant: string; valor: number; total: number }
 export interface OrcOpcao { fornecedor: string; nOrc: string; pgto: string; quant: string; valorUnit: number; total: number; selecionado: boolean }
 export interface OrcItem { nome: string; descricao: string; imagem: string | null; opcoes: OrcOpcao[] }
 export interface LegalNote { text: string; highlight?: boolean }
@@ -141,9 +141,15 @@ export async function loadProducaoDoc(supabase: any, orgId: string, producaoId: 
     }
     const valor = Number(p.valor ?? 0)
     const bvPct = Number(p.bv_pct ?? 0)
-    const itens: PedidoItem[] = (Array.isArray(det.itens) ? det.itens : []).map((it: any) => ({
-      nome: it?.nome ?? '', descricao: it?.descricao ?? '', nOrc: it?.n_orc ?? '', quant: it?.quant ?? '', valor: money(it?.valor),
-    }))
+    const itens: PedidoItem[] = (Array.isArray(det.itens) ? det.itens : []).map((it: any) => {
+      // Mesma régua do itemTotal do form: total digitado vence; senão quant × unitário.
+      const q = parseInt(String(it?.quant ?? '') || '1', 10) || 0
+      const totalDigitado = money(it?.valor_total)
+      return {
+        nome: it?.nome ?? '', descricao: it?.descricao ?? '', nOrc: it?.n_orc ?? '', quant: it?.quant ?? '',
+        valor: money(it?.valor), total: totalDigitado > 0 ? totalDigitado : q * money(it?.valor),
+      }
+    })
     // Só o que o fornecedor recebe do cliente (datas p/ ele emitir a NF). As parcelas
     // de comissão/honorários (receber_*) são internas — nunca vão pro PDF do fornecedor.
     // valor da parcela é salvo como número canônico (String(parseMoney(...)) → "623.69"),

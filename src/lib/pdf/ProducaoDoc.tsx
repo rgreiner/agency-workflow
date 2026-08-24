@@ -149,7 +149,8 @@ function Pedido({ d }: { d: Extract<ProducaoDocData, { tipo: 'pedido' }> }) {
           <View style={{ flexDirection: 'row', marginTop: 2 }}>
             <Text style={{ marginRight: 22, color: CINZA }}>Nº Orç.: {it.nOrc || '---'}</Text>
             <Text style={{ marginRight: 22, color: CINZA }}>Quantidade: {it.quant || '---'}</Text>
-            <Text style={{ color: CINZA }}>Valor: {brl(it.valor)}</Text>
+            <Text style={{ marginRight: 22, color: CINZA }}>Valor unit.: {brl(it.valor)}</Text>
+            <Text style={{ color: '#111827', fontFamily: 'Helvetica-Bold' }}>Total: {brl(it.total)}</Text>
           </View>
         </View>
       ))}
