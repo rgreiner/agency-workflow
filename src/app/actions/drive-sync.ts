@@ -141,6 +141,8 @@ export async function applyCampaignDriveReconcile(
   for (const n of decisions.novosJobs ?? []) {
     try {
       // create_activity tem defaults não refletidos nos tipos gerados — cast como no resto do app.
+      // Sem p_assignees de propósito (mig. 253): pasta órfã não tem dono conhecido,
+      // então o job nasce sem responsável e fica marcado na fila "Sem responsável".
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: actId, error } = await (supabase as any).rpc('create_activity', {
         p_user_id: user.id, p_campaign_id: campaignId, p_title: n.name,

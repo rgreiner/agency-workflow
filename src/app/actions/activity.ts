@@ -60,11 +60,18 @@ export async function createActivity(
   const title = (formData.get('title') as string)?.trim()
   if (!title) return { error: 'Título obrigatório' }
 
+  // Tarefa não nasce sem dono (e não é mais o criador por padrão — mig. 253):
+  // o form exige a escolha e aqui o servidor confere de novo.
+  const assigneeIds = formData.getAll('assignee_ids').map(String).filter(Boolean)
+  if (assigneeIds.length === 0) return { error: 'Escolha quem responde pela tarefa.' }
+
   const start_date = formData.get('start_date') as string
   const due_date = formData.get('due_date') as string
   const estimated_hours = formData.get('estimated_hours') as string
 
-  const { data: activityId, error } = await supabase.rpc('create_activity', {
+  // p_assignees (mig. 253) ainda não está nos tipos gerados — cast como o resto do app.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: activityId, error } = await (supabase as any).rpc('create_activity', {
     p_user_id: user.id,
     p_campaign_id: campaignId,
     p_title: title,
@@ -75,6 +82,7 @@ export async function createActivity(
     p_due_date: due_date || null,
     p_estimated_hours: estimated_hours ? parseFloat(estimated_hours) : null,
     p_start_date: start_date || null,
+    p_assignees: assigneeIds,
   })
 
   if (error) return { error: error.message }
@@ -120,6 +128,7 @@ export async function createActivityInline(
   campaignId: string,
   title: string,
   status: string,
+  assigneeIds: string[],
 ) {
   const supabase = await createClient()
   const user = await getUsuario()
@@ -128,7 +137,13 @@ export async function createActivityInline(
   const t = (title ?? '').trim()
   if (!t) return { error: 'Título obrigatório' }
 
-  const { data: activityId, error } = await supabase.rpc('create_activity', {
+  // Criação manual exige dono explícito (mig. 253 — sem fallback pro criador).
+  const resp = (assigneeIds ?? []).filter(Boolean)
+  if (resp.length === 0) return { error: 'Escolha quem responde pela tarefa.' }
+
+  // p_assignees ainda não está nos tipos gerados — cast como o resto do app.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: activityId, error } = await (supabase as any).rpc('create_activity', {
     p_user_id: user.id,
     p_campaign_id: campaignId,
     p_title: t,
@@ -139,6 +154,7 @@ export async function createActivityInline(
     p_due_date: null,
     p_estimated_hours: null,
     p_start_date: null,
+    p_assignees: resp,
   })
   if (error) return { error: error.message }
 

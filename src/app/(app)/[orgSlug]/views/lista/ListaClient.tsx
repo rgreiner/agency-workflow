@@ -1014,6 +1014,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                         listPath={listPath}
                         status={statusCfg.value}
                         campMap={campMap}
+                        members={members}
                         fixedCampaign={newActivityCampaign}
                       />
                     )}
@@ -1300,11 +1301,13 @@ function GroupAddTask({
   listPath,
   status,
   campMap,
+  members,
   fixedCampaign,
 }: {
   listPath: string
   status: string
   campMap: Record<string, CampInfo>
+  members: Member[]
   fixedCampaign?: { workspaceId: string; campaignId: string }
 }) {
   const [open, setOpen] = useState(false)
@@ -1312,33 +1315,48 @@ function GroupAddTask({
   const [camp, setCamp] = useState<{ id: string; label: string } | null>(null)
   const [campOpen, setCampOpen] = useState(false)
   const [q, setQ] = useState('')
+  // Responsável é obrigatório na criação (mig. 253): sem dono não salva, e o
+  // chip fica marcado em âmbar pra mostrar o que falta.
+  const [resp, setResp] = useState<string[]>([])
+  const [respOpen, setRespOpen] = useState(false)
   const [pending, startSave] = useTransition()
   const inputRef = useRef<HTMLInputElement>(null)
   const campRef = useRef<HTMLDivElement>(null)
+  const respRef = useRef<HTMLDivElement>(null)
+  const me = useUsuario()?.id ?? null
 
   // Em página de campanha a campanha é fixa; na Lista global escolhe-se.
   const campaignId = fixedCampaign?.campaignId ?? camp?.id ?? null
-  const canSave = !!title.trim() && !!campaignId
+  const canSave = !!title.trim() && !!campaignId && resp.length > 0
 
   useEffect(() => {
-    if (!campOpen) return
+    if (!campOpen && !respOpen) return
     function onOut(e: MouseEvent) {
       if (campRef.current && !campRef.current.contains(e.target as Node)) setCampOpen(false)
+      if (respRef.current && !respRef.current.contains(e.target as Node)) setRespOpen(false)
     }
     document.addEventListener('mousedown', onOut)
     return () => document.removeEventListener('mousedown', onOut)
-  }, [campOpen])
+  }, [campOpen, respOpen])
 
-  function close() { setOpen(false); setTitle(''); setCampOpen(false); setQ('') }
+  function close() { setOpen(false); setTitle(''); setCampOpen(false); setQ(''); setResp([]); setRespOpen(false) }
 
   function submit() {
-    if (!canSave || !campaignId || pending) return
+    if (pending) return
+    if (title.trim() && campaignId && resp.length === 0) {
+      // Marca a informação que falta em vez de salvar sem dono.
+      toast.error('Falta escolher o responsável pela tarefa.')
+      setRespOpen(true)
+      return
+    }
+    if (!canSave || !campaignId) return
     const t = title.trim()
+    const r0 = resp
     startSave(async () => {
-      const r = await createActivityInline(listPath, campaignId, t, status)
+      const r = await createActivityInline(listPath, campaignId, t, status, r0)
       if (r?.error) { toast.error(r.error); return }
       toast.success('Tarefa criada')
-      setTitle('')            // mantém o grupo/campanha p/ adicionar a próxima
+      setTitle('')            // mantém o grupo/campanha/responsável p/ a próxima
       requestAnimationFrame(() => inputRef.current?.focus())
     })
   }
@@ -1409,6 +1427,53 @@ function GroupAddTask({
         </div>
       )}
 
+      {/* Responsável — obrigatório: tarefa não nasce sem dono (mig. 253) */}
+      <div className="relative shrink-0" ref={respRef}>
+        <button
+          type="button"
+          onClick={() => setRespOpen(o => !o)}
+          className={cn(
+            'inline-flex items-center gap-1 max-w-[160px] text-xs rounded-lg border px-2.5 py-1.5 transition',
+            resp.length > 0
+              ? 'border-orange-200 bg-white text-gray-700'
+              : 'border-amber-300 bg-amber-50 text-amber-700 hover:border-amber-400'
+          )}
+        >
+          <UserPlus className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">
+            {resp.length === 0
+              ? 'Responsável'
+              : resp.length === 1
+                ? (() => { const m = members.find(x => x.userId === resp[0]); return (m?.fullName ?? m?.email ?? '1 pessoa').split(' ')[0] })()
+                : `${resp.length} pessoas`}
+          </span>
+          <ChevronDown className="w-3.5 h-3.5 shrink-0 opacity-60" />
+        </button>
+        {respOpen && (
+          <div className="pop-in absolute left-0 bottom-full mb-1 w-60 bg-white rounded-xl border border-gray-200 shadow-lg z-30 py-1.5 max-h-60 overflow-y-auto">
+            <p className="px-3 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Quem responde pela tarefa</p>
+            {members.length === 0 ? (
+              <p className="px-3 py-2 text-xs text-gray-400">Nenhum membro</p>
+            ) : members.map(m => {
+              const on = resp.includes(m.userId)
+              return (
+                <button key={m.userId} type="button"
+                  onClick={() => setResp(prev => on ? prev.filter(x => x !== m.userId) : [...prev, m.userId])}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition text-left">
+                  <span className={cn('w-4 h-4 rounded border flex items-center justify-center shrink-0', on ? 'bg-orange-600 border-orange-600' : 'border-gray-300')}>
+                    {on && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                  </span>
+                  <span className="text-sm text-gray-700 truncate">
+                    {m.fullName ?? m.email.split('@')[0]}
+                    {m.userId === me && <span className="text-gray-400"> (você)</span>}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
       <input
         ref={inputRef}
         autoFocus
@@ -1419,10 +1484,12 @@ function GroupAddTask({
         className="flex-1 min-w-0 text-sm bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-500"
       />
       <button type="button" onClick={close} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 shrink-0">Cancelar</button>
+      {/* Clicável mesmo sem responsável: o submit marca o que falta em vez de
+          salvar — desabilitar esconderia o motivo. */}
       <button
         type="button"
         onClick={submit}
-        disabled={!canSave || pending}
+        disabled={!title.trim() || !campaignId || pending}
         className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 disabled:opacity-50 transition shrink-0"
       >
         {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}

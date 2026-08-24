@@ -136,6 +136,9 @@ export async function createActivitiesFromSpecs(orgSlug: string, campaignId: str
   const valid = items.filter(i => i.title?.trim())
   if (valid.length === 0) return { error: 'Nenhuma atividade selecionada.' }
 
+  // Sem p_assignees de propósito (mig. 253): a planilha de specs não diz quem é o
+  // dono, então as tarefas nascem sem responsável e ficam marcadas na fila
+  // "Sem responsável" até serem distribuídas (a RPC não atribui mais o criador).
   const created: { activityId: string; title: string }[] = []
   for (let i = 0; i < valid.length; i += 6) {
     const batch = valid.slice(i, i + 6)
