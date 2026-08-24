@@ -4,8 +4,8 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import {
-  Check, ChevronRight, Loader2, Plus, Repeat, Link2, Power, CalendarClock,
-  FolderOpen, FolderPlus,
+  ChevronRight, Loader2, Plus, Repeat, Link2, Power, CalendarClock,
+  FolderOpen, FolderPlus, CheckCircle2, Circle, AlertCircle, MinusCircle, MoreHorizontal,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
@@ -196,9 +196,10 @@ function CardCliente({ orgSlug, cliente, rotinas, itensImplantacao, pessoas, abe
                 return (
                   <li key={r.id} className={cn('flex items-center gap-3 px-3 py-2 rounded-lg border',
                     v ? 'border-emerald-100 bg-emerald-50/40' : 'border-gray-100')}>
-                    <span className={cn('w-5 h-5 rounded-md flex items-center justify-center shrink-0',
-                      v ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-300')}>
-                      <Check className="w-3 h-3" />
+                    <span className="w-5 h-5 flex items-center justify-center shrink-0">
+                      {v
+                        ? <CheckCircle2 className="w-[18px] h-[18px] text-emerald-600" />
+                        : <Circle className="w-[18px] h-[18px] text-gray-300" />}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="text-sm text-gray-800 block truncate">{r.nome}</span>
@@ -218,13 +219,18 @@ function CardCliente({ orgSlug, cliente, rotinas, itensImplantacao, pessoas, abe
                         temPastaCliente={!!op.driveFolderId} pasta={r.pasta} />
                     )}
                     {v ? (
-                      <button onClick={() => desligar(v.vinculoId)} disabled={pending} title="Desligar rotina"
-                        className="text-gray-300 hover:text-red-600 transition-colors shrink-0">
-                        <Power className="w-3.5 h-3.5" />
+                      <button onClick={() => desligar(v.vinculoId)} disabled={pending}
+                        title="Desligar rotina" aria-label="Desligar rotina"
+                        className="shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-lg text-gray-400
+                                   hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-60
+                                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60">
+                        <Power className="w-4 h-4" />
                       </button>
                     ) : (
                       <button onClick={() => aplicar([r.id])} disabled={pending}
-                        className="text-[11px] font-medium px-2 py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-orange-100 hover:text-orange-700 transition-colors shrink-0 disabled:opacity-60">
+                        className="text-[11px] font-medium min-h-[32px] px-3 rounded-lg bg-gray-100 text-gray-600
+                                   hover:bg-orange-100 hover:text-orange-700 transition-colors shrink-0 disabled:opacity-60
+                                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60">
                         criar
                       </button>
                     )}
@@ -321,12 +327,25 @@ function ProgressoImplantacao({ itens, estados }: { itens: ItemImplantacao[]; es
   )
 }
 
-const ESTADOS: { v: EstadoImplantacao; label: string; cls: string }[] = [
-  { v: 'ok', label: 'ok', cls: 'bg-emerald-100 text-emerald-700' },
-  { v: 'pendente', label: 'pendente', cls: 'bg-gray-100 text-gray-500' },
-  { v: 'perdido', label: 'perdido', cls: 'bg-red-100 text-red-700' },
-  { v: 'na', label: 'n/a', cls: 'bg-gray-100 text-gray-400' },
+/**
+ * Os quatro estados. `ok` e `pendente` são os dois lados do gesto diário; os
+ * outros dois são exceções que a pessoa registra de vez em quando — e a UI
+ * reflete essa diferença em vez de dar o mesmo peso aos quatro.
+ */
+const ESTADOS: {
+  v: EstadoImplantacao; label: string; descricao: string
+  Icone: typeof Circle; cor: string; chip: string
+}[] = [
+  { v: 'ok', label: 'Temos', descricao: 'acesso ou documento em mãos',
+    Icone: CheckCircle2, cor: 'text-emerald-600', chip: 'bg-emerald-600 text-[#fff]' },
+  { v: 'pendente', label: 'Falta', descricao: 'ainda não conseguimos',
+    Icone: Circle, cor: 'text-gray-400', chip: 'bg-gray-800 text-[#fff]' },
+  { v: 'perdido', label: 'Perdemos', descricao: 'tínhamos e caiu',
+    Icone: AlertCircle, cor: 'text-red-600', chip: 'bg-red-600 text-[#fff]' },
+  { v: 'na', label: 'Não se aplica', descricao: 'este cliente não usa',
+    Icone: MinusCircle, cor: 'text-gray-300', chip: 'bg-gray-500 text-[#fff]' },
 ]
+const POR_ESTADO = Object.fromEntries(ESTADOS.map(e => [e.v, e])) as Record<EstadoImplantacao, typeof ESTADOS[number]>
 
 /** Checklist de ESTADO — não é uma lista de tarefas a concluir: o item volta
  *  para 'perdido' quando o acesso cai, e é esse o ponto de existir. */
@@ -336,14 +355,39 @@ function Implantacao({ orgSlug, workspaceId, itens, estados }: {
   itens: ItemImplantacao[]
   estados: ClienteRow['implantacao']
 }) {
-  const [pending, start] = useTransition()
-  const { pct, ok, vale } = calcula(itens, estados)
+  const [, start] = useTransition()
+  // Resposta imediata ao clique: quem marca 22 itens seguidos não pode esperar
+  // o round-trip a cada um. Em erro, o override cai e o valor do servidor volta.
+  const [otimista, setOtimista] = useState<Record<string, EstadoImplantacao>>({})
+  const [salvando, setSalvando] = useState<string | null>(null)
+  const [menuAberto, setMenuAberto] = useState<string | null>(null)
+
+  const estadoDe = (id: string): EstadoImplantacao =>
+    otimista[id] ?? ((estados[id]?.estado ?? 'pendente') as EstadoImplantacao)
+
+  const { pct, ok, vale } = calcula(
+    itens,
+    // O resumo acompanha o clique junto com as linhas — número que demora a
+    // alcançar a lista faz a pessoa clicar de novo.
+    Object.fromEntries(itens.map(i => [i.id, { estado: estadoDe(i.id), nota: estados[i.id]?.nota ?? null }])),
+  )
   if (itens.length === 0) return null
 
   function marcar(itemId: string, estado: EstadoImplantacao) {
+    setOtimista(o => ({ ...o, [itemId]: estado }))
+    setSalvando(itemId)
+    setMenuAberto(null)
     start(async () => {
       const r = await marcarImplantacao(orgSlug, workspaceId, itemId, estado)
-      if (r?.error) toast.error(r.error)
+      setSalvando(null)
+      if (r?.error) {
+        setOtimista(o => {
+          const resto = { ...o }
+          delete resto[itemId]
+          return resto
+        })
+        toast.error(r.error)
+      }
     })
   }
 
@@ -351,40 +395,120 @@ function Implantacao({ orgSlug, workspaceId, itens, estados }: {
     <div>
       <div className="flex items-center justify-between gap-3 mb-2">
         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Implantação</h3>
-        <span className="text-[11px] text-gray-400 tabular-nums">{ok} de {vale} · {pct}%</span>
+        <span className="text-[11px] text-gray-500 tabular-nums">{ok} de {vale} · {pct}%</span>
       </div>
+
       <div className="grid sm:grid-cols-2 gap-3">
         {BLOCOS.map(b => {
           const doBloco = itens.filter(i => i.bloco === b.id)
           if (doBloco.length === 0) return null
           return (
-            <div key={b.id} className="border border-gray-100 rounded-xl p-3">
-              <p className="text-[11px] font-semibold text-gray-500 mb-1.5">{b.label}</p>
-              <ul className="space-y-1">
-                {doBloco.map(i => {
-                  const atual = (estados[i.id]?.estado ?? 'pendente') as EstadoImplantacao
-                  return (
-                    <li key={i.id} className="flex items-center gap-2">
-                      <span className="text-[12px] text-gray-700 min-w-0 flex-1 truncate" title={i.nome}>{i.nome}</span>
-                      <span className="flex items-center gap-0.5 shrink-0">
-                        {ESTADOS.map(e => (
-                          <button key={e.v} onClick={() => marcar(i.id, e.v)} disabled={pending}
-                            title={e.label}
-                            className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-md transition-colors disabled:opacity-60',
-                              atual === e.v ? e.cls : 'text-gray-300 hover:bg-gray-100')}>
-                            {e.label}
-                          </button>
-                        ))}
-                      </span>
-                    </li>
-                  )
-                })}
+            <div key={b.id} className="border border-gray-100 rounded-xl p-2.5">
+              <p className="text-[11px] font-semibold text-gray-500 px-1.5 mb-1">{b.label}</p>
+              <ul>
+                {doBloco.map(i => (
+                  <LinhaItem
+                    key={i.id}
+                    nome={i.nome}
+                    estado={estadoDe(i.id)}
+                    salvando={salvando === i.id}
+                    menuAberto={menuAberto === i.id}
+                    onAlternar={() => marcar(i.id, estadoDe(i.id) === 'ok' ? 'pendente' : 'ok')}
+                    onMenu={() => setMenuAberto(menuAberto === i.id ? null : i.id)}
+                    onEscolher={e => marcar(i.id, e)}
+                  />
+                ))}
               </ul>
             </div>
           )
         })}
       </div>
+      <p className="text-[11px] text-gray-400 mt-2">
+        Clique no item para marcar que temos. Os outros estados ficam no menu de cada linha.
+      </p>
     </div>
+  )
+}
+
+/**
+ * A linha INTEIRA é o alvo do gesto que acontece o tempo todo (temos ↔ falta).
+ * Antes eram quatro botões de 16px de altura colados a 2px um do outro, com o
+ * rótulo em cinza-300 — abaixo do mínimo de alvo (24px) e de contraste (4.5:1)
+ * ao mesmo tempo. Os dois estados raros saem do caminho e vão para o menu, que
+ * é onde eles pertencem pela frequência de uso.
+ */
+function LinhaItem({ nome, estado, salvando, menuAberto, onAlternar, onMenu, onEscolher }: {
+  nome: string
+  estado: EstadoImplantacao
+  salvando: boolean
+  menuAberto: boolean
+  onAlternar: () => void
+  onMenu: () => void
+  onEscolher: (e: EstadoImplantacao) => void
+}) {
+  const cfg = POR_ESTADO[estado]
+  const Icone = cfg.Icone
+
+  return (
+    <li>
+      <div className="flex items-center gap-1 rounded-lg hover:bg-gray-50 transition-colors">
+        <button
+          type="button"
+          onClick={onAlternar}
+          aria-pressed={estado === 'ok'}
+          aria-label={`${nome} — ${cfg.label.toLowerCase()}. Clique para ${estado === 'ok' ? 'desmarcar' : 'marcar que temos'}.`}
+          className="group flex items-center gap-2.5 flex-1 min-w-0 min-h-[38px] px-1.5 rounded-lg text-left
+                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60 transition-colors"
+        >
+          <span className="shrink-0 w-5 h-5 inline-flex items-center justify-center">
+            {salvando
+              ? <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+              : <Icone className={cn('w-[18px] h-[18px] transition-colors', cfg.cor,
+                  estado === 'pendente' && 'group-hover:text-emerald-500')} />}
+          </span>
+          <span className={cn('text-[13px] min-w-0 truncate transition-colors',
+            estado === 'ok' ? 'text-gray-800'
+              : estado === 'perdido' ? 'text-red-700 font-medium'
+              : estado === 'na' ? 'text-gray-400 line-through decoration-gray-300'
+              : 'text-gray-600')} title={nome}>
+            {nome}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={onMenu}
+          aria-expanded={menuAberto}
+          aria-label={`Outros estados de ${nome}`}
+          className={cn('shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-lg transition-colors',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60',
+            menuAberto ? 'bg-gray-200 text-gray-700' : 'text-gray-300 hover:bg-gray-200 hover:text-gray-600')}
+        >
+          <MoreHorizontal className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Disclosure inline em vez de popover: sem portal, sem clique-fora para
+          dar errado, e o teclado segue a ordem natural da lista. */}
+      {menuAberto && (
+        <div className="flex flex-wrap gap-1.5 px-1.5 pb-2 pt-1">
+          {ESTADOS.map(e => (
+            <button
+              key={e.v}
+              type="button"
+              onClick={() => onEscolher(e.v)}
+              title={e.descricao}
+              className={cn('inline-flex items-center gap-1.5 min-h-[34px] px-2.5 rounded-lg text-[12px] font-medium transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60',
+                estado === e.v ? e.chip : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}
+            >
+              <e.Icone className="w-3.5 h-3.5" />
+              {e.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </li>
   )
 }
 
@@ -492,9 +616,12 @@ function BotaoPastaDoMes({ orgSlug, vinculoId, temPastaCliente, pasta }: {
 
   return (
     <>
-      <button onClick={abrir} disabled={pending} title={`Pasta do mês em ${pasta}`}
-        className="text-gray-300 hover:text-orange-600 transition-colors shrink-0 disabled:opacity-60">
-        {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderPlus className="w-3.5 h-3.5" />}
+      <button onClick={abrir} disabled={pending}
+        title={`Pasta do mês em ${pasta}`} aria-label={`Abrir a pasta do mês em ${pasta}`}
+        className="shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-lg text-gray-400
+                   hover:bg-orange-50 hover:text-orange-600 transition-colors disabled:opacity-60
+                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60">
+        {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderPlus className="w-4 h-4" />}
       </button>
 
       {escolha && (
