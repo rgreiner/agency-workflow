@@ -1,11 +1,12 @@
 'use client'
 
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Clock, LogIn, Coffee, Undo2, Loader2, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { baterPonto } from '@/app/actions/rh-ponto'
+import { ExtraContextoModal, extraNascida, type ExtraNascida } from '@/components/ponto/ExtraContextoModal'
 
 const hm = (t: string) => t.slice(0, 5)
 
@@ -20,6 +21,7 @@ export function PontoCardHome({ orgSlug, colaboradorId, marcacoes }: {
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
+  const [extra, setExtra] = useState<ExtraNascida | null>(null)
 
   const dentro = marcacoes.length % 2 === 1
   const ultima = marcacoes.length ? hm(marcacoes[marcacoes.length - 1]) : null
@@ -32,6 +34,9 @@ export function PontoCardHome({ orgSlug, colaboradorId, marcacoes }: {
       const r = await baterPonto(orgSlug, colaboradorId)
       if (r?.error) { toast.error(r.error); return }
       toast.success('Ponto registrado!')
+      // Fechou o dia com extra pendente e sem contexto → pergunta na hora.
+      const ex = extraNascida(r.resultado)
+      if (ex) setExtra(ex)
       router.refresh()
     })
   }
@@ -75,6 +80,8 @@ export function PontoCardHome({ orgSlug, colaboradorId, marcacoes }: {
           {proxima.label}
         </button>
       </div>
+      {extra && <ExtraContextoModal orgSlug={orgSlug} colaboradorId={colaboradorId}
+        extra={extra} onClose={() => setExtra(null)} />}
     </div>
   )
 }

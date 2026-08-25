@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Clock, FileText, Check, X, Ban, CalendarX, CalendarClock, Paperclip } from 'lucide-react'
+import { Clock, FileText, Check, X, Ban, CalendarX, CalendarClock, Paperclip, Briefcase } from 'lucide-react'
 import { toast } from 'sonner'
 import { decidirExtra, decidirJustificativa, setPontoObrigatorio } from '@/app/actions/rh-ponto'
 import { MarcacoesEditor, validarMarcacoes } from '@/components/ponto/MarcacoesEditor'
@@ -20,8 +20,10 @@ export interface JustDoDia { tipo: string; descricao: string | null; status: str
 export interface ExtraPend {
   id: string; data: string; minutos: number; saldo_min: number; acima_10h: boolean
   colaborador_id: string
-  /** Motivo vindo do relatório importado (Pontomais) — dia do Flow não preenche. */
+  /** Motivo contado pelo colaborador na batida (mig. 255) ou vindo do Pontomais. */
   motivo: string | null
+  /** Tarefa/campanha em que a pessoa estava trabalhando (rh_ponto.extra_projeto). */
+  projeto: { title: string; campaigns: { name: string; workspaces: { name: string } | null } | null } | null
   /** Marcações reais do dia, HH:MM em ordem cronológica. */
   batidas: string[]
   jornada: JornadaResumo | null
@@ -263,8 +265,19 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
                       </span>
                     </div>
                   </div>
-                  {(e.motivo || e.justs.length > 0) && (
+                  {(e.motivo || e.projeto || e.justs.length > 0) && (
                     <div className="mt-1.5 space-y-1">
+                      {e.projeto && (
+                        <div className="flex items-start gap-1.5 text-[11px] text-gray-600">
+                          <Briefcase className="w-3.5 h-3.5 text-gray-400 mt-px shrink-0" />
+                          <span>
+                            <b className="font-medium">{e.projeto.title}</b>
+                            {e.projeto.campaigns && (
+                              <span className="text-gray-400"> · {e.projeto.campaigns.name}{e.projeto.campaigns.workspaces && ` — ${e.projeto.campaigns.workspaces.name}`}</span>
+                            )}
+                          </span>
+                        </div>
+                      )}
                       {e.motivo && (
                         <div className="flex items-start gap-1.5 text-[11px] text-gray-600">
                           <FileText className="w-3.5 h-3.5 text-gray-400 mt-px shrink-0" />

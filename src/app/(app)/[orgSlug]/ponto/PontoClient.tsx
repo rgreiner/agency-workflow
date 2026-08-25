@@ -6,6 +6,7 @@ import { Clock, LogIn, Coffee, Undo2, Loader2, FileText, Check, FileSignature, P
 import { toast } from 'sonner'
 import { Select } from '@/components/ui/Select'
 import { MarcacoesEditor, validarMarcacoes } from '@/components/ponto/MarcacoesEditor'
+import { ExtraContextoModal, extraNascida, type ExtraNascida } from '@/components/ponto/ExtraContextoModal'
 import { downscaleImage } from '@/lib/image-resize'
 import { baterPonto, criarJustificativa } from '@/app/actions/rh-ponto'
 
@@ -34,6 +35,7 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
   const router = useRouter()
   const [pending, start] = useTransition()
   const [just, setJust] = useState(false)
+  const [extra, setExtra] = useState<ExtraNascida | null>(null)
   const d = diaHoje
 
   // N marcações livres: ímpar = está trabalhando (próxima é saída/pausa),
@@ -73,6 +75,9 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
       } else {
         toast.success(res?.local ? `Ponto registrado — ${res.local}` : 'Ponto registrado!')
       }
+      // A batida fechou o dia com extra pendente e sem contexto → pergunta na hora.
+      const ex = extraNascida(res)
+      if (ex) setExtra(ex)
       router.refresh()
     })
   }
@@ -167,6 +172,8 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
         </div>
       )}
 
+      {extra && <ExtraContextoModal orgSlug={orgSlug} colaboradorId={colaboradorId}
+        extra={extra} onClose={() => setExtra(null)} />}
       {just && <JustificarModal orgSlug={orgSlug} colaboradorId={colaboradorId}
         dias={Object.fromEntries([...(d ? [d] : []), ...recentes].map(r => [r.data, (r.marcacoes ?? []).map(h => h.slice(0, 5))]))}
         onClose={() => setJust(false)} />}

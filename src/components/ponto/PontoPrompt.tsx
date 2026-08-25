@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, useTransition } from 'react'
 import { Clock, Loader2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { pontoEstado, baterPonto, baterEntradaRetro } from '@/app/actions/rh-ponto'
+import { ExtraContextoModal, extraNascida, type ExtraNascida } from '@/components/ponto/ExtraContextoModal'
 
 type Estado = NonNullable<Awaited<ReturnType<typeof pontoEstado>>>
 
@@ -85,6 +86,7 @@ function snoozed(tipo: string, dia: string): boolean {
 export function PontoPrompt({ orgSlug }: { orgSlug: string }) {
   const [estado, setEstado] = useState<Estado | null>(null)
   const [oculto, setOculto] = useState(false)
+  const [extra, setExtra] = useState<{ nascida: ExtraNascida; colaboradorId: string } | null>(null)
   const [pending, start] = useTransition()
 
   const carregar = useCallback(() => {
@@ -101,8 +103,15 @@ export function PontoPrompt({ orgSlug }: { orgSlug: string }) {
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis) }
   }, [carregar])
 
+  // O modal de contexto da extra vive FORA do early-return: depois de bater a
+  // saída o lembrete some (decidir() = null) e o modal precisa continuar aberto.
+  const modalExtra = extra ? (
+    <ExtraContextoModal orgSlug={orgSlug} colaboradorId={extra.colaboradorId}
+      extra={extra.nascida} onClose={() => setExtra(null)} />
+  ) : null
+
   const prompt = estado ? decidir(estado) : null
-  if (!estado || !prompt || oculto || snoozed(prompt.tipo, estado.dia)) return null
+  if (!estado || !prompt || oculto || snoozed(prompt.tipo, estado.dia)) return modalExtra
 
   function depois() {
     try { localStorage.setItem(snoozeKey(prompt!.tipo, estado!.dia), String(Date.now() + SNOOZE_MIN * 60_000)) } catch {}
@@ -110,18 +119,26 @@ export function PontoPrompt({ orgSlug }: { orgSlug: string }) {
   }
 
   function bater(retro: boolean) {
+    const colaboradorId = estado!.colaborador_id
     start(async () => {
       const r = retro
         ? await baterEntradaRetro(orgSlug)
-        : await baterPonto(orgSlug, estado!.colaborador_id)
+        : await baterPonto(orgSlug, colaboradorId)
       if (r && 'error' in r && r.error) { toast.error(r.error); return }
       const hora = retro && r && 'hora' in r ? (r as { hora?: string }).hora : null
       toast.success(hora ? `Entrada registrada às ${hora}.` : 'Ponto registrado.')
+      // A batida do lembrete de saída pode fechar o dia com extra pendente —
+      // é exatamente o momento de perguntar o contexto.
+      if (!retro && r && 'resultado' in r) {
+        const ex = extraNascida(r.resultado)
+        if (ex) setExtra({ nascida: ex, colaboradorId })
+      }
       carregar()
     })
   }
 
-  return (
+  return (<>
+    {modalExtra}
     <div className="fixed bottom-4 left-4 md:left-auto md:right-4 md:bottom-24 z-40 max-w-sm w-[calc(100%-2rem)] md:w-80 rounded-2xl border border-orange-200 bg-white shadow-xl shadow-orange-500/10 p-4 animate-[paletteIn_0.2s_ease-out]">
       <div className="flex items-start gap-3">
         <div className="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
@@ -164,5 +181,5 @@ export function PontoPrompt({ orgSlug }: { orgSlug: string }) {
         )}
       </div>
     </div>
-  )
+  </>)
 }

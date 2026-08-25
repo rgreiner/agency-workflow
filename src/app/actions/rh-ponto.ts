@@ -41,7 +41,77 @@ export async function baterPonto(orgSlug: string, colaboradorId: string, geo?: {
   })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/ponto`)
-  return { ok: true, resultado: data as { hora: string; fora?: boolean; local?: string | null } }
+  return {
+    ok: true, resultado: data as {
+      hora: string; fora?: boolean; local?: string | null
+      // Estado da extra do dia (mig. 255) — gatilho da pergunta de contexto.
+      aberto?: boolean; saldo_min?: number; extra_status?: string | null; tem_contexto?: boolean
+    },
+  }
+}
+
+export interface OpcaoProjetoExtra { value: string; label: string }
+
+/** Tarefas para o "em que você estava trabalhando?" da hora extra: primeiro as
+ *  que a pessoa ABRIU hoje (activity_focus — a mesma régua das horas por
+ *  tarefa), depois as atribuídas a ela ainda em aberto. */
+export async function opcoesProjetoExtra(orgSlug: string): Promise<OpcaoProjetoExtra[]> {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return []
+  const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+  const inicio = new Date(`${hoje}T00:00:00-03:00`).toISOString()
+
+  type Emb = {
+    id: string; title: string; archived: boolean; status?: string
+    campaigns: { name: string; workspaces: { name: string; org_id: string } | null } | null
+  }
+  const rotulo = (a: Emb) =>
+    a.campaigns?.workspaces?.name ? `${a.title} · ${a.campaigns.workspaces.name}` : a.title
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: focos } = await (c.supabase as any)
+    .from('activity_focus')
+    .select('activity_id, aberta_em, activities(id, title, archived, campaigns(name, workspaces(name, org_id)))')
+    .eq('org_id', c.orgId).eq('user_id', c.userId)
+    .gte('aberta_em', inicio)
+    .order('aberta_em', { ascending: false }).limit(80)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: minhas } = await (c.supabase as any)
+    .from('activity_assignees')
+    .select('activities(id, title, status, archived, campaigns(name, workspaces(name, org_id)))')
+    .eq('user_id', c.userId).limit(120)
+
+  const out = new Map<string, string>()
+  // Trabalhou nela hoje: entra mesmo concluída/arquivada — é bem provável que a
+  // tarefa da extra tenha sido fechada no fim do dia.
+  for (const f of (focos ?? []) as { activities: Emb | null }[]) {
+    if (f.activities && !out.has(f.activities.id)) out.set(f.activities.id, rotulo(f.activities))
+  }
+  for (const m of (minhas ?? []) as { activities: Emb | null }[]) {
+    const a = m.activities
+    if (!a || out.has(a.id) || a.archived || a.status === 'concluido') continue
+    if (a.campaigns?.workspaces?.org_id !== c.orgId) continue
+    out.set(a.id, rotulo(a))
+    if (out.size >= 40) break
+  }
+  return [...out].map(([value, label]) => ({ value, label }))
+}
+
+/** Grava motivo + tarefa da extra pendente do dia — RPC estreita (mig. 255):
+ *  não toca hora nem status, e só enquanto o gestor não decidiu. */
+export async function salvarContextoExtra(orgSlug: string, colaboradorId: string, data: string,
+  info: { motivo: string | null; projetoId: string | null }) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (c.supabase as any).rpc('rh_extra_contexto', {
+    p_colaborador_id: colaboradorId, p_data: data,
+    p_motivo: info.motivo, p_projeto: info.projetoId,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/ponto`)
+  return { ok: true }
 }
 
 /** Marcações batidas fora dos locais autorizados, aguardando o RH. */
