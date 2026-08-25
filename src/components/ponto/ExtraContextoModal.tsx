@@ -1,10 +1,9 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { Clock, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Select } from '@/components/ui/Select'
-import { opcoesProjetoExtra, salvarContextoExtra, type OpcaoProjetoExtra } from '@/app/actions/rh-ponto'
+import { salvarContextoExtra } from '@/app/actions/rh-ponto'
 
 /** Resultado da batida que fechou o dia com extra pendente e ainda sem contexto. */
 export interface ExtraNascida { saldoMin: number }
@@ -22,28 +21,25 @@ export function extraNascida(res?: {
 
 /**
  * Pergunta o contexto da hora extra na batida em que ela nasce — a memória está
- * fresca e o gestor decide melhor na aprovação. NUNCA trava a saída: "Agora
- * não" fecha e a extra segue pendente do mesmo jeito (aviso, não parede).
+ * fresca e o gestor decide melhor na aprovação. Só texto livre DE PROPÓSITO
+ * (decisão do Rafael, 25/08): o dia pode ter tido N tarefas, e apontar uma só
+ * distorceria — quem quiser cita as tarefas no próprio texto. NUNCA trava a
+ * saída: "Agora não" fecha e a extra segue pendente do mesmo jeito.
  */
 export function ExtraContextoModal({ orgSlug, colaboradorId, extra, onClose }: {
   orgSlug: string; colaboradorId: string; extra: ExtraNascida; onClose: () => void
 }) {
-  const [opcoes, setOpcoes] = useState<OpcaoProjetoExtra[] | null>(null)
-  const [projeto, setProjeto] = useState('')
   const [motivo, setMotivo] = useState('')
   const [saving, start] = useTransition()
-
-  useEffect(() => { opcoesProjetoExtra(orgSlug).then(setOpcoes) }, [orgSlug])
 
   const saldo = `+${Math.floor(extra.saldoMin / 60)}h${String(extra.saldoMin % 60).padStart(2, '0')}`
 
   function salvar() {
-    if (!motivo.trim() && !projeto) { toast.error('Conte o motivo ou escolha a tarefa.'); return }
+    if (!motivo.trim()) { toast.error('Conte o motivo da hora extra.'); return }
     // O dia da extra é o de hoje — foi a batida de agora que fechou o período.
     const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
     start(async () => {
-      const r = await salvarContextoExtra(orgSlug, colaboradorId, hoje,
-        { motivo: motivo.trim() || null, projetoId: projeto || null })
+      const r = await salvarContextoExtra(orgSlug, colaboradorId, hoje, motivo.trim())
       if (r?.error) { toast.error(r.error); return }
       toast.success('Anotado — vai junto para a aprovação do gestor.')
       onClose()
@@ -59,21 +55,14 @@ export function ExtraContextoModal({ orgSlug, colaboradorId, extra, onClose }: {
             <span className="text-sm font-semibold text-emerald-600 tabular-nums">{saldo}</span>
           </h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            O dia fechou além da jornada. Conte em que você estava trabalhando — o gestor vê isso ao decidir a extra.
+            O dia fechou além da jornada. Conte o que precisou do tempo extra — o gestor vê isso ao decidir.
           </p>
         </div>
-        <div className="px-6 py-5 space-y-3">
-          <div>
-            <label className="block text-sm text-gray-600 mb-1.5">Tarefa / campanha <span className="text-gray-400 font-normal">(as de hoje primeiro)</span></label>
-            <Select value={projeto} onChange={setProjeto} options={opcoes ?? []}
-              placeholder={opcoes === null ? 'Carregando…' : opcoes.length ? 'Escolher tarefa' : 'Nenhuma tarefa sua encontrada'} />
-          </div>
-          <div>
-            <label className="block text-sm text-gray-600 mb-1.5">Motivo</label>
-            <textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={2}
-              className="w-full px-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
-              placeholder="Ex.: fechamento de campanha, entrega de última hora…" />
-          </div>
+        <div className="px-6 py-5">
+          <label className="block text-sm text-gray-600 mb-1.5">Motivo</label>
+          <textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={3} autoFocus
+            className="w-full px-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
+            placeholder="Ex.: finalização da campanha do cliente X e ajustes de última hora no site do Y" />
         </div>
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-100">
           <button onClick={onClose} disabled={saving}
