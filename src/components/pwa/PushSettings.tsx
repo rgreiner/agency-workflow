@@ -78,12 +78,12 @@ export function PushSettings() {
   if (estado === 'carregando' || estado === 'indisponivel') return null
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-5">
+    <div className="bg-gray-50/60 rounded-xl border border-gray-200 p-4">
       <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-        <Bell className="w-4 h-4 text-orange-600" /> Notificações no celular
+        <Bell className="w-4 h-4 text-orange-600" /> Push neste aparelho
       </h2>
       <p className="text-xs text-gray-500 mt-1">
-        Receba menções, comentários e o lembrete do ponto mesmo com o app fechado.
+        Com o app fechado, chega aqui o que estiver ligado na coluna Push — e o lembrete do ponto.
       </p>
 
       {estado === 'sem-suporte' && (

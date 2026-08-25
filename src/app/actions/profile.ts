@@ -28,6 +28,30 @@ export async function updateProfile(
   revalidatePath('/', 'layout')
 }
 
+/**
+ * Grava as preferências de notificação (evento × canal) do próprio usuário na
+ * org — migration 254. O RPC valida com whitelist; o filtro real é o trigger.
+ */
+export async function setNotificationPrefs(orgSlug: string, prefs: import('@/lib/notification-prefs').NotifPrefs) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { data: org } = await supabase
+    .from('organizations').select('id').eq('slug', orgSlug).single()
+  if (!org) return { error: 'Organização não encontrada' }
+
+  // RPC novo (mig. 254) ainda não está nos tipos gerados — cast como o resto do app.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('set_notification_prefs', {
+    p_user_id: user.id,
+    p_org_id: org.id,
+    p_prefs: prefs,
+  })
+  if (error) return { error: error.message }
+  return {}
+}
+
 /** Liga/desliga o resumo diário por e-mail (8h30) do próprio usuário. */
 export async function setDigestEnabled(enabled: boolean) {
   const supabase = await createClient()

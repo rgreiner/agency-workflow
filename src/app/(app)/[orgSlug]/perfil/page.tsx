@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { redirect } from 'next/navigation'
 import { ProfileForm } from './ProfileForm'
-import { PushSettings } from '@/components/pwa/PushSettings'
+import type { NotifPrefs } from '@/lib/notification-prefs'
 
 export default async function PerfilPage({
   params,
@@ -21,15 +21,26 @@ export default async function PerfilPage({
     .eq('id', authUser.id)
     .single()
 
+  const { data: org } = await supabase
+    .from('organizations').select('id').eq('slug', orgSlug).single()
+
   // Preferência do resumo diário (default ligado se não houver linha).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: prefs } = await (supabase as any)
     .from('user_prefs').select('digest_enabled').eq('user_id', authUser.id).maybeSingle()
   const digestEnabled = prefs?.digest_enabled ?? true
 
+  // Preferências de notificação (evento × canal, mig. 254; sem linha = tudo ligado).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: notifRow } = org ? await (supabase as any)
+    .from('user_notification_prefs').select('prefs')
+    .eq('user_id', authUser.id).eq('org_id', org.id).maybeSingle()
+    : { data: null }
+  const notifPrefs: NotifPrefs = (notifRow?.prefs as NotifPrefs | null) ?? {}
+
   return (
-    <>
     <ProfileForm
+      orgSlug={orgSlug}
       user={{
         id:               authUser.id,
         email:            authUser.email ?? '',
@@ -42,11 +53,7 @@ export default async function PerfilPage({
         driveLang:        (profile as { drive_lang?: string | null } | null)?.drive_lang ?? 'pt',
       }}
       digestEnabled={digestEnabled}
+      notifPrefs={notifPrefs}
     />
-    {/* Push do aparelho (some sozinho se o servidor não tem chave VAPID). */}
-    <div className="px-6 pb-6 max-w-lg">
-      <PushSettings />
-    </div>
-    </>
   )
 }
