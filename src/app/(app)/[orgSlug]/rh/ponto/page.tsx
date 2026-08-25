@@ -2,21 +2,52 @@ import { assertRhAccess } from '@/lib/rh'
 import { unwrap, unwrapOne } from '@/lib/supabase/unwrap'
 import { marcacoesFora } from '@/app/actions/rh-ponto'
 import { meuIp, type LocalRh } from '@/app/actions/rh-local'
-import { PontoGestaoClient, type ExtraPend, type JustPend } from './PontoGestaoClient'
+import { PontoGestaoClient, type ExtraPend, type JustPend, type JornadaResumo, type JustDoDia } from './PontoGestaoClient'
 import type { JornadaVals } from '../JornadaEditor'
 
 export const dynamic = 'force-dynamic'
+
+type ExtraRow = Omit<ExtraPend, 'batidas' | 'jornada' | 'justs'> & { rh_marcacao: { hora: string; seq: number }[] | null }
 
 export default async function PontoGestaoPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params
   const { supabase, orgId } = await assertRhAccess(orgSlug)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const extras = unwrap<ExtraPend>(await (supabase as any)
+  const extrasRaw = unwrap<ExtraRow>(await (supabase as any)
     .from('rh_ponto')
-    .select('id, data, minutos, saldo_min, acima_10h, rh_colaborador!colaborador_id(nome)')
+    .select('id, data, minutos, saldo_min, acima_10h, colaborador_id, motivo, rh_colaborador!colaborador_id(nome), rh_marcacao(hora, seq)')
     .eq('org_id', orgId).eq('extra_status', 'pendente')
     .order('data', { ascending: false }), 'horas extras')
+
+  // Contexto da aprovação: jornada prevista de cada pessoa (personalizada, senão a
+  // padrão da org) e justificativas que cobrem os dias pendentes — o aprovador
+  // decide vendo previsto × batido × motivo, sem sair da tela.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const jornadas = unwrap<JornadaResumo & { colaborador_id: string | null }>(await (supabase as any)
+    .from('rh_jornada')
+    .select('colaborador_id, entrada, intervalo_ini, intervalo_fim, saida')
+    .eq('org_id', orgId), 'jornadas')
+  const jornadaDe = (cid: string): JornadaResumo | null =>
+    jornadas.find(j => j.colaborador_id === cid) ?? jornadas.find(j => j.colaborador_id === null) ?? null
+
+  let justsDosDias: (JustDoDia & { colaborador_id: string; data_ini: string; data_fim: string })[] = []
+  if (extrasRaw.length) {
+    const datas = extrasRaw.map(e => e.data).sort()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    justsDosDias = unwrap(await (supabase as any)
+      .from('rh_justificativa')
+      .select('colaborador_id, data_ini, data_fim, tipo, descricao, status')
+      .eq('org_id', orgId)
+      .lte('data_ini', datas[datas.length - 1]).gte('data_fim', datas[0]), 'justificativas dos dias')
+  }
+
+  const extras: ExtraPend[] = extrasRaw.map(({ rh_marcacao, ...e }) => ({
+    ...e,
+    batidas: (rh_marcacao ?? []).slice().sort((a, b) => a.seq - b.seq).map(m => m.hora.slice(0, 5)),
+    jornada: jornadaDe(e.colaborador_id),
+    justs: justsDosDias.filter(x => x.colaborador_id === e.colaborador_id && x.data_ini <= e.data && x.data_fim >= e.data),
+  }))
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const justs = unwrap<JustPend>(await (supabase as any)
