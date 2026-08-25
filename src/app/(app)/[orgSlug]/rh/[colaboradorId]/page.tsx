@@ -14,7 +14,7 @@ export default async function ColaboradorPage({ params }: { params: Promise<{ or
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const colab = unwrapOne<Colaborador>(await (supabase as any)
     .from('rh_colaborador')
-    .select('id, nome, cpf, email, telefone, cargo, tipo_vinculo, data_admissao, data_demissao, status, gestor_id, salario_atual, beneficios_mensal, observacao, arquivado, membro_user_id, bate_ponto')
+    .select('id, nome, cpf, email, telefone, cargo, tipo_vinculo, data_admissao, data_demissao, status, gestor_id, salario_atual, beneficios_mensal, observacao, arquivado, membro_user_id, bate_ponto, entra_fechamento')
     .eq('id', colaboradorId).eq('org_id', orgId).maybeSingle(), 'colaborador')
   if (!colab) notFound()
 

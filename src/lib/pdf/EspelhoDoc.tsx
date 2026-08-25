@@ -1,8 +1,8 @@
 // Espelho de ponto em PDF. Quando o ciclo está assinado, o conteúdo vem do
 // SNAPSHOT CONGELADO junto da assinatura — nunca de uma releitura do banco —
 // para o documento ser exatamente aquilo sobre o que o hash foi calculado.
-import { Text, View } from '@react-pdf/renderer'
-import { s, PRETO, CINZA, CINZA_CLARO, LINHA, FolhaA4, Cabecalho, Rodape, agoraBR, type Agencia } from './kit'
+import { Document, Page, Text, View } from '@react-pdf/renderer'
+import { s, PRETO, CINZA, CINZA_CLARO, LINHA, Cabecalho, Rodape, agoraBR, type Agencia } from './kit'
 
 export interface EspelhoPdfDia {
   data: string; dow: number; esperado_min: number; marcacoes: string[]
@@ -40,10 +40,13 @@ function Cel({ w, children, alinha, forte, cor }: {
   )
 }
 
-export function EspelhoDoc({ d, agencia, logoUrl }: { d: EspelhoPdfDados; agencia: Agencia; logoUrl: string | null }) {
+/** Uma pessoa = uma página (que pagina sozinha se o ciclo for longo). Extraída
+ *  para o PDF do FECHAMENTO montar um documento único com o time inteiro —
+ *  mesmo formato do relatório que a contabilidade recebia do Pontomais. */
+export function EspelhoPagina({ d, agencia, logoUrl }: { d: EspelhoPdfDados; agencia: Agencia; logoUrl: string | null }) {
   const assinado = d.assinaturas.length > 0
   return (
-    <FolhaA4>
+    <Page size="A4" style={s.page}>
       <Cabecalho agencia={agencia} logoUrl={logoUrl} />
 
       <Text style={{ ...s.titulo, marginTop: 10 }}>ESPELHO DE PONTO</Text>
@@ -138,6 +141,21 @@ export function EspelhoDoc({ d, agencia, logoUrl }: { d: EspelhoPdfDados; agenci
         identificacao={`Espelho de ponto · ${d.colaborador.nome} · ${d.competencia}`}
         geradoEm={agoraBR()}
       />
-    </FolhaA4>
+    </Page>
+  )
+}
+
+export function EspelhoDoc(props: { d: EspelhoPdfDados; agencia: Agencia; logoUrl: string | null }) {
+  return <Document><EspelhoPagina {...props} /></Document>
+}
+
+/** O documento do fechamento: todo o time num PDF só, uma pessoa por página. */
+export function EspelhoLoteDoc({ dados, agencia, logoUrl }: {
+  dados: EspelhoPdfDados[]; agencia: Agencia; logoUrl: string | null
+}) {
+  return (
+    <Document>
+      {dados.map((d, i) => <EspelhoPagina key={i} d={d} agencia={agencia} logoUrl={logoUrl} />)}
+    </Document>
   )
 }

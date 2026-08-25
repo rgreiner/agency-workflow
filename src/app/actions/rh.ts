@@ -62,6 +62,20 @@ export async function setBatePonto(orgSlug: string, id: string, bate: boolean) {
   return { ok: true }
 }
 
+/** Liga/desliga a entrada da pessoa no fechamento da contabilidade (mig. 256).
+ *  Separado de bate_ponto: dá para bater ponto (custo/hora por tarefa) sem ir
+ *  para a contabilidade — e o contrário. */
+export async function setEntraFechamento(orgSlug: string, id: string, entra: boolean) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (c.supabase as any).rpc('rh_set_entra_fechamento', { p_colaborador: id, p_entra: entra })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/rh/${id}`)
+  revalidatePath(`/${orgSlug}/rh/fechamento`)
+  return { ok: true }
+}
+
 export async function setColaboradorArquivado(orgSlug: string, id: string, arquivado: boolean) {
   const c = await ctx(orgSlug)
   if ('error' in c) return { error: c.error }

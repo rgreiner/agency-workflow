@@ -8,7 +8,7 @@ import { Select } from '@/components/ui/Select'
 import { cn } from '@/lib/utils'
 import { formatBRL, parseMoney } from '@/lib/midia'
 import { maskCPF, maskPhone } from '@/lib/masks'
-import { salvarColaborador, setColaboradorArquivado, carregarImpactoDesligamento, setBatePonto } from '@/app/actions/rh'
+import { salvarColaborador, setColaboradorArquivado, carregarImpactoDesligamento, setBatePonto, setEntraFechamento } from '@/app/actions/rh'
 import { JornadaEditor, type JornadaVals } from '../JornadaEditor'
 import { Timeline } from '@/components/rh/Timeline'
 
@@ -17,6 +17,8 @@ export interface Colaborador {
   cargo: string | null; tipo_vinculo: string | null; data_admissao: string | null; data_demissao: string | null
   /** false = sócio/cargo de confiança: sem jornada controlada (migration 209). */
   bate_ponto?: boolean | null
+  /** false = nunca entra no fechamento da contabilidade (migration 256). */
+  entra_fechamento?: boolean | null
   status: string; gestor_id: string | null; salario_atual: number | string | null; beneficios_mensal: number | string | null; observacao: string | null; arquivado: boolean
   membro_user_id: string | null
 }
@@ -65,6 +67,19 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
       const r = await setBatePonto(orgSlug, colab.id, v)
       if (r?.error) { setBatePontoLocal(!v); toast.error(r.error); return }
       toast.success(v ? 'Passa a bater ponto.' : 'Dispensado de bater ponto.')
+      router.refresh()
+    })
+  }
+
+  // Separado de bate_ponto DE PROPÓSITO: sócio pode bater ponto para medir
+  // custo/hora por tarefa e mesmo assim ficar fora do corte da contabilidade.
+  const [entraFech, setEntraFechLocal] = useState(colab.entra_fechamento !== false)
+  function alternarFechamento(v: boolean) {
+    setEntraFechLocal(v)
+    startToggle(async () => {
+      const r = await setEntraFechamento(orgSlug, colab.id, v)
+      if (r?.error) { setEntraFechLocal(!v); toast.error(r.error); return }
+      toast.success(v ? 'Entra no fechamento da contabilidade.' : 'Fora do fechamento da contabilidade.')
       router.refresh()
     })
   }
@@ -148,8 +163,29 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
                 </p>
                 <p className="text-[11px] text-gray-500 mt-0.5">
                   {batePonto
-                    ? 'Tem jornada a cumprir: entra na cobrança, no espelho e no fechamento.'
+                    ? 'Tem jornada a cumprir: entra na cobrança e no espelho.'
                     : 'Sem jornada a cumprir — não gera falta nem entra na cobrança. É o caso de sócio e cargo de confiança (art. 62, II da CLT). Se registrar horas, elas aparecem como estão.'}
+                </p>
+              </div>
+            </div>
+            {/* O segundo interruptor é independente do primeiro: bater ponto
+                para medir custo/hora por tarefa ≠ ir para a contabilidade. */}
+            <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-gray-100 mt-2">
+              <button type="button" role="switch" aria-checked={entraFech} disabled={togglando}
+                onClick={() => alternarFechamento(!entraFech)}
+                className={cn('mt-0.5 relative w-10 h-6 rounded-full transition-colors shrink-0 disabled:opacity-50',
+                  entraFech ? 'bg-orange-600' : 'bg-gray-300')}>
+                <span className={cn('absolute top-0.5 w-5 h-5 rounded-full bg-[#fff] shadow transition-transform',
+                  entraFech ? 'translate-x-[1.125rem]' : 'translate-x-0.5')} />
+              </button>
+              <div className="min-w-0">
+                <p className="text-sm text-gray-800">
+                  {entraFech ? 'Entra no fechamento da contabilidade' : 'Fora do fechamento da contabilidade'}
+                </p>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  {entraFech
+                    ? 'Aparece pré-marcado no corte do ciclo e vai no PDF/e-mail para a contabilidade.'
+                    : 'Nunca entra no corte nem no material da contabilidade — mesmo batendo ponto (ex.: sócio que registra horas só para medir custo por tarefa).'}
                 </p>
               </div>
             </div>

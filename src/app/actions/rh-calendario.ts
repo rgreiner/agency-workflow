@@ -96,6 +96,10 @@ export interface FechamentoLinha {
   hn_min: number; he50_min: number; he100_min: number; faltas_min: number
   total_min: number; quitacao_min: number; pendente_min: number
   editado_em: string | null; dias_com_ponto: number; dias_esperados: number
+  /** Regra da ficha: false = nunca entra no corte da contabilidade (mig. 256). */
+  entra_fechamento?: boolean
+  /** Preenche a oferta "estender o ciclo até a demissão" na seleção do corte. */
+  data_demissao?: string | null
 }
 export interface Fechamento { ini: string; fim: string; competencia: string; linhas: FechamentoLinha[] }
 
