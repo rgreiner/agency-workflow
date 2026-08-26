@@ -7,8 +7,7 @@ import { getUsuario } from '@/lib/auth/server'
 import { sendMail, type MailAttachment } from '@/lib/email/send'
 import { logSystemError } from '@/lib/system-error'
 import { loadOrgDocs } from '@/lib/agency'
-import { EspelhoLoteDoc } from '@/lib/pdf/EspelhoDoc'
-import { montarEspelhosDoRun } from '@/lib/pdf/fechamento-ponto'
+import { FechamentoResumoDoc } from '@/lib/pdf/FechamentoResumoDoc'
 
 /** O ciclo congelado (mig. 256) — snapshot que a contabilidade recebe. */
 export interface RunRhLinha {
@@ -82,6 +81,27 @@ export async function salvarEmailsContabilidadeRh(orgSlug: string, emails: strin
   return { ok: true, emails: limpos }
 }
 
+/** A tabela do banco de horas no CORPO do e-mail ("segue abaixo…") — o
+ *  formato que a contabilidade pediu; estilos inline por causa dos clientes
+ *  de e-mail. */
+function tabelaHtml(linhas: RunRhLinha[]): string {
+  const th = (t: string, right = true) =>
+    `<th style="padding:6px 8px;border:1px solid #d1d5db;background:#f3f4f6;font-size:12px;text-align:${right ? 'right' : 'left'};white-space:nowrap">${t}</th>`
+  const td = (t: string, right = true, forte = false) =>
+    `<td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;text-align:${right ? 'right' : 'left'};${forte ? 'font-weight:bold;' : ''}white-space:nowrap">${t}</td>`
+  const tot = linhas.reduce((a, l) => ({
+    hn: a.hn + l.hn_min, h50: a.h50 + l.he50_min, h100: a.h100 + l.he100_min,
+    faltas: a.faltas + l.faltas_min, total: a.total + l.total_min, quit: a.quit + l.quitacao_min,
+  }), { hn: 0, h50: 0, h100: 0, faltas: 0, total: 0, quit: 0 })
+  return `
+    <table style="border-collapse:collapse;margin:12px 0">
+      <tr>${th('Colaborador', false)}${th('Matrícula (CPF)', false)}${th('H.N.')}${th('H.E.50')}${th('H.E.100')}${th('Faltas')}${th('H. Totais')}${th('Quitação Banco')}</tr>
+      ${linhas.map(l => `<tr>${td(escapeHtml(l.nome), false)}${td(l.cpf ?? '—', false)}${td(hm(l.hn_min))}${td(hm(l.he50_min))}${td(hm(l.he100_min))}${td(hm(l.faltas_min))}${td(hm(l.total_min), true, true)}${td(hm(l.quitacao_min), true, true)}</tr>`).join('\n      ')}
+      <tr>${td('<b>TOTAIS</b>', false)}${td('', false)}${td(`<b>${hm(tot.hn)}</b>`)}${td(`<b>${hm(tot.h50)}</b>`)}${td(`<b>${hm(tot.h100)}</b>`)}${td(`<b>${hm(tot.faltas)}</b>`)}${td(`<b>${hm(tot.total)}</b>`)}${td(`<b>${hm(tot.quit)}</b>`)}</tr>
+    </table>
+    <p style="color:#6b7280;font-size:11px">H.N. = horas normais · H.E.50/100 = extras aprovadas · H. Totais = H.N. + extras − faltas · Quitação Banco = extras − faltas.</p>`
+}
+
 function montarCsv(linhas: RunRhLinha[]): string {
   const head = ['Colaborador', 'Matrícula (CPF)', 'Cargo', 'Período', 'H.N.', 'H.E.50', 'H.E.100', 'Faltas', 'H. Totais', 'Quitação Banco']
   const rows = linhas.map(l => [
@@ -122,15 +142,17 @@ export async function enviarFechamentoRh(orgSlug: string, runId: string, dados: 
   try {
     const linhas = ([...run.rh_fechamento_run_linha] as RunRhLinha[])
       .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-    const espelhos = await montarEspelhosDoRun(sb, c.orgId, run.competencia, linhas)
     const { agency } = await loadOrgDocs(sb, c.orgId)
-    const pdf = await renderToBuffer(
-      EspelhoLoteDoc({ dados: espelhos, agencia: agency, logoUrl: cfg?.logo_url ?? null }))
-
+    // Anexo = o RESUMO (tabela do banco de horas): a contabilidade pediu só
+    // essas colunas (26/08). O espelho detalhado segue disponível na tela.
     const comp = String(run.competencia).slice(0, 7)
+    const pdf = await renderToBuffer(
+      FechamentoResumoDoc({ d: { ini: run.ini, fim: run.fim, competencia: comp, linhas },
+        agencia: agency, logoUrl: cfg?.logo_url ?? null }))
+
     const per = `${dBR(run.ini)} a ${dBR(run.fim)}`
     const anexos: MailAttachment[] = [
-      { filename: `Espelho de ponto ${comp} (${per.replace(/\//g, '.')}).pdf`, content: Buffer.from(pdf) },
+      { filename: `Fechamento do ponto ${comp} (${per.replace(/\//g, '.')}).pdf`, content: Buffer.from(pdf) },
       { filename: `fechamento-ponto-${comp}.csv`, content: Buffer.from('﻿' + montarCsv(linhas), 'utf-8') },
     ]
 
@@ -138,7 +160,8 @@ export async function enviarFechamentoRh(orgSlug: string, runId: string, dados: 
     const html = `
       ${reenvio ? `<p><strong>Versão corrigida</strong> — substitui o material ${dataAnterior ? `enviado em ${dataAnterior}` : 'enviado antes'}.</p>` : ''}
       ${dados.corpo.trim().split(/\n+/).map(l => `<p>${escapeHtml(l)}</p>`).join('\n      ')}
-      <p style="color:#888;font-size:12px">Enviado pelo Flow — espelho de ponto em PDF e resumo em CSV anexos (período ${per}).</p>`
+      ${tabelaHtml(linhas)}
+      <p style="color:#888;font-size:12px">Enviado pelo Flow — tabela também em PDF e CSV anexos (período ${per}).</p>`
 
     const { error: mailErr } = await sendMail({
       to: destinatarios,

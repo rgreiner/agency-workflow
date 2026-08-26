@@ -23,12 +23,6 @@ function hm(min: number): string {
   const a = Math.abs(min)
   return `${s}${Math.floor(a / 60)}:${String(a % 60).padStart(2, '0')}`
 }
-/** minutos → texto do e-mail ("1h35min", "36min"). */
-function hTexto(min: number): string {
-  const a = Math.abs(min)
-  const h = Math.floor(a / 60), m = a % 60
-  return h > 0 ? `${h}h${String(m).padStart(2, '0')}min` : `${m}min`
-}
 const dataBR = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`
 const ddmm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
 const cpfMask = (c: string | null) => c ?? '—'
@@ -41,25 +35,18 @@ const parseMoney = (s: string): number | null => {
 }
 const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
-/** O rascunho do corpo do e-mail — o texto que o Rafael mandava à mão, gerado
- *  das linhas congeladas (a frase de saldo vem da Quitação). Sempre editável. */
-function gerarCorpo(linhas: RunRhLinha[], ini: string, fim: string, vr: number | null, vt: number | null): string {
-  const p: string[] = [`Segue em anexo o espelho de ponto do período ${dataBR(ini)} a ${dataBR(fim)}.`, '']
-  const comSaldo = linhas.filter(l => l.quitacao_min !== 0)
-  for (const l of comSaldo) {
-    p.push(l.quitacao_min > 0
-      ? `${l.nome} ficou com saldo positivo para receber em horas extras ${hTexto(l.quitacao_min)}.`
-      : `${l.nome} ficou com saldo negativo para desconto de ${hTexto(l.quitacao_min)}.`)
-  }
-  const zerados = linhas.length - comSaldo.length
-  if (zerados > 0) {
-    p.push(comSaldo.length
-      ? 'Os demais colaboradores fecharam o período zerados.'
-      : 'Todos os colaboradores fecharam o período zerados.')
-  }
+/** O rascunho do corpo do e-mail, no molde do que a casa manda de verdade
+ *  ("Bom dia… segue abaixo o banco de horas…"): a TABELA entra sozinha depois
+ *  do texto, então aqui ficam só a saudação e os benefícios — proporcionais e
+ *  casos por pessoa (ex.: VT só de um) se ajustam editando o texto. */
+function gerarCorpo(ini: string, fim: string, vr: number | null, vt: number | null): string {
+  const p: string[] = [
+    'Bom dia,', '',
+    `Segue abaixo o fechamento do banco de horas do período ${dataBR(ini)} a ${dataBR(fim)}.`,
+  ]
   if (vr || vt) p.push('')
-  if (vr) p.push(`O vale refeição deste mês ficou no valor de ${brl(vr)}.`)
-  if (vt) p.push(`O vale transporte deste mês ficou no valor de ${brl(vt)}.`)
+  if (vr) p.push(`Foi creditado ${brl(vr)} do vale alimentação.`)
+  if (vt) p.push(`Foi creditado ${brl(vt)} do vale-transporte.`)
   p.push('', 'Qualquer dúvida estou à disposição.')
   return p.join('\n')
 }
@@ -186,8 +173,7 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
   // é DERIVADO (regera a cada tecla nos valores); editar assume o controle.
   const corpoGerado = useMemo(() => {
     if (!envioDe) return ''
-    const linhas = [...envioDe.rh_fechamento_run_linha].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-    return gerarCorpo(linhas, envioDe.ini, envioDe.fim, parseMoney(vrTxt), parseMoney(vtTxt))
+    return gerarCorpo(envioDe.ini, envioDe.fim, parseMoney(vrTxt), parseMoney(vtTxt))
   }, [envioDe, vrTxt, vtTxt])
   const corpoFinal = corpoTocado ? corpo : corpoGerado
 
@@ -263,9 +249,15 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
               </span>
             </div>
             <div className="flex items-center gap-2 ml-auto">
-              <a href={`/api/rh/fechamento/pdf?org=${orgSlug}&run=${runComp.id}`}
+              <a href={`/api/rh/fechamento/pdf?org=${orgSlug}&run=${runComp.id}&tipo=resumo`}
+                title="A tabela do banco de horas — o formato que a contabilidade recebe"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white ring-1 ring-emerald-200 text-emerald-800 hover:bg-emerald-100 transition-colors">
-                <FileText className="w-3.5 h-3.5" /> PDF do espelho
+                <FileText className="w-3.5 h-3.5" /> Resumo (PDF)
+              </a>
+              <a href={`/api/rh/fechamento/pdf?org=${orgSlug}&run=${runComp.id}&tipo=espelho`}
+                title="Espelho detalhado, uma página por pessoa"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white ring-1 ring-emerald-200 text-emerald-800 hover:bg-emerald-100 transition-colors">
+                <FileText className="w-3.5 h-3.5" /> Espelho detalhado
               </a>
               <button onClick={() => baixarCsvDe(runComp.rh_fechamento_run_linha, `fechamento-ponto-${comp}.csv`)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white ring-1 ring-emerald-200 text-emerald-800 hover:bg-emerald-100 transition-colors">
@@ -508,9 +500,13 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
                         </tbody>
                       </table>
                       <div className="flex items-center gap-2 mt-2">
-                        <a href={`/api/rh/fechamento/pdf?org=${orgSlug}&run=${r.id}`}
+                        <a href={`/api/rh/fechamento/pdf?org=${orgSlug}&run=${r.id}&tipo=resumo`}
                           className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-orange-600 transition-colors">
-                          <FileText className="w-3.5 h-3.5" /> PDF do espelho
+                          <FileText className="w-3.5 h-3.5" /> Resumo (PDF)
+                        </a>
+                        <a href={`/api/rh/fechamento/pdf?org=${orgSlug}&run=${r.id}&tipo=espelho`}
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-orange-600 transition-colors">
+                          <FileText className="w-3.5 h-3.5" /> Espelho detalhado
                         </a>
                         <button onClick={() => baixarCsvDe(linhas, `fechamento-ponto-${rc}.csv`)}
                           className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-orange-600 transition-colors">
@@ -591,7 +587,7 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
               <h2 className="text-base font-semibold text-gray-900">Enviar para a contabilidade</h2>
               <p className="text-xs text-gray-500 mt-0.5">
                 {labelComp(String(envioDe.competencia).slice(0, 7))} · {dataBR(envioDe.ini)} – {dataBR(envioDe.fim)} ·
-                anexos: espelho em PDF (uma página por pessoa) + resumo em CSV.
+                a tabela do banco de horas vai no corpo do e-mail e anexa em PDF + CSV.
               </p>
             </div>
             <div className="px-6 py-5 space-y-4">
@@ -620,8 +616,8 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1.5">Vale refeição do mês <span className="text-gray-400 font-normal">(R$, opcional)</span></label>
-                  <input inputMode="decimal" value={vrTxt} onChange={e => setVrTxt(e.target.value)} className={inputCls} placeholder="585,00" />
+                  <label className="block text-sm text-gray-600 mb-1.5">Vale alimentação do mês <span className="text-gray-400 font-normal">(R$, opcional)</span></label>
+                  <input inputMode="decimal" value={vrTxt} onChange={e => setVrTxt(e.target.value)} className={inputCls} placeholder="782,00" />
                 </div>
                 <div>
                   <label className="block text-sm text-gray-600 mb-1.5">Vale transporte do mês <span className="text-gray-400 font-normal">(R$, opcional)</span></label>
@@ -637,9 +633,12 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
                     </button>
                   )}
                 </div>
-                <textarea value={corpoFinal} onChange={e => { setCorpo(e.target.value); setCorpoTocado(true) }} rows={9}
+                <textarea value={corpoFinal} onChange={e => { setCorpo(e.target.value); setCorpoTocado(true) }} rows={8}
                   className={cn(inputCls, 'font-mono text-xs leading-relaxed')} />
-                <p className="text-[11px] text-gray-400 mt-1">Gerado dos números congelados (a frase de saldo é a Quitação de cada pessoa). Edite à vontade antes de enviar.</p>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  A <b>tabela do banco de horas entra sozinha</b> logo abaixo deste texto. Edite à vontade —
+                  proporcionais e casos por pessoa (ex.: VT só de um colaborador) se escrevem aqui.
+                </p>
               </div>
             </div>
             <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-100">
