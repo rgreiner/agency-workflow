@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Coins, Loader2, Info } from 'lucide-react'
+import { Coins, Loader2, Info, Settings2, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { setCustoConfig } from '@/app/actions/org-custo'
 
@@ -61,6 +61,7 @@ export function CustoHora({ orgSlug, orgId, camadas, preco, canConfig, estimadas
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
+  const [cfgOpen, setCfgOpen] = useState(false)
   const [provisao, setProvisao] = useState(preco ? String(preco.provisao_lucro_mes || '') : '')
   const [margem, setMargem] = useState(preco ? String(preco.margem_pct) : '20')
   const [imposto, setImposto] = useState(preco?.imposto_manual ? String(preco.imposto_pct) : '')
@@ -75,16 +76,26 @@ export function CustoHora({ orgSlug, orgId, camadas, preco, canConfig, estimadas
         impostoPct: imposto === '' ? null : Number(imposto.replace(',', '.')),
       })
       if (r?.error) toast.error(r.error)
-      else { toast.success('Configuração do custo salva.'); router.refresh() }
+      else { toast.success('Configuração do custo salva.'); setCfgOpen(false); router.refresh() }
     })
   }
 
+  const inputCls = 'w-full px-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500'
+
   return (
     <section className="mt-10">
-      <h2 className="text-sm font-semibold text-gray-700 mb-1 flex items-center gap-1.5">
-        <Coins className="w-4 h-4" /> Custo da hora — composição completa
-        {preco?.comp && <span className="text-gray-400 font-normal">· folha de {compLabel(preco.comp)}</span>}
-      </h2>
+      <div className="flex items-center justify-between gap-3 mb-1">
+        <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+          <Coins className="w-4 h-4" /> Custo da hora — composição completa
+          {preco?.comp && <span className="text-gray-400 font-normal">· folha de {compLabel(preco.comp)}</span>}
+        </h2>
+        {canConfig && (
+          <button onClick={() => setCfgOpen(true)} title="Provisão de lucro, margem alvo e imposto"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors shrink-0">
+            <Settings2 className="w-3.5 h-3.5" /> Parâmetros
+          </button>
+        )}
+      </div>
       <p className="text-xs text-gray-400 mb-3">
         Bruto + FGTS + encargos da guia + provisões (13º/férias/aviso, só CLT) + benefícios, ÷ <b>horas
         vendáveis</b> (média mensal medida em tarefas — sem medição vale a jornada), + estrutura rateada.
@@ -220,41 +231,43 @@ export function CustoHora({ orgSlug, orgId, camadas, preco, canConfig, estimadas
         </span>
       </p>
 
-      {/* Config — owner/admin */}
-      {canConfig && (
-        <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-4 flex flex-wrap items-end gap-3">
-          <div>
-            <label className="block text-[11px] font-medium text-gray-600 mb-1">Provisão de lucro (R$/mês)</label>
-            <input
-              inputMode="decimal" value={provisao} onChange={e => setProvisao(e.target.value)}
-              placeholder="0,00"
-              className="w-36 text-sm bg-gray-100 border border-transparent rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300"
-            />
-            <p className="text-[10px] text-gray-400 mt-1">distribuição projetada · entra na estrutura</p>
+      {/* Parâmetros do custo — modal aberto pela engrenagem no topo da seção */}
+      {cfgOpen && (
+        <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+          onClick={e => { if (e.target === e.currentTarget) setCfgOpen(false) }}>
+          <div className="modal-card w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h3 className="text-base font-semibold text-gray-900">Parâmetros do custo da hora</h3>
+              <p className="text-xs text-gray-500 mt-0.5">Valem para a composição e o preço de venda de toda a org.</p>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1.5">Provisão de lucro <span className="text-gray-400 font-normal">(R$/mês)</span></label>
+                <input inputMode="decimal" value={provisao} onChange={e => setProvisao(e.target.value)}
+                  placeholder="0,00" className={inputCls} />
+                <p className="text-[11px] text-gray-400 mt-1">Parcela de gestão/distribuição que rateia na estrutura do time — separada do custo projetado da ficha.</p>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1.5">Margem alvo <span className="text-gray-400 font-normal">(%)</span></label>
+                <input inputMode="decimal" value={margem} onChange={e => setMargem(e.target.value)} className={inputCls} />
+                <p className="text-[11px] text-gray-400 mt-1">Mínima de 20; a casa já operou a 35.</p>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1.5">Imposto sobre a venda <span className="text-gray-400 font-normal">(%)</span></label>
+                <input inputMode="decimal" value={imposto} onChange={e => setImposto(e.target.value)}
+                  placeholder={`auto: ${preco?.imposto_auto_pct ?? '—'}%`} className={inputCls} />
+                <p className="text-[11px] text-gray-400 mt-1">Vazio = automático pelo caixa (DAS ÷ recebido, 12 meses).</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-100">
+              <button onClick={() => setCfgOpen(false)} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors">Cancelar</button>
+              <button type="button" onClick={salvar} disabled={pending}
+                className={cn('inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors',
+                  'bg-orange-600 text-[#fff] hover:bg-orange-700 active:scale-[0.97] disabled:opacity-50')}>
+                {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Salvar
+              </button>
+            </div>
           </div>
-          <div>
-            <label className="block text-[11px] font-medium text-gray-600 mb-1">Margem alvo (%)</label>
-            <input
-              inputMode="decimal" value={margem} onChange={e => setMargem(e.target.value)}
-              className="w-24 text-sm bg-gray-100 border border-transparent rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-medium text-gray-600 mb-1">Imposto s/ venda (%)</label>
-            <input
-              inputMode="decimal" value={imposto} onChange={e => setImposto(e.target.value)}
-              placeholder={`auto: ${preco?.imposto_auto_pct ?? '—'}%`}
-              className="w-28 text-sm bg-gray-100 border border-transparent rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300"
-            />
-            <p className="text-[10px] text-gray-400 mt-1">vazio = automático pelo caixa</p>
-          </div>
-          <button
-            type="button" onClick={salvar} disabled={pending}
-            className={cn('flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl transition-colors',
-              'bg-orange-600 text-[#fff] hover:bg-orange-700 disabled:opacity-50')}
-          >
-            {pending && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Salvar
-          </button>
         </div>
       )}
     </section>
