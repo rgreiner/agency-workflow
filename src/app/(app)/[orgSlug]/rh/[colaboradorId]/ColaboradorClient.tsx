@@ -8,7 +8,7 @@ import { Select } from '@/components/ui/Select'
 import { cn } from '@/lib/utils'
 import { formatBRL, parseMoney } from '@/lib/midia'
 import { maskCPF, maskPhone } from '@/lib/masks'
-import { salvarColaborador, setColaboradorArquivado, carregarImpactoDesligamento, setBatePonto, setEntraFechamento } from '@/app/actions/rh'
+import { salvarColaborador, setColaboradorArquivado, carregarImpactoDesligamento, setBatePonto, setEntraFechamento, setCustoOverhead } from '@/app/actions/rh'
 import { JornadaEditor, type JornadaVals } from '../JornadaEditor'
 import { Timeline } from '@/components/rh/Timeline'
 
@@ -21,6 +21,10 @@ export interface Colaborador {
   entra_fechamento?: boolean | null
   status: string; gestor_id: string | null; salario_atual: number | string | null; beneficios_mensal: number | string | null; observacao: string | null; arquivado: boolean
   membro_user_id: string | null
+  /** Substitui a folha no custo/hora (mig. 257) — sócio: retirada projetada. */
+  custo_projetado_mensal?: number | string | null
+  /** true = custo rateia como overhead (não atua em tarefas). */
+  custo_overhead?: boolean | null
 }
 export interface GestorRef { id: string; nome: string }
 export interface MembroRef { user_id: string; profiles: { full_name: string | null; email: string } | null }
@@ -41,6 +45,7 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
     data_admissao: colab.data_admissao ?? '', data_demissao: colab.data_demissao ?? '',
     gestor_id: colab.gestor_id ?? '', salario_atual: colab.salario_atual != null ? formatBRL(Number(colab.salario_atual)).replace('R$', '').trim() : '',
     beneficios_mensal: colab.beneficios_mensal != null && Number(colab.beneficios_mensal) > 0 ? formatBRL(Number(colab.beneficios_mensal)).replace('R$', '').trim() : '',
+    custo_projetado_mensal: colab.custo_projetado_mensal != null && Number(colab.custo_projetado_mensal) > 0 ? formatBRL(Number(colab.custo_projetado_mensal)).replace('R$', '').trim() : '',
     observacao: colab.observacao ?? '', membro_user_id: colab.membro_user_id ?? '',
   })
   // Desligar aqui corta o acesso e solta as atividades (gatilho da migration 179).
@@ -84,6 +89,19 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
     })
   }
 
+  // Cargo adm/gestão que não atua em tarefas (mig. 257): o custo rateia como
+  // overhead em quem produz e as horas saem do denominador.
+  const [custoOh, setCustoOhLocal] = useState(colab.custo_overhead === true)
+  function alternarCustoOverhead(v: boolean) {
+    setCustoOhLocal(v)
+    startToggle(async () => {
+      const r = await setCustoOverhead(orgSlug, colab.id, v)
+      if (r?.error) { setCustoOhLocal(!v); toast.error(r.error); return }
+      toast.success(v ? 'Custo passa a ratear como overhead.' : 'Custo volta a ser direto da pessoa.')
+      router.refresh()
+    })
+  }
+
   function salvar() {
     if (!f.nome.trim()) { toast.error('Nome é obrigatório.'); return }
     // CPF é a chave que casa a folha com a pessoa: sem ele o reimport criava uma
@@ -96,6 +114,7 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
         data_demissao: f.status === 'desligado' ? f.data_demissao : null,
         salario_atual: f.salario_atual ? String(parseMoney(f.salario_atual)) : null,
         beneficios_mensal: f.beneficios_mensal ? String(parseMoney(f.beneficios_mensal)) : '0',
+        custo_projetado_mensal: f.custo_projetado_mensal ? String(parseMoney(f.custo_projetado_mensal)) : null,
         gestor_id: f.gestor_id || null,
       })
       if (r?.error) toast.error(r.error)
@@ -189,6 +208,27 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
                 </p>
               </div>
             </div>
+            {/* Custo como overhead (mig. 257): cargo adm/gestão que não atua em
+                tarefas — o custo dele rateia em quem produz. */}
+            <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-gray-100 mt-2">
+              <button type="button" role="switch" aria-checked={custoOh} disabled={togglando}
+                onClick={() => alternarCustoOverhead(!custoOh)}
+                className={cn('mt-0.5 relative w-10 h-6 rounded-full transition-colors shrink-0 disabled:opacity-50',
+                  custoOh ? 'bg-orange-600' : 'bg-gray-300')}>
+                <span className={cn('absolute top-0.5 w-5 h-5 rounded-full bg-[#fff] shadow transition-transform',
+                  custoOh ? 'translate-x-[1.125rem]' : 'translate-x-0.5')} />
+              </button>
+              <div className="min-w-0">
+                <p className="text-sm text-gray-800">
+                  {custoOh ? 'Custo rateia como overhead' : 'Custo direto da pessoa'}
+                </p>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  {custoOh
+                    ? 'Não atua em tarefas: o custo mensal entra na estrutura (rateado em quem produz) e as horas saem do denominador do custo/hora.'
+                    : 'Atua em tarefas: o custo mensal vira o custo/hora da própria pessoa. Ligue só para cargo de gestão/adm que não abre tarefa.'}
+                </p>
+              </div>
+            </div>
           </div>
           <div><label className={labelCls}>E-mail</label><input value={f.email} onChange={e => set('email', e.target.value)} className={inputCls} /></div>
           <div><label className={labelCls}>Telefone</label><input value={f.telefone} onChange={e => set('telefone', maskPhone(e.target.value))} className={inputCls} placeholder="(00) 00000-0000" inputMode="tel" /></div>
@@ -198,6 +238,18 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
           <div><label className={labelCls}>Salário atual</label><input inputMode="decimal" value={f.salario_atual} onChange={e => set('salario_atual', e.target.value)} className={inputCls} placeholder="0,00" /></div>
           {/* Custo-empresa de VR/VA/plano etc. — entra na camada 4 do custo/hora (migration 170) */}
           <div><label className={labelCls}>Benefícios (custo mensal)</label><input inputMode="decimal" value={f.beneficios_mensal} onChange={e => set('beneficios_mensal', e.target.value)} className={inputCls} placeholder="0,00" /></div>
+          {/* Substitui a folha no custo/hora (mig. 257): sócio informa a retirada
+              projetada (pró-labore + distribuição média) — o holerite de R$ 1.621
+              fazia a hora do dono ser a 2ª mais barata do time. */}
+          <div className="sm:col-span-2">
+            <label className={labelCls}>Custo projetado <span className="font-normal text-gray-400">(R$/mês, opcional)</span></label>
+            <input inputMode="decimal" value={f.custo_projetado_mensal} onChange={e => set('custo_projetado_mensal', e.target.value)} className={inputCls} placeholder="0,00" />
+            <p className="text-[11px] text-gray-400 mt-1">
+              Preenchido, substitui a folha no cálculo do custo/hora — informe o custo TOTAL mensal
+              (ex.: sócio = pró-labore + distribuição média; sem encargos/provisões por cima).
+              Benefícios da ficha ainda somam. Vazio = usa a folha normalmente.
+            </p>
+          </div>
           <div><label className={labelCls}>Gestor</label><Select value={f.gestor_id} onChange={v => set('gestor_id', v)} options={[{ value: '', label: '— nenhum —' }, ...gestores.map(g => ({ value: g.id, label: g.nome }))]} /></div>
           <div><label className={labelCls}>Vincular ao login <span className="font-normal text-gray-400">(habilita o ponto)</span></label>
             <Select value={f.membro_user_id} onChange={v => set('membro_user_id', v)} options={[{ value: '', label: '— não vinculado —' }, ...membros.map(m => ({ value: m.user_id, label: m.profiles?.full_name || m.profiles?.email || m.user_id }))]} /></div>

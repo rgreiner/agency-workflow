@@ -21,6 +21,8 @@ export interface ColaboradorInput {
   /** Custo-empresa mensal de VR/VA/plano — camada 4 do custo/hora (migration 170). */
   beneficios_mensal?: string | null
   salario_atual?: string | null
+  /** Substitui a folha no custo/hora (mig. 257) — sócio: retirada projetada. */
+  custo_projetado_mensal?: string | null
   observacao?: string | null
   membro_user_id?: string | null
 }
@@ -59,6 +61,20 @@ export async function setBatePonto(orgSlug: string, id: string, bate: boolean) {
   revalidatePath(`/${orgSlug}/rh`)
   revalidatePath(`/${orgSlug}/rh/${id}`)
   revalidatePath(`/${orgSlug}/rh/ponto`)
+  return { ok: true }
+}
+
+/** Liga/desliga o rateio do custo da pessoa como overhead (mig. 257) — cargo
+ *  adm/gestão que não atua em tarefas: o custo vai para a estrutura e as horas
+ *  saem do denominador. */
+export async function setCustoOverhead(orgSlug: string, id: string, overhead: boolean) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (c.supabase as any).rpc('rh_set_custo_overhead', { p_colaborador: id, p_overhead: overhead })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/rh/${id}`)
+  revalidatePath(`/${orgSlug}/rh/horas`)
   return { ok: true }
 }
 
