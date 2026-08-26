@@ -26,6 +26,9 @@ export interface ExtraPend {
   batidas: string[]
   jornada: JornadaResumo | null
   justs: JustDoDia[]
+  /** Carga LÍQUIDA do dia (rh_esperado_min): já desconta abono/feriado — a
+   *  mesma régua do fechamento. O saldo exibido é minutos − esperado. */
+  esperado_min: number
   rh_colaborador: Colab | null
 }
 export interface JustPend {
@@ -224,16 +227,17 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
         ) : (
           <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-50">
             {extras.map(e => {
-              // Carga efetiva do dia já com decisões do RH (abono, feriado, escala):
-              // para extra pendente o saldo é cheio, então esperado = trabalhado − saldo.
-              const esperado = e.minutos - e.saldo_min
+              // Carga LÍQUIDA (abono/feriado/escala) vinda da page; a extra
+              // exibida é trabalhado − esperado — a mesma régua do fechamento.
+              const esperado = e.esperado_min
+              const extraMin = Math.max(0, e.minutos - esperado)
               const fora = batidasFora(e.batidas, e.jornada, esperado)
               return (
                 <div key={e.id} className="px-4 py-3">
                   <div className="flex items-center gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-gray-900">{e.rh_colaborador?.nome ?? '—'}</div>
-                      <div className="text-xs text-gray-500 tabular-nums">{dataBR(e.data)} · saldo <b className="text-emerald-600">{saldoStr(e.saldo_min)}</b>{e.acima_10h && <span className="text-red-500"> · acima de 10h</span>}</div>
+                      <div className="text-xs text-gray-500 tabular-nums">{dataBR(e.data)} · extra <b className="text-emerald-600">{saldoStr(extraMin)}</b>{e.acima_10h && <span className="text-red-500"> · acima de 10h</span>}</div>
                     </div>
                     <button onClick={() => extra(e.id, 'aprovado')} disabled={pending}
                       className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 text-[#fff] hover:bg-emerald-700 disabled:opacity-50 transition"><Check className="w-3.5 h-3.5" /> Aprovar</button>

@@ -47,6 +47,17 @@ export default async function PontoGestaoPage({ params }: { params: Promise<{ or
     batidas: (rh_marcacao ?? []).slice().sort((a, b) => a.seq - b.seq).map(m => m.hora.slice(0, 5)),
     jornada: jornadaDe(e.colaborador_id),
     justs: justsDosDias.filter(x => x.colaborador_id === e.colaborador_id && x.data_ini <= e.data && x.data_fim >= e.data),
+    esperado_min: e.minutos - e.saldo_min,
+  }))
+
+  // Carga LÍQUIDA do dia (abono, feriado, escala — mig. 214): é a régua do
+  // fechamento. O saldo_min gravado é pré-abono — numa extra que nasceu de
+  // abono (mig. 259) ele até é negativo, e exibi-lo mentiria o tamanho da extra.
+  await Promise.all(extras.map(async e => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: esp } = await (supabase as any)
+      .rpc('rh_esperado_min', { p_colaborador: e.colaborador_id, p_data: e.data })
+    if (typeof esp === 'number') e.esperado_min = esp
   }))
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
