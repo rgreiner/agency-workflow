@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
 import { carregarFechamento, salvarFechamentoConfig, type Fechamento, type FechamentoLinha } from '@/app/actions/rh-calendario'
 import {
   fecharCiclo, reabrirFechamento, enviarFechamentoRh, salvarEmailsContabilidadeRh,
-  type RunRh, type RunRhLinha,
+  type RunRh,
 } from '@/app/actions/rh-fechamento'
 
 export interface FechConfig { dia_ini: number; dia_pagamento: number; paga_mes_seguinte: boolean }
