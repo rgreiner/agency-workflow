@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Loader2, Check, Archive, ArchiveRestore, CalendarClock, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Select } from '@/components/ui/Select'
+import { Switch } from '@/components/ui/Switch'
 import { cn } from '@/lib/utils'
 import { formatBRL, parseMoney } from '@/lib/midia'
 import { maskCPF, maskPhone } from '@/lib/masks'
@@ -175,13 +176,11 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
           <div className="sm:col-span-2">
             <label className={labelCls}>Controle de jornada</label>
             <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-gray-100">
-              <button type="button" role="switch" aria-checked={batePonto} disabled={togglando}
-                onClick={() => alternarPonto(!batePonto)}
-                className={cn('mt-0.5 relative w-10 h-6 rounded-full transition-colors shrink-0 disabled:opacity-50',
-                  batePonto ? 'bg-orange-600' : 'bg-gray-300')}>
-                <span className={cn('absolute top-0.5 w-5 h-5 rounded-full bg-[#fff] shadow transition-transform',
-                  batePonto ? 'translate-x-[1.125rem]' : 'translate-x-0.5')} />
-              </button>
+              {/* Switch canônico (ui/Switch) — a cópia inline antiga posicionava
+                  a bolinha sem `left` e quebrou (dependia da posição estática). */}
+              <div className="mt-0.5 shrink-0">
+                <Switch checked={batePonto} onChange={alternarPonto} disabled={togglando} label="Bate ponto" />
+              </div>
               <div className="min-w-0">
                 <p className="text-sm text-gray-800">
                   {batePonto ? 'Bate ponto' : 'Dispensado de bater ponto'}
@@ -196,13 +195,9 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
             {/* O segundo interruptor é independente do primeiro: bater ponto
                 para medir custo/hora por tarefa ≠ ir para a contabilidade. */}
             <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-gray-100 mt-2">
-              <button type="button" role="switch" aria-checked={entraFech} disabled={togglando}
-                onClick={() => alternarFechamento(!entraFech)}
-                className={cn('mt-0.5 relative w-10 h-6 rounded-full transition-colors shrink-0 disabled:opacity-50',
-                  entraFech ? 'bg-orange-600' : 'bg-gray-300')}>
-                <span className={cn('absolute top-0.5 w-5 h-5 rounded-full bg-[#fff] shadow transition-transform',
-                  entraFech ? 'translate-x-[1.125rem]' : 'translate-x-0.5')} />
-              </button>
+              <div className="mt-0.5 shrink-0">
+                <Switch checked={entraFech} onChange={alternarFechamento} disabled={togglando} label="Entra no fechamento da contabilidade" />
+              </div>
               <div className="min-w-0">
                 <p className="text-sm text-gray-800">
                   {entraFech ? 'Entra no fechamento da contabilidade' : 'Fora do fechamento da contabilidade'}
@@ -217,13 +212,9 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
             {/* Custo como overhead (mig. 257): cargo adm/gestão que não atua em
                 tarefas — o custo dele rateia em quem produz. */}
             <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-gray-100 mt-2">
-              <button type="button" role="switch" aria-checked={custoOh} disabled={togglando}
-                onClick={() => alternarCustoOverhead(!custoOh)}
-                className={cn('mt-0.5 relative w-10 h-6 rounded-full transition-colors shrink-0 disabled:opacity-50',
-                  custoOh ? 'bg-orange-600' : 'bg-gray-300')}>
-                <span className={cn('absolute top-0.5 w-5 h-5 rounded-full bg-[#fff] shadow transition-transform',
-                  custoOh ? 'translate-x-[1.125rem]' : 'translate-x-0.5')} />
-              </button>
+              <div className="mt-0.5 shrink-0">
+                <Switch checked={custoOh} onChange={alternarCustoOverhead} disabled={togglando} label="Custo rateia como overhead" />
+              </div>
               <div className="min-w-0">
                 <p className="text-sm text-gray-800">
                   {custoOh ? 'Custo rateia como overhead' : 'Custo direto da pessoa'}
