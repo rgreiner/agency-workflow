@@ -25,6 +25,9 @@ export interface Colaborador {
   custo_projetado_mensal?: number | string | null
   /** true = custo rateia como overhead (não atua em tarefas). */
   custo_overhead?: boolean | null
+  /** Aviso prévio trabalhado (art. 488, mig. 262): reduz a carga esperada. */
+  aviso_previo_ini?: string | null
+  aviso_previo_modo?: string | null
 }
 export interface GestorRef { id: string; nome: string }
 export interface MembroRef { user_id: string; profiles: { full_name: string | null; email: string } | null }
@@ -47,6 +50,7 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
     beneficios_mensal: colab.beneficios_mensal != null && Number(colab.beneficios_mensal) > 0 ? formatBRL(Number(colab.beneficios_mensal)).replace('R$', '').trim() : '',
     custo_projetado_mensal: colab.custo_projetado_mensal != null && Number(colab.custo_projetado_mensal) > 0 ? formatBRL(Number(colab.custo_projetado_mensal)).replace('R$', '').trim() : '',
     observacao: colab.observacao ?? '', membro_user_id: colab.membro_user_id ?? '',
+    aviso_previo_ini: colab.aviso_previo_ini ?? '', aviso_previo_modo: colab.aviso_previo_modo ?? '',
   })
   // Desligar aqui corta o acesso e solta as atividades (gatilho da migration 179).
   // A ficha avisa o tamanho disso ANTES de salvar — ninguém deve descobrir depois.
@@ -110,8 +114,10 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
     startSave(async () => {
       const r = await salvarColaborador(orgSlug, colab.id, {
         ...f,
-        // Demissão só faz sentido p/ desligado; se voltou a ativo, limpa.
+        // Demissão (e o aviso prévio junto) só fazem sentido p/ desligado.
         data_demissao: f.status === 'desligado' ? f.data_demissao : null,
+        aviso_previo_ini: f.status === 'desligado' && f.aviso_previo_modo ? (f.aviso_previo_ini || null) : null,
+        aviso_previo_modo: f.status === 'desligado' ? (f.aviso_previo_modo || null) : null,
         salario_atual: f.salario_atual ? String(parseMoney(f.salario_atual)) : null,
         beneficios_mensal: f.beneficios_mensal ? String(parseMoney(f.beneficios_mensal)) : '0',
         custo_projetado_mensal: f.custo_projetado_mensal ? String(parseMoney(f.custo_projetado_mensal)) : null,
@@ -235,6 +241,36 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
           <div><label className={labelCls}>Admissão</label><input type="date" value={f.data_admissao} onChange={e => set('data_admissao', e.target.value)} className={inputCls} /></div>
           <div><label className={labelCls}>Situação</label><Select value={f.status} onChange={v => set('status', v)} options={STATUS} /></div>
           {f.status === 'desligado' && <div><label className={labelCls}>Demissão</label><input type="date" value={f.data_demissao} onChange={e => set('data_demissao', e.target.value)} className={inputCls} /></div>}
+          {/* Aviso prévio trabalhado (art. 488): a escolha reduz a CARGA
+              esperada — nada de abonar dia a dia. Fim do aviso = a demissão. */}
+          {f.status === 'desligado' && (
+            <div className="sm:col-span-2 rounded-xl bg-gray-50 p-3">
+              <div className="text-xs font-medium text-gray-600 mb-2">Aviso prévio trabalhado <span className="font-normal text-gray-400">(art. 488 — a escolha é do colaborador)</span></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] text-gray-500 mb-1">Modalidade</label>
+                  <Select value={f.aviso_previo_modo} onChange={v => set('aviso_previo_modo', v)} options={[
+                    { value: '', label: 'Sem redução (ou não se aplica)' },
+                    { value: 'reducao_2h', label: 'Redução de 2h por dia' },
+                    { value: 'ultima_semana', label: 'Dispensa dos últimos 7 dias' },
+                  ]} />
+                </div>
+                {f.aviso_previo_modo && (
+                  <div>
+                    <label className="block text-[11px] text-gray-500 mb-1">Início do aviso</label>
+                    <input type="date" value={f.aviso_previo_ini} onChange={e => set('aviso_previo_ini', e.target.value)} className={inputCls} />
+                  </div>
+                )}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-2">
+                {f.aviso_previo_modo === 'reducao_2h'
+                  ? 'Do início do aviso até a demissão, a jornada esperada cai 2h por dia — espelho e fechamento já contam assim, sem justificativa.'
+                  : f.aviso_previo_modo === 'ultima_semana'
+                    ? 'Jornada cheia durante o aviso e os 7 últimos dias corridos (até a demissão) ficam sem carga — espelho e fechamento já contam assim.'
+                    : 'Se o colaborador optar por uma das modalidades, o espelho e o fechamento ajustam a carga sozinhos.'}
+              </p>
+            </div>
+          )}
           <div><label className={labelCls}>Salário atual</label><input inputMode="decimal" value={f.salario_atual} onChange={e => set('salario_atual', e.target.value)} className={inputCls} placeholder="0,00" /></div>
           {/* Custo-empresa de VR/VA/plano etc. — entra na camada 4 do custo/hora (migration 170) */}
           <div><label className={labelCls}>Benefícios (custo mensal)</label><input inputMode="decimal" value={f.beneficios_mensal} onChange={e => set('beneficios_mensal', e.target.value)} className={inputCls} placeholder="0,00" /></div>

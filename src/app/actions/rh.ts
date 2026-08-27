@@ -23,6 +23,9 @@ export interface ColaboradorInput {
   salario_atual?: string | null
   /** Substitui a folha no custo/hora (mig. 257) — sócio: retirada projetada. */
   custo_projetado_mensal?: string | null
+  /** Aviso prévio trabalhado (art. 488, mig. 262): reduz a carga esperada. */
+  aviso_previo_ini?: string | null
+  aviso_previo_modo?: string | null
   observacao?: string | null
   membro_user_id?: string | null
 }
