@@ -95,8 +95,16 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
   const [emailNovo, setEmailNovo] = useState('')
   const [expandido, setExpandido] = useState<Record<string, boolean>>({})
 
-  const runComp = useMemo(() => runs.find(r => String(r.competencia).slice(0, 7) === comp) ?? null, [runs, comp])
-  const fechado = !!runComp && runComp.status !== 'reaberto'
+  // N fechamentos por competência (mig. 261): quem já fechou vira card; quem
+  // sobra continua na tabela viva e fecha num run COMPLEMENTAR, com envio
+  // próprio (o caso real: duas pessoas saindo dia 31 vão num 2º e-mail).
+  const runsComp = useMemo(() => runs.filter(r => String(r.competencia).slice(0, 7) === comp), [runs, comp])
+  const runsFechados = useMemo(() => runsComp.filter(r => r.status !== 'reaberto'), [runsComp])
+  const runAberto = runsComp.find(r => r.status === 'reaberto') ?? null
+  const fechadosIds = useMemo(() => new Set(
+    runsFechados.flatMap(r => r.rh_fechamento_run_linha.map(l => l.colaborador_id))), [runsFechados])
+  const linhasVivas = useMemo(() => (fech?.linhas ?? []).filter(l => !fechadosIds.has(l.colaborador_id)),
+    [fech, fechadosIds])
 
   /** A pessoa já teve o último ciclo dela coberto por um fechamento anterior
    *  (fim ≥ demissão)? Aí ela não entra de novo no ciclo seguinte. */
@@ -133,8 +141,8 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
     })
   }
 
-  // ── Fechar o ciclo ──
-  const selecionadas = (fech?.linhas ?? []).filter(l => incluir[l.colaborador_id])
+  // ── Fechar o ciclo (ou o complementar de quem sobrou) ──
+  const selecionadas = linhasVivas.filter(l => incluir[l.colaborador_id])
   function fecharAgora() {
     setConfirmFechar(false)
     start(async () => {
@@ -144,7 +152,7 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
       }))
       const r = await fecharCiclo(orgSlug, comp, pessoas)
       if (r?.error) { toast.error(r.error); return }
-      toast.success(`Ciclo de ${labelComp(comp)} fechado com ${pessoas.length} pessoa(s).`)
+      toast.success(`${runsFechados.length ? 'Fechamento complementar' : `Ciclo de ${labelComp(comp)}`} fechado com ${pessoas.length} pessoa(s).`)
       router.refresh()
     })
   }
@@ -203,8 +211,8 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
     })
   }
 
-  const semMarcacao = (fech?.linhas ?? []).filter(l => l.dias_com_ponto === 0)
-  const pendentes = (fech?.linhas ?? []).filter(l => l.pendente_min > 0)
+  const semMarcacao = linhasVivas.filter(l => l.dias_com_ponto === 0)
+  const pendentes = linhasVivas.filter(l => l.pendente_min > 0)
   const inputCls = 'w-full px-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500'
 
   /** Linha do desligado: oferta de esticar o ciclo até a demissão (34 dias em
@@ -234,40 +242,40 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
         </div>
       </div>
 
-      {/* ── Ciclo FECHADO: snapshot + envio ── */}
-      {fechado && runComp && (
-        <>
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 px-4 py-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-            <div className="flex items-center gap-2 text-sm text-emerald-800">
-              <Lock className="w-4 h-4" />
+      {/* ── Fechamentos desta competência (pode haver mais de um — mig. 261) ── */}
+      {runsFechados.map(run => (
+        <div key={run.id} className="mb-6">
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 px-4 py-3 mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="flex items-center gap-2 text-sm text-emerald-800 min-w-0">
+              <Lock className="w-4 h-4 shrink-0" />
               <span>
-                <b>Ciclo fechado</b> em {dataBR(String(runComp.fechado_em).slice(0, 10))}
-                {runComp.versao > 1 && <> · v{runComp.versao}</>}
-                {runComp.status === 'enviado' && runComp.enviado_em && (
-                  <> · enviado em {dataBR(String(runComp.enviado_em).slice(0, 10))} para {runComp.destinatarios?.join(', ')}{(runComp.envios ?? 0) > 1 && ` (${runComp.envios}º envio)`}</>
+                <b>Fechado</b> em {dataBR(String(run.fechado_em).slice(0, 10))} · {run.rh_fechamento_run_linha.length} pessoa{run.rh_fechamento_run_linha.length === 1 ? '' : 's'}
+                {run.versao > 1 && <> · v{run.versao}</>}
+                {run.status === 'enviado' && run.enviado_em && (
+                  <> · enviado em {dataBR(String(run.enviado_em).slice(0, 10))} para {run.destinatarios?.join(', ')}{(run.envios ?? 0) > 1 && ` (${run.envios}º envio)`}</>
                 )}
               </span>
             </div>
             <div className="flex items-center gap-2 ml-auto">
-              <a href={`/api/rh/fechamento/pdf?org=${orgSlug}&run=${runComp.id}&tipo=resumo`}
+              <a href={`/api/rh/fechamento/pdf?org=${orgSlug}&run=${run.id}&tipo=resumo`}
                 title="A tabela do banco de horas — o formato que a contabilidade recebe"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white ring-1 ring-emerald-200 text-emerald-800 hover:bg-emerald-100 transition-colors">
                 <FileText className="w-3.5 h-3.5" /> Resumo (PDF)
               </a>
-              <a href={`/api/rh/fechamento/pdf?org=${orgSlug}&run=${runComp.id}&tipo=espelho`}
+              <a href={`/api/rh/fechamento/pdf?org=${orgSlug}&run=${run.id}&tipo=espelho`}
                 title="Espelho detalhado, uma página por pessoa"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white ring-1 ring-emerald-200 text-emerald-800 hover:bg-emerald-100 transition-colors">
                 <FileText className="w-3.5 h-3.5" /> Espelho detalhado
               </a>
-              <button onClick={() => baixarCsvDe(runComp.rh_fechamento_run_linha, `fechamento-ponto-${comp}.csv`)}
+              <button onClick={() => baixarCsvDe(run.rh_fechamento_run_linha, `fechamento-ponto-${comp}.csv`)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white ring-1 ring-emerald-200 text-emerald-800 hover:bg-emerald-100 transition-colors">
                 <Download className="w-3.5 h-3.5" /> CSV
               </button>
-              <button onClick={() => abrirEnvio(runComp)} disabled={pending}
+              <button onClick={() => abrirEnvio(run)} disabled={pending}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 text-[#fff] hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-                <Send className="w-3.5 h-3.5" /> {runComp.status === 'enviado' ? 'Reenviar' : 'Enviar para a contabilidade'}
+                <Send className="w-3.5 h-3.5" /> {run.status === 'enviado' ? 'Reenviar' : 'Enviar para a contabilidade'}
               </button>
-              <button onClick={() => { setReabrirDe(runComp); setMotivoReabrir('') }} disabled={pending}
+              <button onClick={() => { setReabrirDe(run); setMotivoReabrir('') }} disabled={pending}
                 title="Reabrir para ajustes"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-emerald-800 hover:bg-emerald-100 transition-colors">
                 <RotateCcw className="w-3.5 h-3.5" /> Reabrir
@@ -288,14 +296,14 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
                 <th className="text-right px-4 py-3 font-medium">Quitação Banco</th>
               </tr></thead>
               <tbody>
-                {runComp.rh_fechamento_run_linha.slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')).map(l => (
+                {run.rh_fechamento_run_linha.slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')).map(l => (
                   <tr key={l.colaborador_id} className="border-b border-gray-50 last:border-0 hover:bg-orange-50/40 transition-colors">
                     <td className="px-4 py-3">
                       <Link href={`/${orgSlug}/rh/espelho/${l.colaborador_id}?comp=${comp}`}
                         className="font-medium text-gray-900 hover:text-orange-600 transition-colors">{l.nome}</Link>
                       <div className="text-xs text-gray-400">
                         {l.cargo ?? '—'}
-                        {(l.ini !== runComp.ini || l.fim !== runComp.fim) && (
+                        {(l.ini !== run.ini || l.fim !== run.fim) && (
                           <span className="text-sky-700"> · período próprio {ddmm(l.ini)}–{ddmm(l.fim)}</span>
                         )}
                       </div>
@@ -312,23 +320,32 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
               </tbody>
             </table>
           </div>
-          <p className="text-[11px] text-gray-400 mt-3">
-            Números congelados no fechamento — para corrigir, reabra o ciclo, ajuste e feche de novo.
-            Clique no nome para ver o espelho dia a dia (marcações, justificativas e anexos).
-          </p>
-        </>
+        </div>
+      ))}
+      {runsFechados.length > 0 && (
+        <p className="text-[11px] text-gray-400 -mt-3 mb-6">
+          Números congelados — para corrigir, reabra, ajuste e feche de novo. Clique no nome para o espelho dia a dia.
+        </p>
       )}
 
-      {/* ── Ciclo ABERTO: relatório vivo + seleção de quem entra ── */}
-      {!fechado && (<>
-        {runComp?.status === 'reaberto' && (
+      {/* ── Quem AINDA NÃO fechou: relatório vivo + seleção ── */}
+      {(<>
+        {runAberto && (
           <div className="rounded-xl bg-amber-50 ring-1 ring-amber-200 px-4 py-3 mb-4 text-sm text-amber-800 flex items-start gap-2">
             <RotateCcw className="w-4 h-4 mt-0.5 shrink-0" />
             <div>
-              <b>Ciclo reaberto</b>{runComp.reaberto_motivo && <> — {runComp.reaberto_motivo}</>}.
+              <b>Fechamento reaberto</b>{runAberto.reaberto_motivo && <> — {runAberto.reaberto_motivo}</>}.
               Ajuste o que precisar e feche de novo; o envio fica bloqueado até lá.
             </div>
           </div>
+        )}
+        {!loading && runsFechados.length > 0 && linhasVivas.length > 0 && (
+          <h2 className="text-sm font-semibold text-gray-700 mb-2">
+            Ainda sem fechamento <span className="text-gray-400">{linhasVivas.length}</span>
+          </h2>
+        )}
+        {!loading && runsFechados.length > 0 && linhasVivas.length === 0 && (
+          <p className="text-sm text-gray-400 mb-4">Todo o time desta competência está fechado.</p>
         )}
         {!!pendentes.length && (
           <div className="rounded-xl bg-amber-50 ring-1 ring-amber-200 px-4 py-3 mb-4 text-sm text-amber-800 flex items-start gap-2">
@@ -350,9 +367,9 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
 
         {loading ? (
           <div className="text-center py-16 text-gray-400 text-sm">Calculando…</div>
-        ) : !fech?.linhas.length ? (
+        ) : !fech?.linhas.length && !runsFechados.length ? (
           <div className="text-center py-16 text-gray-400 text-sm">Nenhum colaborador no período.</div>
-        ) : (
+        ) : linhasVivas.length > 0 && (
           <>
             <div className="rounded-2xl border border-gray-200 bg-white overflow-x-auto">
               <table className="w-full text-sm">
@@ -368,7 +385,7 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
                   <th className="text-right px-4 py-3 font-medium">Quitação Banco</th>
                 </tr></thead>
                 <tbody>
-                  {fech.linhas.map(l => {
+                  {linhasVivas.map(l => {
                     const vazio = l.dias_com_ponto === 0
                     const marcado = !!incluir[l.colaborador_id]
                     const demissaoAlem = ofertaEstender(l)
@@ -433,7 +450,7 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
               <button onClick={() => setConfirmFechar(true)} disabled={pending || !selecionadas.length}
                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 active:scale-[0.97] disabled:opacity-50 transition-colors">
                 {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
-                Fechar ciclo ({selecionadas.length} pessoa{selecionadas.length === 1 ? '' : 's'})
+                {runsFechados.length ? 'Fechar complementar' : 'Fechar ciclo'} ({selecionadas.length} pessoa{selecionadas.length === 1 ? '' : 's'})
               </button>
             </div>
           </>
@@ -528,7 +545,9 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
         <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
           <div className="modal-card w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-200">
             <div className="px-6 py-4 border-b border-gray-100">
-              <h2 className="text-base font-semibold text-gray-900">Fechar o ciclo de {labelComp(comp)}?</h2>
+              <h2 className="text-base font-semibold text-gray-900">
+                {runsFechados.length ? `Fechar o complementar de ${labelComp(comp)}?` : `Fechar o ciclo de ${labelComp(comp)}?`}
+              </h2>
               <p className="text-xs text-gray-500 mt-0.5">Período {dataBR(fech.ini)} – {dataBR(fech.fim)} · {selecionadas.length} pessoa{selecionadas.length === 1 ? '' : 's'}</p>
             </div>
             <div className="px-6 py-4 space-y-2 text-sm text-gray-600">
