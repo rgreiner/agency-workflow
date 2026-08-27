@@ -9,6 +9,7 @@ import { MarcacoesEditor, validarMarcacoes } from '@/components/ponto/MarcacoesE
 import { ExtraContextoModal, extraNascida, type ExtraNascida } from '@/components/ponto/ExtraContextoModal'
 import { downscaleImage } from '@/lib/image-resize'
 import { baterPonto, criarJustificativa } from '@/app/actions/rh-ponto'
+import { anunciarPonto } from '@/components/ponto/ponto-sync'
 
 export interface PontoDia {
   data: string; entrada: string | null; intervalo_ini: string | null; intervalo_fim: string | null
@@ -78,6 +79,7 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
       // A batida fechou o dia com extra pendente e sem contexto → pergunta na hora.
       const ex = extraNascida(res)
       if (ex) setExtra(ex)
+      anunciarPonto()
       router.refresh()
     })
   }

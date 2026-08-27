@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { toast } from 'sonner'
 import { Clock, Loader2, Coffee } from 'lucide-react'
 import { baterPonto, pontoGate } from '@/app/actions/rh-ponto'
+import { anunciarPonto } from '@/components/ponto/ponto-sync'
 
 /**
  * Trava do ponto (migration 199) — só existe quando a organização liga o
@@ -76,6 +77,7 @@ export function PontoGate({ orgSlug }: { orgSlug: string }) {
       if (r?.error) { toast.error(r.error); return }
       toast.success('Ponto registrado. Bom trabalho.')
       carregar()
+      anunciarPonto()
     })
   }
 

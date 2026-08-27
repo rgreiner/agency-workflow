@@ -15,11 +15,13 @@ interface Props {
 function getMotivation(done: number, total: number, overdue: number, myActiveCount: number) {
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
 
+  // No dark os pastéis *-50 continuariam claros enquanto text-gray-* vira claro
+  // (texto sumia sobre o card). Fundo escuro tingido + tom -400 no ícone.
   if (myActiveCount === 0 && done === 0) {
     return {
       icon: Target,
       color: 'text-gray-500',
-      bg: 'bg-gray-50',
+      bg: 'bg-gray-50 dark:bg-gray-100',
       bar: 'bg-gray-300',
       msg: 'Você não tem tarefas alocadas no momento.',
       sub: 'Aproveite para ajudar o time ou planejar a próxima semana.',
@@ -28,8 +30,8 @@ function getMotivation(done: number, total: number, overdue: number, myActiveCou
   if (myActiveCount === 0) {
     return {
       icon: Trophy,
-      color: 'text-yellow-600',
-      bg: 'bg-yellow-50',
+      color: 'text-yellow-600 dark:text-yellow-400',
+      bg: 'bg-yellow-50 dark:bg-yellow-500/10',
       bar: 'bg-yellow-400',
       msg: '🏆 Semana concluída! Missão cumprida.',
       sub: `Você finalizou ${done} tarefa${done !== 1 ? 's' : ''} essa semana. Parabéns!`,
@@ -38,8 +40,8 @@ function getMotivation(done: number, total: number, overdue: number, myActiveCou
   if (overdue === 0 && pct >= 66) {
     return {
       icon: Flame,
-      color: 'text-orange-600',
-      bg: 'bg-orange-50',
+      color: 'text-orange-600 dark:text-orange-400',
+      bg: 'bg-orange-50 dark:bg-orange-500/10',
       bar: 'bg-orange-500',
       msg: 'Você está voando! Quase lá.',
       sub: `${done} de ${total} tarefa${total !== 1 ? 's' : ''} concluída${done !== 1 ? 's' : ''} — mantenha o ritmo.`,
@@ -48,8 +50,8 @@ function getMotivation(done: number, total: number, overdue: number, myActiveCou
   if (overdue === 0) {
     return {
       icon: Target,
-      color: 'text-green-600',
-      bg: 'bg-green-50',
+      color: 'text-green-600 dark:text-green-400',
+      bg: 'bg-green-50 dark:bg-green-500/10',
       bar: 'bg-green-500',
       msg: '✅ Tudo sob controle por aqui.',
       sub: `${done} de ${total} concluída${done !== 1 ? 's' : ''}. Sem atrasos — ótimo trabalho!`,
@@ -58,8 +60,8 @@ function getMotivation(done: number, total: number, overdue: number, myActiveCou
   if (overdue <= 2) {
     return {
       icon: Zap,
-      color: 'text-orange-600',
-      bg: 'bg-orange-50',
+      color: 'text-orange-600 dark:text-orange-400',
+      bg: 'bg-orange-50 dark:bg-orange-500/10',
       bar: 'bg-orange-400',
       msg: `⚡ Atenção: ${overdue} tarefa${overdue !== 1 ? 's' : ''} atrasada${overdue !== 1 ? 's' : ''}.`,
       sub: 'Priorize as pendentes e você vira o jogo hoje.',
@@ -67,8 +69,8 @@ function getMotivation(done: number, total: number, overdue: number, myActiveCou
   }
   return {
     icon: Zap,
-    color: 'text-red-600',
-    bg: 'bg-red-50',
+    color: 'text-red-600 dark:text-red-400',
+    bg: 'bg-red-50 dark:bg-red-500/10',
     bar: 'bg-red-500',
     msg: `💪 Dia intenso! ${overdue} tarefas atrasadas.`,
     sub: 'Foque nas mais urgentes primeiro — uma de cada vez.',
@@ -120,7 +122,8 @@ export function WeeklyProgress({ done, total, overdue, myActiveCount, userName }
             <span>{done} concluída{done !== 1 ? 's' : ''} essa semana</span>
             <span>{pct}%</span>
           </div>
-          <div className="h-2.5 bg-white/60 rounded-full overflow-hidden">
+          {/* No dark, bg-white remapeia para charcoal e o trilho sumiria — branco literal translúcido. */}
+          <div className="h-2.5 bg-white/60 dark:bg-[#fff]/10 rounded-full overflow-hidden">
             <div
               className={cn('h-full rounded-full transition-[width] duration-700 ease-out', m.bar)}
               style={{ width: `${width}%` }}

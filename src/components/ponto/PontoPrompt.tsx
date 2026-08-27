@@ -1,9 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { Clock, Loader2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { pontoEstado, baterPonto, baterEntradaRetro } from '@/app/actions/rh-ponto'
+import { PONTO_EVENT, anunciarPonto } from '@/components/ponto/ponto-sync'
 import { ExtraContextoModal, extraNascida, type ExtraNascida } from '@/components/ponto/ExtraContextoModal'
 
 type Estado = NonNullable<Awaited<ReturnType<typeof pontoEstado>>>
@@ -84,6 +86,7 @@ function snoozed(tipo: string, dia: string): boolean {
  * hora do primeiro foco — validada no servidor). Sem ficha vinculada: nada.
  */
 export function PontoPrompt({ orgSlug }: { orgSlug: string }) {
+  const router = useRouter()
   const [estado, setEstado] = useState<Estado | null>(null)
   const [oculto, setOculto] = useState(false)
   const [extra, setExtra] = useState<{ nascida: ExtraNascida; colaboradorId: string } | null>(null)
@@ -100,7 +103,14 @@ export function PontoPrompt({ orgSlug }: { orgSlug: string }) {
     }, POLL_MS)
     const onVis = () => { if (document.visibilityState === 'visible') carregar() }
     document.addEventListener('visibilitychange', onVis)
-    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis) }
+    // Batida feita em outro componente (card da home, tela do ponto, gate):
+    // re-consulta na hora para o lembrete sumir sem esperar o poll.
+    window.addEventListener(PONTO_EVENT, carregar)
+    return () => {
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener(PONTO_EVENT, carregar)
+    }
   }, [carregar])
 
   // O modal de contexto da extra vive FORA do early-return: depois de bater a
@@ -134,6 +144,8 @@ export function PontoPrompt({ orgSlug }: { orgSlug: string }) {
         if (ex) setExtra({ nascida: ex, colaboradorId })
       }
       carregar()
+      anunciarPonto()
+      router.refresh() // card "Meu ponto" da home recebe marcações do servidor
     })
   }
 
