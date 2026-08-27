@@ -6,7 +6,6 @@ import { ArrowLeft, Loader2, Check, Archive, ArchiveRestore, CalendarClock, Aler
 import { toast } from 'sonner'
 import { Select } from '@/components/ui/Select'
 import { Switch } from '@/components/ui/Switch'
-import { cn } from '@/lib/utils'
 import { formatBRL, parseMoney } from '@/lib/midia'
 import { maskCPF, maskPhone } from '@/lib/masks'
 import { salvarColaborador, setColaboradorArquivado, carregarImpactoDesligamento, setBatePonto, setEntraFechamento, setCustoOverhead } from '@/app/actions/rh'
