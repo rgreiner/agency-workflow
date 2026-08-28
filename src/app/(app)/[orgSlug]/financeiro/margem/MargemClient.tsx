@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Target, AlertTriangle, Info } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { carregarMargemCliente, type MargemCliente } from '@/app/actions/fin-margem'
+import { carregarMargemCliente, type MargemCliente, type CoberturaHoras } from '@/app/actions/fin-margem'
 
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const brlCurto = (v: number) => Math.abs(v) >= 1000
@@ -32,7 +32,9 @@ const OPCOES = [
 
 export function MargemClient({ orgSlug, hoje }: { orgSlug: string; hoje: string }) {
   const [faixa, setFaixa] = useState('3m')
-  const [dados, setDados] = useState<{ linhas: MargemCliente[]; margemAlvo: number } | null>(null)
+  const [dados, setDados] = useState<{
+    linhas: MargemCliente[]; margemAlvo: number; cobertura: CoberturaHoras | null
+  } | null>(null)
   const [loading, setLoading] = useState(true)
 
   const { ini, fim } = useMemo(() => periodo(faixa, hoje), [faixa, hoje])
@@ -41,7 +43,7 @@ export function MargemClient({ orgSlug, hoje }: { orgSlug: string; hoje: string 
     setLoading(true)
     const r = await carregarMargemCliente(orgSlug, ini, fim)
     if (r.error || !r.linhas) { toast.error(r.error ?? 'Falha ao calcular a margem'); setDados(null) }
-    else setDados({ linhas: r.linhas, margemAlvo: r.margemAlvo ?? 20 })
+    else setDados({ linhas: r.linhas, margemAlvo: r.margemAlvo ?? 20, cobertura: r.cobertura ?? null })
     setLoading(false)
   }, [orgSlug, ini, fim])
 
@@ -123,6 +125,24 @@ export function MargemClient({ orgSlug, hoje }: { orgSlug: string; hoje: string 
             <p className="text-[11px] text-gray-400 mt-0.5">{brl(total.margem)} · alvo {alvo}%</p>
           </div>
         </div>
+
+        {/* A ressalva que evita decisão errada: o custo por cliente só cobre o
+            tempo que virou tarefa. Com metade do ponto sem atribuição, a margem
+            está otimista — e o número precisa dizer isso sozinho. */}
+        {dados?.cobertura && dados.cobertura.pctAtribuido < 80 && (
+          <div className="rounded-xl bg-sky-50 ring-1 ring-sky-200 px-4 py-3 mb-4 text-sm text-sky-900 flex items-start gap-2">
+            <Info className="w-4 h-4 mt-0.5 shrink-0" />
+            <div>
+              <b>Margem otimista: só {dados.cobertura.pctAtribuido}% do tempo do time está atribuído a tarefas</b>{' '}
+              ({dados.cobertura.hTarefa.toLocaleString('pt-BR')}h de {dados.cobertura.hPonto.toLocaleString('pt-BR')}h de ponto no período).
+              <div className="text-xs mt-0.5">
+                O custo do tempo por cliente conta só as horas atribuídas — as demais são custo real que
+                nenhum cliente está absorvendo aqui. Quanto mais o time abrir a tarefa no Flow ao trabalhar,
+                mais a margem se aproxima da verdade. Veja o detalhe em RH → Horas.
+              </div>
+            </div>
+          </div>
+        )}
 
         {!!abaixo.length && (
           <div className="rounded-xl bg-amber-50 ring-1 ring-amber-200 px-4 py-3 mb-4 text-sm text-amber-900 flex items-start gap-2">
