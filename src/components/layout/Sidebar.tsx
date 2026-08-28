@@ -148,6 +148,7 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
   { id: 'rh', label: 'RH', icon: UserCog, rh: true, items: [
     { label: 'Painel',  href: 'rh/painel' },
     { label: 'Pessoas', href: 'rh', exact: true, heading: 'Pessoas' },
+    { label: 'Ausências', href: 'rh/ausencias' },
     { label: 'Avaliação', href: 'rh/avaliacao' },
     { label: 'Férias e 13º', href: 'rh/ferias' },
     { label: 'Reajuste', href: 'rh/reajuste' },

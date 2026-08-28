@@ -261,3 +261,28 @@ export async function responderExplicacao(orgSlug: string, colaboradorId: string
   revalidatePath(`/${orgSlug}/rh/espelho/${colaboradorId}`)
   return { ok: true }
 }
+
+// ── Calendário de ausências do time (migration 265) ──
+
+export interface AusenciaLinha {
+  colaborador_id: string; nome: string; cargo: string | null
+  data: string
+  /** feriado | ponte | ferias | ferias_avulsa | aviso | atestado | medico | falta | outro */
+  tipo: string
+  rotulo: string | null
+  /** true = ausência de parte do dia (declaração com horário). */
+  parcial: boolean
+}
+
+/** Quem está fora, dia a dia, no período — férias, pontes, atestados,
+ *  feriados e aviso prévio numa consulta só. */
+export async function carregarAusencias(orgSlug: string, ini: string, fim: string) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (c.supabase as any).rpc('rh_ausencias', {
+    p_org: c.orgId, p_ini: ini, p_fim: fim,
+  })
+  if (error) return { error: error.message }
+  return { linhas: (data ?? []) as AusenciaLinha[] }
+}
