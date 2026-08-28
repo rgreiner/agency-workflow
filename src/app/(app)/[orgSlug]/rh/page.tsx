@@ -12,7 +12,7 @@ export default async function RhPage({ params }: { params: Promise<{ orgSlug: st
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const colaboradores = unwrap<ColaboradorRow>(await (supabase as any)
     .from('rh_colaborador')
-    .select('id, nome, cargo, tipo_vinculo, status, data_admissao, data_demissao, arquivado')
+    .select('id, nome, cargo, tipo_vinculo, status, data_admissao, data_demissao, arquivado, aviso_previo_ini, aviso_previo_fim, aviso_previo_modo')
     .eq('org_id', orgId)
     .order('arquivado', { ascending: true })
     .order('status', { ascending: true })

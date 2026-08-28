@@ -17,6 +17,10 @@ export interface ColaboradorRow {
   data_admissao: string | null
   data_demissao: string | null
   arquivado: boolean
+  /** Aviso prévio em curso (migs. 262/263) — vira o chip "em aviso". */
+  aviso_previo_ini?: string | null
+  aviso_previo_fim?: string | null
+  aviso_previo_modo?: string | null
 }
 
 const STATUS: Record<string, { label: string; cls: string }> = {
@@ -139,7 +143,18 @@ export function PessoasClient({ orgSlug, colaboradores, hoje }: { orgSlug: strin
                         </div>
                       )
                     })()}</td>
-                    <td className="px-4 py-3"><span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${st.cls}`}>{st.label}</span></td>
+                    <td className="px-4 py-3">
+                      {/* "Em aviso" é estado DERIVADO do bloco da ficha, não um
+                          status novo — a pessoa segue ativa até o último dia. */}
+                      {(() => {
+                        const fim = c.aviso_previo_fim || c.data_demissao
+                        const emAviso = c.aviso_previo_modo && c.aviso_previo_ini && fim
+                          && hoje >= c.aviso_previo_ini && hoje <= fim && c.status !== 'desligado'
+                        return emAviso
+                          ? <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700" title={c.aviso_previo_modo === 'reducao_2h' ? 'Aviso prévio — jornada reduzida em 2h/dia' : 'Aviso prévio — dispensa dos últimos 7 dias'}>Em aviso até {dd(fim!)}</span>
+                          : <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${st.cls}`}>{st.label}</span>
+                      })()}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <button onClick={() => setDocsFor({ id: c.id, nome: c.nome })} title="Documentos"
                         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-gray-500 hover:text-orange-600 hover:bg-orange-50 transition">

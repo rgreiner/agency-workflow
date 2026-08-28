@@ -64,6 +64,14 @@ export function EspelhoListaClient({ orgSlug, compInicial }: { orgSlug: string; 
                       {c.bate_ponto === false
                         ? ' · dispensado de bater ponto'
                         : !c.tem_login && ' · sem login (não bate ponto)'}
+                      {/* Em aviso: estado derivado da ficha — segue ativa e
+                          batendo; a carga esperada é que muda (migs. 262/263). */}
+                      {c.aviso_ate && (
+                        <span className="ml-1.5 inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-700"
+                          title={c.aviso_modo === 'reducao_2h' ? 'Aviso prévio — jornada reduzida em 2h/dia' : 'Aviso prévio — dispensa dos últimos 7 dias'}>
+                          em aviso até {dataBR(c.aviso_ate)}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-3 py-3 text-right tabular-nums text-gray-600">{c.dias_com_ponto}</td>

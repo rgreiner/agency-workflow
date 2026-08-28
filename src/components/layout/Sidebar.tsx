@@ -87,7 +87,13 @@ interface SidebarProps {
   onExpand?: () => void
 }
 
-interface NavItem { label: string; href: string }
+interface NavItem {
+  label: string; href: string
+  /** Cabeçalho de seção renderizado ANTES deste item (agrupa sem aninhar). */
+  heading?: string
+  /** Ativo só na rota exata — para hrefs-raiz (ex.: 'rh'), senão startsWith acende em tudo. */
+  exact?: boolean
+}
 interface NavGroupDef { id: string; label: string; icon: LucideIcon; items: NavItem[]; finance?: boolean; rh?: boolean }
 
 // Grupos do módulo comercial/financeiro (SigaSW → One a One).
@@ -137,18 +143,20 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Fornecedores', href: 'cadastros/fornecedores' },
     { label: 'Histórico de docs', href: 'documentos' },
   ] },
+  // RH em três blocos (pedido do Rafael, 28/08): Pessoas (gente e ciclo de
+  // vida), Ponto (o dia a dia até a contabilidade) e Folha & custos.
   { id: 'rh', label: 'RH', icon: UserCog, rh: true, items: [
     { label: 'Painel',  href: 'rh/painel' },
-    { label: 'Pessoas', href: 'rh' },
-    { label: 'Folha',   href: 'rh/folha' },
-    { label: 'Ponto',   href: 'rh/ponto' },
-    { label: 'Espelho', href: 'rh/espelho' },
-    { label: 'Horas',   href: 'rh/horas' },
+    { label: 'Pessoas', href: 'rh', exact: true, heading: 'Pessoas' },
+    { label: 'Avaliação', href: 'rh/avaliacao' },
     { label: 'Férias e 13º', href: 'rh/ferias' },
     { label: 'Reajuste', href: 'rh/reajuste' },
-    { label: 'Avaliação', href: 'rh/avaliacao' },
-    { label: 'Calendário', href: 'rh/calendario' },
+    { label: 'Aprovações', href: 'rh/ponto', heading: 'Ponto' },
+    { label: 'Espelho', href: 'rh/espelho' },
     { label: 'Fechamento', href: 'rh/fechamento' },
+    { label: 'Calendário', href: 'rh/calendario' },
+    { label: 'Folha',   href: 'rh/folha', heading: 'Folha e custos' },
+    { label: 'Horas',   href: 'rh/horas' },
   ] },
 ]
 
@@ -181,18 +189,24 @@ function NavGroup({ base, pathname, group, open, onToggle }: {
         <div className="ml-7 mr-2 mt-px space-y-px">
           {group.items.map(it => {
             const href = `${base}/${it.href}`
-            const active = pathname.startsWith(href)
+            const active = it.exact ? pathname === href : pathname.startsWith(href)
             return (
-              <Link
-                key={it.href}
-                href={href}
-                className={cn(
-                  'flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm transition-colors',
-                  active ? 'bg-orange-600/20 text-orange-300' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/60'
+              <div key={it.href}>
+                {it.heading && (
+                  <div className="px-2.5 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600 select-none">
+                    {it.heading}
+                  </div>
                 )}
-              >
-                <span className="truncate">{it.label}</span>
-              </Link>
+                <Link
+                  href={href}
+                  className={cn(
+                    'flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm transition-colors',
+                    active ? 'bg-orange-600/20 text-orange-300' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/60'
+                  )}
+                >
+                  <span className="truncate">{it.label}</span>
+                </Link>
+              </div>
             )
           })}
         </div>

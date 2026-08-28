@@ -123,6 +123,9 @@ export interface EspelhoLinha {
   id: string; nome: string; cargo: string | null; tem_login: boolean
   /** false = dispensado de jornada controlada (migration 209). */
   bate_ponto?: boolean
+  /** Em aviso prévio HOJE (migs. 262/263): último dia + modalidade. */
+  aviso_ate?: string | null
+  aviso_modo?: string | null
   dias_com_ponto: number; extras_pendentes: number; intervalo_curto: number
   ajustados: number; saldo_min: number
 }
