@@ -128,6 +128,7 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Painel',         href: 'financeiro/painel' },
     { label: 'Fluxo de caixa', href: 'financeiro/fluxo-caixa' },
     { label: 'Análise',        href: 'financeiro/analise' },
+    { label: 'Margem por cliente', href: 'financeiro/margem' },
     { label: 'Lançamentos',    href: 'financeiro/lancamentos' },
     { label: 'Inadimplentes',  href: 'financeiro/inadimplentes' },
     { label: 'Faturamento',    href: 'financeiro/faturamento' },
