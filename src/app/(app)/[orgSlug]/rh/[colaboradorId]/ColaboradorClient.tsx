@@ -11,6 +11,7 @@ import { maskCPF, maskPhone } from '@/lib/masks'
 import { salvarColaborador, setColaboradorArquivado, carregarImpactoDesligamento, setBatePonto, setEntraFechamento, setCustoOverhead } from '@/app/actions/rh'
 import { JornadaEditor, type JornadaVals } from '../JornadaEditor'
 import { Timeline } from '@/components/rh/Timeline'
+import { LancamentosFuturos } from '@/components/rh/LancamentosFuturos'
 
 export interface Colaborador {
   id: string; nome: string; cpf: string | null; email: string | null; telefone: string | null
@@ -318,6 +319,11 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
       </div>
 
       <p className="text-xs text-gray-400 mt-3">Os documentos ficam na lista de Pessoas — botão “Documentos” na linha da pessoa.</p>
+
+      {/* O que ainda está previsto no fluxo para esta pessoa (mig. 268) — o
+          desligamento no RH não mexe no financeiro sozinho; aqui ele decide. */}
+      <LancamentosFuturos orgSlug={orgSlug} colaboradorId={colab.id} nome={colab.nome}
+        ativo={f.status !== 'desligado' && !f.aviso_previo_modo} />
 
       {/* Linha do tempo: promoção, reajuste, feedback, advertência (mig. 226) */}
       <div className="mt-4">

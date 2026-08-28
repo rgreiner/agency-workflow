@@ -158,6 +158,7 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Fechamento', href: 'rh/fechamento' },
     { label: 'Calendário', href: 'rh/calendario' },
     { label: 'Folha',   href: 'rh/folha', heading: 'Folha e custos' },
+    { label: 'Folha × Financeiro', href: 'rh/conferencia' },
     { label: 'Horas',   href: 'rh/horas' },
   ] },
 ]
