@@ -16,7 +16,15 @@ export interface MargemCliente {
   margem: number
   /** null quando não houve receita no período (só custo). */
   margem_pct: number | null
+  /** Início do relacionamento (1ª tarefa ou 1º recebimento) — mig. 267. */
+  desde: string | null
+  /** Meses de casa no fim do período. ≤ 3 = implantação (regra do Rafael:
+   *  nos primeiros meses se entrega mais do que o contratado). */
+  meses_casa: number | null
 }
+
+/** Janela em que a margem negativa é investimento de entrada, não problema. */
+export const MESES_IMPLANTACAO = 3
 
 /** Quanto do tempo do ponto chegou a virar tarefa de algum cliente. Sem isso a
  *  margem se lê como definitiva: medido em 08/2026, 61% das horas do ponto não

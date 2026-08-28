@@ -4,7 +4,13 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Target, AlertTriangle, Info } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { carregarMargemCliente, type MargemCliente, type CoberturaHoras } from '@/app/actions/fin-margem'
+import { carregarMargemCliente, MESES_IMPLANTACAO, type MargemCliente, type CoberturaHoras } from '@/app/actions/fin-margem'
+
+/** Cliente em implantação: nos primeiros meses a casa entrega mais do que o
+ *  contratado ("muito trabalho até entrar nos trilhos"), então margem baixa aí
+ *  é investimento — não pode ser lida como cliente ruim. */
+const emImplantacao = (l: MargemCliente) =>
+  l.meses_casa != null && l.meses_casa < MESES_IMPLANTACAO
 
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const brlCurto = (v: number) => Math.abs(v) >= 1000
@@ -61,7 +67,9 @@ export function MargemClient({ orgSlug, hoje }: { orgSlug: string; hoje: string 
   }), { receita: 0, imposto: 0, custo_horas: 0, custo_direto: 0, margem: 0, horas: 0 }), [clientes])
   const margemTotalPct = total.receita > 0 ? (total.margem / total.receita) * 100 : null
 
-  const abaixo = clientes.filter(l => l.receita > 0 && (l.margem_pct ?? 0) < alvo)
+  // Só cobra alvo de quem já saiu da implantação.
+  const abaixo = clientes.filter(l => l.receita > 0 && (l.margem_pct ?? 0) < alvo && !emImplantacao(l))
+  const novos = clientes.filter(emImplantacao)
   const semReceita = clientes.filter(l => l.receita === 0 && l.custo_horas > 0)
 
   /** Cor da margem contra o alvo: no alvo, perto (≥ metade) ou abaixo. */
@@ -148,9 +156,10 @@ export function MargemClient({ orgSlug, hoje }: { orgSlug: string; hoje: string 
           <div className="rounded-xl bg-amber-50 ring-1 ring-amber-200 px-4 py-3 mb-4 text-sm text-amber-900 flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
             <div>
-              <b>{abaixo.length} cliente(s) abaixo do alvo de {alvo}%</b>
+              <b>{abaixo.length} cliente(s) maduro(s) abaixo do alvo de {alvo}%</b>
               <div className="text-xs mt-0.5">
-                {abaixo.map(l => `${l.cliente} (${l.margem_pct?.toFixed(0)}%)`).join(' · ')}
+                {abaixo.map(l => `${l.cliente} (${l.margem_pct?.toFixed(0)}%, ${l.meses_casa} meses)`).join(' · ')}
+                {novos.length > 0 && ` — ${novos.length} em implantação ficam fora desta cobrança.`}
               </div>
             </div>
           </div>
@@ -174,8 +183,17 @@ export function MargemClient({ orgSlug, hoje }: { orgSlug: string; hoje: string 
                 <tr key={l.workspace_id ?? l.cliente} className="border-b border-gray-50 last:border-0 hover:bg-orange-50/40 transition-colors">
                   <td className="px-4 py-3 font-medium text-gray-900">
                     {l.cliente}
+                    {emImplantacao(l) && (
+                      <span className="ml-1.5 text-[10px] font-medium text-sky-700 bg-sky-50 rounded-full px-1.5 py-0.5"
+                        title={`Cliente desde ${l.desde ? dataBR(l.desde) : '—'} — nos primeiros ${MESES_IMPLANTACAO} meses a entrega passa do contratado`}>
+                        implantação
+                      </span>
+                    )}
                     {l.receita === 0 && l.custo_horas > 0 && (
                       <span className="ml-1.5 text-[10px] font-medium text-gray-500 bg-gray-100 rounded-full px-1.5 py-0.5">sem receita no período</span>
+                    )}
+                    {l.meses_casa != null && !emImplantacao(l) && (
+                      <span className="ml-1.5 text-[10px] text-gray-300">{l.meses_casa} meses de casa</span>
                     )}
                   </td>
                   <td className="px-3 py-3 text-right tabular-nums text-gray-700">{l.receita ? brl(l.receita) : '—'}</td>
