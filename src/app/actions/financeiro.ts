@@ -675,7 +675,9 @@ export interface FinanceCategoriaGrupo {
   fora_receita?: boolean
   filhos: FinanceCategoriaFilho[]
 }
-export interface FinanceCentro { nome: string; cor: string | null; arquivado?: boolean }
+/** `padrao` = centro DA CASA: usado quando o lançamento não tem cliente
+ *  (hoje o rendimento conciliado do OFX — mig. 271). Um por org. */
+export interface FinanceCentro { nome: string; cor: string | null; arquivado?: boolean; padrao?: boolean }
 
 export async function setFinanceConfig(orgSlug: string, categorias: FinanceCategoriaGrupo[], centros: FinanceCentro[]) {
   const supabase = await createClient()

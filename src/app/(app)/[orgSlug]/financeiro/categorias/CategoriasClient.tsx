@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { Plus, Trash2, Loader2, Building2, ChevronRight, Search, CornerDownRight, Archive, ArchiveRestore } from 'lucide-react'
+import { Plus, Trash2, Loader2, Building2, ChevronRight, Search, CornerDownRight, Archive, ArchiveRestore , Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { setFinanceConfig, type FinanceCategoriaGrupo, type FinanceCentro } from '@/app/actions/financeiro'
 import { toast } from 'sonner'
@@ -180,12 +180,24 @@ export function CategoriasClient({ orgSlug, categorias: initCats, centros: initC
           <h2 className="text-sm font-semibold text-gray-900">Centros de custo</h2>
           <span className="text-xs text-gray-400">{centrosAtivos.length}</span>
         </div>
+        <p className="text-xs text-gray-400 -mt-2 mb-3">
+          A ⭐ marca o <b>centro da casa</b>: é o que entra sozinho em lançamento sem cliente —
+          hoje, o rendimento de aplicação conciliado do extrato. Sem nenhum marcado, o campo fica vazio.
+        </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {centrosAtivos.map(({ ce, i }) => (
             <div key={i} className="group flex items-center gap-2 bg-white border border-gray-200 rounded-lg pl-2.5 pr-1.5 py-1.5 hover:border-gray-300 transition-colors">
               <ColorDot color={ce.cor} onChange={cor => setCentro(i, { cor })} />
               <input value={ce.nome} placeholder="Nome do centro de custo"
                 onChange={e => setCentro(i, { nome: e.target.value })} className={rowInput} />
+              {/* Centro da casa: um só por org — marcar aqui desmarca o
+                  anterior. É o que o rendimento conciliado usa (mig. 271). */}
+              <button onClick={() => setCentros(prev => prev.map((c, j) => ({ ...c, padrao: j === i ? !c.padrao : false })))}
+                title={ce.padrao ? 'Centro padrão da casa — clique para desmarcar' : 'Marcar como centro padrão da casa (usado em lançamento sem cliente)'}
+                className={cn('p-1 rounded transition shrink-0',
+                  ce.padrao ? 'text-orange-500' : 'text-gray-300 hover:text-orange-500 opacity-0 group-hover:opacity-100')}>
+                <Star className={cn('w-3.5 h-3.5', ce.padrao && 'fill-current')} />
+              </button>
               <button onClick={() => setCentro(i, { arquivado: true })} title="Arquivar (cliente inativo)"
                 className="p-1 rounded text-gray-300 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition shrink-0"><Archive className="w-3.5 h-3.5" /></button>
               <button onClick={() => removeCentro(i)} title="Remover"
