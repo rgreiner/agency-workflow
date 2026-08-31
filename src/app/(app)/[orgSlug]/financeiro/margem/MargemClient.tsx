@@ -4,7 +4,12 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Target, AlertTriangle, Info } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { carregarMargemCliente, MESES_IMPLANTACAO, type MargemCliente, type CoberturaHoras } from '@/app/actions/fin-margem'
+import { carregarMargemCliente, type MargemCliente, type CoberturaHoras } from '@/app/actions/fin-margem'
+
+/** Janela em que a margem negativa é investimento de entrada, não problema.
+ *  Mora aqui, e não no módulo de actions: arquivo `'use server'` só pode
+ *  exportar função async — um `export const` derruba o módulo inteiro. */
+const MESES_IMPLANTACAO = 3
 
 /** Cliente em implantação: nos primeiros meses a casa entrega mais do que o
  *  contratado ("muito trabalho até entrar nos trilhos"), então margem baixa aí

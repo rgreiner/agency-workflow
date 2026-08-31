@@ -23,9 +23,6 @@ export interface MargemCliente {
   meses_casa: number | null
 }
 
-/** Janela em que a margem negativa é investimento de entrada, não problema. */
-export const MESES_IMPLANTACAO = 3
-
 /** Quanto do tempo do ponto chegou a virar tarefa de algum cliente. Sem isso a
  *  margem se lê como definitiva: medido em 08/2026, 61% das horas do ponto não
  *  estavam atribuídas — o custo por cliente sai subestimado na mesma proporção. */
