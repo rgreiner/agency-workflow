@@ -21,6 +21,8 @@ export interface RunRh {
   status: string; versao: number
   fechado_em: string; reaberto_em: string | null; reaberto_motivo: string | null
   enviado_em: string | null; destinatarios: string[] | null; envios: number
+  /** true = ciclo interno (sócio/estagiário): fecha e não vai à contabilidade. */
+  sem_envio: boolean
   vr_valor: number | null; vt_valor: number | null; corpo: string | null
   rh_fechamento_run_linha: RunRhLinha[]
 }
@@ -55,6 +57,20 @@ export async function fecharCiclo(orgSlug: string, competencia: string,
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/rh/fechamento`)
   return { ok: true, runId: (data as { run_id: string }).run_id }
+}
+
+/** Marca (ou desmarca) o ciclo como interno — fecha sem ir à contabilidade.
+ *  Sócio e estagiário: o espelho fica registrado, o e-mail não existe. */
+export async function marcarSemEnvio(orgSlug: string, runId: string, semEnvio: boolean) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (c.supabase as any).rpc('rh_fechamento_sem_envio', {
+    p_run: runId, p_sem_envio: semEnvio,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/rh/fechamento`)
+  return { ok: true }
 }
 
 export async function reabrirFechamento(orgSlug: string, runId: string, motivo: string) {

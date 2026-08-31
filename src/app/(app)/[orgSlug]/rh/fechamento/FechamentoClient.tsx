@@ -11,7 +11,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { carregarFechamento, salvarFechamentoConfig, type Fechamento, type FechamentoLinha } from '@/app/actions/rh-calendario'
 import {
-  fecharCiclo, reabrirFechamento, enviarFechamentoRh, salvarEmailsContabilidadeRh,
+  fecharCiclo, reabrirFechamento, enviarFechamentoRh, salvarEmailsContabilidadeRh, marcarSemEnvio,
   type RunRh,
 } from '@/app/actions/rh-fechamento'
 
@@ -81,7 +81,9 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
   // Seleção do corte: quem entra e quem tem período próprio (desligado).
   const [incluir, setIncluir] = useState<Record<string, boolean>>({})
   const [estender, setEstender] = useState<Record<string, boolean>>({})
-  const [confirmFechar, setConfirmFechar] = useState(false)
+  // null = diálogo fechado; 'envio' = ciclo que vai à contabilidade;
+  // 'interno' = sócio/estagiário, fecha e não gera pendência de envio.
+  const [confirmFechar, setConfirmFechar] = useState<null | 'envio' | 'interno'>(null)
 
   // Modais de reabrir/enviar + histórico expandido.
   const [reabrirDe, setReabrirDe] = useState<RunRh | null>(null)
@@ -143,8 +145,8 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
 
   // ── Fechar o ciclo (ou o complementar de quem sobrou) ──
   const selecionadas = linhasVivas.filter(l => incluir[l.colaborador_id])
-  function fecharAgora() {
-    setConfirmFechar(false)
+  function fecharAgora(interno: boolean) {
+    setConfirmFechar(null)
     start(async () => {
       const pessoas = selecionadas.map(l => ({
         id: l.colaborador_id,
@@ -152,7 +154,24 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
       }))
       const r = await fecharCiclo(orgSlug, comp, pessoas)
       if (r?.error) { toast.error(r.error); return }
-      toast.success(`${runsFechados.length ? 'Fechamento complementar' : `Ciclo de ${labelComp(comp)}`} fechado com ${pessoas.length} pessoa(s).`)
+      // Marcar como interno é um 2º passo: o fechamento em si é o mesmo ato.
+      if (interno && r.runId) {
+        const m = await marcarSemEnvio(orgSlug, r.runId, true)
+        if (m?.error) toast.error(`Fechado, mas não marcou como interno: ${m.error}`)
+      }
+      toast.success(interno
+        ? `Fechado sem envio — ${pessoas.length} pessoa(s), fica só no Flow.`
+        : `${runsFechados.length ? 'Fechamento complementar' : `Ciclo de ${labelComp(comp)}`} fechado com ${pessoas.length} pessoa(s).`)
+      router.refresh()
+    })
+  }
+
+  /** Volta atrás: o ciclo interno passa a aguardar envio (e vice-versa). */
+  function alternarSemEnvio(run: RunRh) {
+    start(async () => {
+      const r = await marcarSemEnvio(orgSlug, run.id, !run.sem_envio)
+      if (r?.error) { toast.error(r.error); return }
+      toast.success(run.sem_envio ? 'Ciclo volta a aguardar envio.' : 'Ciclo marcado como interno.')
       router.refresh()
     })
   }
@@ -254,6 +273,13 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
                 {run.status === 'enviado' && run.enviado_em && (
                   <> · enviado em {dataBR(String(run.enviado_em).slice(0, 10))} para {run.destinatarios?.join(', ')}{(run.envios ?? 0) > 1 && ` (${run.envios}º envio)`}</>
                 )}
+                {run.sem_envio && run.status !== 'enviado' && (
+                  <> · <button onClick={() => alternarSemEnvio(run)} disabled={pending}
+                    title="Passar a aguardar envio à contabilidade"
+                    className="underline decoration-dotted underline-offset-2 hover:text-emerald-900 transition-colors">
+                    interno, sem envio
+                  </button></>
+                )}
               </span>
             </div>
             <div className="flex items-center gap-2 ml-auto">
@@ -271,9 +297,16 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white ring-1 ring-emerald-200 text-emerald-800 hover:bg-emerald-100 transition-colors">
                 <Download className="w-3.5 h-3.5" /> CSV
               </button>
+              {/* Ciclo interno (sócio/estagiário) não fica com pendência de
+                  envio — mas continua podendo ser enviado, discretamente. */}
               <button onClick={() => abrirEnvio(run)} disabled={pending}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 text-[#fff] hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-                <Send className="w-3.5 h-3.5" /> {run.status === 'enviado' ? 'Reenviar' : 'Enviar para a contabilidade'}
+                className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg disabled:opacity-50 transition-colors',
+                  run.sem_envio && run.status !== 'enviado'
+                    ? 'text-emerald-800 hover:bg-emerald-100'
+                    : 'bg-emerald-600 text-[#fff] hover:bg-emerald-700')}>
+                <Send className="w-3.5 h-3.5" />
+                {run.status === 'enviado' ? 'Reenviar'
+                  : run.sem_envio ? 'Enviar mesmo assim' : 'Enviar para a contabilidade'}
               </button>
               <button onClick={() => { setReabrirDe(run); setMotivoReabrir('') }} disabled={pending}
                 title="Reabrir para ajustes"
@@ -447,11 +480,20 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
                 H.N. = horas normais · H.E.50/100 = extra 50%/100% (só o aprovado) · Faltas = horas não cumpridas (inclui atraso parcial) ·
                 H. Totais = H.N. + extras − faltas · Quitação = extras − faltas. Fechar congela os números e libera o envio à contabilidade.
               </p>
-              <button onClick={() => setConfirmFechar(true)} disabled={pending || !selecionadas.length}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 active:scale-[0.97] disabled:opacity-50 transition-colors">
-                {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
-                {runsFechados.length ? 'Fechar complementar' : 'Fechar ciclo'} ({selecionadas.length} pessoa{selecionadas.length === 1 ? '' : 's'})
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Sócio e estagiário não vão à contabilidade: fecham e ficam
+                    só no Flow, sem pendência de envio (pedido do Rafael). */}
+                <button onClick={() => setConfirmFechar('interno')} disabled={pending || !selecionadas.length}
+                  title="Fecha o ciclo e não gera pendência de envio — sócios, estagiários"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-200 disabled:opacity-50 transition-colors">
+                  <Lock className="w-4 h-4" /> Fechar sem enviar
+                </button>
+                <button onClick={() => setConfirmFechar('envio')} disabled={pending || !selecionadas.length}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 active:scale-[0.97] disabled:opacity-50 transition-colors">
+                  {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                  {runsFechados.length ? 'Fechar complementar' : 'Fechar ciclo'} ({selecionadas.length} pessoa{selecionadas.length === 1 ? '' : 's'})
+                </button>
+              </div>
             </div>
           </>
         )}
@@ -484,8 +526,9 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
                         <RotateCcw className="w-3 h-3" /> reaberto
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">
-                        <Lock className="w-3 h-3" /> fechado
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-gray-100 text-gray-600 rounded-full px-2 py-0.5"
+                        title={r.sem_envio ? 'Ciclo interno — não vai à contabilidade' : 'Fechado, aguardando envio'}>
+                        <Lock className="w-3 h-3" /> {r.sem_envio ? 'interno' : 'fechado'}
                       </span>
                     )}
                   </button>
@@ -546,12 +589,25 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
           <div className="modal-card w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-200">
             <div className="px-6 py-4 border-b border-gray-100">
               <h2 className="text-base font-semibold text-gray-900">
-                {runsFechados.length ? `Fechar o complementar de ${labelComp(comp)}?` : `Fechar o ciclo de ${labelComp(comp)}?`}
+                {confirmFechar === 'interno'
+                  ? `Fechar sem enviar — ${labelComp(comp)}?`
+                  : runsFechados.length ? `Fechar o complementar de ${labelComp(comp)}?` : `Fechar o ciclo de ${labelComp(comp)}?`}
               </h2>
               <p className="text-xs text-gray-500 mt-0.5">Período {dataBR(fech.ini)} – {dataBR(fech.fim)} · {selecionadas.length} pessoa{selecionadas.length === 1 ? '' : 's'}</p>
             </div>
             <div className="px-6 py-4 space-y-2 text-sm text-gray-600">
-              <p>Os números são <b>congelados como estão agora</b> e o envio para a contabilidade é liberado. Para corrigir depois, é preciso reabrir com motivo.</p>
+              <p>
+                Os números são <b>congelados como estão agora</b>
+                {confirmFechar === 'interno'
+                  ? ' e o ciclo fica só no Flow: espelho, PDF e histórico normais, sem pendência de envio à contabilidade. Dá para enviar depois, se precisar.'
+                  : ' e o envio para a contabilidade é liberado.'}
+                {' '}Para corrigir depois, é preciso reabrir com motivo.
+              </p>
+              {confirmFechar === 'interno' && (
+                <p className="text-gray-500 bg-gray-50 rounded-lg px-3 py-2 text-xs">
+                  Use para <b>sócios e estagiários</b> — quem não entra no material da contabilidade.
+                </p>
+              )}
               {pendentes.some(p => incluir[p.colaborador_id]) && (
                 <p className="text-amber-700 bg-amber-50 rounded-lg px-3 py-2 text-xs">
                   Há hora extra <b>pendente de aprovação</b> entre as pessoas selecionadas — o que não foi aprovado não entra nas colunas H.E.
@@ -564,10 +620,14 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
               )}
             </div>
             <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-100">
-              <button onClick={() => setConfirmFechar(false)} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors">Cancelar</button>
-              <button onClick={fecharAgora} disabled={pending}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition-colors">
-                {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />} Fechar ciclo
+              <button onClick={() => setConfirmFechar(null)} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors">Cancelar</button>
+              <button onClick={() => fecharAgora(confirmFechar === 'interno')} disabled={pending}
+                className={cn('inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl disabled:opacity-50 transition-colors',
+                  confirmFechar === 'interno'
+                    ? 'bg-gray-700 text-[#fff] hover:bg-gray-800'
+                    : 'bg-orange-600 text-[#fff] hover:bg-orange-700')}>
+                {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                {confirmFechar === 'interno' ? 'Fechar sem enviar' : 'Fechar ciclo'}
               </button>
             </div>
           </div>

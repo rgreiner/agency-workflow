@@ -20,7 +20,7 @@ export default async function FechamentoPage({ params }: { params: Promise<{ org
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const runs = unwrap<RunRh>(await (supabase as any)
     .from('rh_fechamento_run')
-    .select('id, competencia, ini, fim, status, versao, fechado_em, reaberto_em, reaberto_motivo, enviado_em, destinatarios, envios, vr_valor, vt_valor, corpo, rh_fechamento_run_linha(colaborador_id, nome, cpf, cargo, ini, fim, hn_min, he50_min, he100_min, faltas_min, total_min, quitacao_min, pendente_min, dias_com_ponto)')
+    .select('id, competencia, ini, fim, status, versao, fechado_em, reaberto_em, reaberto_motivo, enviado_em, destinatarios, envios, sem_envio, vr_valor, vt_valor, corpo, rh_fechamento_run_linha(colaborador_id, nome, cpf, cargo, ini, fim, hn_min, he50_min, he100_min, faltas_min, total_min, quitacao_min, pendente_min, dias_com_ponto)')
     .eq('org_id', orgId)
     .order('competencia', { ascending: false }), 'fechamentos')
 
