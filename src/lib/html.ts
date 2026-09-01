@@ -3,6 +3,7 @@
 export function stripHtml(s: string): string {
   return (s ?? '')
     .replace(/<[^>]*>/g, ' ')
+    .replace(/<[^>]*$/, ' ')   // rabo de tag sem fechar (texto já truncado)
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')

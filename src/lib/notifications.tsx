@@ -1,5 +1,6 @@
 import { MessageSquare, ArrowRightLeft, UserPlus, LogIn, AtSign, FolderSync, AlarmClock, MessageSquareReply, Inbox, BadgeCheck, PenLine } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { commentPreview } from '@/lib/html'
 import { STATUS_CONFIG, type StatusConfig } from '@/types'
 import type { NotificationItem } from '@/app/actions/notifications'
 
@@ -8,20 +9,27 @@ export function statusLabel(v: unknown, statuses: StatusConfig[] = STATUS_CONFIG
   return statuses.find(s => s.value === v)?.label ?? String(v ?? '')
 }
 
+/** Prévia guardada em `data.preview`. O comentário é HTML (TipTap) e a caixa
+ *  renderiza texto puro — sem isto a tag aparece crua na mensagem. */
+function previa(v: unknown): string {
+  const t = commentPreview(String(v ?? ''))
+  return t ? `: ${t}` : ''
+}
+
 export function messageOf(n: NotificationItem, statuses: StatusConfig[] = STATUS_CONFIG): string {
   const actor = n.actorName ?? 'Alguém'
   const to = n.data?.to
   switch (n.type) {
     case 'status_change':  return `${actor} mudou o status${to ? ` para ${statusLabel(to, statuses)}` : ''}`
     case 'entered_status': return `Entrou em ${statusLabel(to, statuses)} — sua etapa`
-    case 'new_comment':    return `${actor} comentou${n.data?.preview ? `: ${n.data.preview}` : ''}`
-    case 'mention':        return `${actor} ${n.data?.all ? 'mencionou todos' : 'mencionou você'}${n.data?.preview ? `: ${n.data.preview}` : ''}`
+    case 'new_comment':    return `${actor} comentou${previa(n.data?.preview)}`
+    case 'mention':        return `${actor} ${n.data?.all ? 'mencionou todos' : 'mencionou você'}${previa(n.data?.preview)}`
     case 'assigned':       return 'Você foi associado a esta tarefa'
     case 'drive_sync':     return 'Pasta do Drive vinculada — revise o que criar/vincular'
     case 'due_soon':       return '⏰ Vence amanhã — não esqueça'
     case 'portal_resposta': {
       const cli = n.data?.cliente ?? 'O cliente'
-      return `${cli} respondeu a pendência${n.data?.preview ? `: ${n.data.preview}` : ''}`
+      return `${cli} respondeu a pendência${previa(n.data?.preview)}`
     }
     case 'portal_solicitacao': {
       const cli = n.data?.cliente ?? 'Um cliente'
@@ -29,12 +37,12 @@ export function messageOf(n: NotificationItem, statuses: StatusConfig[] = STATUS
     }
     case 'portal_aprovado': {
       const cli = n.data?.cliente ?? 'O cliente'
-      return `✅ ${cli} APROVOU o trabalho${n.data?.preview ? `: ${n.data.preview}` : ''}`
+      return `✅ ${cli} APROVOU o trabalho${previa(n.data?.preview)}`
     }
     case 'portal_ajuste': {
       const cli = n.data?.cliente ?? 'O cliente'
       const q = Number(n.data?.pecas ?? 0)
-      return `✏️ ${cli} pediu ajustes${q ? ` em ${q} peça${q > 1 ? 's' : ''}` : ''}${n.data?.preview ? `: ${n.data.preview}` : ''}`
+      return `✏️ ${cli} pediu ajustes${q ? ` em ${q} peça${q > 1 ? 's' : ''}` : ''}${previa(n.data?.preview)}`
     }
     default:               return 'Atualização'
   }
