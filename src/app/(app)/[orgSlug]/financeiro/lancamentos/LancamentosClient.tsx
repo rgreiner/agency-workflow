@@ -16,7 +16,8 @@ import {
   createLancamento, createLancamentosSerie, updateLancamento, deleteLancamento, liquidarLancamento, reabrirLancamento,
   criarTransferencia, excluirTransferencia,
   setLancamentoAnexos, promoverExtrato, updateLancamentosLote, descartarExtrato,
-  impactoExcluirLancamento,
+  impactoExcluirLancamento, impactoEncerrarDocumento, encerrarDocumento,
+  type ImpactoEncerrar,
   type FinanceCategoriaGrupo, type FinanceCentro, type Anexo, type ImpactoExclusao,
 } from '@/app/actions/financeiro'
 import { categoriaNomes, isTransferenciaCategoria } from '@/lib/finance-categorias'
@@ -506,6 +507,9 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
   const [isPending, startTransition] = useTransition()
   const [confirmDel, setConfirmDel] = useState(false)
   const [impacto, setImpacto] = useState<ImpactoExclusao | null>(null)
+  // Encerramento de contrato: alternativa ao estorno quando o documento já
+  // tem parcela recebida (mig. 272).
+  const [encerrar, setEncerrar] = useState<ImpactoEncerrar | null>(null)
   const [confirmDescarte, setConfirmDescarte] = useState(false)
   const paid = isPago(l.situacao)
   const overdue = !paid && !!l.vencimento && l.vencimento < today
@@ -550,9 +554,33 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
     if (l.transferencia_id) { setImpacto(null); setConfirmDel(true); return }
     startTransition(async () => {
       const imp = await impactoExcluirLancamento(l.id)
-      if (!imp.pode) { toast.error(imp.motivo ?? 'Não é possível excluir este lançamento.'); return }
+      if (!imp.pode) {
+        // Documento com parcela já recebida: estornar tudo é proibido, mas
+        // encerrar o contrato daqui para frente é legítimo (mig. 272).
+        const podeEncerrar = (imp.motivo ?? '').includes('Outra parcela deste documento')
+        if (podeEncerrar && l.vencimento) {
+          const enc = await impactoEncerrarDocumento(l.id, l.vencimento)
+          if (enc.pode) { setEncerrar(enc); return }
+          toast.error(enc.motivo ?? imp.motivo ?? 'Não é possível excluir este lançamento.')
+          return
+        }
+        toast.error(imp.motivo ?? 'Não é possível excluir este lançamento.')
+        return
+      }
       setImpacto(imp)
       setConfirmDel(true)
+    })
+  }
+
+  function encerrarAgora() {
+    if (!encerrar?.a_partir) return
+    const aPartir = encerrar.a_partir
+    setEncerrar(null)
+    startTransition(async () => {
+      const r = await encerrarDocumento(orgSlug, l.id, aPartir)
+      if ('error' in r) { toast.error(r.error); return }
+      toast.success(`Contrato encerrado — ${r.removidas} parcela(s) removida(s) do fluxo.`)
+      router.refresh()
     })
   }
   function remover() {
@@ -731,6 +759,18 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
                 description={l.transferencia_id ? 'Remove os DOIS lados (saída e entrada) desta transferência entre contas. Se um lado estiver conciliado com o extrato, desfaça a conciliação antes.' : descreveImpacto(impacto)}
                 confirmLabel={l.transferencia_id ? 'Excluir transferência' : impacto?.escopo === 'documento' ? 'Estornar faturamento' : 'Excluir'}
                 onConfirm={remover} onCancel={() => setConfirmDel(false)}
+              />
+              <ConfirmDialog
+                open={!!encerrar} loading={isPending}
+                title="Encerrar contrato a partir desta parcela"
+                description={encerrar
+                  ? `As parcelas já recebidas ficam como estão. Saem do fluxo ${encerrar.remove} parcela(s) em aberto `
+                    + `a partir de ${(encerrar.a_partir ?? '').slice(8, 10)}/${(encerrar.a_partir ?? '').slice(5, 7)}/${(encerrar.a_partir ?? '').slice(0, 4)} `
+                    + `(${formatBRL(Number(encerrar.valor_removido ?? 0))}). O documento segue faturado e passa a valer `
+                    + `${formatBRL(Number(encerrar.valor_final ?? 0))} — o que foi realmente cobrado. Não dá para desfazer.`
+                  : ''}
+                confirmLabel="Encerrar contrato"
+                onConfirm={encerrarAgora} onCancel={() => setEncerrar(null)}
               />
               {/* Transferência não tem baixa (nasce liquidada nos 2 lados); só se exclui. */}
               {l.transferencia_id ? null : paid ? (

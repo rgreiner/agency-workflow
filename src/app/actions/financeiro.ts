@@ -281,6 +281,42 @@ export async function impactoExcluirLancamento(lancamentoId: string): Promise<Im
   return data as ImpactoExclusao
 }
 
+export interface ImpactoEncerrar {
+  pode: boolean; motivo?: string
+  remove?: number; valor_removido?: number
+  fica?: number; valor_final?: number; a_partir?: string
+}
+
+/** Prévia do encerramento de contrato: o que sai do fluxo a partir do mês. */
+export async function impactoEncerrarDocumento(lancamentoId: string, aPartir: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { pode: false, motivo: 'Não autenticado' } as ImpactoEncerrar
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('fin_impacto_encerrar_doc', {
+    p_user_id: user.id, p_lancamento_id: lancamentoId, p_a_partir: aPartir,
+  })
+  if (error) return { pode: false, motivo: error.message } as ImpactoEncerrar
+  return data as ImpactoEncerrar
+}
+
+/** Encerra o documento a partir do mês: apaga só as parcelas em aberto dali em
+ *  diante e ajusta o valor. O recebido não é tocado e o documento segue
+ *  faturado (mig. 272 — decisão do Rafael). */
+export async function encerrarDocumento(orgSlug: string, lancamentoId: string, aPartir: string, motivo?: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('fin_encerrar_documento', {
+    p_user_id: user.id, p_lancamento_id: lancamentoId, p_a_partir: aPartir, p_motivo: motivo ?? null,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+  revalidatePath(`/${orgSlug}/financeiro/faturamento`)
+  return { ok: true, ...(data as { removidas: number; valor_final: number }) }
+}
+
 export async function deleteLancamento(orgSlug: string, lancamentoId: string) {
   const supabase = await createClient()
   const user = await getUsuario()
