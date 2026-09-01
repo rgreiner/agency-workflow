@@ -20,6 +20,7 @@ export async function ativarClienteMidia(orgSlug: string, workspaceId: string, a
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/midia/clientes`)
   revalidatePath(`/${orgSlug}/midia`)
+  revalidatePath(`/${orgSlug}/midia/visao-geral`)
   return { id: data as string }
 }
 
@@ -37,6 +38,7 @@ export async function aplicarRotinas(
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/midia/clientes`)
   revalidatePath(`/${orgSlug}/midia`)
+  revalidatePath(`/${orgSlug}/midia/visao-geral`)
   return { criadas: (data as number) ?? 0 }
 }
 
@@ -150,6 +152,7 @@ export async function salvarEntrega(orgSlug: string, e: EntregaInput) {
 
   revalidatePath(`/${orgSlug}/midia/entregas`)
   revalidatePath(`/${orgSlug}/midia`)
+  revalidatePath(`/${orgSlug}/midia/visao-geral`)
   if (abrirEm) revalidatePath(`/${orgSlug}`, 'layout')
   return { id, briefingErro, briefingId }
 }
@@ -237,6 +240,7 @@ export async function mudarSituacaoEntrega(
 
   revalidatePath(`/${orgSlug}/midia/entregas`)
   revalidatePath(`/${orgSlug}/midia`)
+  revalidatePath(`/${orgSlug}/midia/visao-geral`)
   if (tarefa) revalidatePath(`/${orgSlug}`, 'layout')
   return { tarefa }
 }
@@ -437,6 +441,7 @@ export async function vincularEntregaTarefa(orgSlug: string, entregaId: string, 
   revalidatePath(`/${orgSlug}/midia/vincular`)
   revalidatePath(`/${orgSlug}/midia/entregas`)
   revalidatePath(`/${orgSlug}/midia`)
+  revalidatePath(`/${orgSlug}/midia/visao-geral`)
   return {}
 }
 
@@ -456,6 +461,7 @@ export async function marcarImplantacao(
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/midia/clientes`)
   revalidatePath(`/${orgSlug}/midia`)
+  revalidatePath(`/${orgSlug}/midia/visao-geral`)
   return {}
 }
 
@@ -776,6 +782,7 @@ export async function concluirTarefaMidia(orgSlug: string, activityId: string) {
 
   after(() => dispatchPushNotificacoes().catch(() => {}))
   revalidatePath(`/${orgSlug}/midia`)
+  revalidatePath(`/${orgSlug}/midia/visao-geral`)
   return { recorreu: !!recorreu, novoPrazo }
 }
 
@@ -844,6 +851,7 @@ export async function reabrirTarefaMidia(orgSlug: string, activityId: string, st
   })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/midia`)
+  revalidatePath(`/${orgSlug}/midia/visao-geral`)
   return {}
 }
 

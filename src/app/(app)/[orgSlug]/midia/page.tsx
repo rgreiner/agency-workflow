@@ -1,170 +1,69 @@
-import Link from 'next/link'
-import { CalendarClock, CalendarDays, Inbox, Truck, Users } from 'lucide-react'
-import { assertMidiaAccess, statusDaMidia } from '@/lib/midia-hub'
-import { unwrap } from '@/lib/supabase/unwrap'
-import { PainelMidia, type PedidoRow, type RotinaRow } from './PainelMidia'
-import { EntregasResumo, type EntregaResumoRow } from './EntregasResumo'
-import { ImplantacaoResumo, type ImplantacaoRow } from './ImplantacaoResumo'
+import { assertMidiaAccess } from '@/lib/midia-hub'
+import { carregarFilaMidia } from '@/lib/midia-fila'
+import { Trabalhar, type ItemFila } from './Trabalhar'
 
-export const metadata = { title: 'Mídia — Painel' }
+export const metadata = { title: 'Mídia — Trabalhar' }
 
-interface AtividadeRow {
-  id: string; title: string; status: string; due_date: string | null
-  drive_folder_url: string | null; drive_path: string | null
-  redacao_url: string | null; preview_url: string | null; finalizacao_url: string | null
-  campaign_id: string
-}
-
-export default async function MidiaPainelPage({ params }: { params: Promise<{ orgSlug: string }> }) {
+export default async function MidiaTrabalharPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params
   const { supabase, orgId } = await assertMidiaAccess(orgSlug)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb = supabase as any
+  const fila = await carregarFilaMidia(supabase as any, orgId)
 
-  const statuses = await statusDaMidia(sb, orgId)
+  // Uma linha por trabalho. Entrega vinculada a uma tarefa que já está na fila
+  // apareceria DUAS vezes; a entrega vence, porque o prazo do veículo é o que
+  // manda e ela já carrega o status e as pastas da tarefa junto.
+  const porId = new Map(fila.tarefas.map(t => [t.id, t]))
+  const comEntrega = new Set(fila.entregas.map(e => e.activityId).filter(Boolean) as string[])
 
-  // Campanhas de operação (as rotinas) x resto da pauta (os pedidos): a fila da
-  // mídia é o que o time MANDOU para ela, não o que ela mesma agendou.
-  const [resOper, resStatus, resEntregas, resItens, resEstados] = await Promise.all([
-    sb.from('midia_cliente')
-      .select('id, ano, campaign_id, workspace_id, workspaces(name), midia_cliente_rotina(id, ativo, activity_id, midia_rotina(nome, frequencia))')
-      .eq('org_id', orgId).eq('ativo', true),
-    sb.from('org_status').select('valor, label, bg, txt').eq('org_id', orgId),
-    sb.from('midia_entrega_view')
-      .select('id, titulo, cliente, veiculo, prazo_envio, situacao, conflito_prazo, tarefa_titulo, tarefa_status, tarefa_prazo')
-      .eq('org_id', orgId).eq('situacao', 'aguardando')
-      .order('prazo_envio', { ascending: true, nullsFirst: false }),
-    sb.from('midia_implantacao_item').select('id').eq('org_id', orgId).eq('ativo', true),
-    sb.from('midia_implantacao_estado').select('workspace_id, item_id, estado').eq('org_id', orgId),
-  ])
-  const operacoes = unwrap<{
-    id: string; ano: number; campaign_id: string | null; workspace_id: string
-    workspaces: { name: string } | null
-    midia_cliente_rotina: { id: string; ativo: boolean; activity_id: string | null; midia_rotina: { nome: string; frequencia: string } | null }[]
-  }>(resOper, 'operações de mídia')
-  const statusCfg = unwrap<{ valor: string; label: string; bg: string; txt: string }>(resStatus, 'status')
-  const entregasRaw = unwrap<{
-    id: string; titulo: string; cliente: string; veiculo: string | null
-    prazo_envio: string | null; situacao: string; conflito_prazo: boolean | null
-    tarefa_titulo: string | null; tarefa_status: string | null; tarefa_prazo: string | null
-  }>(resEntregas, 'entregas')
-  const itens = unwrap<{ id: string }>(resItens, 'itens de implantação')
-  const estados = unwrap<{ workspace_id: string; item_id: string; estado: string }>(resEstados, 'implantação')
+  const daEntrega: ItemFila[] = fila.entregas.map(e => {
+    const t = e.activityId ? porId.get(e.activityId) ?? null : null
+    return {
+      chave: `e:${e.id}`,
+      tipo: 'entrega',
+      titulo: e.titulo,
+      cliente: e.cliente,
+      data: e.prazoEnvio,
+      activityId: e.activityId,
+      status: e.tarefaStatus,
+      workspaceId: t?.workspaceId ?? null,
+      campaignId: t?.campaignId ?? null,
+      pastaPath: t?.pastaPath ?? null,
+      previewUrl: t?.previewUrl ?? null,
+      finalUrl: t?.finalUrl ?? null,
+      entregaId: e.id,
+      veiculo: e.veiculo,
+      conflito: e.conflito,
+      esperandoCriacao: !!e.activityId && !e.materialPronto,
+      frequencia: null,
+    }
+  })
 
-  const campanhasOperacao = new Set(operacoes.map(o => o.campaign_id).filter(Boolean) as string[])
-  const rotinaActivityIds = operacoes.flatMap(o =>
-    o.midia_cliente_rotina.filter(r => r.ativo && r.activity_id).map(r => r.activity_id as string))
-
-  // Tudo que está num status de mídia, ativo e com prazo conhecido.
-  const { data: ativRaw, error: errAtiv } = await sb
-    .from('activities')
-    .select('id, title, status, due_date, drive_folder_url, drive_path, redacao_url, preview_url, finalizacao_url, campaign_id, campaigns!inner(id, name, workspace_id, workspaces!inner(id, name, org_id))')
-    .eq('campaigns.workspaces.org_id', orgId)
-    .eq('archived', false)
-    .in('status', statuses)
-    .order('due_date', { ascending: true, nullsFirst: false })
-  if (errAtiv) throw new Error(`Falha ao carregar a fila da mídia: ${errAtiv.message}`)
-
-  type Raw = AtividadeRow & { campaigns: { id: string; name: string; workspace_id: string; workspaces: { id: string; name: string } } }
-  const todas = (ativRaw ?? []) as Raw[]
-
-  const pedidos: PedidoRow[] = todas
-    .filter(a => !campanhasOperacao.has(a.campaign_id))
-    .map(a => ({
-      id: a.id, titulo: a.title, status: a.status, prazo: a.due_date,
-      cliente: a.campaigns.workspaces.name, campanha: a.campaigns.name,
-      workspaceId: a.campaigns.workspaces.id, campaignId: a.campaign_id,
-      pastaUrl: a.drive_folder_url, pastaPath: a.drive_path,
-      redacaoUrl: a.redacao_url, previewUrl: a.preview_url, finalUrl: a.finalizacao_url,
+  const dasTarefas: ItemFila[] = fila.tarefas
+    .filter(t => !comEntrega.has(t.id))
+    .map(t => ({
+      chave: `t:${t.id}`,
+      tipo: t.rotina ? 'rotina' : 'pedido',
+      titulo: t.titulo,
+      cliente: t.cliente,
+      data: t.prazo,
+      activityId: t.id,
+      status: t.status,
+      workspaceId: t.workspaceId,
+      campaignId: t.campaignId,
+      pastaPath: t.pastaPath,
+      previewUrl: t.previewUrl,
+      finalUrl: t.finalUrl,
+      entregaId: null,
+      veiculo: null,
+      conflito: false,
+      esperandoCriacao: false,
+      frequencia: t.rotina?.frequencia ?? null,
     }))
 
-  // Rotinas: a tarefa viva de cada vínculo ativo (o prazo delas é o calendário da mídia).
-  const porId = new Map(todas.map(a => [a.id, a]))
-  const rotinas: RotinaRow[] = []
-  for (const o of operacoes) {
-    for (const r of o.midia_cliente_rotina) {
-      if (!r.ativo || !r.activity_id) continue
-      const a = porId.get(r.activity_id)
-      if (!a) continue
-      rotinas.push({
-        id: a.id, titulo: r.midia_rotina?.nome ?? a.title, status: a.status, prazo: a.due_date,
-        cliente: o.workspaces?.name ?? '—', frequencia: r.midia_rotina?.frequencia ?? '',
-        workspaceId: o.workspace_id, campaignId: a.campaign_id,
-      })
-    }
-  }
-  rotinas.sort((a, b) => (a.prazo ?? '9999').localeCompare(b.prazo ?? '9999'))
+  // Sem data vai para o fim: não dá para priorizar o que ninguém datou.
+  const itens = [...daEntrega, ...dasTarefas].sort((a, b) =>
+    (a.data ?? '9999-12-31').localeCompare(b.data ?? '9999-12-31'))
 
-  // Implantação por cliente com mídia ativa: 'na' (não se aplica) sai do
-  // denominador — item que nunca vai existir naquele cliente não pode segurar
-  // o percentual para sempre.
-  const totalItens = itens.length
-  const implantacoes: ImplantacaoRow[] = operacoes.map(o => {
-    const doCliente = estados.filter(e => e.workspace_id === o.workspace_id)
-    const na = doCliente.filter(e => e.estado === 'na').length
-    const ok = doCliente.filter(e => e.estado === 'ok').length
-    const perdidos = doCliente.filter(e => e.estado === 'perdido').length
-    const vale = Math.max(totalItens - na, 0)
-    return {
-      workspaceId: o.workspace_id,
-      cliente: o.workspaces?.name ?? '—',
-      pct: vale ? Math.round((ok / vale) * 100) : 100,
-      ok, vale, perdidos,
-    }
-  }).filter(i => i.pct < 100 || i.perdidos > 0)
-    .sort((a, b) => (b.perdidos - a.perdidos) || (a.pct - b.pct))
-
-  const entregas: EntregaResumoRow[] = entregasRaw.map(e => ({
-    id: e.id, titulo: e.titulo, cliente: e.cliente, veiculo: e.veiculo,
-    prazoEnvio: e.prazo_envio, conflito: !!e.conflito_prazo,
-    tarefaTitulo: e.tarefa_titulo,
-    // Material pronto = a tarefa já chegou num status que a mídia opera.
-    materialPronto: !e.tarefa_titulo || (!!e.tarefa_status && statuses.includes(e.tarefa_status)),
-  }))
-  void rotinaActivityIds
-
-  return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">Mídia</h1>
-          <p className="text-gray-500 text-sm mt-0.5">
-            O que o time mandou para a mídia e as rotinas de cada cliente.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link href={`/${orgSlug}/midia/agenda`}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-xl bg-orange-600 text-[#fff] hover:bg-orange-700 transition-colors">
-            <CalendarDays className="w-4 h-4" /> Agenda do mês
-          </Link>
-          <Link href={`/${orgSlug}/midia/clientes`}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
-            <Users className="w-4 h-4" /> Clientes e rotinas
-          </Link>
-        </div>
-      </div>
-
-      <div className="grid md:grid-cols-4 gap-4">
-        <Resumo icon={<Inbox className="w-4 h-4" />} label="Pedidos na fila" valor={pedidos.length} />
-        <Resumo icon={<CalendarClock className="w-4 h-4" />} label="Rotinas ativas" valor={rotinas.length} />
-        <Resumo icon={<Truck className="w-4 h-4" />} label="Entregas pendentes" valor={entregas.length} />
-        <Resumo icon={<Users className="w-4 h-4" />} label="Clientes com mídia" valor={operacoes.length} />
-      </div>
-
-      <EntregasResumo orgSlug={orgSlug} entregas={entregas} />
-
-      <ImplantacaoResumo orgSlug={orgSlug} clientes={implantacoes} />
-
-      <PainelMidia orgSlug={orgSlug} pedidos={pedidos} rotinas={rotinas} statusCfg={statusCfg} />
-    </div>
-  )
-}
-
-function Resumo({ icon, label, valor }: { icon: React.ReactNode; label: string; valor: number }) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <p className="text-[11px] text-gray-400 inline-flex items-center gap-1.5">{icon} {label}</p>
-      <p className="text-2xl font-semibold text-gray-900 mt-1 tabular-nums">{valor}</p>
-    </div>
-  )
+  return <Trabalhar orgSlug={orgSlug} itens={itens} statusCfg={fila.statusCfg} />
 }

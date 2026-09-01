@@ -99,7 +99,8 @@ interface NavGroupDef { id: string; label: string; icon: LucideIcon; items: NavI
 // Grupos do módulo comercial/financeiro (SigaSW → One a One).
 const COMERCIAL_GROUPS: NavGroupDef[] = [
   { id: 'midia_hub', label: 'Operação', icon: Radio, items: [
-    { label: 'Painel',             href: 'midia' },
+    { label: 'Trabalhar',          href: 'midia', exact: true },
+    { label: 'Visão geral',        href: 'midia/visao-geral' },
     { label: 'Agenda do mês',      href: 'midia/agenda' },
     { label: 'Clientes e rotinas', href: 'midia/clientes' },
     { label: 'Entregas',           href: 'midia/entregas' },
