@@ -9,6 +9,7 @@ import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
 import { formatBRL } from '@/lib/midia'
 import {
+  setFeriasMarco,
   programarFerias, mudarStatusFerias,
   type PeriodoFerias, type LinhaDecimo, type SaldoAno, type PonteLinha, type LancamentoFerias,
 } from '@/app/actions/rh-ferias'
@@ -35,21 +36,36 @@ const SITUACAO: Record<PeriodoFerias['situacao'], { rotulo: string; cls: string 
   aberto:         { rotulo: 'estimado · em aberto',      cls: 'bg-blue-50 text-blue-700 border-blue-200' },
   em_formacao:    { rotulo: 'em formação',               cls: 'bg-gray-100 text-gray-500 border-gray-200' },
   quitado:        { rotulo: 'quitado',                   cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  // Fechou antes de o Flow existir: a casa quitava tudo no recesso (mig. 274).
+  quitado_pre_flow: { rotulo: 'quitado antes do Flow',   cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
 }
 
 type Aba = 'saldo' | 'emendas' | 'clt'
 
 export function FeriasClient({
-  orgSlug, periodos, decimo, gozos, saldos, pontes, lancamentos, ano, anoAtual, erro,
+  orgSlug, periodos, decimo, gozos, saldos, pontes, lancamentos, ano, anoAtual, erro, feriasMarco,
 }: {
   orgSlug: string; periodos: PeriodoFerias[]; decimo: LinhaDecimo[]
   gozos: FeriasGozo[]; saldos: SaldoAno[]; pontes: PonteLinha[]; lancamentos: LancamentoFerias[]
   ano: number; anoAtual: number; erro: string | null
+  /** Marco de quitação pré-Flow (mig. 274). */
+  feriasMarco: string | null
 }) {
   const [aba, setAba] = useState<Aba>('saldo')
+  const [marco, setMarco] = useState(feriasMarco ?? '')
+  const [salvandoMarco, startMarco] = useTransition()
   const [programando, setProgramando] = useState<PeriodoFerias | null>(null)
   const [pending, start] = useTransition()
   const router = useRouter()
+
+  function salvarMarco() {
+    startMarco(async () => {
+      const r = await setFeriasMarco(orgSlug, marco || null)
+      if (r?.error) { toast.error(r.error); return }
+      toast.success(marco ? 'Marco salvo — períodos anteriores saem do passivo.' : 'Marco removido.')
+      router.refresh()
+    })
+  }
 
   const anos = useMemo(
     () => Array.from({ length: 4 }, (_, i) => anoAtual + 1 - i),
@@ -70,7 +86,8 @@ export function FeriasClient({
   // Períodos ainda em formação poluem a lista de trabalho: quem precisa de ação
   // é quem já venceu ou está por vencer.
   const [verTodos, setVerTodos] = useState(false)
-  const visiveis = verTodos ? periodos : periodos.filter(p => p.situacao !== 'em_formacao' && p.situacao !== 'quitado')
+  const visiveis = verTodos ? periodos
+    : periodos.filter(p => p.situacao !== 'em_formacao' && p.situacao !== 'quitado' && p.situacao !== 'quitado_pre_flow')
 
   function statusGozo(id: string, status: string) {
     start(async () => {
@@ -194,6 +211,25 @@ export function FeriasClient({
       </section>
 
       {/* Períodos aquisitivos */}
+      {/* Marco de quitação: antes do Flow a casa fechava tudo no recesso, e a
+          tabela vazia lia isso como férias não gozadas (mig. 274). */}
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 mb-4 flex flex-wrap items-end gap-3">
+        <div>
+          <label className="block text-[11px] font-medium text-gray-600 mb-1">Férias quitadas até</label>
+          <input type="date" value={marco} onChange={e => setMarco(e.target.value)}
+            className="px-3 py-2 text-sm bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+        </div>
+        <button onClick={salvarMarco} disabled={salvandoMarco}
+          className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 transition-colors">
+          {salvandoMarco && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Salvar marco
+        </button>
+        <p className="text-[11px] text-gray-400 flex-1 min-w-[16rem]">
+          Períodos encerrados até esta data entram como <b>quitados antes do Flow</b> — a casa fechava no
+          recesso de fim de ano e pagava férias e 13º do ano corrente. Em branco, todo período antigo
+          aparece como pendente.
+        </p>
+      </div>
+
       <section>
         <div className="flex items-baseline justify-between gap-3 mb-3">
           <h2 className="text-sm font-semibold text-gray-700">

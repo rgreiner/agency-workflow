@@ -20,6 +20,10 @@ export default async function FeriasPage({ params, searchParams }: {
   const anoAtual = new Date().getFullYear()
   const ano = Number(anoQS) || anoAtual
 
+  // Marco de quitação pré-Flow (mig. 274) — some junto com os períodos.
+  const { data: cfgFerias } = await sb.from('org_settings')
+    .select('ferias_quitadas_ate').eq('org_id', orgId).maybeSingle()
+
   const [perRes, decRes, gozoRes, saldoRes, ponteRes, lancRes] = await Promise.all([
     sb.rpc('rh_ferias_periodos', { p_org: orgId }),
     sb.rpc('rh_decimo_terceiro', { p_org: orgId, p_ano: ano }),
@@ -44,6 +48,7 @@ export default async function FeriasPage({ params, searchParams }: {
       saldos={(saldoRes.data ?? []) as SaldoAno[]}
       pontes={(ponteRes.data ?? []) as PonteLinha[]}
       lancamentos={(lancRes.data ?? []) as LancamentoFerias[]}
+      feriasMarco={(cfgFerias?.ferias_quitadas_ate as string | null) ?? null}
       ano={ano}
       anoAtual={anoAtual}
       erro={(saldoRes.error?.message ?? perRes.error?.message ?? decRes.error?.message ?? null) as string | null}

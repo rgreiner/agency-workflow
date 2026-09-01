@@ -21,7 +21,7 @@ export interface PeriodoFerias {
   periodo_inicio: string; periodo_fim: string; limite: string
   dias_direito: number; dias_gozados: number; dias_programados: number; dias_saldo: number
   em_formacao: boolean; dias_para_limite: number
-  situacao: 'em_formacao' | 'aberto' | 'vence_em_breve' | 'vencido' | 'quitado'
+  situacao: 'em_formacao' | 'aberto' | 'vence_em_breve' | 'vencido' | 'quitado' | 'quitado_pre_flow'
 }
 
 export interface LinhaDecimo {
@@ -134,4 +134,18 @@ export async function ajustarRetorno(orgSlug: string, ano: number, colaboradorId
   return chamar(orgSlug, 'rh_recesso_ajustar', {
     p_org: c.orgId, p_ano: ano, p_colaborador: colaboradorId, p_retorno: retorno,
   })
+}
+
+/** Marco de quitação: períodos encerrados até esta data foram gozados no
+ *  recesso, antes do Flow (mig. 274). Um por org. */
+export async function setFeriasMarco(orgSlug: string, data: string | null) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (c.supabase as any).rpc('rh_set_ferias_marco', {
+    p_org: c.orgId, p_data: data,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/rh/ferias`)
+  return { ok: true }
 }
