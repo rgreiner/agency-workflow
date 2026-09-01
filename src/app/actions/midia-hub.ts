@@ -316,6 +316,120 @@ export async function tarefasDoCliente(orgSlug: string, workspaceId: string) {
   }
 }
 
+// ── Vincular entregas antigas às tarefas da pauta ────────────────────────────
+
+export interface EntregaSemTarefa {
+  id: string
+  titulo: string
+  cliente: string
+  workspaceId: string
+  veiculo: string | null
+  formato: string | null
+  prazoEnvio: string | null
+  observacao: string | null
+  tarefaSugerida: string | null
+  sugestaoFraca: boolean
+}
+
+export interface TarefaCandidata {
+  id: string; titulo: string; prazo: string | null; campanha: string; campaignId: string
+}
+
+/**
+ * Tela transitória: as entregas criadas ANTES de o select ter três estados
+ * ficaram com `activity_id` nulo sem dizer se era "material pronto" ou "ainda
+ * não abriram a tarefa". Aqui a mídia liga cada pendente à tarefa que já existe
+ * na pauta. Quando a lista zera, a tela pode sair do menu — igual à de migrar
+ * rotinas.
+ *
+ * Só PENDENTES: entrega já enviada ao veículo é passado, e passado não se
+ * conserta (decisão do Rafael, 01/09).
+ */
+export async function carregarVinculoEntregas(orgSlug: string) {
+  const { supabase, orgId } = await assertMidiaAccess(orgSlug)
+  const sb = supabase as any
+  const { sugerirTarefa } = await import('@/lib/midia-migracao')
+
+  const { data: rows, error } = await sb
+    .from('midia_entrega_view')
+    .select('id, titulo, cliente, workspace_id, veiculo, formato, prazo_envio, observacao')
+    .eq('org_id', orgId)
+    .eq('situacao', 'aguardando')
+    .is('activity_id', null)
+    .order('prazo_envio', { ascending: true, nullsFirst: false })
+  if (error) return { error: error.message as string }
+
+  const pendentes = (rows ?? []) as any[]
+  const wsIds = [...new Set(pendentes.map(r => r.workspace_id as string))]
+  if (wsIds.length === 0) return { entregas: [], tarefas: {} as Record<string, TarefaCandidata[]> }
+
+  const { data: acts, error: e2 } = await sb
+    .from('activities')
+    .select('id, title, due_date, campaign_id, campaigns!inner(id, name, workspace_id)')
+    .in('campaigns.workspace_id', wsIds)
+    .eq('archived', false)
+    .order('due_date', { ascending: false, nullsFirst: false })
+    .limit(1000)
+  if (e2) return { error: e2.message as string }
+
+  const tarefas: Record<string, TarefaCandidata[]> = {}
+  for (const a of (acts ?? []) as any[]) {
+    const ws = a.campaigns?.workspace_id as string
+    if (!ws) continue
+    ;(tarefas[ws] ??= []).push({
+      id: a.id, titulo: a.title, prazo: a.due_date ?? null,
+      campanha: a.campaigns?.name ?? '', campaignId: a.campaign_id,
+    })
+  }
+
+  const entregas: EntregaSemTarefa[] = pendentes.map(r => {
+    const cand = tarefas[r.workspace_id] ?? []
+    const sug = sugerirTarefa(r.titulo, cand.map(t => ({ id: t.id, nome: t.titulo, prazo: t.prazo })), r.prazo_envio)
+    return {
+      id: r.id, titulo: r.titulo, cliente: r.cliente, workspaceId: r.workspace_id,
+      veiculo: r.veiculo ?? null, formato: r.formato ?? null,
+      prazoEnvio: r.prazo_envio ?? null, observacao: r.observacao ?? null,
+      tarefaSugerida: sug?.id ?? null,
+      sugestaoFraca: sug ? !sug.forte : true,
+    }
+  })
+
+  return { entregas, tarefas }
+}
+
+/** Liga uma entrega existente a uma tarefa da pauta (campanha vem da tarefa). */
+export async function vincularEntregaTarefa(orgSlug: string, entregaId: string, activityId: string) {
+  const { supabase } = await assertMidiaAccess(orgSlug)
+  const sb = supabase as any
+
+  const [{ data: e }, { data: a }] = await Promise.all([
+    sb.from('midia_entrega')
+      .select('workspace_id, titulo, veiculo, formato, prazo_envio, observacao')
+      .eq('id', entregaId).maybeSingle(),
+    sb.from('activities').select('campaign_id').eq('id', activityId).maybeSingle(),
+  ])
+  if (!e) return { error: 'Entrega não encontrada.' }
+  if (!a) return { error: 'Tarefa não encontrada.' }
+
+  const { error } = await sb.rpc('midia_entrega_salvar', {
+    p_id: entregaId,
+    p_workspace_id: e.workspace_id,
+    p_titulo: e.titulo,
+    p_veiculo: e.veiculo ?? null,
+    p_formato: e.formato ?? null,
+    p_prazo_envio: e.prazo_envio ?? null,
+    p_activity_id: activityId,
+    p_campaign_id: a.campaign_id ?? null,
+    p_observacao: e.observacao ?? null,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath(`/${orgSlug}/midia/vincular`)
+  revalidatePath(`/${orgSlug}/midia/entregas`)
+  revalidatePath(`/${orgSlug}/midia`)
+  return {}
+}
+
 // ── Implantação (migration 237) ──────────────────────────────────────────────
 
 export type EstadoImplantacao = 'pendente' | 'ok' | 'na' | 'perdido'

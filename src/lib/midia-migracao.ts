@@ -93,3 +93,47 @@ export function sugerirRotina(
   // Sugestão errada com cara de certa é pior que sugestão nenhuma.
   return { id: melhor.id, forte: melhor.noNome }
 }
+
+export interface TarefaAlvo extends Alvo { prazo?: string | null }
+
+/** Título de tarefa sem o prefixo de data ("260819 - Padrão…" → "Padrão…"). */
+export function tituloSemData(titulo: string): string {
+  return titulo.replace(/^\s*\d{6}\s*-?\s*/, '').trim()
+}
+
+/**
+ * Tarefa sugerida para uma ENTREGA da mídia: palavras em comum entre o nome da
+ * entrega e o título da tarefa, já sem o prefixo de data que o Flow põe na pasta.
+ * Empate resolve pelo prazo mais próximo do envio ao veículo — duas peças do
+ * mesmo anunciante costumam ter nome igual e datas diferentes.
+ *
+ * `forte` exige 2+ palavras em comum OU uma palavra longa (≥6 letras): a mídia
+ * repete "anúncio", "arte", "post" em quase tudo, e uma palavra genérica em
+ * comum não é evidência de nada — mesma lição da sugestão fraca das rotinas.
+ */
+export function sugerirTarefa(
+  tituloEntrega: string, tarefas: TarefaAlvo[], prazoEnvio?: string | null,
+): { id: string; forte: boolean } | null {
+  const t = tokens(tituloEntrega)
+  if (t.size === 0) return null
+
+  const distancia = (prazo?: string | null) => {
+    if (!prazoEnvio || !prazo) return 9999
+    return Math.abs(Date.parse(prazo.slice(0, 10)) - Date.parse(prazoEnvio.slice(0, 10))) / 86400000
+  }
+
+  let melhor: { id: string; score: number; especifica: boolean; d: number } | null = null
+  for (const a of tarefas) {
+    const alvo = tokens(tituloSemData(a.nome))
+    let score = 0
+    let especifica = false
+    for (const tk of t) if (alvo.has(tk)) { score++; if (tk.length >= 6) especifica = true }
+    if (score === 0) continue
+    const d = distancia(a.prazo)
+    if (!melhor || score > melhor.score || (score === melhor.score && d < melhor.d)) {
+      melhor = { id: a.id, score, especifica, d }
+    }
+  }
+  if (!melhor) return null
+  return { id: melhor.id, forte: melhor.score >= 2 || melhor.especifica }
+}
