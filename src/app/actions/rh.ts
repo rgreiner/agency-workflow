@@ -96,6 +96,49 @@ export async function setEntraFechamento(orgSlug: string, id: string, entra: boo
   return { ok: true }
 }
 
+export interface ImpactoExcluirColab {
+  pode: boolean; motivo?: string; nome?: string; total?: number
+  /** Contagem por tipo de registro que impede a exclusão. */
+  historico?: Record<string, number>
+}
+
+/** Prévia: dá para apagar esta ficha ou ela já tem histórico? (mig. 273) */
+export async function impactoExcluirColaborador(orgSlug: string, id: string) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { pode: false, motivo: c.error } as ImpactoExcluirColab
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (c.supabase as any).rpc('rh_impacto_excluir_colaborador', { p_id: id })
+  if (error) return { pode: false, motivo: error.message } as ImpactoExcluirColab
+  return data as ImpactoExcluirColab
+}
+
+/** Apaga ficha SEM histórico — o cadastro errado. Com histórico, a RPC recusa
+ *  e manda arquivar (offboarding da casa continua sendo arquivar). */
+export async function excluirColaborador(orgSlug: string, id: string) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (c.supabase as any).rpc('rh_excluir_colaborador', { p_id: id })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/rh`)
+  return { ok: true }
+}
+
+/** Ex-colaborador que voltou: reativa a ficha (o histórico segue dela). O
+ *  ACESSO continua sendo concessão explícita em Membros. */
+export async function reativarColaborador(orgSlug: string, id: string, admissao?: string | null) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (c.supabase as any).rpc('rh_reativar_colaborador', {
+    p_id: id, p_admissao: admissao ?? null,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/rh`)
+  revalidatePath(`/${orgSlug}/rh/${id}`)
+  return { ok: true }
+}
+
 export async function setColaboradorArquivado(orgSlug: string, id: string, arquivado: boolean) {
   const c = await ctx(orgSlug)
   if ('error' in c) return { error: c.error }

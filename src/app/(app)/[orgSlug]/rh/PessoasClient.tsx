@@ -3,9 +3,11 @@
 import { useState, useMemo, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { UserCog, Plus, Loader2, Archive, Paperclip } from 'lucide-react'
+import { UserCog, Plus, Loader2, Archive, Paperclip, Trash2, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
-import { salvarColaborador } from '@/app/actions/rh'
+import { salvarColaborador, impactoExcluirColaborador, excluirColaborador, reativarColaborador,
+  type ImpactoExcluirColab } from '@/app/actions/rh'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { DocumentosModal } from './DocumentosModal'
 
 export interface ColaboradorRow {
@@ -63,9 +65,41 @@ function periodo(c: ColaboradorRow, hoje: string): { txt: string; sub?: string; 
 const inputCls = 'w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 
 export function PessoasClient({ orgSlug, colaboradores, hoje }: { orgSlug: string; colaboradores: ColaboradorRow[]; hoje: string }) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
   const [aba, setAba] = useState<'ativos' | 'todos' | 'arquivados'>('ativos')
   const [novo, setNovo] = useState(false)
   const [docsFor, setDocsFor] = useState<{ id: string; nome: string } | null>(null)
+  // Excluir ficha só existe para cadastro SEM histórico (o duplicado de hoje);
+  // com histórico a RPC recusa e a régua da casa continua sendo arquivar.
+  const [excluir, setExcluir] = useState<{ id: string; nome: string; imp: ImpactoExcluirColab } | null>(null)
+
+  function pedirExclusao(c: ColaboradorRow) {
+    startTransition(async () => {
+      const imp = await impactoExcluirColaborador(orgSlug, c.id)
+      if (!imp.pode) { toast.error(imp.motivo ?? 'Não é possível excluir esta ficha.'); return }
+      setExcluir({ id: c.id, nome: c.nome, imp })
+    })
+  }
+  function confirmarExclusao() {
+    if (!excluir) return
+    const { id, nome } = excluir
+    setExcluir(null)
+    startTransition(async () => {
+      const r = await excluirColaborador(orgSlug, id)
+      if (r?.error) { toast.error(r.error); return }
+      toast.success(`Ficha de ${nome} excluída.`)
+      router.refresh()
+    })
+  }
+  function reativar(c: ColaboradorRow) {
+    startTransition(async () => {
+      const r = await reativarColaborador(orgSlug, c.id)
+      if (r?.error) { toast.error(r.error); return }
+      toast.success(`${c.nome.split(' ')[0]} reativado(a) — o histórico continua na ficha. O acesso é liberado em Membros.`)
+      router.refresh()
+    })
+  }
 
   const lista = useMemo(() => colaboradores.filter(c =>
     aba === 'arquivados' ? c.arquivado : aba === 'ativos' ? (!c.arquivado && c.status !== 'desligado') : !c.arquivado
@@ -156,10 +190,24 @@ export function PessoasClient({ orgSlug, colaboradores, hoje }: { orgSlug: strin
                       })()}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button onClick={() => setDocsFor({ id: c.id, nome: c.nome })} title="Documentos"
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-gray-500 hover:text-orange-600 hover:bg-orange-50 transition">
-                        <Paperclip className="w-3.5 h-3.5" /> Documentos
-                      </button>
+                      <div className="inline-flex items-center gap-1">
+                        {/* Quem voltou: a ficha antiga volta a valer, com o
+                            histórico. Nunca cadastrar de novo (mig. 273). */}
+                        {(c.status === 'desligado' || c.arquivado) && (
+                          <button onClick={() => reativar(c)} disabled={isPending} title="Reativar — a pessoa voltou para a casa"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-gray-500 hover:text-emerald-700 hover:bg-emerald-50 transition disabled:opacity-50">
+                            <RotateCcw className="w-3.5 h-3.5" /> Reativar
+                          </button>
+                        )}
+                        <button onClick={() => setDocsFor({ id: c.id, nome: c.nome })} title="Documentos"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-gray-500 hover:text-orange-600 hover:bg-orange-50 transition">
+                          <Paperclip className="w-3.5 h-3.5" /> Documentos
+                        </button>
+                        <button onClick={() => pedirExclusao(c)} disabled={isPending} title="Excluir ficha (só sem histórico)"
+                          className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-50">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
@@ -170,6 +218,16 @@ export function PessoasClient({ orgSlug, colaboradores, hoje }: { orgSlug: strin
       )}
 
       {novo && <NovaPessoaModal orgSlug={orgSlug} onClose={() => setNovo(false)} />}
+      <ConfirmDialog
+        open={!!excluir} loading={isPending}
+        title="Excluir ficha"
+        description={excluir
+          ? `A ficha de ${excluir.nome} será apagada de vez. Ela não tem nenhum registro de ponto, folha, `
+            + 'férias ou avaliação — por isso pode sair. Não dá para desfazer.'
+          : ''}
+        confirmLabel="Excluir ficha"
+        onConfirm={confirmarExclusao} onCancel={() => setExcluir(null)}
+      />
       {docsFor && <DocumentosModal orgSlug={orgSlug} colaboradorId={docsFor.id} nome={docsFor.nome} onClose={() => setDocsFor(null)} />}
     </div>
   )
