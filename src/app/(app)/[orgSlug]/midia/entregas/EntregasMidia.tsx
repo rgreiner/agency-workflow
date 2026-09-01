@@ -352,6 +352,15 @@ function ModalEntrega({ orgSlug, clientes, entrega, onClose }: {
     setCampanhas(r.campanhas ?? [])
   }
 
+  // Espelha tituloDaTarefa() do servidor: DATA - VEÍCULO - FORMATO - JOB, sem
+  // deduplicar nada. Mostrar aqui evita a surpresa de descobrir o nome depois.
+  const nomeTarefa = useMemo(() => {
+    const d = hojeBR()
+    const data = `${d.slice(2, 4)}${d.slice(5, 7)}${d.slice(8, 10)}`
+    return [data, form.veiculo, form.formato, form.titulo]
+      .map(x => x.trim()).filter(Boolean).join(' - ')
+  }, [form.veiculo, form.formato, form.titulo])
+
   // Projeto sugerido: o último usado neste cliente, se ainda existir.
   function sugerirCampanha(): string {
     if (form.campaignId) return form.campaignId
@@ -495,7 +504,10 @@ function ModalEntrega({ orgSlug, clientes, entrega, onClose }: {
             <p className="text-[11px] text-orange-800/80">
               A tarefa nasce em <b>Briefing</b>, <b>sem responsável</b> — cai na fila &ldquo;Sem responsável&rdquo;
               do atendimento — com prazo {form.prazoEnvio ? fmt(form.prazoEnvio) : 'igual ao do envio'} e a pasta
-              do Drive já criada. Veículo, especificação e observação vão no briefing.
+              do Drive já criada com o mesmo nome. O briefing nasce em branco, para o atendimento escrever.
+            </p>
+            <p className="text-[11px] text-orange-800/70">
+              Nome da tarefa: <span className="font-mono text-orange-900">{nomeTarefa}</span>
             </p>
           </div>
         )}

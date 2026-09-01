@@ -92,19 +92,24 @@ export interface EntregaInput {
   briefingEmCampanha?: string | null
 }
 
-const escHtml = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+const hojeBR = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
 
-const dataBR = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
-
-/** Briefing inicial da tarefa com o que a mídia já preencheu na entrega. */
-function briefingDaEntrega(e: EntregaInput): string {
-  const l: string[] = ['<p><em>Tarefa aberta a partir de uma entrega de mídia.</em></p>']
-  if (e.prazoEnvio) l.push(`<p><strong>Envio ao veículo:</strong> ${escHtml(dataBR(e.prazoEnvio))}</p>`)
-  if (e.veiculo) l.push(`<p><strong>Veículo:</strong> ${escHtml(e.veiculo)}</p>`)
-  if (e.formato) l.push(`<p><strong>Especificação:</strong> ${escHtml(e.formato)}</p>`)
-  if (e.observacao) l.push(`<p><strong>Observação:</strong> ${escHtml(e.observacao)}</p>`)
-  return l.join('')
+/**
+ * Nome da tarefa no padrão da casa: DATA - VEÍCULO - FORMATO - JOB, pulando o
+ * que estiver vazio. A data é a do dia em que a tarefa nasce (convenção das
+ * pastas do Drive, YYMMDD) — e como o título já começa com 6 dígitos, o
+ * `taskFolderName` mantém exatamente este nome na pasta em vez de prefixar de novo.
+ *
+ * Nada é deduplicado: se o nome da entrega já repete o veículo, o título repete
+ * também. Decisão do Rafael (01/09) — previsível ganha de curto.
+ */
+function tituloDaTarefa(e: EntregaInput): string {
+  const d = hojeBR()
+  const data = `${d.slice(2, 4)}${d.slice(5, 7)}${d.slice(8, 10)}`
+  return [data, e.veiculo, e.formato, e.titulo]
+    .map(p => (p ?? '').trim())
+    .filter(Boolean)
+    .join(' - ')
 }
 
 /**
@@ -155,11 +160,16 @@ async function abrirBriefing(
   entregaId: string, campaignId: string, e: EntregaInput,
 ): Promise<{ activityId?: string; erro?: string }> {
   // Sem p_assignees de propósito (mig. 253): a mídia não decide quem produz.
+  const titulo = tituloDaTarefa(e)
+  // Briefing nasce VAZIO de propósito: o que a mídia sabe já está no título
+  // (data/veículo/formato/job) e no aviso dentro da tarefa (prazo do veículo e
+  // conflito). Contato e forma de envio são assunto da mídia, não da criação —
+  // repetir isso aqui só polui o campo que o atendimento vai escrever.
   const { data: activityId, error } = await supabase.rpc('create_activity', {
     p_user_id: userId,
     p_campaign_id: campaignId,
-    p_title: e.titulo.trim(),
-    p_description: briefingDaEntrega(e),
+    p_title: titulo,
+    p_description: '',
     p_status: 'briefing',
     p_priority: 'medium',
     p_complexity: 'medium',
@@ -184,7 +194,7 @@ async function abrirBriefing(
 
   await provisionActivitiesDrive(supabase, {
     campaignId, userId,
-    items: [{ activityId: activityId as string, title: e.titulo.trim(), date: e.prazoEnvio ?? null }],
+    items: [{ activityId: activityId as string, title: titulo, date: hojeBR() }],
   })
   // Aviso de tarefa nova sem dono sai pelo trigger da criação; o push é imediato
   // pra não esperar a varredura de 15min.
