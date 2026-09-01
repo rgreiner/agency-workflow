@@ -192,14 +192,82 @@ async function abrirBriefing(
   return { activityId: activityId as string }
 }
 
-/** 'liberado' = material enviado ao veículo. Reversível. */
-export async function mudarSituacaoEntrega(orgSlug: string, id: string, situacao: 'aguardando' | 'liberado' | 'cancelado') {
-  const { supabase } = await assertMidiaAccess(orgSlug)
-  const { error } = await (supabase as any).rpc('midia_entrega_situacao', { p_id: id, p_situacao: situacao })
+export interface TarefaConcluidaPelaEntrega {
+  titulo: string
+  recorreu: boolean
+  novoPrazo: string | null
+}
+
+/**
+ * 'liberado' = o material já foi enviado ao veículo.
+ *
+ * Enviar ao veículo é o fim do trabalho — não sobra nada para produzir — então o
+ * mesmo gesto CONCLUI a tarefa vinculada: rotina recorrente volta com o próximo
+ * prazo, execução única fica concluída (mesma régua do "Feito" do painel).
+ *
+ * Reabrir a entrega NÃO desconclui a tarefa: a conclusão já gravou histórico e
+ * pode ter disparado recorrência, e desfazer pelo lado da mídia seria adivinhar
+ * de qual status a tarefa veio. Por isso a tela confirma antes, quando a tarefa
+ * ainda está com a criação.
+ */
+export async function mudarSituacaoEntrega(
+  orgSlug: string, id: string, situacao: 'aguardando' | 'liberado' | 'cancelado',
+): Promise<{ error?: string; tarefa?: TarefaConcluidaPelaEntrega }> {
+  const { supabase, orgId, userId } = await assertMidiaAccess(orgSlug)
+  const sb = supabase as any
+  const { error } = await sb.rpc('midia_entrega_situacao', { p_id: id, p_situacao: situacao })
   if (error) return { error: error.message }
+
+  let tarefa: TarefaConcluidaPelaEntrega | undefined
+  if (situacao === 'liberado') {
+    const r = await concluirTarefaDaEntrega(sb, orgId, userId, id)
+    if (r.error) return { error: r.error }
+    tarefa = r.tarefa
+  }
+
   revalidatePath(`/${orgSlug}/midia/entregas`)
   revalidatePath(`/${orgSlug}/midia`)
-  return {}
+  if (tarefa) revalidatePath(`/${orgSlug}`, 'layout')
+  return { tarefa }
+}
+
+/** Conclui a tarefa vinculada à entrega. Sem tarefa (ou já concluída) = no-op. */
+async function concluirTarefaDaEntrega(
+  sb: any, orgId: string, userId: string, entregaId: string,
+): Promise<{ error?: string; tarefa?: TarefaConcluidaPelaEntrega }> {
+  const { data: e } = await sb
+    .from('midia_entrega').select('activity_id').eq('id', entregaId).maybeSingle()
+  const activityId = (e?.activity_id ?? null) as string | null
+  if (!activityId) return {}
+
+  const [{ data: st }, { data: act }] = await Promise.all([
+    sb.from('org_status').select('valor').eq('org_id', orgId).eq('papel', 'conclusao').maybeSingle(),
+    sb.from('activities').select('title, status').eq('id', activityId).maybeSingle(),
+  ])
+  const concluido = (st?.valor as string) ?? 'concluido'
+  if (!act || act.status === concluido) return {}
+
+  const { error } = await sb.rpc('update_activity_status', {
+    p_user_id: userId, p_activity_id: activityId,
+    p_new_status: concluido, p_comment: 'Material enviado ao veículo (entrega da mídia).',
+  })
+  if (error) return { error: error.message }
+
+  // Síncrono, como no "Feito" do painel: a tela precisa dizer na hora para quando
+  // a rotina voltou. Devolve false quando não há recorrência.
+  const { data: recorreu, error: e2 } = await sb.rpc('recur_activity', {
+    p_user_id: userId, p_activity_id: activityId,
+  })
+  if (e2) return { error: e2.message }
+
+  let novoPrazo: string | null = null
+  if (recorreu) {
+    const { data } = await sb.from('activities').select('due_date').eq('id', activityId).maybeSingle()
+    novoPrazo = (data?.due_date as string) ?? null
+  }
+
+  after(() => dispatchPushNotificacoes().catch(() => {}))
+  return { tarefa: { titulo: act.title as string, recorreu: !!recorreu, novoPrazo } }
 }
 
 export async function excluirEntrega(orgSlug: string, id: string) {

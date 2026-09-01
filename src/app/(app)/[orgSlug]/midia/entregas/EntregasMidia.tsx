@@ -10,6 +10,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import {
   salvarEntrega, mudarSituacaoEntrega, excluirEntrega, tarefasDoCliente,
 } from '@/app/actions/midia-hub'
@@ -68,6 +69,11 @@ function lembrarCampanha(workspaceId: string, campaignId: string) {
 }
 
 type Filtro = 'pendentes' | 'liberadas' | 'todas'
+
+// A situação no banco continua 'liberado'; no texto o gesto é "enviei ao veículo".
+const ROTULO_FILTRO: Record<Filtro, string> = {
+  pendentes: 'pendentes', liberadas: 'enviadas', todas: 'todas',
+}
 
 export function EntregasMidia({ orgSlug, entregas, clientes, statusCfg }: {
   orgSlug: string
@@ -138,7 +144,7 @@ export function EntregasMidia({ orgSlug, entregas, clientes, statusCfg }: {
             <button key={f} onClick={() => setFiltro(f)} aria-pressed={filtro === f}
               className={cn('px-3.5 py-1.5 text-sm font-medium rounded-[10px] transition-colors capitalize',
                 filtro === f ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
-              {f}
+              {ROTULO_FILTRO[f]}
             </button>
           ))}
         </div>
@@ -183,15 +189,28 @@ function LinhaEntrega({ orgSlug, e, cfg, onEditar }: {
   orgSlug: string; e: EntregaRow; cfg: Map<string, StatusCfg>; onEditar: () => void
 }) {
   const [pending, start] = useTransition()
+  const [confirmar, setConfirmar] = useState(false)
   const dias = diasAte(e.prazoEnvio)
   const st = e.tarefa?.status ? cfg.get(e.tarefa.status) : null
   const liberada = e.situacao === 'liberado'
 
+  // Enviar ao veículo conclui a tarefa. Quando ela ainda está com a criação isso
+  // pula o quadro inteiro e não tem volta pelo lado da mídia — aí confirma.
+  function enviar() {
+    if (e.tarefa && !e.tarefa.materialPronto) { setConfirmar(true); return }
+    situacao('liberado')
+  }
+
   function situacao(s: 'aguardando' | 'liberado' | 'cancelado') {
     start(async () => {
       const r = await mudarSituacaoEntrega(orgSlug, e.id, s)
-      if (r?.error) toast.error(r.error)
-      else toast.success(s === 'liberado' ? 'Entrega liberada.' : 'Entrega reaberta.')
+      if (r?.error) { toast.error(r.error); return }
+      setConfirmar(false)
+      if (s !== 'liberado') { toast.success('Entrega reaberta — a tarefa segue concluída.'); return }
+      const t = r.tarefa
+      if (!t) toast.success('Marcado como enviado ao veículo.')
+      else if (t.recorreu) toast.success(`Enviado ao veículo. A rotina volta em ${fmt(t.novoPrazo)}.`)
+      else toast.success('Enviado ao veículo e tarefa concluída.')
     })
   }
 
@@ -258,13 +277,27 @@ function LinhaEntrega({ orgSlug, e, cfg, onEditar }: {
               {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />} Reabrir
             </button>
           ) : (
-            <button onClick={() => situacao('liberado')} disabled={pending}
+            <button onClick={enviar} disabled={pending}
+              title={e.tarefa ? 'Marca a entrega como enviada e conclui a tarefa' : 'Marca a entrega como enviada ao veículo'}
               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 text-[#fff] hover:bg-emerald-700 transition-colors disabled:opacity-60">
-              {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Liberar
+              {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Enviei ao veículo
             </button>
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmar}
+        title="Concluir a tarefa junto?"
+        description={`A tarefa "${e.tarefa?.titulo ?? ''}" ainda está com a criação`
+          + `${st ? ` (${st.label})` : ''}. Marcar como enviado ao veículo também CONCLUI a tarefa`
+          + ` — e reabrir a entrega depois não desfaz isso.`}
+        confirmLabel="Enviei ao veículo"
+        cancelLabel="Cancelar"
+        loading={pending}
+        onConfirm={() => situacao('liberado')}
+        onCancel={() => setConfirmar(false)}
+      />
 
       {e.conflitoPrazo && !liberada && (
         <p className="mt-2.5 text-[12px] text-red-700 bg-red-50 rounded-lg px-3 py-2 inline-flex items-center gap-1.5">
