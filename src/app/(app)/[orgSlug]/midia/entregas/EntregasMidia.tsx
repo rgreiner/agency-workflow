@@ -46,6 +46,27 @@ function diasAte(prazo: string | null): number | null {
     (new Date(prazo.slice(0, 10) + 'T12:00:00').getTime() - new Date(hojeBR() + 'T12:00:00').getTime()) / 86400000)
 }
 
+/**
+ * Sentinela do select "Tarefa da criação". O vazio ('') já significava "material
+ * pronto, não passa pela criação" — usar o mesmo vazio pra "ainda não tem tarefa"
+ * deixava os dois casos indistinguíveis, e por isso a entrega nunca chegava no
+ * atendimento. Este valor separa os dois e é o que dispara a criação do briefing.
+ */
+const NOVA_TAREFA = '__briefing__'
+
+// Última campanha usada por cliente — a mídia repete o mesmo projeto o tempo todo.
+const LS_CAMPANHA = 'flow:midia:entrega:campanha:v1'
+
+function lerMapaCampanha(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(LS_CAMPANHA) ?? '{}') as Record<string, string> }
+  catch { return {} }
+}
+function lembrarCampanha(workspaceId: string, campaignId: string) {
+  try {
+    localStorage.setItem(LS_CAMPANHA, JSON.stringify({ ...lerMapaCampanha(), [workspaceId]: campaignId }))
+  } catch { /* storage indisponível (aba anônima) — só perde a memória */ }
+}
+
 type Filtro = 'pendentes' | 'liberadas' | 'todas'
 
 export function EntregasMidia({ orgSlug, entregas, clientes, statusCfg }: {
@@ -282,17 +303,27 @@ function ModalEntrega({ orgSlug, clientes, entrega, onClose }: {
     observacao: entrega?.observacao ?? '',
   })
   const [tarefas, setTarefas] = useState<{ id: string; titulo: string; prazo: string | null; campanha: string; campaignId: string }[]>([])
+  const [campanhas, setCampanhas] = useState<{ id: string; nome: string }[]>([])
   const [carregandoTarefas, setCarregandoTarefas] = useState(false)
 
   async function trocarCliente(id: string) {
     setForm(f => ({ ...f, workspaceId: id, activityId: '', campaignId: '' }))
     setTarefas([])
+    setCampanhas([])
     if (!id) return
     setCarregandoTarefas(true)
     const r = await tarefasDoCliente(orgSlug, id)
     setCarregandoTarefas(false)
     if ('error' in r && r.error) { toast.error(r.error); return }
     setTarefas(r.tarefas ?? [])
+    setCampanhas(r.campanhas ?? [])
+  }
+
+  // Projeto sugerido: o último usado neste cliente, se ainda existir.
+  function sugerirCampanha(): string {
+    if (form.campaignId) return form.campaignId
+    const ultima = lerMapaCampanha()[form.workspaceId]
+    return ultima && campanhas.some(c => c.id === ultima) ? ultima : ''
   }
 
   // Ao abrir para editar, já traz as tarefas do cliente para poder trocar o vínculo.
@@ -306,6 +337,13 @@ function ModalEntrega({ orgSlug, clientes, entrega, onClose }: {
   function salvar() {
     if (!form.workspaceId) { toast.error('Escolha o cliente.'); return }
     if (!form.titulo.trim()) { toast.error('Dê um nome à entrega.'); return }
+    const abrindoBriefing = form.activityId === NOVA_TAREFA
+    if (abrindoBriefing && !form.campaignId) {
+      toast.error('Escolha o projeto onde a tarefa vai nascer.'); return
+    }
+    if (abrindoBriefing && !form.prazoEnvio) {
+      toast.error('Informe o prazo de envio — é dele que sai o prazo da tarefa.'); return
+    }
     start(async () => {
       const tarefa = tarefas.find(t => t.id === form.activityId)
       const r = await salvarEntrega(orgSlug, {
@@ -315,13 +353,20 @@ function ModalEntrega({ orgSlug, clientes, entrega, onClose }: {
         veiculo: form.veiculo,
         formato: form.formato,
         prazoEnvio: form.prazoEnvio || null,
-        activityId: form.activityId || null,
+        activityId: abrindoBriefing ? null : (form.activityId || null),
         // A campanha vem da tarefa quando há vínculo — evita escolher duas vezes.
         campaignId: tarefa?.campaignId ?? form.campaignId ?? null,
         observacao: form.observacao,
+        briefingEmCampanha: abrindoBriefing ? form.campaignId : null,
       })
-      if ('error' in r && r.error) { toast.error(r.error); return }
-      toast.success(entrega ? 'Entrega atualizada.' : 'Entrega criada.')
+      if ('error' in r) { toast.error(r.error); return }
+      if (abrindoBriefing) {
+        lembrarCampanha(form.workspaceId, form.campaignId)
+        if (r.briefingErro) toast.warning(`Entrega salva, mas o briefing não abriu: ${r.briefingErro}`)
+        else toast.success('Entrega salva e briefing aberto para o atendimento.')
+      } else {
+        toast.success(entrega ? 'Entrega atualizada.' : 'Entrega criada.')
+      }
       onClose()
     })
   }
@@ -382,15 +427,45 @@ function ModalEntrega({ orgSlug, clientes, entrega, onClose }: {
             Tarefa da criação {carregandoTarefas && <span className="text-gray-300">· carregando…</span>}
           </span>
           <div className="mt-0.5">
-            <Select value={form.activityId} onChange={v => setForm(f => ({ ...f, activityId: v }))}
-              options={[{ value: '', label: 'Sem tarefa (material pronto)' },
-                ...tarefas.map(t => ({ value: t.id, label: `${t.titulo}${t.prazo ? ` · ${fmt(t.prazo)}` : ''}` }))]}
+            <Select
+              value={form.activityId}
+              onChange={v => setForm(f => ({
+                ...f,
+                activityId: v,
+                // Ao escolher "precisa de criação", já sugere o último projeto usado.
+                campaignId: v === NOVA_TAREFA ? sugerirCampanha() : f.campaignId,
+              }))}
+              options={[
+                { value: NOVA_TAREFA, label: 'Precisa de criação — abrir briefing' },
+                { value: '', label: 'Material pronto — não passa pela criação' },
+                ...tarefas.map(t => ({ value: t.id, label: `${t.titulo}${t.prazo ? ` · ${fmt(t.prazo)}` : ''}` })),
+              ]}
               placeholder={form.workspaceId ? 'Vincular a uma tarefa' : 'Escolha o cliente primeiro'} />
           </div>
-          <span className="text-[11px] text-gray-400 mt-1 block">
-            O prazo da tarefa continua sendo o da criação. Se ele passar do envio, a entrega avisa.
-          </span>
+          {form.activityId !== NOVA_TAREFA && (
+            <span className="text-[11px] text-gray-400 mt-1 block">
+              O prazo da tarefa continua sendo o da criação. Se ele passar do envio, a entrega avisa.
+            </span>
+          )}
         </label>
+
+        {form.activityId === NOVA_TAREFA && (
+          <div className="rounded-xl bg-orange-50 border border-orange-100 p-3 space-y-2">
+            <label className="block">
+              <span className="text-[11px] text-orange-800">Projeto onde a tarefa vai nascer</span>
+              <div className="mt-0.5">
+                <Select value={form.campaignId} onChange={v => setForm(f => ({ ...f, campaignId: v }))}
+                  options={campanhas.map(c => ({ value: c.id, label: c.nome }))}
+                  placeholder={campanhas.length ? 'Escolha o projeto' : 'Este cliente não tem projeto ativo'} />
+              </div>
+            </label>
+            <p className="text-[11px] text-orange-800/80">
+              A tarefa nasce em <b>Briefing</b>, <b>sem responsável</b> — cai na fila &ldquo;Sem responsável&rdquo;
+              do atendimento — com prazo {form.prazoEnvio ? fmt(form.prazoEnvio) : 'igual ao do envio'} e a pasta
+              do Drive já criada. Veículo, especificação e observação vão no briefing.
+            </p>
+          </div>
+        )}
 
         <label className="block">
           <span className="text-[11px] text-gray-400">Observação</span>

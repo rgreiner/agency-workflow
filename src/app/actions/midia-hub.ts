@@ -7,6 +7,8 @@ import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { dispatchPushNotificacoes } from '@/lib/push'
 import { assertMidiaAccess } from '@/lib/midia-hub'
+import { provisionActivitiesDrive } from '@/lib/drive-provision'
+import { porNome } from '@/lib/utils'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -81,11 +83,44 @@ export interface EntregaInput {
   activityId?: string | null
   campaignId?: string | null
   observacao?: string | null
+  /**
+   * Campanha onde a entrega deve ABRIR um briefing novo (em vez de vincular uma
+   * tarefa que já existe). Sem isso, `activityId` vazio continua significando
+   * "material pronto, não passa pela criação" — os dois vazios eram o mesmo
+   * estado e por isso nada chegava no atendimento.
+   */
+  briefingEmCampanha?: string | null
 }
 
-/** Cria ou edita a entrega. O prazo aqui é o da MÍDIA — nunca toca o da tarefa. */
+const escHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+const dataBR = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
+
+/** Briefing inicial da tarefa com o que a mídia já preencheu na entrega. */
+function briefingDaEntrega(e: EntregaInput): string {
+  const l: string[] = ['<p><em>Tarefa aberta a partir de uma entrega de mídia.</em></p>']
+  if (e.prazoEnvio) l.push(`<p><strong>Envio ao veículo:</strong> ${escHtml(dataBR(e.prazoEnvio))}</p>`)
+  if (e.veiculo) l.push(`<p><strong>Veículo:</strong> ${escHtml(e.veiculo)}</p>`)
+  if (e.formato) l.push(`<p><strong>Especificação:</strong> ${escHtml(e.formato)}</p>`)
+  if (e.observacao) l.push(`<p><strong>Observação:</strong> ${escHtml(e.observacao)}</p>`)
+  return l.join('')
+}
+
+/**
+ * Cria ou edita a entrega. O prazo aqui é o da MÍDIA — nunca toca o de uma
+ * tarefa que já existe.
+ *
+ * Com `briefingEmCampanha`, a entrega ABRE a tarefa: nasce em Briefing, sem
+ * responsável (cai na fila "Sem responsável" do atendimento, mesma régua da
+ * mig. 253) e com o prazo do envio. A entrega é gravada ANTES da tarefa de
+ * propósito — se a criação falhar, sobra uma entrega sem vínculo (recuperável
+ * reabrindo o modal) em vez de uma tarefa órfã que ninguém liga a nada.
+ */
 export async function salvarEntrega(orgSlug: string, e: EntregaInput) {
-  const { supabase } = await assertMidiaAccess(orgSlug)
+  const { supabase, userId } = await assertMidiaAccess(orgSlug)
+  const abrirEm = (e.briefingEmCampanha ?? '').trim()
+
   const { data, error } = await (supabase as any).rpc('midia_entrega_salvar', {
     p_id: e.id || null,
     p_workspace_id: e.workspaceId,
@@ -93,14 +128,68 @@ export async function salvarEntrega(orgSlug: string, e: EntregaInput) {
     p_veiculo: e.veiculo || null,
     p_formato: e.formato || null,
     p_prazo_envio: e.prazoEnvio || null,
-    p_activity_id: e.activityId || null,
-    p_campaign_id: e.campaignId || null,
+    p_activity_id: abrirEm ? null : (e.activityId || null),
+    p_campaign_id: abrirEm || e.campaignId || null,
     p_observacao: e.observacao || null,
   })
   if (error) return { error: error.message }
+  const id = data as string
+
+  let briefingErro: string | undefined
+  let briefingId: string | undefined
+  if (abrirEm) {
+    const r = await abrirBriefing(supabase, userId, orgSlug, id, abrirEm, e)
+    briefingErro = r.erro
+    briefingId = r.activityId
+  }
+
   revalidatePath(`/${orgSlug}/midia/entregas`)
   revalidatePath(`/${orgSlug}/midia`)
-  return { id: data as string }
+  if (abrirEm) revalidatePath(`/${orgSlug}`, 'layout')
+  return { id, briefingErro, briefingId }
+}
+
+/** Cria a tarefa de briefing e devolve o vínculo pra entrega. Não lança. */
+async function abrirBriefing(
+  supabase: any, userId: string, orgSlug: string,
+  entregaId: string, campaignId: string, e: EntregaInput,
+): Promise<{ activityId?: string; erro?: string }> {
+  // Sem p_assignees de propósito (mig. 253): a mídia não decide quem produz.
+  const { data: activityId, error } = await supabase.rpc('create_activity', {
+    p_user_id: userId,
+    p_campaign_id: campaignId,
+    p_title: e.titulo.trim(),
+    p_description: briefingDaEntrega(e),
+    p_status: 'briefing',
+    p_priority: 'medium',
+    p_complexity: 'medium',
+    p_due_date: e.prazoEnvio || null,
+    p_estimated_hours: null,
+    p_start_date: null,
+  })
+  if (error || !activityId) return { erro: error?.message ?? 'A tarefa não foi criada.' }
+
+  const { error: errVinculo } = await supabase.rpc('midia_entrega_salvar', {
+    p_id: entregaId,
+    p_workspace_id: e.workspaceId,
+    p_titulo: e.titulo,
+    p_veiculo: e.veiculo || null,
+    p_formato: e.formato || null,
+    p_prazo_envio: e.prazoEnvio || null,
+    p_activity_id: activityId,
+    p_campaign_id: campaignId,
+    p_observacao: e.observacao || null,
+  })
+  if (errVinculo) return { activityId: activityId as string, erro: errVinculo.message }
+
+  await provisionActivitiesDrive(supabase, {
+    campaignId, userId,
+    items: [{ activityId: activityId as string, title: e.titulo.trim(), date: e.prazoEnvio ?? null }],
+  })
+  // Aviso de tarefa nova sem dono sai pelo trigger da criação; o push é imediato
+  // pra não esperar a varredura de 15min.
+  after(() => dispatchPushNotificacoes().catch(() => {}))
+  return { activityId: activityId as string }
 }
 
 /** 'liberado' = material enviado ao veículo. Reversível. */
@@ -121,24 +210,41 @@ export async function excluirEntrega(orgSlug: string, id: string) {
   return {}
 }
 
-/** Tarefas ativas do cliente, para vincular a entrega à peça da criação. */
+/**
+ * Tarefas ativas do cliente (pra vincular a entrega à peça da criação) e os
+ * projetos ativos (pra escolher onde um briefing novo vai nascer). Vêm juntos
+ * porque a tela pede os dois no mesmo momento — ao trocar de cliente.
+ */
 export async function tarefasDoCliente(orgSlug: string, workspaceId: string) {
   const { supabase } = await assertMidiaAccess(orgSlug)
-  const { data, error } = await (supabase as any)
-    .from('activities')
-    .select('id, title, status, due_date, campaign_id, campaigns!inner(id, name, workspace_id)')
-    .eq('campaigns.workspace_id', workspaceId)
-    .eq('archived', false)
-    .order('due_date', { ascending: true, nullsFirst: false })
-    .limit(300)
-  if (error) return { error: error.message }
+  const [resT, resC] = await Promise.all([
+    (supabase as any)
+      .from('activities')
+      .select('id, title, status, due_date, campaign_id, campaigns!inner(id, name, workspace_id)')
+      .eq('campaigns.workspace_id', workspaceId)
+      .eq('archived', false)
+      .order('due_date', { ascending: true, nullsFirst: false })
+      .limit(300),
+    (supabase as any)
+      .from('campaigns')
+      .select('id, name')
+      .eq('workspace_id', workspaceId)
+      .eq('archived', false)
+      .limit(200),
+  ])
+  if (resT.error) return { error: resT.error.message as string }
+  if (resC.error) return { error: resC.error.message as string }
   return {
-    tarefas: (data ?? []).map((a: any) => ({
+    tarefas: (resT.data ?? []).map((a: any) => ({
       id: a.id as string, titulo: a.title as string, status: a.status as string,
       prazo: (a.due_date ?? null) as string | null,
       campanha: (a.campaigns?.name ?? '') as string,
       campaignId: a.campaign_id as string,
     })),
+    // porNome: o Postgres Alpine ordena por bytes e joga acento pro fim.
+    campanhas: ((resC.data ?? []) as { id: string; name: string }[])
+      .map(c => ({ id: c.id, nome: c.name }))
+      .sort(porNome(c => c.nome)),
   }
 }
 
