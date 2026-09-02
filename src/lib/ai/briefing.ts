@@ -187,6 +187,9 @@ async function runGemini(userMsg: string): Promise<{ model: string; output: RawO
     model: process.env.BRIEFING_MODEL_GEMINI,
     // Modelo de raciocínio divide este orçamento com o pensamento (ver lib/ai/gemini.ts).
     maxOutputTokens: 8192,
+    // A pessoa está esperando com o spinner: modelo que não responde em 25 s cede a
+    // vez pro reserva (em 02/09 o 3.6-flash levou 45 s num "ok"; o 3.8-flash, 2 s).
+    timeoutMs: 25_000,
   })
   return { model, output: data }
 }

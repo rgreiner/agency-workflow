@@ -43,7 +43,10 @@ export function mensagemErroIA(
   if (status === 500 || status === 503 || bruto.includes('overloaded') || bruto.includes('unavailable')) {
     return 'A IA está sobrecarregada no momento. Tente de novo em instantes.'
   }
-  if (bruto.includes('timeout') || bruto.includes('timed out') || bruto.includes('fetch failed') || bruto.includes('econnreset') || bruto.includes('falha de rede')) {
+  if (bruto.includes('timeout') || bruto.includes('timed out')) {
+    return 'A IA está lenta demais agora e não respondeu a tempo. Tente de novo em instantes.'
+  }
+  if (bruto.includes('fetch failed') || bruto.includes('econnreset') || bruto.includes('falha de rede')) {
     return 'Não consegui falar com a IA (falha de rede). Tente de novo.'
   }
   return fallback

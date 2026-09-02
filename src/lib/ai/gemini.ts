@@ -17,6 +17,8 @@ import 'server-only'
  *
  * Modelo: GEMINI_MODEL para todo mundo, com override por uso
  * (REVIEW_MODEL_GEMINI, BRIEFING_MODEL_GEMINI, FOLHA_MODEL_GEMINI, GUIA_MODEL_GEMINI).
+ * Modelo lotado (503/429 por minuto/timeout) cai na cadeia de reserva — ver
+ * FALLBACK_MODELS e GEMINI_FALLBACK_MODELS mais abaixo.
  */
 
 /** Parte de entrada — texto ou mídia (imagem/PDF) em base64. */
@@ -27,6 +29,8 @@ export type IAPart =
 /** Erro de IA com o status HTTP preservado (lib/ai/erro.ts traduz pela pessoa). */
 export class ErroIA extends Error {
   status: number
+  /** Falha de CAPACIDADE (503, 429 por minuto, timeout, rede) — outro modelo tende a responder. */
+  transitorio = false
   constructor(status: number, message: string) {
     super(message)
     this.name = 'ErroIA'
@@ -106,6 +110,8 @@ export interface GeminiJsonOpts {
   model?: string | null
   maxOutputTokens?: number
   temperature?: number
+  /** Prazo por tentativa; estourou = pula pro próximo modelo da cadeia. Default 3 min (PDF grande). */
+  timeoutMs?: number
 }
 
 /**
@@ -138,7 +144,7 @@ export async function geminiJson<T>(opts: GeminiJsonOpts): Promise<{ model: stri
     },
   }
 
-  const { model, res } = await postNoModelo(pedido, JSON.stringify(body))
+  const { model, res } = await postNoModelo(pedido, JSON.stringify(body), opts.timeoutMs ?? 180_000)
   const json = await res.json() as {
     candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[]
     promptFeedback?: { blockReason?: string }
@@ -160,26 +166,64 @@ export async function geminiJson<T>(opts: GeminiJsonOpts): Promise<{ model: stri
 }
 
 /**
- * O Google APOSENTA modelo: `gemini-2.5-flash` virou 404 em 19/08/2026 com o recado
- * "no longer available to new users. Please update your code to use
- * models/gemini-3.6-flash". Quem morre nisso não é o código (o default da casa já é
- * o modelo novo) e sim uma env var velha no Coolify — e o efeito é a revisão inteira
- * parar até alguém mexer no painel. Então: 404 de modelo NÃO é fim de linha. Tenta de
- * novo com o substituto que o próprio Google indica na mensagem (ou com o default da
- * casa) e segue o trabalho, deixando o aviso no log pra env ser corrigida.
+ * Modelos tentados, nesta ordem, quando o pedido cai por CAPACIDADE — 503 "high
+ * demand", 429 de limite por minuto, sem resposta no prazo, rede. Medido em
+ * 02/09/2026 com a chave de produção: o `gemini-3.6-flash` devolveu 503 na
+ * otimização de briefing e levou 45 s pra responder "ok", enquanto o
+ * `gemini-3.8-flash` respondia em 2 s. Modelo lotado não é motivo pra tela falhar:
+ * outro da mesma família responde igual pro que o Flow pede (JSON estruturado).
+ * GEMINI_FALLBACK_MODELS (lista separada por vírgula) troca a cadeia; vazia desliga.
  */
-async function postNoModelo(pedido: string, body: string): Promise<{ model: string; res: Response }> {
-  const { url, headers } = await geminiEndpoint(pedido)
-  try {
-    return { model: pedido, res: await postComRetry(url, headers, body) }
-  } catch (e) {
-    if (!(e instanceof ErroIA) || e.status !== 404) throw e
-    const substituto = modeloSubstituto(e.message, pedido)
-    if (!substituto) throw e
-    console.warn(`[gemini] modelo "${pedido}" não existe mais; usando "${substituto}". Corrija GEMINI_MODEL/REVIEW_MODEL_GEMINI no Coolify.`)
-    const alt = await geminiEndpoint(substituto)
-    return { model: substituto, res: await postComRetry(alt.url, alt.headers, body) }
+const FALLBACK_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite']
+
+function modelosFallback(pedido: string): string[] {
+  const env = process.env.GEMINI_FALLBACK_MODELS
+  const lista = env === undefined ? FALLBACK_MODELS : env.split(',').map(s => s.trim()).filter(Boolean)
+  return lista.filter(m => m !== pedido)
+}
+
+/**
+ * Um pedido, vários modelos possíveis:
+ *
+ *  • 404 — o Google APOSENTA modelo: `gemini-2.5-flash` virou 404 em 19/08/2026 com o
+ *    recado "no longer available to new users. Please update your code to use
+ *    models/gemini-3.6-flash". Quem morre nisso não é o código (o default da casa já
+ *    é o modelo novo) e sim uma env var velha no Coolify. Então tenta de novo com o
+ *    substituto que o próprio Google indica na mensagem (ou com o default da casa) e
+ *    deixa o aviso no log pra env ser corrigida.
+ *  • capacidade (503/429 por minuto/timeout/rede) — percorre a cadeia de reserva.
+ *    Se todos caírem, o erro que vale é o do modelo pedido (é o que a env configura).
+ */
+async function postNoModelo(pedido: string, body: string, timeoutMs: number): Promise<{ model: string; res: Response }> {
+  const fila = [pedido, ...modelosFallback(pedido)]
+  const tentados = new Set<string>()
+  let primeiroErro: ErroIA | null = null
+
+  while (fila.length) {
+    const modelo = fila.shift() as string
+    if (tentados.has(modelo)) continue
+    tentados.add(modelo)
+    try {
+      // O modelo pedido merece insistência; o reserva é só uma segunda chance.
+      return { model: modelo, res: await postComRetry(modelo, body, timeoutMs, modelo === pedido ? 3 : 2) }
+    } catch (e) {
+      if (!(e instanceof ErroIA)) throw e
+      if (e.status === 404) {
+        const substituto = modeloSubstituto(e.message, modelo)
+        if (substituto && !tentados.has(substituto)) {
+          console.warn(`[gemini] modelo "${modelo}" não existe mais; usando "${substituto}". Corrija GEMINI_MODEL/REVIEW_MODEL_GEMINI no Coolify.`)
+          fila.unshift(substituto)
+          continue
+        }
+        if (modelo !== pedido) continue   // reserva aposentado: pula pro próximo
+        throw e
+      }
+      if (!e.transitorio) throw e
+      primeiroErro ??= e
+      if (fila.length) console.warn(`[gemini] "${modelo}" indisponível (${e.message.slice(0, 120)}); tentando "${fila[0]}".`)
+    }
   }
+  throw primeiroErro ?? new ErroIA(0, 'Gemini: falha desconhecida.')
 }
 
 /** Modelo sugerido pelo próprio 404 ("use models/X"), senão o default da casa. */
@@ -189,22 +233,30 @@ function modeloSubstituto(mensagem: string, pedido: string): string | null {
   return alvo === pedido ? null : alvo
 }
 
+const transitorio = (e: ErroIA) => { e.transitorio = true; return e }
+
 /**
  * 429/500/503 do Gemini costumam ser passageiros e o retry resolve de graça — MENOS
  * quando o 429 é falta de crédito/cota, que não melhora esperando: aí levanta na hora
  * pra pessoa ver o recado certo em vez de encarar 3 tentativas de espera.
+ * Sem resposta no prazo também não repete no mesmo modelo: insistir num modelo lento
+ * só custa mais espera — levanta como transitório e o chamador passa pro próximo.
  */
-async function postComRetry(url: string, headers: Record<string, string>, body: string): Promise<Response> {
-  const TENTATIVAS = 3
+async function postComRetry(modelo: string, body: string, timeoutMs: number, tentativas: number): Promise<Response> {
+  const { url, headers } = await geminiEndpoint(modelo)
   let ultimo: ErroIA | null = null
 
-  for (let i = 0; i < TENTATIVAS; i++) {
+  for (let i = 0; i < tentativas; i++) {
     let res: Response
     try {
-      res = await fetch(url, { method: 'POST', headers, body })
+      res = await fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(timeoutMs) })
     } catch (e) {
-      ultimo = new ErroIA(0, `Falha de rede ao falar com o Gemini: ${e instanceof Error ? e.message : String(e)}`)
-      if (i === TENTATIVAS - 1) throw ultimo
+      const nome = (e as { name?: string } | null)?.name
+      if (nome === 'TimeoutError' || nome === 'AbortError') {
+        throw transitorio(new ErroIA(0, `Gemini (${modelo}): sem resposta em ${Math.round(timeoutMs / 1000)}s (timeout).`))
+      }
+      ultimo = transitorio(new ErroIA(0, `Falha de rede ao falar com o Gemini: ${e instanceof Error ? e.message : String(e)}`))
+      if (i === tentativas - 1) throw ultimo
       await espera(i)
       continue
     }
@@ -213,8 +265,9 @@ async function postComRetry(url: string, headers: Record<string, string>, body: 
     const texto = await res.text().catch(() => res.statusText)
     const erro = new ErroIA(res.status, `Gemini ${res.status}: ${texto.slice(0, 400)}`)
     const semSaldo = /credit|billing|quota|exceeded/i.test(texto)
-    const vaiMelhorar = (res.status === 429 && !semSaldo) || res.status === 500 || res.status === 503
-    if (!vaiMelhorar || i === TENTATIVAS - 1) throw erro
+    const capacidade = (res.status === 429 && !semSaldo) || res.status === 500 || res.status === 503
+    if (capacidade) erro.transitorio = true
+    if (!capacidade || i === tentativas - 1) throw erro
     ultimo = erro
     await espera(i)
   }

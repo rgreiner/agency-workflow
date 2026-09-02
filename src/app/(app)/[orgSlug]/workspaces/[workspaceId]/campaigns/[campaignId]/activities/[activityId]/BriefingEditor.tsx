@@ -122,14 +122,16 @@ export function BriefingEditor({ activityId, path, description, canEdit }: {
     setIsImproving(true)
     setFaltandoIA([])
     const anterior = editor.getHTML()
+    // Motivo em pt-BR vindo da rota (sobrecarga, sem crédito…); rede/parse cai no genérico.
+    let motivo = ''
     try {
       const res = await fetch('/api/ai/improve-briefing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: texto }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { motivo = typeof data.error === 'string' ? data.error : ''; throw new Error('api') }
       if (data.briefing) {
         editor.commands.setContent(briefingToEditorHTML(data.briefing))
         toast.success('Briefing otimizado.', {
@@ -141,7 +143,7 @@ export function BriefingEditor({ activityId, path, description, canEdit }: {
         toast.error('A IA não retornou um briefing. Tente de novo.')
       }
     } catch {
-      toast.error('Não foi possível otimizar o briefing agora.')
+      toast.error(motivo || 'Não foi possível otimizar o briefing agora.', { duration: motivo ? 8000 : 4000 })
     } finally {
       setIsImproving(false)
     }

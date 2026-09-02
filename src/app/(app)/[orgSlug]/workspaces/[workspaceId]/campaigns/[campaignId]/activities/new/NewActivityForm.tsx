@@ -237,14 +237,16 @@ export function NewActivityForm({ members, currentUserId }: {
     setIsImprovingAI(true)
     setFaltandoIA([])
     const anterior = form.description
+    // Motivo em pt-BR vindo da rota (sobrecarga, sem crédito…); rede/parse cai no genérico.
+    let motivo = ''
     try {
       const res = await fetch('/api/ai/improve-briefing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: form.description }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { motivo = typeof data.error === 'string' ? data.error : ''; throw new Error('api') }
       if (data.briefing) {
         setF('description', data.briefing)
         toast.success('Briefing otimizado.', {
@@ -256,7 +258,7 @@ export function NewActivityForm({ members, currentUserId }: {
         toast.error('A IA não retornou um briefing. Tente de novo.')
       }
     } catch {
-      toast.error('Não foi possível otimizar o briefing agora.')
+      toast.error(motivo || 'Não foi possível otimizar o briefing agora.', { duration: motivo ? 8000 : 4000 })
     } finally {
       setIsImprovingAI(false)
     }
