@@ -233,16 +233,18 @@ export function DocumentEditor({
         </Link>
 
         <div className="flex items-center gap-2">
-          {saveStatus === 'saving' && (
-            <span className="flex items-center gap-1 text-xs text-gray-400">
-              <Loader2 className="w-3 h-3 animate-spin" /> Salvando…
-            </span>
-          )}
-          {saveStatus === 'saved' && (
-            <span className="flex items-center gap-1 text-xs text-green-500">
-              <Check className="w-3 h-3" /> Salvo
-            </span>
-          )}
+          {/* Largura fixa e opacidade: o status troca sem empurrar os botões
+              ao lado — o pulo de layout era o que mais chamava atenção aqui.
+              Some por opacity em vez de desmontar, para não piscar. */}
+          <span aria-live="polite" className={cn(
+            'flex items-center gap-1 text-xs w-[4.5rem] justify-end transition-opacity duration-200',
+            saveStatus === 'idle' ? 'opacity-0' : 'opacity-100',
+            saveStatus === 'saved' ? 'text-emerald-600' : 'text-gray-400',
+          )}>
+            {saveStatus === 'saved'
+              ? <><Check className="w-3 h-3" /> Salvo</>
+              : <><Loader2 className="w-3 h-3 animate-spin" /> Salvando…</>}
+          </span>
 
           {canManage && (
             <div className="flex items-center gap-1.5">
@@ -431,9 +433,19 @@ function Btn({ onClick, active, title, children }: { onClick: () => void; active
     <button
       onClick={onClick}
       title={title}
+      // type="button": dentro de qualquer form, o default 'submit' dispararia
+      // envio ao formatar texto.
+      type="button"
+      // O mousedown rouba o foco do editor e a formatação cai no lugar errado
+      // (ou some a seleção). Prevenir mantém o cursor onde está.
+      onMouseDown={e => e.preventDefault()}
       className={cn(
-        'p-1.5 rounded transition-colors',
-        active ? 'bg-orange-100 text-orange-700' : 'text-gray-400 hover:text-gray-800 hover:bg-gray-100'
+        // transition-colors, nunca 'all': só cor muda no hover.
+        'p-1.5 rounded transition-colors duration-150 active:scale-[0.97]',
+        // Hover só onde existe mouse — no toque, :hover gruda depois do tap.
+        active
+          ? 'bg-orange-100 text-orange-700'
+          : 'text-gray-400 hover:text-gray-800 [@media(hover:hover)]:hover:bg-gray-100'
       )}
     >
       {children}

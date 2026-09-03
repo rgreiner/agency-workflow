@@ -260,6 +260,22 @@ button:focus-visible,
   min-height: 400px;
   color: var(--color-gray-700);
   line-height: 1.75;
+  /* Foco de escrita: o cursor precisa ser visível e a caixa toda clicável —
+     min-height sozinho não estende a área de clique até o fim da página. */
+  caret-color: var(--color-orange-600);
+  padding-bottom: 40vh;
+}
+
+/* Somente leitura: some o cursor de texto e o caret piscando, que sugerem
+   que dá para escrever. */
+.doc-editor .ProseMirror[contenteditable='false'] {
+  caret-color: transparent;
+  cursor: default;
+}
+
+/* Seleção com o accent da casa, em vez do azul do sistema. */
+.doc-editor .ProseMirror ::selection {
+  background: color-mix(in srgb, var(--color-orange-600) 22%, transparent);
 }
 
 .doc-editor .ProseMirror p { margin-bottom: 0.75rem; }
