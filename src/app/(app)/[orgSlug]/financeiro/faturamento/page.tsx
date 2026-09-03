@@ -1,6 +1,6 @@
 import { assertFinanceAccess } from '@/lib/finance'
 import { unwrap, unwrapOne } from '@/lib/supabase/unwrap'
-import { formatBRL, parseMoney, FATURAMENTO_PAGADOR } from '@/lib/midia'
+import { formatBRL, FATURAMENTO_PAGADOR, producaoDe } from '@/lib/midia'
 import { FaturamentoFeesTable } from './FaturamentoFeesTable'
 import { FaturamentoMidiaTable, type MidiaView } from './FaturamentoMidiaTable'
 import type { ContatoCard } from './ContatosButton'
@@ -137,16 +137,6 @@ export default async function FaturamentoPage({
   const defaultConta = (contasAtivas.find(c => c.favorita) ?? contasAtivas[0])?.id ?? ''
   const cat = { contas, categorias, centros, defaultConta }
 
-  /** Mesma conta da RPC gerar_lancamento_midia — o valor conferido tem que ser o lançado.
-   *  Os campos são TEXTO do form ("1.234,56"), então lê com parseMoney, igual ao _br_num. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function comissaoProducaoDe(det: any): number {
-    const v = parseMoney(String(det?.producao_valor ?? ''))
-    const q = Math.max(1, parseInt(String(det?.producao_quantidade ?? '1'), 10) || 1)
-    const pct = parseMoney(String(det?.producao_comissao_pct ?? ''))
-    return Math.round(v * q * pct) / 100
-  }
-
   /**
    * Sai da fila quem já foi lançado — e também quem foi faturado SEM comissão
    * (migration 219): esse não gera lançamento por definição, então o teste de
@@ -159,7 +149,7 @@ export default async function FaturamentoPage({
     lancadas.has(d.id) ||
     (d.situacao === 'faturado'
       && (Math.round(Number(d.valor ?? 0) * Number(d.desconto_pct ?? 0)) / 100)
-         + comissaoProducaoDe(d.detalhe) <= 0)
+         + producaoDe(d.detalhe).comissao <= 0)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const midias: MidiaView[] = (docsRaw as any[]).filter(d => !resolvida(d)).map(d => ({
@@ -175,7 +165,7 @@ export default async function FaturamentoPage({
     contatos: [contatoCard(d.workspaces, 'Cliente', true), contatoCard(d.veiculos, 'Veículo')].filter(Boolean) as ContatoCard[],
     valorDoc: Number(d.valor ?? 0),
     comissao: Math.round(Number(d.valor ?? 0) * Number(d.desconto_pct ?? 0)) / 100,
-    comissaoProducao: comissaoProducaoDe(d.detalhe),
+    comissaoProducao: producaoDe(d.detalhe).comissao,
     pagadorProducao: d.detalhe?.producao_tipo === 'de_terceiros'
       ? (fornMap.get(d.detalhe?.producao_fornecedor_id)?.name ?? `${d.veiculos?.name ?? '—'} (sem fornecedor definido)`)
       : (d.veiculos?.name ?? '—'),

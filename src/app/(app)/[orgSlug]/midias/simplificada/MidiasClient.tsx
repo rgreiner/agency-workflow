@@ -17,6 +17,8 @@ export interface MidiaRow {
   id: string; numero: number | null; serie?: string | null; titulo: string; tipo: string | null
   valor: number; desconto_pct: number; faturamento: string | null
   situacao: string; archived: boolean; cliente: string; veiculo: string
+  /** Produção embutida (só a Externa tem): entra no Valor e na Comissão. */
+  producao?: { total: number; comissao: number }
 }
 
 export function MidiasClient({
@@ -104,7 +106,9 @@ export function MidiasClient({
             </thead>
             <tbody className="divide-y divide-gray-50">
               {midias.map(m => {
-                const comissao = m.valor * (m.desconto_pct / 100)
+                const prod = m.producao ?? { total: 0, comissao: 0 }
+                const valor = m.valor + prod.total
+                const comissao = m.valor * (m.desconto_pct / 100) + prod.comissao
                 const cor = MIDIA_SITUACAO_COLORS[m.situacao]
                 return (
                   <tr key={m.id} className="hover:bg-gray-50/50 transition">
@@ -117,8 +121,18 @@ export function MidiasClient({
                     <td className="px-4 py-3 text-sm text-gray-600">{m.cliente}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{m.veiculo}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{labelOf(MIDIA_TIPO_OPTIONS, m.tipo)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatBRL(m.valor)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">{formatBRL(comissao)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 text-right tabular-nums">
+                      {formatBRL(valor)}
+                      {prod.total > 0 && m.valor > 0 && (
+                        <span className="block text-[11px] text-gray-400">prod. {formatBRL(prod.total)}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium tabular-nums">
+                      {formatBRL(comissao)}
+                      {prod.comissao > 0 && m.valor > 0 && (
+                        <span className="block text-[11px] font-normal text-gray-400">prod. {formatBRL(prod.comissao)}</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       {archivedView ? (
                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium"

@@ -163,3 +163,22 @@ export function parseMoney(input: string): number {
   const n = Number(s)
   return isNaN(n) ? 0 : n
 }
+
+/**
+ * Produção embutida numa mídia externa (lona, adesivo…): mora em `detalhe`
+ * (jsonb), fora das colunas `valor`/`desconto_pct` — por isso a lista de
+ * Liberação mostrava R$ 0,00 numa MX que era só produção (01/09/2026).
+ *
+ * MESMA fórmula da RPC `faturar_midia` (mig. 186): valor unitário × quantidade
+ * (mínimo 1) × comissão %. Quem exibe e quem cobra têm que concordar — por isso
+ * é um helper só, usado pela lista, pelo Faturamento e por quem mais precisar.
+ */
+export function producaoDe(detalhe: unknown): { total: number; comissao: number } {
+  const d = (detalhe ?? {}) as Record<string, unknown>
+  const unit = parseMoney(String(d.producao_valor ?? ''))
+  const qtd = Math.max(1, parseInt(String(d.producao_quantidade ?? '1'), 10) || 1)
+  const pct = parseMoney(String(d.producao_comissao_pct ?? ''))
+  const total = Math.round(unit * qtd * 100) / 100
+  const comissao = Math.round(total * pct) / 100
+  return { total, comissao }
+}
