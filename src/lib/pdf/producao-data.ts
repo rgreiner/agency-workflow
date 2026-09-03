@@ -60,6 +60,20 @@ export type ProducaoDocData = Base & (
 
 const money = (v: unknown) => parseMoney(String(v ?? ''))
 
+/**
+ * Régua única de item/opção — a MESMA do form: o total DIGITADO vence; senão quant ×
+ * unitário. E o unitário mostrado é total ÷ quantidade quando houve total digitado:
+ * o form gravava o unitário derivado arredondado a 2 casas (1.398,60 ÷ 1000 → "1,40")
+ * e recalcular quant × "1,40" aqui dava 1.400,00 — diferente do que a tela mostrava.
+ */
+function valoresItem(quant: unknown, valorUnit: unknown, valorTotal: unknown): { valorUnit: number; total: number } {
+  const q = parseInt(String(quant ?? '') || '1', 10) || 0
+  const unit = money(valorUnit)
+  const totalDigitado = money(valorTotal)
+  if (totalDigitado > 0) return { valorUnit: q > 0 ? totalDigitado / q : unit, total: totalDigitado }
+  return { valorUnit: unit, total: q * unit }
+}
+
 function enderecoDe(ws: Record<string, unknown> | null): string {
   if (!ws) return ''
   return [
@@ -142,13 +156,8 @@ export async function loadProducaoDoc(supabase: any, orgId: string, producaoId: 
     const valor = Number(p.valor ?? 0)
     const bvPct = Number(p.bv_pct ?? 0)
     const itens: PedidoItem[] = (Array.isArray(det.itens) ? det.itens : []).map((it: any) => {
-      // Mesma régua do itemTotal do form: total digitado vence; senão quant × unitário.
-      const q = parseInt(String(it?.quant ?? '') || '1', 10) || 0
-      const totalDigitado = money(it?.valor_total)
-      return {
-        nome: it?.nome ?? '', descricao: it?.descricao ?? '', nOrc: it?.n_orc ?? '', quant: it?.quant ?? '',
-        valor: money(it?.valor), total: totalDigitado > 0 ? totalDigitado : q * money(it?.valor),
-      }
+      const { valorUnit, total } = valoresItem(it?.quant, it?.valor, it?.valor_total)
+      return { nome: it?.nome ?? '', descricao: it?.descricao ?? '', nOrc: it?.n_orc ?? '', quant: it?.quant ?? '', valor: valorUnit, total }
     })
     // Só o que o fornecedor recebe do cliente (datas p/ ele emitir a NF). As parcelas
     // de comissão/honorários (receber_*) são internas — nunca vão pro PDF do fornecedor.
@@ -178,11 +187,11 @@ export async function loadProducaoDoc(supabase: any, orgId: string, producaoId: 
     // Do volume e em PNG — a URL exige cookie e o arquivo é WebP (ver lib/pdf/imagem).
     imagem: await imagemParaPdf(it?.imagem),
     opcoes: (Array.isArray(it?.opcoes) ? it.opcoes : []).map((o: any) => {
-      const total = (parseInt(o?.quant || '1', 10) || 0) * money(o?.valor_unit)
+      const { valorUnit, total } = valoresItem(o?.quant, o?.valor_unit, o?.valor_total)
       return {
         fornecedor: o?.fornecedor_id ? (fornMap.get(o.fornecedor_id) ?? '—') : '—',
         nOrc: o?.n_orc ?? '', pgto: o?.pgto ?? '', quant: o?.quant ?? '',
-        valorUnit: money(o?.valor_unit), total, selecionado: !!o?.selecionado,
+        valorUnit, total, selecionado: !!o?.selecionado,
       }
     }),
   })))

@@ -113,10 +113,17 @@ export async function gerarPedidosDoOrcamento(orgSlug: string, orcamentoId: stri
     if (!sel || !sel.fornecedor_id) continue
 
     const quant = parseInt(sel.quant || '1', 10) || 1
-    const valor = parseMoney(sel.valor_unit || '') * quant
+    // Mesma régua do form e do PDF: o total digitado vence; senão quant × unitário.
+    // O unitário derivado do total pode estar arredondado ("1,40" para 1.398,60 ÷ 1000),
+    // e a PP nascia com 1.400,00 — por isso ela herda o total digitado também.
+    const totalDigitado = parseMoney(sel.valor_total || '')
+    const valor = totalDigitado > 0 ? totalDigitado : parseMoney(sel.valor_unit || '') * quant
 
     const g = grupos.get(sel.fornecedor_id) ?? { itens: [], valor: 0 }
-    g.itens.push({ nome: it.nome ?? '', descricao: it.descricao ?? '', n_orc: sel.n_orc ?? '', quant: String(quant), valor: sel.valor_unit ?? '' })
+    g.itens.push({
+      nome: it.nome ?? '', descricao: it.descricao ?? '', n_orc: sel.n_orc ?? '', quant: String(quant),
+      valor: sel.valor_unit ?? '', ...(totalDigitado > 0 ? { valor_total: sel.valor_total } : {}),
+    })
     g.valor += valor
     grupos.set(sel.fornecedor_id, g)
   }

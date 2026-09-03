@@ -5,7 +5,7 @@
 
 import { Text, View, Image, StyleSheet } from '@react-pdf/renderer'
 import {
-  s, CINZA, CINZA_CLARO, Cabecalho, Linha, Secao, Assinaturas, Rodape, FolhaA4, brl, dataBR, agoraBR,
+  s, CINZA, CINZA_CLARO, Cabecalho, Linha, Secao, Assinaturas, Rodape, FolhaA4, brl, brlUnit, dataBR, agoraBR,
 } from './kit'
 import type { ProducaoDocData, LegalNote } from './producao-data'
 
@@ -149,7 +149,7 @@ function Pedido({ d }: { d: Extract<ProducaoDocData, { tipo: 'pedido' }> }) {
           <View style={{ flexDirection: 'row', marginTop: 2 }}>
             <Text style={{ marginRight: 22, color: CINZA }}>Nº Orç.: {it.nOrc || '---'}</Text>
             <Text style={{ marginRight: 22, color: CINZA }}>Quantidade: {it.quant || '---'}</Text>
-            <Text style={{ marginRight: 22, color: CINZA }}>Valor unit.: {brl(it.valor)}</Text>
+            <Text style={{ marginRight: 22, color: CINZA }}>Valor unit.: {brlUnit(it.valor)}</Text>
             <Text style={{ color: '#111827', fontFamily: 'Helvetica-Bold' }}>Total: {brl(it.total)}</Text>
           </View>
         </View>
@@ -221,7 +221,7 @@ function Orcamento({ d }: { d: Extract<ProducaoDocData, { tipo: 'orcamento' }> }
               <Text style={{ width: '14%' }}>{o.nOrc}</Text>
               <Text style={{ width: '13%' }}>{o.pgto}</Text>
               <Text style={{ width: '11%' }}>{o.quant}</Text>
-              <Text style={[{ width: '17%' }, t.right]}>{brl(o.valorUnit)}</Text>
+              <Text style={[{ width: '17%' }, t.right]}>{brlUnit(o.valorUnit)}</Text>
               <Text style={[{ width: '17%' }, t.right, ...(o.selecionado ? [s.forte] : [])]}>{brl(o.total)}</Text>
               <Text style={{ width: 14, textAlign: 'right', color: '#059669' }}>{o.selecionado ? '✓' : ''}</Text>
             </View>

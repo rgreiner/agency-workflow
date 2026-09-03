@@ -37,6 +37,9 @@ const opcaoTotal = (o: Opcao) => {
 }
 // Número → string BR ("3.118,44"): formato que os inputs usam e que parseMoney reconverte certo.
 const fmtBR = (v: number) => (isFinite(v) ? v : 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// Unitário derivado do total guarda até 4 casas (1.398,60 ÷ 1000 = 1,3986). Arredondar a
+// "1,40" fazia quant × unit dar 1.400,00 no PDF e na PP gerada — diferente da tela.
+const fmtBRUnit = (v: number) => (isFinite(v) ? v : 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
 
 function emptyValues(today: string, responsavelId: string): OrcamentoValues {
   return {
@@ -77,7 +80,7 @@ export function OrcamentoForm({
   // Unit ↔ total: digitou unit → recalcula total; digitou total → recalcula unit;
   // mudou a quantidade → mantém o unit e recalcula o total.
   const setOpcaoUnit = (ii: number, oi: number, v: string) => patchOpcao(ii, oi, o => ({ ...o, valor_unit: v, valor_total: parseMoney(v) ? fmtBR(oQtd(o) * parseMoney(v)) : '' }))
-  const setOpcaoTotal = (ii: number, oi: number, v: string) => patchOpcao(ii, oi, o => ({ ...o, valor_total: v, valor_unit: oQtd(o) && parseMoney(v) ? fmtBR(parseMoney(v) / oQtd(o)) : o.valor_unit }))
+  const setOpcaoTotal = (ii: number, oi: number, v: string) => patchOpcao(ii, oi, o => ({ ...o, valor_total: v, valor_unit: oQtd(o) && parseMoney(v) ? fmtBRUnit(parseMoney(v) / oQtd(o)) : o.valor_unit }))
   const setOpcaoQuant = (ii: number, oi: number, v: string) => patchOpcao(ii, oi, o => { const q = parseInt(v || '1', 10) || 0; return { ...o, quant: v, valor_total: parseMoney(o.valor_unit) ? fmtBR(q * parseMoney(o.valor_unit)) : o.valor_total } })
   // Clicar alterna: escolhe a opção (e desmarca as outras) ou, se já era a escolhida, desmarca.
   const toggleOpcao = (ii: number, oi: number) =>

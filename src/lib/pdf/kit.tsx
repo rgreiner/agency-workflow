@@ -123,6 +123,9 @@ export function FolhaA4({ children }: { children: React.ReactNode }) {
 
 export const brl = (v: number) =>
   `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+/** Unitário: até 4 casas quando total ÷ quantidade não fecha em centavos (1.398,60 ÷ 1000 = 1,3986). */
+export const brlUnit = (v: number) =>
+  `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
 export const dataBR = (iso: string | null) => (iso ? iso.slice(0, 10).split('-').reverse().join('/') : '—')
 export const agoraBR = () => new Date().toLocaleString('pt-BR', {
   timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',

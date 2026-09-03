@@ -60,6 +60,9 @@ function dividirValor(total: number, n: number): number[] {
 // Número → string BR ("3.118,44"). É o formato que os inputs usam e que parseMoney
 // reconverte certo — nunca gravar String(numero) com ponto (parseMoney o lê ×100).
 const fmtBR = (v: number) => (isFinite(v) ? v : 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// Unitário derivado do total guarda até 4 casas (1.398,60 ÷ 1000 = 1,3986), senão o PDF
+// recalcula quant × unit arredondado e mostra outro total.
+const fmtBRUnit = (v: number) => (isFinite(v) ? v : 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
 
 // Linha de conferência: soma das parcelas de um tipo × alvo esperado, com indicativo
 // de "confere / acima / abaixo".
@@ -123,7 +126,7 @@ export function PedidoForm({
   // quantidade → mantém o unitário e recalcula o total.
   const mapItem = (i: number, fn: (it: ItemPed) => ItemPed) => setForm(f => ({ ...f, itens: f.itens.map((it, idx) => idx === i ? fn(it) : it) }))
   const setItemUnit = (i: number, v: string) => mapItem(i, it => ({ ...it, valor: v, valor_total: parseMoney(v) ? fmtBR(qtd(it) * parseMoney(v)) : '' }))
-  const setItemTotal = (i: number, v: string) => mapItem(i, it => ({ ...it, valor_total: v, valor: qtd(it) && parseMoney(v) ? fmtBR(parseMoney(v) / qtd(it)) : it.valor }))
+  const setItemTotal = (i: number, v: string) => mapItem(i, it => ({ ...it, valor_total: v, valor: qtd(it) && parseMoney(v) ? fmtBRUnit(parseMoney(v) / qtd(it)) : it.valor }))
   const setItemQuant = (i: number, v: string) => mapItem(i, it => { const q = parseInt(v || '1', 10) || 0; return { ...it, quant: v, valor_total: parseMoney(it.valor) ? fmtBR(q * parseMoney(it.valor)) : it.valor_total } })
   const addItem = () => setForm(f => ({ ...f, itens: [...f.itens, newItem()] }))
   const delItem = (i: number) => setForm(f => ({ ...f, itens: f.itens.filter((_, idx) => idx !== i) }))
