@@ -80,6 +80,18 @@ export function MidiaDoc({ d }: { d: MidiaDocData }) {
           <Secao titulo="Preços" />
           <TabLinha label="Prazo" valor={d.precos.prazoLabel} />
           <TabLinha label={d.precos.faturamentoLabel} valor={brl(d.precos.valor)} forte />
+
+          {/* Com produção, quem lê quer as somas: veiculação + produção e as duas
+              comissões juntas. As parcelas já estão acima (Total produção, Comissão
+              produção, Desconto Padrão Agência, valor da veiculação) — aqui só o que
+              soma, pra não empurrar a página. Sem produção, o valor acima já é o total. */}
+          {d.producao.mostrar && (
+            <>
+              <Secao titulo="Totais" />
+              <TabLinha label="Veiculação + produção" valor={brl(d.totais.total)} forte />
+              {d.totais.comissoes > 0 && <TabLinha label="Total de comissões" valor={brl(d.totais.comissoes)} forte />}
+            </>
+          )}
         </View>
       </View>
 

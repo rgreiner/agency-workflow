@@ -49,13 +49,14 @@ export interface PropostaItem { tipoLabel: string; nome: string; quantidade: str
 export interface PedidoItem { nome: string; descricao: string; nOrc: string; quant: string; valor: number; total: number }
 export interface OrcOpcao { fornecedor: string; nOrc: string; pgto: string; quant: string; valorUnit: number; total: number; selecionado: boolean }
 export interface OrcItem { nome: string; descricao: string; imagem: string | null; opcoes: OrcOpcao[] }
+export interface OrcTotais { faturar: number; honorariosPct: number; honorarios: number; total: number }
 export interface LegalNote { text: string; highlight?: boolean }
 
 export type ProducaoDocData = Base & (
   | { tipo: 'fee'; fee: { de: string | null; ate: string | null; numParcelas: string; valorMensal: number; parcelas: FeeParcela[]; total: number } }
   | { tipo: 'proposta'; proposta: { introducao: string; itens: PropostaItem[]; total: number } }
   | { tipo: 'pedido'; pedido: { fornecedor: { nome: string; cnpj: string }; entrega: string | null; faturarLabel: string; prazoLabel: string; valorTotal: number; comissaoPct: number; comissao: number; itens: PedidoItem[]; pagamentos: PagamentoParcela[]; notas: LegalNote[] } }
-  | { tipo: 'orcamento'; orcamento: { itens: OrcItem[]; notas: LegalNote[] } }
+  | { tipo: 'orcamento'; orcamento: { itens: OrcItem[]; notas: LegalNote[]; totais: OrcTotais } }
 )
 
 const money = (v: unknown) => parseMoney(String(v ?? ''))
@@ -195,5 +196,12 @@ export async function loadProducaoDoc(supabase: any, orgId: string, producaoId: 
       }
     }),
   })))
-  return { ...base, tipo: 'orcamento', orcamento: { itens, notas: nfNotes } }
+  // Totais = a mesma conta da tela: soma só das opções ESCOLHIDAS (item sem escolha
+  // soma zero) + honorários sobre ela. Recalculado dos itens, não lido de p.valor,
+  // pra fechar com os totais impressos linha a linha.
+  const faturar = itens.reduce((acc, it) => acc + (it.opcoes.find(o => o.selecionado)?.total ?? 0), 0)
+  const honorariosPct = Number(p.honorarios_pct ?? 0)
+  const honorarios = Math.round(faturar * honorariosPct) / 100
+  const totais: OrcTotais = { faturar, honorariosPct, honorarios, total: faturar + honorarios }
+  return { ...base, tipo: 'orcamento', orcamento: { itens, notas: nfNotes, totais } }
 }

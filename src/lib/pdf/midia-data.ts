@@ -42,6 +42,7 @@ export interface MidiaDocData {
   producao: { mostrar: boolean; tipo: string; pedido: string; qtd: number; unitario: number; total: number; comissao: number }
   exibicao: { custo: number; descPct: number; desconto: number }
   precos: { prazoLabel: string; faturamentoLabel: string; valor: number }
+  totais: { veiculacao: number; producao: number; total: number; comissaoVeiculacao: number; comissaoProducao: number; comissoes: number }
   legal: { titulo: string; itens: { text: string; highlight?: boolean }[]; textoProprio: string }
   datas: { local: string; emissao: string | null; primeira: string | null; ultima: string | null }
   assinaturas: { esquerda: string; direita: string }
@@ -79,6 +80,13 @@ export async function loadMidiaDoc(supabase: any, orgId: string, midiaId: string
   const prodTotalDigitado = parseMoney(String(det.producao_total ?? ''))
   const prodTotal = prodTotalDigitado > 0 ? prodTotalDigitado : parseMoney(String(det.producao_valor ?? '')) * prodQtd
   const prodValor = prodTotalDigitado > 0 ? prodTotalDigitado / prodQtd : parseMoney(String(det.producao_valor ?? ''))
+  // Produção só existe na Externa. Comissões arredondadas ao centavo — a mesma conta
+  // do lançamento (gerar_lancamento_midia e a fila do Faturamento).
+  const temProducao = m.tipo === 'externa' && prodTotal > 0
+  const producaoDoc = temProducao ? prodTotal : 0
+  const comissaoVeiculacao = Math.round(valor * descPct) / 100
+  const comissaoProducaoPct = parseMoney(String(det.producao_comissao_pct ?? ''))
+  const comissaoProducao = Math.round(producaoDoc * comissaoProducaoPct) / 100
 
   const vEnd = Array.isArray(veic?.enderecos) ? veic.enderecos[0] : null
   const enderecoVeiculo = vEnd ? [
@@ -128,15 +136,15 @@ export async function loadMidiaDoc(supabase: any, orgId: string, midiaId: string
       .map((l: any) => ({ endereco: String(l.endereco ?? ''), cidade: String(l.cidade ?? '') }))
       .filter((l: { endereco: string; cidade: string }) => l.endereco.trim() || l.cidade.trim()),
     producao: {
-      mostrar: m.tipo === 'externa' && prodTotal > 0,
+      mostrar: temProducao,
       tipo: det.producao_tipo === 'no_veiculo' ? 'No veículo' : det.producao_tipo === 'de_terceiros' ? 'De terceiros' : '—',
       pedido: String(det.pedido_producao ?? ''),
       qtd: prodQtd, unitario: prodValor, total: prodTotal,
-      comissao: prodTotal * (parseMoney(String(det.producao_comissao_pct ?? '')) / 100),
+      comissao: comissaoProducao,
     },
     exibicao: {
       custo: parseMoney(String(det.custo ?? '')) || valor,
-      descPct, desconto: Math.round(valor * descPct) / 100,
+      descPct, desconto: comissaoVeiculacao,
     },
     precos: {
       prazoLabel: (() => {
@@ -146,6 +154,12 @@ export async function loadMidiaDoc(supabase: any, orgId: string, midiaId: string
       })(),
       faturamentoLabel: labelOf(MIDIA_FATURAMENTO_OPTIONS, m.faturamento),
       valor,
+    },
+    // Veiculação + produção somadas e as duas comissões juntas — é o que a PI
+    // imprime quando há produção (sem produção, a veiculação já é o total).
+    totais: {
+      veiculacao: valor, producao: producaoDoc, total: valor + producaoDoc,
+      comissaoVeiculacao, comissaoProducao, comissoes: comissaoVeiculacao + comissaoProducao,
     },
     legal: {
       titulo: 'Observações sobre faturamento:',

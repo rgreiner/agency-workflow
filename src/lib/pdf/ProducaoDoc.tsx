@@ -229,6 +229,16 @@ function Orcamento({ d }: { d: Extract<ProducaoDocData, { tipo: 'orcamento' }> }
         </View>
       ))}
 
+      {/* Mesma conta da tela: soma só das opções escolhidas + honorários. Sem escolha
+          não há o que somar — o documento fica como comparativo de opções. */}
+      {oc.totais.faturar > 0 && (
+        <View style={t.box} wrap={false}>
+          {oc.totais.honorarios > 0 && <Cell label="Valor a faturar" valor={brl(oc.totais.faturar)} />}
+          {oc.totais.honorarios > 0 && <Cell label={`Honorários (${String(oc.totais.honorariosPct).replace('.', ',')}%)`} valor={brl(oc.totais.honorarios)} />}
+          <Cell label="Valor total" valor={brl(oc.totais.total)} />
+        </View>
+      )}
+
       <Notas notas={oc.notas} />
       <Rodapes observacao={d.observacao} textoLegal={d.textoLegal} />
     </>
