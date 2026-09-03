@@ -16,9 +16,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * complexidade, horas e responsáveis da tarefa de origem; data e período são de
  * hoje. A leitura passa pela RLS — quem não enxerga a origem cria em branco.
  */
-export default async function NewActivityPage({ params, searchParams }: {
+export default async function NewActivityPage({ params, searchParams, modal = false }: {
   params: Promise<{ orgSlug: string; workspaceId: string; campaignId: string }>
   searchParams?: Promise<{ from?: string }>
+  /** Renderizada dentro do TaskModal (intercept): layout ocupa a altura do card. */
+  modal?: boolean
 }) {
   const { workspaceId } = await params
   const { from } = (await searchParams) ?? {}
@@ -64,5 +66,5 @@ export default async function NewActivityPage({ params, searchParams }: {
     }
   }
 
-  return <NewActivityForm members={members} currentUserId={user?.id ?? null} inicial={inicial} />
+  return <NewActivityForm members={members} currentUserId={user?.id ?? null} inicial={inicial} modal={modal} />
 }

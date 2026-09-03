@@ -9,6 +9,6 @@ export default async function InterceptedNewActivityPage({ params, searchParams 
   params: Promise<{ orgSlug: string; workspaceId: string; campaignId: string }>
   searchParams: Promise<{ from?: string }>
 }) {
-  const content = await NewActivityPage({ params, searchParams })
-  return <TaskModal>{content}</TaskModal>
+  const content = await NewActivityPage({ params, searchParams, modal: true })
+  return <TaskModal fill>{content}</TaskModal>
 }

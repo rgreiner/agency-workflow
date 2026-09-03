@@ -14,7 +14,12 @@ import { X } from 'lucide-react'
  * removido no mousedown e o clique "atravessa" pro fundo — e também quando se
  * arrasta uma seleção de texto e solta fora do card.
  */
-export function TaskModal({ children }: { children: React.ReactNode }) {
+/**
+ * `fill`: o card ocupa os 92vh em vez de crescer com o conteúdo — pra tela que
+ * quer distribuir a altura por dentro (a criação de tarefa deixa só o briefing
+ * rolar). O detalhe da tarefa continua crescendo até o teto.
+ */
+export function TaskModal({ children, fill = false }: { children: React.ReactNode; fill?: boolean }) {
   const router = useRouter()
   const downOnBackdrop = useRef(false)
 
@@ -34,7 +39,7 @@ export function TaskModal({ children }: { children: React.ReactNode }) {
       onClick={e => { if (downOnBackdrop.current && e.target === e.currentTarget) router.back() }}
     >
       <div
-        className="modal-card relative w-full bg-white shadow-xl flex flex-col overflow-hidden sm:max-w-5xl sm:max-h-[92vh] sm:rounded-2xl"
+        className={`modal-card relative w-full bg-white shadow-xl flex flex-col overflow-hidden sm:max-w-5xl sm:max-h-[92vh] sm:rounded-2xl${fill ? ' sm:h-[92vh]' : ''}`}
         onMouseDown={e => e.stopPropagation()}
       >
         <button

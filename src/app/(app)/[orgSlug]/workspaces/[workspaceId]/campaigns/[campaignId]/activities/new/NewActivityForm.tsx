@@ -200,10 +200,12 @@ function Semaforo({ aceso, className }: { aceso: ActivityComplexity; className?:
   )
 }
 
-export function NewActivityForm({ members, currentUserId, inicial }: {
+export function NewActivityForm({ members, currentUserId, inicial, modal = false }: {
   members: MembroSelecionavel[]
   currentUserId: string | null
   inicial?: NovaAtividadeInicial | null
+  /** Dentro do TaskModal (fill): ocupa a altura do card e só o briefing rola. */
+  modal?: boolean
 }) {
   const statusCfg = useStatusConfig()
   const { orgSlug, workspaceId, campaignId } = useParams<{
@@ -328,35 +330,40 @@ export function NewActivityForm({ members, currentUserId, inicial }: {
   const inputCls = 'w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 
   return (
-    <div className="p-6 sm:p-8 max-w-5xl">
-      <button type="button" onClick={() => router.back()}
-        className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition mb-5">
-        <ArrowLeft className="w-4 h-4" /> Voltar
-      </button>
+    // No modal (TaskModal fill) o form ocupa a altura do card e só o briefing rola por
+    // dentro — nada de barra de rolagem no modal. Na página inteira cresce com o
+    // conteúdo. "Voltar" só fora do modal: lá o X e o Esc já fecham.
+    <div className={cn('flex flex-col', modal ? 'flex-1 min-h-0 p-5 sm:p-6' : 'p-6 sm:p-8 max-w-5xl')}>
+      {!modal && (
+        <button type="button" onClick={() => router.back()}
+          className="self-start flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition mb-5">
+          <ArrowLeft className="w-4 h-4" /> Voltar
+        </button>
+      )}
 
-      <h1 className="text-xl font-semibold text-gray-900 mb-1">Nova atividade</h1>
-      <p className="text-gray-500 text-sm mb-6">O título é composto automaticamente pelos campos abaixo.</p>
+      <h1 className="text-lg font-semibold text-gray-900 mb-3">Nova atividade</h1>
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} className="flex-1 min-h-0 flex flex-col">
 
-        {/* Preview do título */}
-        <div className="bg-orange-50 border border-orange-100 rounded-xl px-4 py-3 mb-6">
-          <p className="text-xs text-orange-400 mb-1 font-medium">Título gerado</p>
-          <p className={cn('font-mono text-sm font-semibold', fullTitle ? 'text-orange-700' : 'text-orange-300')}>
+        {/* Título gerado — uma linha, composta pelos campos abaixo */}
+        <div className="shrink-0 bg-orange-50 border border-orange-100 rounded-xl px-3 py-2 mb-4 flex items-center gap-3 min-w-0">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-orange-400 shrink-0">Título</span>
+          <span className={cn('font-mono text-sm font-semibold truncate', fullTitle ? 'text-orange-700' : 'text-orange-300')}
+            title={fullTitle || undefined}>
             {fullTitle || `${date} - Veículo - Formato - Título da demanda`}
-          </p>
+          </span>
           {inicial && (
-            <p className="mt-1.5 flex items-center gap-1.5 text-xs text-orange-500/80 min-w-0">
+            <span className="ml-auto flex items-center gap-1.5 text-xs text-orange-500/80 min-w-0 max-w-[40%]">
               <Copy className="w-3 h-3 shrink-0" />
-              <span className="truncate">Copiada de: {inicial.fromTitle}</span>
-            </p>
+              <span className="truncate" title={inicial.fromTitle}>Copiada de: {inicial.fromTitle}</span>
+            </span>
           )}
         </div>
 
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-x-10">
+        <div className="flex-1 min-h-0 grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-x-10">
 
           {/* Coluna principal: o que é a atividade */}
-          <div className="min-w-0 space-y-6">
+          <div className="min-w-0 min-h-0 flex flex-col gap-4">
 
             {/* Data · Veículo · Formato */}
             <div className="grid gap-3 sm:grid-cols-[7rem_minmax(0,1fr)_minmax(0,1fr)]">
@@ -399,8 +406,8 @@ export function NewActivityForm({ members, currentUserId, inicial }: {
             </div>
 
             {/* Objetivo / Briefing — o mesmo editor do detalhe: imagem colada/solta vira WebP no volume */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
+            <div className="flex-1 min-h-0 flex flex-col">
+              <div className="flex items-center justify-between mb-1.5 shrink-0">
                 <label className="block text-sm font-medium text-gray-700">
                   Objetivo / Briefing <span className="text-gray-400 font-normal">(opcional)</span>
                 </label>
@@ -417,18 +424,23 @@ export function NewActivityForm({ members, currentUserId, inicial }: {
                   {isImprovingAI ? 'Otimizando...' : 'Otimizar com IA'}
                 </button>
               </div>
-              <div className="rounded-xl bg-gray-100 border border-transparent focus-within:ring-2 focus-within:ring-orange-500 overflow-hidden transition-shadow">
-                <BriefingToolbar editor={editor} insertImage={insertImage} className="border-gray-200/70" />
-                <div className="rich-text px-4 py-3 min-h-[240px] max-h-[460px] overflow-y-auto">
+              <div className="flex-1 min-h-0 flex flex-col rounded-xl bg-gray-100 border border-transparent focus-within:ring-2 focus-within:ring-orange-500 overflow-hidden transition-shadow">
+                <BriefingToolbar editor={editor} insertImage={insertImage} className="shrink-0 border-gray-200/70" />
+                {/* Só esta área rola. Clicar no espaço vazio leva o cursor pro fim do texto. */}
+                <div
+                  className={cn('rich-text flex-1 overflow-y-auto px-4 py-3 [&_.ProseMirror]:min-h-full',
+                    modal ? 'min-h-[160px]' : 'min-h-[240px] max-h-[520px]')}
+                  onClick={(e) => { if (e.target === e.currentTarget) editor?.commands.focus('end') }}
+                >
                   <EditorContent editor={editor} />
                 </div>
               </div>
-              <FaltandoIA perguntas={faltandoIA} onInserir={inserirPerguntas} className="mt-2" />
+              <FaltandoIA perguntas={faltandoIA} onInserir={inserirPerguntas} className="mt-2 shrink-0" />
             </div>
           </div>
 
           {/* Coluna lateral: como a atividade roda */}
-          <aside className="space-y-5">
+          <aside className="space-y-4">
 
             {/* Responsáveis — obrigatório: tarefa não nasce sem dono */}
             <div>
@@ -462,10 +474,28 @@ export function NewActivityForm({ members, currentUserId, inicial }: {
               <input type="hidden" name="status" value={form.status} />
             </div>
 
-            {/* Período: nasce hoje → +7 dias; o AAMMDD do título acompanha o início */}
+            {/* Período: nasce hoje → +7 dias (prazo padrão da casa); o AAMMDD do título
+                acompanha o início. Atalhos de prazo na linha do rótulo. */}
             <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-sm font-medium text-gray-700">Período de execução</label>
+                <div className="flex items-center gap-1" title="Prazo a partir do início">
+                  {ATALHOS_PRAZO.map(n => {
+                    const base = form.start_date || hoje
+                    const alvo = somarDias(base, n)
+                    const ativo = form.due_date === alvo
+                    return (
+                      <button key={n} type="button"
+                        onClick={() => { if (!form.start_date) setF('start_date', base); setF('due_date', alvo) }}
+                        className={cn('px-2 py-0.5 rounded-full text-[11px] border transition-colors active:scale-[0.97]',
+                          ativo ? 'bg-orange-100 text-orange-700 border-transparent font-medium' : 'border-gray-200 text-gray-500 hover:border-orange-300 hover:text-orange-600')}>
+                        +{n}d
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
               <DatePicker
-                label="Período de execução"
                 startDate={form.start_date}
                 endDate={form.due_date}
                 onStartChange={(v) => { setF('start_date', v); if (v) setDate(prefixoDaData(v)) }}
@@ -473,22 +503,6 @@ export function NewActivityForm({ members, currentUserId, inicial }: {
               />
               <input type="hidden" name="start_date" value={form.start_date} />
               <input type="hidden" name="due_date" value={form.due_date} />
-              <div className="mt-2 flex items-center gap-1.5">
-                <span className="text-xs text-gray-400 mr-0.5">Prazo</span>
-                {ATALHOS_PRAZO.map(n => {
-                  const base = form.start_date || hoje
-                  const alvo = somarDias(base, n)
-                  const ativo = form.due_date === alvo
-                  return (
-                    <button key={n} type="button"
-                      onClick={() => { if (!form.start_date) setF('start_date', base); setF('due_date', alvo) }}
-                      className={cn('px-2.5 py-1 rounded-full text-xs border transition-colors active:scale-[0.97]',
-                        ativo ? 'bg-orange-100 text-orange-700 border-transparent font-medium' : 'border-gray-200 text-gray-600 hover:border-orange-300 hover:text-orange-600')}>
-                      +{n}d
-                    </button>
-                  )
-                })}
-              </div>
             </div>
 
             {/* Prioridade (bandeiras) · Complexidade (semáforo) · Horas */}
@@ -583,15 +597,15 @@ export function NewActivityForm({ members, currentUserId, inicial }: {
           </aside>
         </div>
 
-        {error && <p className="text-sm text-red-600 mt-6">{error}</p>}
+        {error && <p className="text-sm text-red-600 mt-3 shrink-0">{error}</p>}
 
-        <div className="flex gap-3 mt-8">
+        <div className="flex gap-3 mt-5 shrink-0">
           <button type="button" onClick={() => router.back()}
-            className="px-5 py-3 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition">
+            className="px-5 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition">
             Cancelar
           </button>
           <button type="submit" disabled={!titulo.trim() || isPending}
-            className="flex-1 py-3 bg-orange-600 text-[#fff] font-medium rounded-xl hover:bg-orange-700 transition disabled:opacity-40 disabled:cursor-not-allowed">
+            className="flex-1 py-2.5 bg-orange-600 text-[#fff] font-medium rounded-xl hover:bg-orange-700 transition disabled:opacity-40 disabled:cursor-not-allowed">
             {isPending ? 'Criando...' : 'Criar atividade'}
           </button>
         </div>
