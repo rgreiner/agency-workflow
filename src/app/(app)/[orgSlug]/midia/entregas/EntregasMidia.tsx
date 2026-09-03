@@ -4,13 +4,12 @@ import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import {
-  AlertTriangle, CalendarClock, Check, ExternalLink, Link2, Loader2, Plus,
-  RotateCcw, Send, Trash2, Truck,
+  AlertTriangle, ArrowRight, CalendarClock, Check, ExternalLink, Link2, Loader2, Plus,
+  RotateCcw, Trash2, Truck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import {
   salvarEntrega, mudarSituacaoEntrega, excluirEntrega, tarefasDoCliente,
 } from '@/app/actions/midia-hub'
@@ -94,19 +93,17 @@ export function EntregasMidia({ orgSlug, entregas, clientes, statusCfg }: {
     return l
   }, [entregas, filtro, cliente])
 
-  const pendentes = entregas.filter(e => e.situacao === 'aguardando')
-  const conflitos = pendentes.filter(e => e.conflitoPrazo)
-  const atrasadas = pendentes.filter(e => (diasAte(e.prazoEnvio) ?? 99) < 0)
-  const aguardandoCriacao = pendentes.filter(e => e.tarefa && !e.tarefa.materialPronto)
-
   return (
     <div className="p-6 space-y-5">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-lg font-semibold text-gray-900">Entregas</h1>
           <p className="text-gray-500 text-sm mt-0.5">
-            O que a mídia precisa enviar e de quem está esperando. O prazo daqui é o do veículo —
-            o da tarefa continua sendo da criação.
+            Cadastro do que a mídia precisa enviar: nova, editar, histórico. O prazo daqui é o do veículo —
+            o da tarefa continua sendo da criação. Para tocar o dia, use{' '}
+            <Link href={`/${orgSlug}/midia`} className="text-orange-600 hover:text-orange-700 inline-flex items-center gap-0.5">
+              Trabalhar <ArrowRight className="w-3 h-3" />
+            </Link>.
           </p>
         </div>
         <button onClick={() => setEditando('nova')}
@@ -114,29 +111,6 @@ export function EntregasMidia({ orgSlug, entregas, clientes, statusCfg }: {
           <Plus className="w-4 h-4" /> Nova entrega
         </button>
       </div>
-
-      <div className="grid sm:grid-cols-4 gap-3">
-        <Kpi label="Pendentes" valor={pendentes.length} />
-        <Kpi label="Esperando a criação" valor={aguardandoCriacao.length} tom={aguardandoCriacao.length ? 'amber' : undefined} />
-        <Kpi label="Prazo do veículo vencido" valor={atrasadas.length} tom={atrasadas.length ? 'red' : undefined} />
-        <Kpi label="Conflito de prazo" valor={conflitos.length} tom={conflitos.length ? 'red' : undefined} />
-      </div>
-
-      {conflitos.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-          <p className="text-sm font-medium text-red-800 inline-flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4" /> A criação prometeu para depois do envio
-          </p>
-          <ul className="mt-2 space-y-1">
-            {conflitos.map(e => (
-              <li key={e.id} className="text-[13px] text-red-700">
-                <b>{e.titulo}</b> ({e.cliente}) — veículo em {fmt(e.prazoEnvio)}, tarefa
-                &ldquo;{e.tarefa?.titulo}&rdquo; com prazo {fmt(e.tarefa?.prazo ?? null)}.
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       <div className="flex items-center gap-3 flex-wrap">
         <div className="inline-flex bg-gray-100 rounded-xl p-0.5">
@@ -175,42 +149,21 @@ export function EntregasMidia({ orgSlug, entregas, clientes, statusCfg }: {
   )
 }
 
-function Kpi({ label, valor, tom }: { label: string; valor: number; tom?: 'red' | 'amber' }) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <p className="text-[11px] text-gray-400">{label}</p>
-      <p className={cn('text-2xl font-semibold mt-0.5 tabular-nums',
-        tom === 'red' ? 'text-red-600' : tom === 'amber' ? 'text-amber-600' : 'text-gray-900')}>{valor}</p>
-    </div>
-  )
-}
-
 function LinhaEntrega({ orgSlug, e, cfg, onEditar }: {
   orgSlug: string; e: EntregaRow; cfg: Map<string, StatusCfg>; onEditar: () => void
 }) {
   const [pending, start] = useTransition()
-  const [confirmar, setConfirmar] = useState(false)
   const dias = diasAte(e.prazoEnvio)
   const st = e.tarefa?.status ? cfg.get(e.tarefa.status) : null
   const liberada = e.situacao === 'liberado'
 
-  // Enviar ao veículo conclui a tarefa. Quando ela ainda está com a criação isso
-  // pula o quadro inteiro e não tem volta pelo lado da mídia — aí confirma.
-  function enviar() {
-    if (e.tarefa && !e.tarefa.materialPronto) { setConfirmar(true); return }
-    situacao('liberado')
-  }
-
-  function situacao(s: 'aguardando' | 'liberado' | 'cancelado') {
+  // Aqui é cadastro: o "Enviei ao veículo" mora no Trabalhar. Reabrir fica,
+  // porque a enviada só aparece nesta lista — e reabrir não desconclui a tarefa.
+  function reabrir() {
     start(async () => {
-      const r = await mudarSituacaoEntrega(orgSlug, e.id, s)
+      const r = await mudarSituacaoEntrega(orgSlug, e.id, 'aguardando')
       if (r?.error) { toast.error(r.error); return }
-      setConfirmar(false)
-      if (s !== 'liberado') { toast.success('Entrega reaberta — a tarefa segue concluída.'); return }
-      const t = r.tarefa
-      if (!t) toast.success('Marcado como enviado ao veículo.')
-      else if (t.recorreu) toast.success(`Enviado ao veículo. A rotina volta em ${fmt(t.novoPrazo)}.`)
-      else toast.success('Enviado ao veículo e tarefa concluída.')
+      toast.success('Entrega reaberta — a tarefa segue concluída.')
     })
   }
 
@@ -271,33 +224,14 @@ function LinhaEntrega({ orgSlug, e, cfg, onEditar }: {
             {!liberada && dias != null && dias < 0 && ' · vencido'}
             {!liberada && dias === 0 && ' · hoje'}
           </span>
-          {liberada ? (
-            <button onClick={() => situacao('aguardando')} disabled={pending}
+          {liberada && (
+            <button onClick={reabrir} disabled={pending}
               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors disabled:opacity-60">
               {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />} Reabrir
-            </button>
-          ) : (
-            <button onClick={enviar} disabled={pending}
-              title={e.tarefa ? 'Marca a entrega como enviada e conclui a tarefa' : 'Marca a entrega como enviada ao veículo'}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 text-[#fff] hover:bg-emerald-700 transition-colors disabled:opacity-60">
-              {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Enviei ao veículo
             </button>
           )}
         </div>
       </div>
-
-      <ConfirmDialog
-        open={confirmar}
-        title="Concluir a tarefa junto?"
-        description={`A tarefa "${e.tarefa?.titulo ?? ''}" ainda está com a criação`
-          + `${st ? ` (${st.label})` : ''}. Marcar como enviado ao veículo também CONCLUI a tarefa`
-          + ` — e reabrir a entrega depois não desfaz isso.`}
-        confirmLabel="Enviei ao veículo"
-        cancelLabel="Cancelar"
-        loading={pending}
-        onConfirm={() => situacao('liberado')}
-        onCancel={() => setConfirmar(false)}
-      />
 
       {e.conflitoPrazo && !liberada && (
         <p className="mt-2.5 text-[12px] text-red-700 bg-red-50 rounded-lg px-3 py-2 inline-flex items-center gap-1.5">

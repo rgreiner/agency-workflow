@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { AppShell } from '@/components/layout/AppShell'
+import { pendenciasDeTransicao } from '@/lib/midia-hub'
 import { OrgSettingsProvider } from '@/components/providers/OrgSettingsProvider'
 import { UserPrefsProvider } from '@/components/providers/UserPrefsProvider'
 import { UsuarioProvider } from '@/components/providers/UsuarioProvider'
@@ -86,6 +87,13 @@ export default async function OrgLayout({
   const { data: trilhaRaw } = await (supabase as any).rpc('onboarding_trilha', { p_org_id: org.id })
   const onboardingPendente = ((trilhaRaw ?? []) as { concluido: boolean }[]).filter(e => !e.concluido).length
 
+  // Telas transitórias da Mídia (migrar rotinas, vincular entregas): o item só
+  // existe enquanto houver o que fazer. Uma consulta a mais, e só para quem opera o Hub.
+  const midiaTransicao = access.midiaHub
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ? await pendenciasDeTransicao(supabase as any, org.id)
+    : { migrar: 0, vincular: 0 }
+
   // Membros da org (p/ o chat) — exceto eu mesmo e quem foi arquivado: não se abre
   // conversa nova com quem saiu da agência.
   const { data: membersRaw } = await membrosAtivos(supabase, org.id, 'user_id, profiles!user_id(id, full_name, avatar_url)')
@@ -146,6 +154,7 @@ export default async function OrgLayout({
         canManage={access.isOwner}
         canListaGlobal={access.listaGlobal}
         onboardingPendente={onboardingPendente}
+        midiaTransicao={midiaTransicao}
       >
         {children}
       </AppShell>

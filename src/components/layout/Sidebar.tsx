@@ -82,6 +82,8 @@ interface SidebarProps {
   canListaGlobal?: boolean
   /** Etapas de onboarding ainda não concluídas — 0 esconde o item. */
   onboardingPendente?: number
+  /** Pendências das telas transitórias da Mídia — 0 esconde o item. */
+  midiaTransicao?: { migrar: number; vincular: number }
   collapsed: boolean
   onCollapse: () => void
   onExpand?: () => void
@@ -104,10 +106,12 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Agenda do mês',      href: 'midia/agenda' },
     { label: 'Clientes e rotinas', href: 'midia/clientes' },
     { label: 'Entregas',           href: 'midia/entregas' },
-    { label: 'Catálogo de rotinas', href: 'midia/rotinas' },
-    { label: 'Migrar rotinas',      href: 'midia/migrar' },
-    // Transitória, como a de migrar rotinas: sai do menu quando a lista zerar.
-    { label: 'Vincular entregas',   href: 'midia/vincular' },
+    // O catálogo de rotinas saiu do menu (é cadastro, não trabalho do dia) e
+    // ficou acessível de dentro de "Clientes e rotinas", com o mesmo gate.
+    // As duas abaixo são transitórias: somem sozinhas quando a pendência zera
+    // (ver pendenciasDeTransicao) — o cabeçalho acompanha a primeira visível.
+    { label: 'Migrar rotinas',      href: 'midia/migrar',   heading: 'Transição' },
+    { label: 'Vincular entregas',   href: 'midia/vincular', heading: 'Transição' },
   ] },
   { id: 'midias', label: 'Liberação de mídias', icon: Megaphone, items: [
     { label: 'Simplificada', href: 'midias/simplificada' },
@@ -277,7 +281,7 @@ export function Sidebar({
   positionName, canMidias = false, canProducao = false, canFinance = false, canCadastros = false, canRh = false,
   canMidiaHub = false,
   canListaGlobal = false,
-  onboardingPendente = 0, collapsed, onCollapse, onExpand,
+  onboardingPendente = 0, midiaTransicao = { migrar: 0, vincular: 0 }, collapsed, onCollapse, onExpand,
 }: SidebarProps) {
   const pathname = usePathname()
   const base = `/${orgSlug}`
@@ -289,7 +293,19 @@ export function Sidebar({
   // computeAccess). Mídias/Produção dependem do cargo; Financeiro do can_finance;
   // Cadastros de can_vendas OU can_finance.
   const groupVisible: Record<string, boolean> = { midia_hub: canMidiaHub, midias: canMidias, producao: canProducao, financeiro: canFinance, cadastros: canCadastros, rh: canRh }
-  const comercialGroups = COMERCIAL_GROUPS.filter(g => groupVisible[g.id])
+  const TRANSITORIAS: Record<string, number> = { 'midia/migrar': midiaTransicao.migrar, 'midia/vincular': midiaTransicao.vincular }
+  const comercialGroups = COMERCIAL_GROUPS.filter(g => groupVisible[g.id]).map(g => {
+    if (g.id !== 'midia_hub') return g
+    const items = g.items.filter(it => !(it.href in TRANSITORIAS) || TRANSITORIAS[it.href] > 0)
+    // Cabeçalho "Transição" só na primeira transitória que sobrou — duas iguais seguidas seria ruído.
+    let primeira = true
+    return { ...g, items: items.map(it => {
+      if (!(it.href in TRANSITORIAS)) return it
+      const out = primeira ? it : { ...it, heading: undefined }
+      primeira = false
+      return out
+    }) }
+  })
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   useEffect(() => {
     try {
