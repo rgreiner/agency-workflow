@@ -214,6 +214,9 @@ export async function pontoEstado() {
       jornada: { entrada: string; intervalo_ini: string; intervalo_fim: string; saida: string; flex_min: number }
       primeiro_foco: string | null
       agora: string
+      /** Dias passados com marcação ímpar — o dia não fecha par nenhum e fica
+       *  com ZERO minuto até alguém corrigir (mig. 275). */
+      dias_incompletos: { data: string; marcacoes: number }[]
     } | null
   } catch {
     return null

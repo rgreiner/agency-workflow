@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Clock, LogIn, Coffee, Undo2, Loader2, FileText, Check, FileSignature, Paperclip, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Select } from '@/components/ui/Select'
@@ -35,7 +35,10 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
-  const [just, setJust] = useState(false)
+  // Veio da home pelo aviso "falta marcação"? Já abre a justificativa no dia.
+  const params = useSearchParams()
+  const diaPedido = params.get('justificar')
+  const [just, setJust] = useState(!!diaPedido)
   const [extra, setExtra] = useState<ExtraNascida | null>(null)
   const d = diaHoje
 
@@ -160,6 +163,14 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
                   <td className="px-4 py-2 text-gray-500 tabular-nums">{dataBR(r.data)}</td>
                   <td className="px-2 py-2 text-gray-600 tabular-nums">
                     {hm(r.entrada)}–{hm(r.intervalo_ini)} · {hm(r.intervalo_fim)}–{hm(r.saida)}
+                    {/* Ímpar em dia passado = faltou bater: o dia não fecha par
+                        e fica com zero hora até o RH ajustar (mig. 275). */}
+                    {(r.marcacoes?.length ?? 0) % 2 === 1 && (
+                      <span title="Falta uma marcação — este dia está contando zero hora"
+                        className="ml-1.5 text-[10px] font-medium text-amber-700 bg-amber-50 rounded px-1.5 py-0.5">
+                        falta marcação
+                      </span>
+                    )}
                     {r.ajuste_em && (
                       <span title={`Ajustado pelo RH. Marcação original: ${[r.ajuste_de?.entrada, r.ajuste_de?.saida].filter(Boolean).map(t => hm(t as string)).join(' – ') || '—'}`}
                         className="ml-1.5 text-[10px] text-amber-600">ajustado</span>
@@ -176,7 +187,7 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
 
       {extra && <ExtraContextoModal orgSlug={orgSlug} colaboradorId={colaboradorId}
         extra={extra} onClose={() => setExtra(null)} />}
-      {just && <JustificarModal orgSlug={orgSlug} colaboradorId={colaboradorId}
+      {just && <JustificarModal orgSlug={orgSlug} colaboradorId={colaboradorId} diaInicial={diaPedido}
         dias={Object.fromEntries([...(d ? [d] : []), ...recentes].map(r => [r.data, (r.marcacoes ?? []).map(h => h.slice(0, 5))]))}
         onClose={() => setJust(false)} />}
     </div>
@@ -187,8 +198,10 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
  *  são sempre de UM dia — e é justamente neles que o horário correto é pedido. */
 const TIPOS_MULTIDIA = new Set(['atestado', 'falta', 'outro'])
 
-function JustificarModal({ orgSlug, colaboradorId, dias, onClose }: {
+function JustificarModal({ orgSlug, colaboradorId, dias, onClose, diaInicial }: {
   orgSlug: string; colaboradorId: string
+  /** Dia que a home pediu para corrigir (aviso de marcação faltando). */
+  diaInicial?: string | null
   /** Marcações atuais por data (hoje + últimos dias) — pré-carregam o editor. */
   dias: Record<string, string[]>
   onClose: () => void
@@ -196,7 +209,7 @@ function JustificarModal({ orgSlug, colaboradorId, dias, onClose }: {
   const router = useRouter()
   const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
   const [tipo, setTipo] = useState('esqueci')
-  const [dia, setDia] = useState(hoje)
+  const [dia, setDia] = useState(diaInicial && /^\d{4}-\d{2}-\d{2}$/.test(diaInicial) ? diaInicial : hoje)
   // Período (N dias) é exceção, não o padrão: o normal é justificar UM dia.
   const [varios, setVarios] = useState(false)
   const [dataFim, setDataFim] = useState(hoje)
@@ -204,7 +217,7 @@ function JustificarModal({ orgSlug, colaboradorId, dias, onClose }: {
   // O dia completo em N pares, pré-carregado com as marcações reais do dia
   // escolhido: corrija um horário, complete o que faltou ou adicione uma pausa.
   const prefill = (data: string) => { const m = dias[data] ?? []; return m.length ? m : ['', ''] }
-  const [horas, setHoras] = useState<string[]>(() => prefill(hoje))
+  const [horas, setHoras] = useState<string[]>(() => prefill(diaInicial && /^\d{4}-\d{2}-\d{2}$/.test(diaInicial) ? diaInicial : hoje))
   const [arquivo, setArquivo] = useState<File | null>(null)
   // Período que o atestado/declaração cobre. É o que sai da carga do dia — o
   // resto (atraso na entrada, volta depois do fim da consulta) continua contando.

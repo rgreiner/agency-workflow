@@ -3,13 +3,14 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Clock, LogIn, Coffee, Undo2, Loader2, ChevronRight } from 'lucide-react'
+import { Clock, LogIn, Coffee, Undo2, Loader2, ChevronRight, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { baterPonto } from '@/app/actions/rh-ponto'
 import { anunciarPonto } from '@/components/ponto/ponto-sync'
 import { ExtraContextoModal, extraNascida, type ExtraNascida } from '@/components/ponto/ExtraContextoModal'
 
 const hm = (t: string) => t.slice(0, 5)
+const dm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
 
 /**
  * Card do ponto na home — o caso móvel nº 1: abrir o app e bater em um toque.
@@ -17,8 +18,10 @@ const hm = (t: string) => t.slice(0, 5)
  * devolveu algo). Mesma régua da tela /ponto: N marcações livres, ímpar =
  * trabalhando; o detalhe (justificar, espelho) continua morando lá.
  */
-export function PontoCardHome({ orgSlug, colaboradorId, marcacoes }: {
+export function PontoCardHome({ orgSlug, colaboradorId, marcacoes, diasIncompletos = [] }: {
   orgSlug: string; colaboradorId: string; marcacoes: string[]
+  /** Dias passados sem fechar par — ficam com ZERO minuto até corrigir (mig. 275). */
+  diasIncompletos?: { data: string; marcacoes: number }[]
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -82,6 +85,29 @@ export function PontoCardHome({ orgSlug, colaboradorId, marcacoes }: {
           {proxima.label}
         </button>
       </div>
+      {/* Dia sem fechar: o par não existe, então o dia inteiro conta ZERO.
+          O caminho é pedir o ajuste ao RH — daí o link já no dia certo. */}
+      {diasIncompletos.length > 0 && (
+        <div className="mt-3 rounded-xl bg-amber-50 ring-1 ring-amber-200 px-3 py-2.5 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium text-amber-900">
+              {diasIncompletos.length === 1
+                ? `Falta uma marcação em ${dm(diasIncompletos[0].data)}`
+                : `Falta marcação em ${diasIncompletos.length} dias`}
+            </p>
+            <p className="text-[11px] text-amber-800/80 mt-0.5">
+              Sem o par de entrada e saída o dia fica com <b>zero hora</b> registrada.
+              {diasIncompletos.length > 1 && ` (${diasIncompletos.slice(0, 4).map(d => dm(d.data)).join(' · ')}${diasIncompletos.length > 4 ? '…' : ''})`}
+            </p>
+          </div>
+          <Link href={`/${orgSlug}/ponto?justificar=${diasIncompletos[0].data}`}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-amber-600 text-[#fff] hover:bg-amber-700 active:scale-[0.97] transition-colors shrink-0">
+            Pedir ajuste
+          </Link>
+        </div>
+      )}
+
       {extra && <ExtraContextoModal orgSlug={orgSlug} colaboradorId={colaboradorId}
         extra={extra} onClose={() => setExtra(null)} />}
     </div>
