@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
-import { redirect } from 'next/navigation'
+import { redirect, RedirectType } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { dispatchPushNotificacoes } from '@/lib/push'
@@ -78,7 +78,7 @@ export async function createActivity(
     p_description: (formData.get('description') as string) ?? '',
     p_status: (formData.get('status') as string) || 'briefing',
     p_priority: (formData.get('priority') as string) || 'medium',
-    p_complexity: (formData.get('complexity') as string) || 'medium',
+    p_complexity: (formData.get('complexity') as string) || 'simple',
     p_due_date: due_date || null,
     p_estimated_hours: estimated_hours ? parseFloat(estimated_hours) : null,
     p_start_date: start_date || null,
@@ -116,7 +116,11 @@ export async function createActivity(
     })
   }
 
-  redirect(`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}/activities/${activityId}`)
+  // `replace`: o form abre em modal (intercepting route) e o detalhe da tarefa nova
+  // também. Com push, fechar o detalhe voltava pro "Nova atividade" — parecia que
+  // o Flow abria outra tarefa sozinho. Substituindo a entrada, fechar volta pra
+  // onde a pessoa estava antes de criar.
+  redirect(`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}/activities/${activityId}`, RedirectType.replace)
 }
 
 /**
@@ -150,7 +154,7 @@ export async function createActivityInline(
     p_description: '',
     p_status: status || 'briefing',
     p_priority: 'medium',
-    p_complexity: 'medium',
+    p_complexity: 'simple',
     p_due_date: null,
     p_estimated_hours: null,
     p_start_date: null,

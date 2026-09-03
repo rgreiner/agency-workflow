@@ -38,7 +38,14 @@ export class ErroIA extends Error {
   }
 }
 
-const DEFAULT_MODEL = 'gemini-3.6-flash'
+/**
+ * Alias móvel do Google: aponta sempre pro Flash estável mais recente, então o
+ * modelo não "aposenta" na env (o 2.5-flash morreu em 19/08/2026 assim). Pra fixar
+ * uma versão, GEMINI_MODEL=gemini-3.6-flash etc. Conferido em 02/09/2026 na lista
+ * da API: gemini-flash-latest, gemini-flash-lite-latest e gemini-pro-latest existem
+ * (o Pro respondeu 429 de cota com a chave de prod — fica fora da cadeia).
+ */
+const DEFAULT_MODEL = 'gemini-flash-latest'
 
 /** Modelo do uso pedido, com fallback pro geral e pro default da casa. */
 export function geminiModel(override?: string | null): string {
@@ -168,13 +175,15 @@ export async function geminiJson<T>(opts: GeminiJsonOpts): Promise<{ model: stri
 /**
  * Modelos tentados, nesta ordem, quando o pedido cai por CAPACIDADE — 503 "high
  * demand", 429 de limite por minuto, sem resposta no prazo, rede. Medido em
- * 02/09/2026 com a chave de produção: o `gemini-3.6-flash` devolveu 503 na
- * otimização de briefing e levou 45 s pra responder "ok", enquanto o
- * `gemini-3.8-flash` respondia em 2 s. Modelo lotado não é motivo pra tela falhar:
- * outro da mesma família responde igual pro que o Flow pede (JSON estruturado).
- * GEMINI_FALLBACK_MODELS (lista separada por vírgula) troca a cadeia; vazia desliga.
+ * 02/09/2026 com a chave de produção: num pico, TODOS os Flash (3.6, 3.8 e o alias
+ * latest) devolveram 503 e só o Flash-Lite respondeu; fora do pico o 3.6-flash
+ * levou 45 s num "ok" que o 3.8-flash fez em 2 s. Modelo lotado não é motivo pra
+ * tela falhar: outro da mesma família responde igual pro que o Flow pede (JSON
+ * estruturado). O Lite vem primeiro por ser um pool de capacidade diferente; o
+ * 3.6 fixo é o último recurso. GEMINI_FALLBACK_MODELS (vírgula) troca a cadeia;
+ * vazia desliga.
  */
-const FALLBACK_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite']
+const FALLBACK_MODELS = ['gemini-flash-lite-latest', 'gemini-3.6-flash']
 
 function modelosFallback(pedido: string): string[] {
   const env = process.env.GEMINI_FALLBACK_MODELS

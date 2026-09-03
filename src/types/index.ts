@@ -124,10 +124,14 @@ export function buildStatusConfig(rows: OrgStatusRow[] = []): StatusConfig[] {
 // `preenchido` = bandeira sólida. A Lista já usava essa régua (urgente/alta
 // cheias, média/baixa vazadas); trazer para a config faz as outras telas
 // mostrarem a MESMA coisa em vez de reinventar por tela.
+// Bandeiras (02/09/2026): verde = Normal (o `medium` do banco, default de toda
+// tarefa), amarela = Alta, vermelha = Urgente. `low` ("Baixa") ficou fora dos
+// seletores — 3 tarefas em 380 usavam — mas segue válida onde já está gravada.
+// `preenchido` = bandeira cheia nas listas (só as que pedem atenção).
 export const PRIORITY_CONFIG = {
-  low: { label: 'Baixa', color: 'text-gray-600', bgColor: 'bg-gray-100', preenchido: false },
-  medium: { label: 'Média', color: 'text-blue-600 dark:text-blue-300', bgColor: 'bg-blue-100 dark:bg-blue-500/15', preenchido: false },
-  high: { label: 'Alta', color: 'text-orange-600 dark:text-orange-300', bgColor: 'bg-orange-100 dark:bg-orange-500/15', preenchido: true },
+  low: { label: 'Baixa', color: 'text-gray-500 dark:text-gray-400', bgColor: 'bg-gray-100 dark:bg-gray-500/15', preenchido: false },
+  medium: { label: 'Normal', color: 'text-green-600 dark:text-green-400', bgColor: 'bg-green-100 dark:bg-green-500/15', preenchido: false },
+  high: { label: 'Alta', color: 'text-amber-500 dark:text-amber-400', bgColor: 'bg-amber-100 dark:bg-amber-500/15', preenchido: true },
   urgent: { label: 'Urgente', color: 'text-red-600 dark:text-red-300', bgColor: 'bg-red-100 dark:bg-red-500/15', preenchido: true },
 }
 

@@ -1716,7 +1716,8 @@ function PriorityCell({ activityId, current, path }: { activityId: string; curre
   }, [open])
 
   const p = PRIORITY_CONFIG[value as ActivityPriority]
-  const order: ActivityPriority[] = ['urgent', 'high', 'medium', 'low']
+  // "Baixa" saiu do seletor (02/09/2026); só aparece se a tarefa ainda a usa.
+  const order = (['urgent', 'high', 'medium', 'low'] as ActivityPriority[]).filter(pk => pk !== 'low' || value === 'low')
 
   async function set(v: ActivityPriority) {
     setOpen(false)

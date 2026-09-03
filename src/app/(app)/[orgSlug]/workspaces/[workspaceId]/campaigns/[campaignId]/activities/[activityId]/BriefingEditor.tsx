@@ -1,60 +1,22 @@
 'use client'
 
 /**
- * Briefing com formatação simples (Tiptap): títulos, negrito, itálico, listas,
- * citação. Guarda HTML na coluna `description` (compatível com textos antigos em
- * texto puro). Edição inline com salvar/cancelar.
+ * Briefing do detalhe da tarefa: leitura com HTML sanitizado e edição inline
+ * (salvar/cancelar) sobre o editor compartilhado de components/briefing/BriefingRich —
+ * o mesmo que a criação usa, então imagem, checklist e a otimização por IA se
+ * comportam igual nos dois lugares.
  */
-import { useRef, useState, useTransition } from 'react'
-import { useEditor, EditorContent } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import Placeholder from '@tiptap/extension-placeholder'
-import TaskList from '@tiptap/extension-task-list'
-import TaskItem from '@tiptap/extension-task-item'
-import Image from '@tiptap/extension-image'
-import {
-  Bold, Italic, Strikethrough, Heading2, Heading3,
-  List, ListOrdered, ListChecks, Quote, Link2, ImagePlus, Check, Loader2, Pencil, Sparkles,
-} from 'lucide-react'
+import { useState, useTransition } from 'react'
+import { EditorContent } from '@tiptap/react'
+import { Check, Loader2, Pencil, Sparkles } from 'lucide-react'
 import { updateActivityField } from '@/app/actions/activity'
-import { downscaleImage } from '@/lib/image-resize'
 import { sanitizeHtml } from '@/lib/sanitize'
-import { uploadFile } from '@/lib/storage/upload-client'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-
-const isHtml = (s: string) => /^\s*</.test(s)
-
-/** Texto antigo (puro) → HTML simples preservando parágrafos/quebras. */
-function toHTML(desc: string | null): string {
-  if (!desc) return ''
-  if (isHtml(desc)) return desc
-  const esc = desc.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  return esc.split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
-}
-
-const isEmptyHtml = (html: string) => html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim() === ''
-
-/** Briefing otimizado (texto puro da IA) → HTML do editor: seções viram título, "- " vira lista. */
-function briefingToEditorHTML(text: string): string {
-  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const out: string[] = []
-  let list: string[] = []
-  const flush = () => {
-    if (list.length) { out.push(`<ul>${list.map(i => `<li>${i}</li>`).join('')}</ul>`); list = [] }
-  }
-  for (const raw of text.split('\n')) {
-    const line = raw.trim()
-    if (!line) { flush(); continue }
-    if (line.startsWith('- ')) { list.push(esc(line.slice(2))); continue }
-    flush()
-    if (/^(Objetivo|Diretrizes):?$/i.test(line)) out.push(`<h3>${esc(line)}</h3>`)
-    else if (line.length <= 40 && /:$/.test(line)) out.push(`<p><strong>${esc(line)}</strong></p>`)
-    else out.push(`<p>${esc(line)}</p>`)
-  }
-  flush()
-  return out.join('')
-}
+import {
+  useBriefingEditor, BriefingToolbar, FaltandoIA,
+  isHtml, toHTML, isEmptyHtml, briefingToEditorHTML, faltandoToChecklistHTML,
+} from '@/components/briefing/BriefingRich'
 
 export function BriefingEditor({ activityId, path, description, canEdit }: {
   activityId: string
@@ -67,46 +29,7 @@ export function BriefingEditor({ activityId, path, description, canEdit }: {
   const [isImproving, setIsImproving] = useState(false)
   // Perguntas devolvidas pela IA quando o rascunho não dá pra estruturar.
   const [faltandoIA, setFaltandoIA] = useState<string[]>([])
-  const fileRef = useRef<HTMLInputElement>(null)
-
-  const editor = useEditor({
-    immediatelyRender: false,
-    extensions: [
-      StarterKit,
-      Placeholder.configure({ placeholder: 'Escreva o briefing… títulos, listas, checklist, imagens (cole/solte)' }),
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      Image.configure({ inline: false }),
-    ],
-    content: toHTML(description),
-    editable: true,
-    editorProps: {
-      handlePaste: (_view, event) => {
-        const imgs = Array.from(event.clipboardData?.files ?? []).filter(f => f.type.startsWith('image/'))
-        if (!imgs.length) return false
-        event.preventDefault(); imgs.forEach(insertImage); return true
-      },
-      handleDrop: (_view, event) => {
-        const imgs = Array.from((event as DragEvent).dataTransfer?.files ?? []).filter(f => f.type.startsWith('image/'))
-        if (!imgs.length) return false
-        event.preventDefault(); imgs.forEach(insertImage); return true
-      },
-    },
-  })
-
-  // Cola/solta imagem → converte p/ WebP (downscale) → sobe → insere no editor.
-  async function insertImage(file: File) {
-    try {
-      const webp = await downscaleImage(file)
-      const url = await uploadFile('briefings', `${crypto.randomUUID()}.webp`, webp)
-      editor?.chain().focus().setImage({ src: url }).run()
-    } catch (e) { toast.error(e instanceof Error ? e.message : 'Falha ao enviar imagem') }
-  }
-  function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0]
-    if (f) insertImage(f)
-    e.target.value = ''
-  }
+  const { editor, insertImage } = useBriefingEditor({ content: toHTML(description) })
 
   function start() {
     editor?.commands.setContent(toHTML(description))
@@ -149,13 +72,11 @@ export function BriefingEditor({ activityId, path, description, canEdit }: {
     }
   }
 
-  function setLink() {
-    if (!editor) return
-    const prev = (editor.getAttributes('link').href as string) ?? ''
-    const url = window.prompt('Cole o link (URL):', prev)
-    if (url === null) return
-    if (url.trim() === '') { editor.chain().focus().extendMarkRange('link').unsetLink().run(); return }
-    editor.chain().focus().extendMarkRange('link').setLink({ href: url.trim() }).run()
+  // As perguntas viram checklist no fim do briefing — a pessoa responde ali mesmo.
+  function inserirPerguntas() {
+    if (!editor || !faltandoIA.length) return
+    editor.chain().focus('end').insertContent(faltandoToChecklistHTML(faltandoIA)).run()
+    setFaltandoIA([])
   }
 
   function save() {
@@ -172,40 +93,13 @@ export function BriefingEditor({ activityId, path, description, canEdit }: {
   if (editing) {
     return (
       <div className="rounded-xl border border-orange-300 bg-white overflow-hidden">
-        <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-gray-100 flex-wrap">
-          <Btn onClick={() => editor?.chain().focus().toggleBold().run()} active={!!editor?.isActive('bold')} title="Negrito"><Bold className="w-3.5 h-3.5" /></Btn>
-          <Btn onClick={() => editor?.chain().focus().toggleItalic().run()} active={!!editor?.isActive('italic')} title="Itálico"><Italic className="w-3.5 h-3.5" /></Btn>
-          <Btn onClick={() => editor?.chain().focus().toggleStrike().run()} active={!!editor?.isActive('strike')} title="Tachado"><Strikethrough className="w-3.5 h-3.5" /></Btn>
-          <Sep />
-          <Btn onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} active={!!editor?.isActive('heading', { level: 2 })} title="Título"><Heading2 className="w-3.5 h-3.5" /></Btn>
-          <Btn onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()} active={!!editor?.isActive('heading', { level: 3 })} title="Subtítulo"><Heading3 className="w-3.5 h-3.5" /></Btn>
-          <Sep />
-          <Btn onClick={() => editor?.chain().focus().toggleBulletList().run()} active={!!editor?.isActive('bulletList')} title="Lista"><List className="w-3.5 h-3.5" /></Btn>
-          <Btn onClick={() => editor?.chain().focus().toggleOrderedList().run()} active={!!editor?.isActive('orderedList')} title="Lista numerada"><ListOrdered className="w-3.5 h-3.5" /></Btn>
-          <Btn onClick={() => editor?.chain().focus().toggleTaskList().run()} active={!!editor?.isActive('taskList')} title="Checklist"><ListChecks className="w-3.5 h-3.5" /></Btn>
-          <Btn onClick={() => editor?.chain().focus().toggleBlockquote().run()} active={!!editor?.isActive('blockquote')} title="Citação"><Quote className="w-3.5 h-3.5" /></Btn>
-          <Sep />
-          <Btn onClick={setLink} active={!!editor?.isActive('link')} title="Link"><Link2 className="w-3.5 h-3.5" /></Btn>
-          <Btn onClick={() => fileRef.current?.click()} active={false} title="Imagem (ou cole/solte)"><ImagePlus className="w-3.5 h-3.5" /></Btn>
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickImage} />
-        </div>
+        <BriefingToolbar editor={editor} insertImage={insertImage} />
 
         <div className="rich-text px-3 py-2.5 max-h-[420px] overflow-y-auto">
           <EditorContent editor={editor} />
         </div>
 
-        {faltandoIA.length > 0 && (
-          <div className="mx-2 mb-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-            <p className="text-xs font-medium text-amber-800 mb-1.5">
-              Para estruturar o briefing, responda no texto acima:
-            </p>
-            <ul className="space-y-1">
-              {faltandoIA.map((q, i) => (
-                <li key={i} className="text-xs text-amber-700">• {q}</li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <FaltandoIA perguntas={faltandoIA} onInserir={inserirPerguntas} className="mx-2 mb-2" />
 
         <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-t border-gray-100 bg-gray-50/50">
           <button type="button" onClick={otimizar} disabled={isImproving}
@@ -214,8 +108,8 @@ export function BriefingEditor({ activityId, path, description, canEdit }: {
             {isImproving ? 'Otimizando...' : 'Otimizar com IA'}
           </button>
           <div className="flex items-center gap-2">
-            <button onClick={() => { setFaltandoIA([]); setEditing(false) }} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">Cancelar</button>
-            <button onClick={save} disabled={isPending}
+            <button type="button" onClick={() => { setFaltandoIA([]); setEditing(false) }} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">Cancelar</button>
+            <button type="button" onClick={save} disabled={isPending}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 disabled:opacity-50 transition">
               {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Salvar
             </button>
@@ -233,28 +127,15 @@ export function BriefingEditor({ activityId, path, description, canEdit }: {
             ? <div className="rich-text" dangerouslySetInnerHTML={{ __html: sanitizeHtml(description) }} />
             : <p className="rich-text whitespace-pre-wrap">{description}</p>
         ) : canEdit ? (
-          <button onClick={start} className="text-sm text-gray-500 hover:text-gray-700 transition-colors italic">Adicionar briefing…</button>
+          <button type="button" onClick={start} className="text-sm text-gray-500 hover:text-gray-700 transition-colors italic">Adicionar briefing…</button>
         ) : null}
       </div>
       {canEdit && description && (
-        <button onClick={start} title="Editar briefing"
+        <button type="button" onClick={start} title="Editar briefing"
           className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 opacity-0 group-hover/desc:opacity-100 focus-visible:opacity-100 transition shrink-0">
           <Pencil className="w-3.5 h-3.5" />
         </button>
       )}
     </div>
   )
-}
-
-function Btn({ onClick, active, title, children }: { onClick: () => void; active: boolean; title: string; children: React.ReactNode }) {
-  return (
-    <button onClick={onClick} title={title}
-      className={cn('p-1.5 rounded transition-colors', active ? 'bg-orange-100 text-orange-700' : 'text-gray-400 hover:text-gray-800 hover:bg-gray-100')}>
-      {children}
-    </button>
-  )
-}
-
-function Sep() {
-  return <div className="w-px h-4 bg-gray-200 mx-0.5" />
 }

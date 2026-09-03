@@ -2,29 +2,33 @@
 
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { EditorContent } from '@tiptap/react'
 import { createActivity } from '@/app/actions/activity'
-import { PRIORITY_CONFIG, COMPLEXITY_CONFIG } from '@/types'
+import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity } from '@/types'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
-import { ArrowLeft, FolderOpen, ExternalLink, Sparkles, UserPlus, X } from 'lucide-react'
+import { ArrowLeft, FolderOpen, ExternalLink, Sparkles, UserPlus, X, Flag, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { Select } from '@/components/ui/Select'
-
-const VEICULOS = [
-  'Meta', 'Instagram', 'Facebook', 'WhatsApp', 'TikTok',
-  'YouTube', 'Google Ads', 'LinkedIn', 'E-mail', 'Impresso',
-  'TV', 'Rádio', 'Site', 'Outro',
-]
-
-const FORMATOS = [
-  'Carrossel', 'Post', 'Stories', 'Reels', 'Vídeo',
-  'Banner', 'Arte estática', 'GIF', 'Identidade Visual',
-  'Texto', 'Roteiro', 'Apresentação', 'Outro',
-]
+import { VEICULOS, FORMATOS, composedTitle, hojeISO, somarDias, prefixoDaData } from '@/lib/atividade-titulo'
+import {
+  useBriefingEditor, useBriefingVazio, BriefingToolbar, FaltandoIA,
+  toHTML, isEmptyHtml, briefingToEditorHTML, faltandoToChecklistHTML,
+} from '@/components/briefing/BriefingRich'
 
 const VEICULO_OPTIONS = VEICULOS.map(v => ({ value: v, label: v }))
 const FORMATO_OPTIONS = FORMATOS.map(f => ({ value: f, label: f }))
+
+// Prazo padrão da casa: 7 dias a partir da entrada na pauta (Rafael, 02/09/2026).
+const PRAZO_PADRAO_DIAS = 7
+const ATALHOS_PRAZO = [3, 7, 14]
+
+// Bandeiras: verde = Normal (o `medium` do banco, default), amarela = Alta, vermelha =
+// Urgente. "Baixa" saiu do seletor — 3 tarefas em 380 usavam — mas continua válida.
+const PRIORIDADES: ActivityPriority[] = ['medium', 'high', 'urgent']
+// Semáforo: verde = Simples (default), amarelo = Médio, vermelho = Complexo.
+const COMPLEXIDADES: ActivityComplexity[] = ['simple', 'medium', 'complex']
 
 export interface MembroSelecionavel {
   userId: string
@@ -33,16 +37,17 @@ export interface MembroSelecionavel {
   avatarUrl: string | null
 }
 
-function todayPrefix() {
-  const now = new Date()
-  const yy = String(now.getFullYear()).slice(2)
-  const mm = String(now.getMonth() + 1).padStart(2, '0')
-  const dd = String(now.getDate()).padStart(2, '0')
-  return `${yy}${mm}${dd}`
-}
-
-function composedTitle(date: string, veiculo: string, formato: string, titulo: string) {
-  return [date, veiculo, formato, titulo].filter(Boolean).join(' - ')
+/** Valores herdados ao duplicar uma tarefa (?from=<id>). Data e período são de hoje. */
+export interface NovaAtividadeInicial {
+  fromTitle: string
+  veiculo: string
+  formato: string
+  titulo: string
+  description: string | null
+  priority: string
+  complexity: string
+  estimated_hours: number | null
+  assigneeIds: string[]
 }
 
 function parseDriveId(url: string): string | null {
@@ -178,9 +183,27 @@ function ResponsavelField({
   )
 }
 
-export function NewActivityForm({ members, currentUserId }: {
+/** Semáforo com uma lâmpada acesa — o ícone da complexidade. */
+function Semaforo({ aceso, className }: { aceso: ActivityComplexity; className?: string }) {
+  const lampada = (nivel: ActivityComplexity, cy: number) => {
+    const on = nivel === aceso
+    const cor = nivel === 'simple' ? 'fill-green-500' : nivel === 'medium' ? 'fill-yellow-400' : 'fill-red-500'
+    return <circle key={nivel} cx="7" cy={cy} r="2.7" className={on ? cor : 'fill-gray-300 dark:fill-gray-600'} />
+  }
+  return (
+    <svg viewBox="0 0 14 26" className={cn('h-5 w-auto', className)} aria-hidden>
+      <rect x="1.5" y="1" width="11" height="24" rx="3.5" className="fill-gray-700 dark:fill-gray-500" />
+      {lampada('complex', 6)}
+      {lampada('medium', 13)}
+      {lampada('simple', 20)}
+    </svg>
+  )
+}
+
+export function NewActivityForm({ members, currentUserId, inicial }: {
   members: MembroSelecionavel[]
   currentUserId: string | null
+  inicial?: NovaAtividadeInicial | null
 }) {
   const statusCfg = useStatusConfig()
   const { orgSlug, workspaceId, campaignId } = useParams<{
@@ -193,32 +216,39 @@ export function NewActivityForm({ members, currentUserId }: {
   // Perguntas devolvidas pela IA quando o rascunho não dá pra estruturar.
   const [faltandoIA, setFaltandoIA] = useState<string[]>([])
 
-  const [date, setDate] = useState(todayPrefix())
-  const [veiculo, setVeiculo] = useState('')
-  const [veiculoCustom, setVeiculoCustom] = useState('')
-  const [formato, setFormato] = useState('')
-  const [formatoCustom, setFormatoCustom] = useState('')
-  const [titulo, setTitulo] = useState('')
+  // Lista conhece o valor → seleciona; senão "Outro" + texto livre (título antigo duplicado).
+  const conhecido = (lista: readonly string[], v: string) => !!v && v !== 'Outro' && lista.includes(v)
+  const hoje = hojeISO()
+  const [date, setDate] = useState(prefixoDaData(hoje))
+  const [veiculo, setVeiculo] = useState(() => !inicial?.veiculo ? '' : conhecido(VEICULOS, inicial.veiculo) ? inicial.veiculo : 'Outro')
+  const [veiculoCustom, setVeiculoCustom] = useState(() => inicial?.veiculo && !conhecido(VEICULOS, inicial.veiculo) ? inicial.veiculo : '')
+  const [formato, setFormato] = useState(() => !inicial?.formato ? '' : conhecido(FORMATOS, inicial.formato) ? inicial.formato : 'Outro')
+  const [formatoCustom, setFormatoCustom] = useState(() => inicial?.formato && !conhecido(FORMATOS, inicial.formato) ? inicial.formato : '')
+  const [titulo, setTitulo] = useState(inicial?.titulo ?? '')
 
   // Tarefa não nasce sem dono: o campo começa vazio DE PROPÓSITO (nada de
-  // pré-selecionar quem cria) e trava o envio até alguém ser escolhido.
-  const [assignees, setAssignees] = useState<string[]>([])
+  // pré-selecionar quem cria) e trava o envio até alguém ser escolhido. Ao
+  // duplicar, herda os responsáveis da origem — escolha explícita, à vista.
+  const [assignees, setAssignees] = useState<string[]>(inicial?.assigneeIds ?? [])
   const [respError, setRespError] = useState(false)
 
   const [form, setForm] = useState({
-    description: '',
     status: 'briefing',
-    priority: 'medium',
-    complexity: 'medium',
-    start_date: '',
-    due_date: '',
-    estimated_hours: '',
+    priority: inicial && PRIORIDADES.includes(inicial.priority as ActivityPriority) ? inicial.priority : 'medium',
+    complexity: inicial && COMPLEXIDADES.includes(inicial.complexity as ActivityComplexity) ? inicial.complexity : 'simple',
+    start_date: hoje,
+    due_date: somarDias(hoje, PRAZO_PADRAO_DIAS),
+    estimated_hours: inicial?.estimated_hours ? String(inicial.estimated_hours) : '',
     drive_folder_url: '',
-    redacao_url: '',
-    layout_url: '',
-    finalizacao_url: '',
-    orcamento: '',
   })
+  // A pasta no Drive é criada sozinha; colar link é exceção, fica recolhido.
+  const [mostrarDrive, setMostrarDrive] = useState(false)
+
+  const { editor, insertImage } = useBriefingEditor({
+    content: toHTML(inicial?.description),
+    placeholder: 'Objetivo, diretrizes e referências… cole ou solte imagens aqui',
+  })
+  const briefingVazio = useBriefingVazio(editor)
 
   function setF(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -233,24 +263,26 @@ export function NewActivityForm({ members, currentUserId }: {
   const statusSel = statusCfg.find(s => s.value === form.status)
 
   async function handleImproveWithAI() {
-    if (!form.description.trim() || isImprovingAI) return
+    if (!editor || isImprovingAI) return
+    const texto = editor.getText({ blockSeparator: '\n' }).trim()
+    if (!texto) return
     setIsImprovingAI(true)
     setFaltandoIA([])
-    const anterior = form.description
+    const anterior = editor.getHTML()
     // Motivo em pt-BR vindo da rota (sobrecarga, sem crédito…); rede/parse cai no genérico.
     let motivo = ''
     try {
       const res = await fetch('/api/ai/improve-briefing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: form.description }),
+        body: JSON.stringify({ text: texto }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) { motivo = typeof data.error === 'string' ? data.error : ''; throw new Error('api') }
       if (data.briefing) {
-        setF('description', data.briefing)
+        editor.commands.setContent(briefingToEditorHTML(data.briefing))
         toast.success('Briefing otimizado.', {
-          action: { label: 'Desfazer', onClick: () => setF('description', anterior) },
+          action: { label: 'Desfazer', onClick: () => editor.commands.setContent(anterior) },
         })
       } else if (data.faltando?.length) {
         setFaltandoIA(data.faltando)
@@ -264,6 +296,13 @@ export function NewActivityForm({ members, currentUserId }: {
     }
   }
 
+  // As perguntas viram checklist no fim do briefing — a pessoa responde ali mesmo.
+  function inserirPerguntas() {
+    if (!editor || !faltandoIA.length) return
+    editor.chain().focus('end').insertContent(faltandoToChecklistHTML(faltandoIA)).run()
+    setFaltandoIA([])
+  }
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!fullTitle.trim() || !titulo.trim()) return
@@ -275,6 +314,8 @@ export function NewActivityForm({ members, currentUserId }: {
 
     const formData = new FormData(e.currentTarget)
     formData.set('title', fullTitle)
+    const html = editor?.getHTML() ?? ''
+    formData.set('description', isEmptyHtml(html) ? '' : html)
     if (driveUrl) formData.set('drive_folder_url', driveUrl)
     for (const id of assignees) formData.append('assignee_ids', id)
 
@@ -284,9 +325,11 @@ export function NewActivityForm({ members, currentUserId }: {
     })
   }
 
+  const inputCls = 'w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
+
   return (
     <div className="p-6 sm:p-8 max-w-5xl">
-      <button onClick={() => router.back()}
+      <button type="button" onClick={() => router.back()}
         className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition mb-5">
         <ArrowLeft className="w-4 h-4" /> Voltar
       </button>
@@ -302,6 +345,12 @@ export function NewActivityForm({ members, currentUserId }: {
           <p className={cn('font-mono text-sm font-semibold', fullTitle ? 'text-orange-700' : 'text-orange-300')}>
             {fullTitle || `${date} - Veículo - Formato - Título da demanda`}
           </p>
+          {inicial && (
+            <p className="mt-1.5 flex items-center gap-1.5 text-xs text-orange-500/80 min-w-0">
+              <Copy className="w-3 h-3 shrink-0" />
+              <span className="truncate">Copiada de: {inicial.fromTitle}</span>
+            </p>
+          )}
         </div>
 
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-x-10">
@@ -316,8 +365,8 @@ export function NewActivityForm({ members, currentUserId }: {
                   Data <span className="text-gray-400 font-normal text-xs">(AAMMDD)</span>
                 </label>
                 <input type="text" value={date} onChange={(e) => setDate(e.target.value)}
-                  maxLength={6} placeholder="260515"
-                  className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 font-mono focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent" />
+                  maxLength={6} placeholder="260515" title="Acompanha o início do período; pode ajustar à mão"
+                  className={cn(inputCls, 'font-mono')} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Veículo</label>
@@ -331,13 +380,11 @@ export function NewActivityForm({ members, currentUserId }: {
 
             {veiculo === 'Outro' && (
               <input type="text" value={veiculoCustom} onChange={(e) => setVeiculoCustom(e.target.value)}
-                placeholder="Qual veículo?" autoFocus
-                className="px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent w-full" />
+                placeholder="Qual veículo?" autoFocus={!inicial} className={inputCls} />
             )}
             {formato === 'Outro' && (
               <input type="text" value={formatoCustom} onChange={(e) => setFormatoCustom(e.target.value)}
-                placeholder="Qual formato?" autoFocus
-                className="px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent w-full" />
+                placeholder="Qual formato?" autoFocus={!inicial} className={inputCls} />
             )}
 
             {/* Título da demanda */}
@@ -351,46 +398,37 @@ export function NewActivityForm({ members, currentUserId }: {
                 required />
             </div>
 
-            {/* Descrição / Briefing */}
+            {/* Objetivo / Briefing — o mesmo editor do detalhe: imagem colada/solta vira WebP no volume */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-sm font-medium text-gray-700">
                   Objetivo / Briefing <span className="text-gray-400 font-normal">(opcional)</span>
                 </label>
-                {form.description.trim() && (
-                  <button
-                    type="button"
-                    onClick={handleImproveWithAI}
-                    disabled={isImprovingAI}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-full border border-orange-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Sparkles className={cn('w-3 h-3', isImprovingAI && 'animate-pulse')} />
-                    {isImprovingAI ? 'Otimizando...' : 'Otimizar com IA'}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={handleImproveWithAI}
+                  disabled={isImprovingAI || briefingVazio}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-full border border-orange-100 transition disabled:opacity-50 disabled:cursor-not-allowed',
+                    briefingVazio && 'invisible',
+                  )}
+                >
+                  <Sparkles className={cn('w-3 h-3', isImprovingAI && 'animate-pulse')} />
+                  {isImprovingAI ? 'Otimizando...' : 'Otimizar com IA'}
+                </button>
               </div>
-              <textarea name="description" value={form.description}
-                onChange={(e) => setF('description', e.target.value)}
-                placeholder="Descreva o objetivo, diretrizes e referências..."
-                rows={Math.min(20, Math.max(10, form.description.split('\n').length + 1))}
-                className="w-full px-4 py-3 bg-gray-100 border border-transparent rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none" />
-              {faltandoIA.length > 0 && (
-                <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                  <p className="text-xs font-medium text-amber-800 mb-1.5">
-                    Para estruturar o briefing, responda no texto acima:
-                  </p>
-                  <ul className="space-y-1">
-                    {faltandoIA.map((q, i) => (
-                      <li key={i} className="text-xs text-amber-700">• {q}</li>
-                    ))}
-                  </ul>
+              <div className="rounded-xl bg-gray-100 border border-transparent focus-within:ring-2 focus-within:ring-orange-500 overflow-hidden transition-shadow">
+                <BriefingToolbar editor={editor} insertImage={insertImage} className="border-gray-200/70" />
+                <div className="rich-text px-4 py-3 min-h-[240px] max-h-[460px] overflow-y-auto">
+                  <EditorContent editor={editor} />
                 </div>
-              )}
+              </div>
+              <FaltandoIA perguntas={faltandoIA} onInserir={inserirPerguntas} className="mt-2" />
             </div>
           </div>
 
           {/* Coluna lateral: como a atividade roda */}
-          <aside className="space-y-6">
+          <aside className="space-y-5">
 
             {/* Responsáveis — obrigatório: tarefa não nasce sem dono */}
             <div>
@@ -424,94 +462,123 @@ export function NewActivityForm({ members, currentUserId }: {
               <input type="hidden" name="status" value={form.status} />
             </div>
 
-            {/* Prioridade */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Prioridade</label>
-              <div className="grid grid-cols-3 gap-1.5">
-                {Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => (
-                  <button key={value} type="button" onClick={() => setF('priority', value)}
-                    className={cn('px-2 py-2 rounded-lg border text-xs font-medium text-center transition-colors',
-                      form.priority === value ? `${cfg.bgColor} ${cfg.color} border-transparent` : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                    )}>
-                    {cfg.label}
-                  </button>
-                ))}
-              </div>
-              <input type="hidden" name="priority" value={form.priority} />
-            </div>
-
-            {/* Complexidade */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Complexidade</label>
-              <div className="grid grid-cols-3 gap-1.5">
-                {Object.entries(COMPLEXITY_CONFIG).map(([value, cfg]) => (
-                  <button key={value} type="button" onClick={() => setF('complexity', value)}
-                    className={cn('px-2 py-2 rounded-lg border text-xs font-medium text-center transition-colors',
-                      form.complexity === value ? 'border-gray-800 bg-gray-900 text-white' : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                    )}>
-                    <span className={form.complexity !== value ? cfg.color : ''}>{cfg.label}</span>
-                  </button>
-                ))}
-              </div>
-              <input type="hidden" name="complexity" value={form.complexity} />
-            </div>
-
+            {/* Período: nasce hoje → +7 dias; o AAMMDD do título acompanha o início */}
             <div>
               <DatePicker
                 label="Período de execução"
                 startDate={form.start_date}
                 endDate={form.due_date}
-                onStartChange={(v) => setF('start_date', v)}
+                onStartChange={(v) => { setF('start_date', v); if (v) setDate(prefixoDaData(v)) }}
                 onEndChange={(v) => setF('due_date', v)}
               />
               <input type="hidden" name="start_date" value={form.start_date} />
               <input type="hidden" name="due_date" value={form.due_date} />
+              <div className="mt-2 flex items-center gap-1.5">
+                <span className="text-xs text-gray-400 mr-0.5">Prazo</span>
+                {ATALHOS_PRAZO.map(n => {
+                  const base = form.start_date || hoje
+                  const alvo = somarDias(base, n)
+                  const ativo = form.due_date === alvo
+                  return (
+                    <button key={n} type="button"
+                      onClick={() => { if (!form.start_date) setF('start_date', base); setF('due_date', alvo) }}
+                      className={cn('px-2.5 py-1 rounded-full text-xs border transition-colors active:scale-[0.97]',
+                        ativo ? 'bg-orange-100 text-orange-700 border-transparent font-medium' : 'border-gray-200 text-gray-600 hover:border-orange-300 hover:text-orange-600')}>
+                      +{n}d
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Horas estimadas</label>
-              <input type="number" name="estimated_hours" value={form.estimated_hours}
-                onChange={(e) => setF('estimated_hours', e.target.value)}
-                placeholder="Ex: 4" min="0.5" step="0.5"
-                className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent" />
-            </div>
-
-            {/* Drive */}
-            <div className="border border-gray-200 rounded-xl p-4 space-y-3 bg-gray-50">
-              <div className="flex items-center gap-2">
-                <FolderOpen className="w-4 h-4 text-gray-400" />
-                <p className="text-sm font-medium text-gray-700">Arquivos no Google Drive</p>
+            {/* Prioridade (bandeiras) · Complexidade (semáforo) · Horas */}
+            <div className="flex flex-wrap items-end gap-x-5 gap-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Prioridade <span className="text-gray-400 font-normal text-xs">· {PRIORITY_CONFIG[form.priority as ActivityPriority].label}</span>
+                </label>
+                <div className="flex gap-1.5">
+                  {PRIORIDADES.map(v => {
+                    const cfg = PRIORITY_CONFIG[v]
+                    const on = form.priority === v
+                    return (
+                      <button key={v} type="button" title={cfg.label} aria-label={`Prioridade ${cfg.label}`} aria-pressed={on}
+                        onClick={() => setF('priority', v)}
+                        className={cn('w-9 h-9 rounded-lg border flex items-center justify-center transition-colors active:scale-[0.97]',
+                          on ? `${cfg.bgColor} border-transparent` : 'border-gray-200 bg-white hover:border-gray-300')}>
+                        <Flag className={cn('w-4 h-4', cfg.color, on ? 'fill-current' : 'opacity-60')} />
+                      </button>
+                    )
+                  })}
+                </div>
+                <input type="hidden" name="priority" value={form.priority} />
               </div>
 
               <div>
-                <label className="block text-xs text-gray-500 mb-1.5">Link da pasta principal</label>
-                <input type="url" name="drive_folder_url" value={form.drive_folder_url}
-                  onChange={(e) => setF('drive_folder_url', e.target.value)}
-                  placeholder="https://drive.google.com/drive/folders/... ou open?id=..."
-                  className="w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white" />
-                {driveUrl && (
-                  <a href={driveUrl} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 mt-1.5 text-xs text-orange-600 hover:underline">
-                    <ExternalLink className="w-3 h-3" /> Abrir pasta no Drive
-                  </a>
-                )}
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Complexidade <span className="text-gray-400 font-normal text-xs">· {COMPLEXITY_CONFIG[form.complexity as ActivityComplexity].label}</span>
+                </label>
+                <div className="flex gap-1.5">
+                  {COMPLEXIDADES.map(v => {
+                    const cfg = COMPLEXITY_CONFIG[v]
+                    const on = form.complexity === v
+                    return (
+                      <button key={v} type="button" title={cfg.label} aria-label={`Complexidade ${cfg.label}`} aria-pressed={on}
+                        onClick={() => setF('complexity', v)}
+                        className={cn('w-9 h-9 rounded-lg border flex items-center justify-center transition-colors active:scale-[0.97]',
+                          on ? 'bg-gray-100 border-gray-300' : 'border-gray-200 bg-white hover:border-gray-300')}>
+                        <Semaforo aceso={v} className={on ? '' : 'opacity-60'} />
+                      </button>
+                    )
+                  })}
+                </div>
+                <input type="hidden" name="complexity" value={form.complexity} />
               </div>
 
-              {[
-                { label: 'Redação', name: 'redacao_url', placeholder: 'Google Docs...', field: 'redacao_url' },
-                { label: 'Layout / Editáveis', name: 'layout_url', placeholder: 'Google Drive...', field: 'layout_url' },
-                { label: 'Finalização', name: 'finalizacao_url', placeholder: 'Arquivo final...', field: 'finalizacao_url' },
-                { label: 'Orçamento', name: 'orcamento', placeholder: 'Valor ou link...', field: 'orcamento', notUrl: true },
-              ].map(({ label, name, placeholder, field, notUrl }) => (
-                <div key={name}>
-                  <label className="block text-xs text-gray-500 mb-1">{label}</label>
-                  <input type={notUrl ? 'text' : 'url'} name={name}
-                    value={form[field as keyof typeof form]}
-                    onChange={(e) => setF(field, e.target.value)}
-                    placeholder={placeholder}
-                    className="w-full px-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white" />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Horas</label>
+                <div className="relative">
+                  <input type="number" name="estimated_hours" value={form.estimated_hours}
+                    onChange={(e) => setF('estimated_hours', e.target.value)}
+                    placeholder="4" min="0.5" step="0.5" title="Horas estimadas"
+                    className="w-[4.5rem] h-9 pl-3 pr-6 bg-gray-100 border border-transparent rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent" />
+                  <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">h</span>
                 </div>
-              ))}
+              </div>
+            </div>
+
+            {/* Drive: automático. Vincular pasta existente é exceção, fica recolhido. */}
+            <div>
+              {!mostrarDrive ? (
+                <button type="button" onClick={() => setMostrarDrive(true)}
+                  className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors text-left">
+                  <FolderOpen className="w-3.5 h-3.5 shrink-0" />
+                  <span>Pasta no Drive criada automaticamente. <span className="underline underline-offset-2">Vincular uma existente</span></span>
+                </button>
+              ) : (
+                <div className="border border-gray-200 rounded-xl p-3 space-y-2 bg-gray-50">
+                  <div className="flex items-center justify-between">
+                    <p className="flex items-center gap-1.5 text-xs font-medium text-gray-700">
+                      <FolderOpen className="w-3.5 h-3.5 text-gray-400" /> Vincular pasta existente
+                    </p>
+                    <button type="button" onClick={() => { setMostrarDrive(false); setF('drive_folder_url', '') }}
+                      aria-label="Fechar" className="text-gray-400 hover:text-gray-600 transition-colors">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <input type="url" name="drive_folder_url" value={form.drive_folder_url}
+                    onChange={(e) => setF('drive_folder_url', e.target.value)}
+                    placeholder="https://drive.google.com/drive/folders/..." autoFocus
+                    className="w-full px-3 py-2 bg-white border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent" />
+                  {driveUrl && (
+                    <a href={driveUrl} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-orange-600 hover:underline">
+                      <ExternalLink className="w-3 h-3" /> Abrir pasta no Drive
+                    </a>
+                  )}
+                  <p className="text-[11px] text-gray-400">Com link colado, o Flow não cria pasta nova.</p>
+                </div>
+              )}
             </div>
           </aside>
         </div>

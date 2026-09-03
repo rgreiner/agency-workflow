@@ -4,10 +4,11 @@ import NewActivityPage from '@/app/(app)/[orgSlug]/workspaces/[workspaceId]/camp
 // "Nova atividade" também abre em modal (este intercept estático tem precedência
 // sobre o [activityId], então não cai mais no caso de UUID). A página é server
 // (carrega os membros pro seletor de responsável), então repassa os params —
-// mesmo padrão do intercept do [activityId].
-export default async function InterceptedNewActivityPage({ params }: {
+// mesmo padrão do intercept do [activityId]. `?from=` (duplicar) vai junto.
+export default async function InterceptedNewActivityPage({ params, searchParams }: {
   params: Promise<{ orgSlug: string; workspaceId: string; campaignId: string }>
+  searchParams: Promise<{ from?: string }>
 }) {
-  const content = await NewActivityPage({ params })
+  const content = await NewActivityPage({ params, searchParams })
   return <TaskModal>{content}</TaskModal>
 }

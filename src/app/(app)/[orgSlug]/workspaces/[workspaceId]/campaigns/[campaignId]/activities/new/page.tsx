@@ -2,17 +2,26 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { membrosAtivos } from '@/lib/membros'
 import { porNome } from '@/lib/utils'
-import { NewActivityForm, type MembroSelecionavel } from './NewActivityForm'
+import { decomporTitulo } from '@/lib/atividade-titulo'
+import { NewActivityForm, type MembroSelecionavel, type NovaAtividadeInicial } from './NewActivityForm'
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
  * "Nova atividade" — a página é server pra carregar a lista de membros: o form
  * exige escolher o responsável na criação (tarefa não nasce sem dono, e não é
  * mais o criador por padrão). O form em si fica em NewActivityForm (client).
+ *
+ * `?from=<id>` = duplicar: herda veículo/formato/título, briefing, prioridade,
+ * complexidade, horas e responsáveis da tarefa de origem; data e período são de
+ * hoje. A leitura passa pela RLS — quem não enxerga a origem cria em branco.
  */
-export default async function NewActivityPage({ params }: {
+export default async function NewActivityPage({ params, searchParams }: {
   params: Promise<{ orgSlug: string; workspaceId: string; campaignId: string }>
+  searchParams?: Promise<{ from?: string }>
 }) {
   const { workspaceId } = await params
+  const { from } = (await searchParams) ?? {}
   const supabase = await createClient()
   const user = await getUsuario()
 
@@ -34,5 +43,26 @@ export default async function NewActivityPage({ params }: {
     }
   }).filter(m => m.email || m.fullName).sort(porNome(m => m.fullName ?? m.email))
 
-  return <NewActivityForm members={members} currentUserId={user?.id ?? null} />
+  let inicial: NovaAtividadeInicial | null = null
+  if (from && UUID_RE.test(from)) {
+    const [{ data: origem }, { data: resp }] = await Promise.all([
+      supabase.from('activities')
+        .select('title, description, priority, complexity, estimated_hours')
+        .eq('id', from).maybeSingle(),
+      supabase.from('activity_assignees').select('user_id').eq('activity_id', from),
+    ])
+    if (origem) {
+      inicial = {
+        fromTitle: origem.title,
+        ...decomporTitulo(origem.title),
+        description: origem.description,
+        priority: origem.priority,
+        complexity: origem.complexity,
+        estimated_hours: origem.estimated_hours,
+        assigneeIds: (resp ?? []).map(r => r.user_id),
+      }
+    }
+  }
+
+  return <NewActivityForm members={members} currentUserId={user?.id ?? null} inicial={inicial} />
 }

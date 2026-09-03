@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity, type StatusOverride } from '@/types'
 import { getStatusConfig } from '@/lib/status'
 import { cn, formatDate, isOverdue } from '@/lib/utils'
-import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink, X, Target, Flag } from 'lucide-react'
+import { AlertTriangle, FolderOpen, FileText, Layers, CheckSquare, ArrowRight, Pencil, ExternalLink, X, Target, Flag, Copy } from 'lucide-react'
 import Link from 'next/link'
 import { DriveProvisioningNotice } from './DriveProvisioningNotice'
 import { EntregaMidiaAviso } from './EntregaMidiaAviso'
@@ -409,6 +409,17 @@ export default async function ActivityPage({
           )}
           {isOrgMember && <MuteButton orgSlug={orgSlug} path={path} activityId={activityId} muted={muted} />}
           <ShareJobButton orgSlug={orgSlug} activityId={activityId} title={activity.title} />
+          {/* Criar outra a partir desta: jobs como "Card distribuidor" se repetem. */}
+          {isOrgMember && (
+            <Link
+              href={`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}/activities/new?from=${activityId}`}
+              title="Criar uma nova tarefa a partir desta (mesmo veículo, formato, briefing e responsáveis)"
+              className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Duplicar</span>
+            </Link>
+          )}
           <span className="hidden md:inline">Criada {formatDate(activity.created_at)}</span>
           {!modal && (
             <Link
@@ -474,12 +485,10 @@ export default async function ActivityPage({
                     activityId={activityId} path={path}
                     field="priority" value={activity.priority} canEdit={isOrgMember}
                     type="select"
-                    options={[
-                      { value: 'low',    label: 'Baixa'   },
-                      { value: 'medium', label: 'Média'   },
-                      { value: 'high',   label: 'Alta'    },
-                      { value: 'urgent', label: 'Urgente' },
-                    ]}
+                    options={(Object.keys(PRIORITY_CONFIG) as ActivityPriority[])
+                      // "Baixa" só aparece se a tarefa ainda a usa.
+                      .filter(v => v !== 'low' || activity.priority === 'low')
+                      .map(v => ({ value: v, label: PRIORITY_CONFIG[v].label }))}
                     display={
                       <span className={cn('inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg border', priorityCfg.bgColor, priorityCfg.color, 'border-transparent')}>
                         <Flag className={cn('w-3.5 h-3.5', priorityCfg.preenchido && 'fill-current')} />
