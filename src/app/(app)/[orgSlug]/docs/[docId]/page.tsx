@@ -50,9 +50,16 @@ export default async function DocPage({
     return { userId: m.user_id, fullName: p?.full_name ?? null, email: p?.email ?? '' }
   })
 
+  // Mesma régua da policy can_manage_doc (mig. 276): documento da ORGANIZAÇÃO
+  // é do time — qualquer membro edita. 'custom' fica com o criador, o
+  // owner/admin e quem foi compartilhado. Antes daqui só o criador e o
+  // owner editavam, e o time inteiro via a tela em modo leitura sem saber
+  // por quê ("o Chrome não deixa editar").
   const canManage =
     doc.created_by === user.id ||
-    ['owner', 'admin'].includes(membership?.role ?? '')
+    ['owner', 'admin'].includes(membership?.role ?? '') ||
+    doc.visibility === 'org' ||
+    (sharedMembers ?? []).some(m => m.user_id === user.id)
 
   const workspaceName = (doc.workspaces as unknown as { name: string } | null)?.name ?? null
 

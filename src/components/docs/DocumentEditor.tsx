@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -109,21 +109,54 @@ export function DocumentEditor({
     }
   }
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // A última gravação pendente fica guardada: sem isso, fechar a aba ou sair
+  // da página dentro da janela de 1s perdia o que a pessoa acabou de digitar,
+  // em silêncio — num editor, o pior tipo de bug.
+  const pendente = useRef<(() => Promise<void>) | null>(null)
+
+  const executarSave = useCallback(async (fn: () => Promise<void>) => {
+    pendente.current = null
+    try {
+      await fn()
+      setSaveStatus('saved')
+      setTimeout(() => setSaveStatus('idle'), 2000)
+    } catch {
+      setSaveStatus('idle')
+      toast.error('Erro ao salvar. Tente novamente.')
+    }
+  }, [])
 
   const scheduleSave = useCallback((fn: () => Promise<void>) => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     setSaveStatus('saving')
-    saveTimer.current = setTimeout(async () => {
-      try {
-        await fn()
-        setSaveStatus('saved')
-        setTimeout(() => setSaveStatus('idle'), 2000)
-      } catch {
-        setSaveStatus('idle')
-        toast.error('Erro ao salvar. Tente novamente.')
-      }
-    }, 1000)
-  }, [])
+    pendente.current = fn
+    saveTimer.current = setTimeout(() => { void executarSave(fn) }, 1000)
+  }, [executarSave])
+
+  // Rede de segurança em três frentes: aviso do navegador ao fechar a aba,
+  // gravação imediata quando a aba perde o foco (trocar de janela é o caso
+  // comum), e flush ao desmontar (navegação interna do app).
+  useEffect(() => {
+    const aoSair = (e: BeforeUnloadEvent) => {
+      if (!pendente.current) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    const aoEsconder = () => {
+      if (document.visibilityState !== 'hidden' || !pendente.current) return
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      void executarSave(pendente.current)
+    }
+    window.addEventListener('beforeunload', aoSair)
+    document.addEventListener('visibilitychange', aoEsconder)
+    return () => {
+      window.removeEventListener('beforeunload', aoSair)
+      document.removeEventListener('visibilitychange', aoEsconder)
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      // Saiu da página pelo app: grava o que faltou antes de desmontar.
+      if (pendente.current) void executarSave(pendente.current)
+    }
+  }, [executarSave])
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -345,6 +378,19 @@ export function DocumentEditor({
           >
             ↪
           </button>
+        </div>
+      )}
+
+      {/* Sem permissão, a barra de ferramentas some e o texto não aceita
+          cursor — o silêncio é o que fez o time achar que era o navegador
+          (mig. 276). Agora a tela diz o porquê e o caminho. */}
+      {!canManage && (
+        <div className="px-6 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center gap-2 text-xs text-gray-600">
+          <Lock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+          <span>
+            <b className="font-medium">Somente leitura.</b> Este documento é restrito a quem foi
+            compartilhado — peça acesso a quem criou, ou mude a visibilidade para “Toda a organização”.
+          </span>
         </div>
       )}
 
