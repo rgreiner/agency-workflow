@@ -72,9 +72,13 @@ export async function loadMidiaDoc(supabase: any, orgId: string, midiaId: string
   const det = m.detalhe ?? {}
   const valor = Number(m.valor ?? 0)
   const descPct = Number(m.desconto_pct ?? 0)
-  const prodValor = parseMoney(String(det.producao_valor ?? ''))
   const prodQtd = parseInt(String(det.producao_quantidade ?? '1'), 10) || 1
-  const prodTotal = prodValor * prodQtd
+  // Mesma régua do form: o total DIGITADO vence; senão unitário × quantidade. O unitário
+  // exibido é total ÷ quantidade — o form gravava o derivado arredondado ("1,40" para
+  // 1.398,60 ÷ 1000) e a PI recalculava 1.400,00.
+  const prodTotalDigitado = parseMoney(String(det.producao_total ?? ''))
+  const prodTotal = prodTotalDigitado > 0 ? prodTotalDigitado : parseMoney(String(det.producao_valor ?? '')) * prodQtd
+  const prodValor = prodTotalDigitado > 0 ? prodTotalDigitado / prodQtd : parseMoney(String(det.producao_valor ?? ''))
 
   const vEnd = Array.isArray(veic?.enderecos) ? veic.enderecos[0] : null
   const enderecoVeiculo = vEnd ? [

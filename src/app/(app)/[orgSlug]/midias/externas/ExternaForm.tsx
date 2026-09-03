@@ -59,6 +59,9 @@ const newLoc = (): Localizacao => ({ endereco: '', cidade: '' })
 // Número → string BR ("3.000,00"): mesmo formato "como digitado" dos outros campos
 // de dinheiro daqui (parseMoney reconverte certo; nunca gravar com ponto decimal).
 const fmtBR = (v: number) => (isFinite(v) ? v : 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// Unitário derivado do total guarda até 4 casas (1.398,60 ÷ 1000 = 1,3986). Arredondar a
+// "1,40" fazia a PI, o faturamento e a RPC recalcularem quant × unit = 1.400,00.
+const fmtBRUnit = (v: number) => (isFinite(v) ? v : 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
 const prodQtdDe = (q: string) => parseInt(q || '1', 10) || 1
 function emptyValues(today: string, responsavelId: string): ExternaValues {
   const [y, m] = today.split('-')
@@ -101,7 +104,7 @@ export function ExternaForm({
   // Produção unit ↔ total: digitou unit → recalcula total; digitou total → recalcula
   // unit (fornecedor que passa "500 un por 3000"); mudou a quantidade → mantém o unit.
   const setProducaoUnit = (v: string) => setForm(f => ({ ...f, producao_valor: v, producao_total: parseMoney(v) ? fmtBR(prodQtdDe(f.producao_quantidade) * parseMoney(v)) : '' }))
-  const setProducaoTotal = (v: string) => setForm(f => ({ ...f, producao_total: v, producao_valor: parseMoney(v) ? fmtBR(parseMoney(v) / prodQtdDe(f.producao_quantidade)) : f.producao_valor }))
+  const setProducaoTotal = (v: string) => setForm(f => ({ ...f, producao_total: v, producao_valor: parseMoney(v) ? fmtBRUnit(parseMoney(v) / prodQtdDe(f.producao_quantidade)) : f.producao_valor }))
   const setProducaoQuant = (v: string) => setForm(f => ({ ...f, producao_quantidade: v, producao_total: parseMoney(f.producao_valor) ? fmtBR(prodQtdDe(v) * parseMoney(f.producao_valor)) : f.producao_total }))
   function setPrimeiraVeiculacao(v: string) {
     setForm(f => ({ ...f, primeira_veiculacao: v, data_base: dataBaseManual || !v ? f.data_base : v }))
@@ -218,6 +221,9 @@ export function ExternaForm({
       // Quem espelha essa leitura no banco é _br_num (migration 132).
       producao_valor: form.producao_valor, producao_comissao_pct: form.producao_comissao_pct,
       producao_quantidade: form.producao_quantidade,
+      // Total digitado também vai gravado: a PI mostra ELE (não unit × quant recalculado)
+      // e a reedição reabre com o que a pessoa digitou. A RPC continua em producao_valor.
+      producao_total: form.producao_total,
       producao_fornecedor_id: form.producao_tipo === 'de_terceiros' ? form.producao_fornecedor_id : '',
       custo: form.custo, desconto_exibicao: form.desconto_exibicao,
       // A linha em branco existe só como campo pra digitar — não vira ponto na PI.

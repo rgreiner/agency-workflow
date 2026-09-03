@@ -4,7 +4,7 @@
 
 import { Text, View } from '@react-pdf/renderer'
 import {
-  s, Cabecalho, Linha, Secao, TabLinha, Assinaturas, Rodape, FolhaA4, brl, dataBR, agoraBR,
+  s, Cabecalho, Linha, Secao, TabLinha, Assinaturas, Rodape, FolhaA4, brl, brlUnit, dataBR, agoraBR,
 } from './kit'
 import type { MidiaDocData } from './midia-data'
 
@@ -64,7 +64,7 @@ export function MidiaDoc({ d }: { d: MidiaDocData }) {
               <TabLinha label="Tipo" valor={d.producao.tipo} />
               {!!d.producao.pedido && <TabLinha label="Pedido de Prod." valor={d.producao.pedido} />}
               <TabLinha label="Quantidade" valor={String(d.producao.qtd)} />
-              <TabLinha label="Valor unitário" valor={brl(d.producao.unitario)} />
+              <TabLinha label="Valor unitário" valor={brlUnit(d.producao.unitario)} />
               <TabLinha label="Total produção" valor={brl(d.producao.total)} forte />
               {d.producao.comissao > 0 && <TabLinha label="Comissão produção" valor={brl(d.producao.comissao)} />}
             </>
