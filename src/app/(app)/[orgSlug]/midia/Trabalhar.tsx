@@ -1,14 +1,15 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useMemo, useState, useSyncExternalStore, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
-  AlertTriangle, ArrowRight, CheckCircle2, ExternalLink, Loader2, PartyPopper,
-  Repeat, Send, Truck,
+  AlertTriangle, ArrowRight, CheckCircle2, ExternalLink, Flag, ListChecks, Loader2,
+  PartyPopper, Repeat, Send, Truck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity } from '@/types'
 import { MachinePath } from '@/components/ui/MachinePath'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { concluirTarefaMidia, mudarSituacaoEntrega } from '@/app/actions/midia-hub'
@@ -32,6 +33,15 @@ export interface ItemFila {
   /** Entrega cuja tarefa ainda não chegou num status da mídia. */
   esperandoCriacao: boolean
   frequencia: string | null
+  /** Quem está na tarefa (a entrega herda da tarefa vinculada). */
+  assigneeIds: string[]
+  pedidoPor: string | null
+  /** Primeira entrada num status da mídia; sem histórico, mostra a criação. */
+  entrouEm: string | null
+  criadaEm: string | null
+  prioridade: string
+  complexidade: string
+  checklist: { feitos: number; total: number } | null
 }
 
 interface StatusCfg { valor: string; label: string; bg: string; txt: string }
@@ -39,6 +49,16 @@ interface StatusCfg { valor: string; label: string; bg: string; txt: string }
 const FREQ: Record<string, string> = {
   weekly: 'semanal', biweekly: 'quinzenal', monthly: 'mensal',
   bimonthly: 'bimestral', quarterly: 'trimestral', semiannual: 'semestral', annual: 'anual',
+}
+
+/** Preferência local: ver só o que está comigo. Versionar a chave se o default mudar. */
+const CHAVE_EU = 'flow:midia:trabalhar:eu:v1'
+const ouvintesEu = new Set<() => void>()
+const lerEu = () => { try { return localStorage.getItem(CHAVE_EU) === '1' } catch { return false } }
+const assinarEu = (cb: () => void) => { ouvintesEu.add(cb); return () => { ouvintesEu.delete(cb) } }
+function gravarEu(v: boolean) {
+  try { localStorage.setItem(CHAVE_EU, v ? '1' : '0') } catch { /* sem storage */ }
+  ouvintesEu.forEach(f => f())
 }
 
 const hojeBR = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
@@ -64,23 +84,34 @@ const TOM: Record<string, string> = {
 }
 
 /**
- * A fila da mídia em UMA lista, ordenada por data — o que fazer agora e o que
- * vem depois. O painel (Visão geral) continua existindo para o retrato da
- * operação; aqui não entra KPI, radar nem agrupamento por cliente, porque foi
- * exatamente isso que fazia perder o foco.
+ * A fila da mídia em três blocos: **Agora** (o item mais urgente, de qualquer
+ * tipo), **Pedidos e entregas** (o que o time pediu — é onde um trabalho grande
+ * precisa de espaço) e **Rotinas** (o catálogo, em linhas compactas). Dentro de
+ * cada bloco a ordem é a data. O painel (Visão geral) continua existindo para o
+ * retrato da operação; aqui não entra KPI nem radar.
  *
  * Uma linha por trabalho: entrega vinculada a uma tarefa que já está na fila
  * aparece só como entrega — o prazo do veículo é o que manda.
  */
-export function Trabalhar({ orgSlug, itens, statusCfg }: {
+export function Trabalhar({ orgSlug, itens, statusCfg, meuId }: {
   orgSlug: string
   itens: ItemFila[]
   statusCfg: StatusCfg[]
+  meuId: string
 }) {
   const cfg = useMemo(() => new Map(statusCfg.map(s => [s.valor, s])), [statusCfg])
   const [feitos, setFeitos] = useState<Set<string>>(new Set())
+  // No servidor a fila nasce inteira; o "Eu" entra depois da hidratação, sem
+  // setState em effect (regra do lint do projeto).
+  const soEu = useSyncExternalStore(assinarEu, lerEu, () => false)
+  const alternarEu = () => gravarEu(!soEu)
 
-  const lista = useMemo(() => itens.filter(i => !feitos.has(i.chave)), [itens, feitos])
+  // "Eu" = o que está comigo. Entrega sem tarefa não tem dono: é de quem opera,
+  // então continua aparecendo.
+  const lista = useMemo(() => itens
+    .filter(i => !feitos.has(i.chave))
+    .filter(i => !soEu || i.assigneeIds.includes(meuId) || (i.tipo === 'entrega' && !i.activityId)),
+  [itens, feitos, soEu, meuId])
   const atrasados = lista.filter(i => prazo(i.data).dias < 0).length
   const hoje = lista.filter(i => prazo(i.data).dias === 0).length
 
@@ -88,49 +119,75 @@ export function Trabalhar({ orgSlug, itens, statusCfg }: {
     setFeitos(prev => new Set([...prev, chave]))
   }
 
-  if (lista.length === 0) {
-    return (
-      <div className="p-6">
-        <Cabecalho orgSlug={orgSlug} atrasados={0} hoje={0} total={0} />
-        <div className="text-center py-20 bg-white border border-gray-200 rounded-xl mt-5">
-          <PartyPopper className="w-8 h-8 text-emerald-600 mx-auto" />
-          <p className="text-sm text-gray-600 mt-3">Fila limpa. Nada esperando por você.</p>
-        </div>
-      </div>
-    )
-  }
-
   const [primeiro, ...resto] = lista
+  const pedidos = resto.filter(i => i.tipo !== 'rotina')
+  const rotinas = resto.filter(i => i.tipo === 'rotina')
 
   return (
     <div className="p-6">
-      <Cabecalho orgSlug={orgSlug} atrasados={atrasados} hoje={hoje} total={lista.length} />
+      <Cabecalho orgSlug={orgSlug} atrasados={atrasados} hoje={hoje} total={lista.length}
+        soEu={soEu} onEu={alternarEu} />
 
-      <section className="mt-5">
-        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Agora</h2>
-        <Item orgSlug={orgSlug} item={primeiro} cfg={cfg} destaque onFeito={concluir} />
-      </section>
+      {!primeiro ? (
+        <div className="text-center py-20 bg-white border border-gray-200 rounded-xl mt-5">
+          <PartyPopper className="w-8 h-8 text-emerald-600 mx-auto" />
+          <p className="text-sm text-gray-600 mt-3">
+            {soEu ? 'Nada com você. Desligue o "Eu" para ver a fila inteira.' : 'Fila limpa. Nada esperando por você.'}
+          </p>
+        </div>
+      ) : (
+        <>
+          <section className="mt-5">
+            <Titulo>Agora</Titulo>
+            <Item orgSlug={orgSlug} item={primeiro} cfg={cfg} destaque onFeito={concluir} />
+          </section>
 
-      {resto.length > 0 && (
-        <section className="mt-6">
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-            Depois <span className="text-gray-300 font-normal">· {resto.length}</span>
-          </h2>
-          <ul className="space-y-1.5">
-            {resto.map(i => (
-              <li key={i.chave}>
-                <Item orgSlug={orgSlug} item={i} cfg={cfg} onFeito={concluir} />
-              </li>
-            ))}
-          </ul>
-        </section>
+          <section className="mt-6">
+            <Titulo contagem={pedidos.length}>Pedidos e entregas</Titulo>
+            {pedidos.length === 0 ? (
+              <p className="text-sm text-gray-400 px-1">Nenhum pedido esperando além do que está em Agora.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {pedidos.map(i => (
+                  <li key={i.chave}>
+                    <Item orgSlug={orgSlug} item={i} cfg={cfg} onFeito={concluir}
+                      destaque={i.complexidade === 'complex'} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {rotinas.length > 0 && (
+            <section className="mt-6">
+              <Titulo contagem={rotinas.length}>Rotinas</Titulo>
+              <ul className="space-y-1.5">
+                {rotinas.map(i => (
+                  <li key={i.chave}>
+                    <Item orgSlug={orgSlug} item={i} cfg={cfg} onFeito={concluir} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </>
       )}
     </div>
   )
 }
 
-function Cabecalho({ orgSlug, atrasados, hoje, total }: {
+function Titulo({ children, contagem }: { children: React.ReactNode; contagem?: number }) {
+  return (
+    <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+      {children}
+      {contagem !== undefined && <span className="text-gray-300 font-normal"> · {contagem}</span>}
+    </h2>
+  )
+}
+
+function Cabecalho({ orgSlug, atrasados, hoje, total, soEu, onEu }: {
   orgSlug: string; atrasados: number; hoje: number; total: number
+  soEu: boolean; onEu: () => void
 }) {
   const partes = [
     atrasados > 0 ? `${atrasados} atrasado${atrasados > 1 ? 's' : ''}` : null,
@@ -142,13 +199,20 @@ function Cabecalho({ orgSlug, atrasados, hoje, total }: {
       <div>
         <h1 className="text-lg font-semibold text-gray-900">Trabalhar</h1>
         <p className="text-gray-500 text-sm mt-0.5">
-          {partes.join(' · ')} — em ordem de data, pedidos, rotinas e entregas juntos.
+          {partes.join(' · ')} — pedidos e entregas separados das rotinas, cada bloco em ordem de data.
         </p>
       </div>
-      <Link href={`/${orgSlug}/midia/visao-geral`}
-        className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
-        Visão geral <ArrowRight className="w-4 h-4" />
-      </Link>
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={onEu} title="Só o que está comigo"
+          className={cn('px-3 py-1.5 text-xs font-medium rounded-full border transition-colors active:scale-[0.97]',
+            soEu ? 'bg-orange-500 border-orange-500 text-[#fff]' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50')}>
+          Eu
+        </button>
+        <Link href={`/${orgSlug}/midia/visao-geral`}
+          className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
+          Visão geral <ArrowRight className="w-4 h-4" />
+        </Link>
+      </div>
     </div>
   )
 }
@@ -165,6 +229,9 @@ function Item({ orgSlug, item, cfg, destaque = false, onFeito }: {
   const [confirmar, setConfirmar] = useState(false)
   const p = prazo(item.data)
   const st = item.status ? cfg.get(item.status) : null
+  const prio = PRIORITY_CONFIG[item.prioridade as ActivityPriority]
+  const compl = COMPLEXITY_CONFIG[item.complexidade as ActivityComplexity]
+  const ehPedido = item.tipo === 'pedido'
 
   const linkTarefa = item.activityId && item.workspaceId && item.campaignId
     ? `/${orgSlug}/workspaces/${item.workspaceId}/campaigns/${item.campaignId}/activities/${item.activityId}?from=${encodeURIComponent(`/${orgSlug}/midia`)}`
@@ -200,6 +267,14 @@ function Item({ orgSlug, item, cfg, destaque = false, onFeito }: {
     })
   }
 
+  // Quem pediu e desde quando — só faz sentido no pedido; a rotina é do catálogo.
+  const origem = ehPedido
+    ? [
+        item.pedidoPor ? `pedido por ${item.pedidoPor}` : null,
+        item.entrouEm ? `entrou ${fmt(item.entrouEm)}` : item.criadaEm ? `criada ${fmt(item.criadaEm)}` : null,
+      ].filter(Boolean).join(' · ')
+    : ''
+
   return (
     <div className={cn('bg-white border rounded-xl',
       destaque ? 'p-5 shadow-sm' : 'px-4 py-3',
@@ -234,12 +309,29 @@ function Item({ orgSlug, item, cfg, destaque = false, onFeito }: {
                 com a criação
               </span>
             )}
+            {item.tipo !== 'rotina' && prio?.preenchido && (
+              <span className={cn('inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full', prio.bgColor, prio.color)}>
+                <Flag className="w-3 h-3" fill="currentColor" /> {prio.label}
+              </span>
+            )}
+            {item.tipo !== 'rotina' && item.complexidade === 'complex' && compl && (
+              <span className={cn('text-[11px] font-medium px-2 py-0.5 rounded-full bg-red-50', compl.color)}>
+                {compl.label}
+              </span>
+            )}
+            {item.checklist && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 tabular-nums"
+                title="Itens do checklist feitos">
+                <ListChecks className="w-3 h-3" /> {item.checklist.feitos}/{item.checklist.total}
+              </span>
+            )}
           </div>
 
           <p className="text-[11px] text-gray-400 mt-0.5">
             {item.cliente}
             {item.veiculo && ` · ${item.veiculo}`}
             {item.frequencia && ` · ${FREQ[item.frequencia] ?? item.frequencia}`}
+            {origem && ` · ${origem}`}
           </p>
 
           {item.conflito && (

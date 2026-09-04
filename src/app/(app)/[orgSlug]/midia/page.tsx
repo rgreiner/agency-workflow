@@ -6,7 +6,7 @@ export const metadata = { title: 'Mídia — Trabalhar' }
 
 export default async function MidiaTrabalharPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params
-  const { supabase, orgId } = await assertMidiaAccess(orgSlug)
+  const { supabase, orgId, userId } = await assertMidiaAccess(orgSlug)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fila = await carregarFilaMidia(supabase as any, orgId)
 
@@ -36,6 +36,14 @@ export default async function MidiaTrabalharPage({ params }: { params: Promise<{
       conflito: e.conflito,
       esperandoCriacao: !!e.activityId && !e.materialPronto,
       frequencia: null,
+      // A entrega não tem responsável; herda o da tarefa quando há uma.
+      assigneeIds: t?.assigneeIds ?? [],
+      pedidoPor: t?.pedidoPor ?? null,
+      entrouEm: t?.entrouEm ?? null,
+      criadaEm: t?.criadaEm ?? null,
+      prioridade: t?.prioridade ?? 'medium',
+      complexidade: t?.complexidade ?? 'medium',
+      checklist: t && t.checklist.total > 0 ? { feitos: t.checklist.feitos, total: t.checklist.total } : null,
     }
   })
 
@@ -59,11 +67,18 @@ export default async function MidiaTrabalharPage({ params }: { params: Promise<{
       conflito: false,
       esperandoCriacao: false,
       frequencia: t.rotina?.frequencia ?? null,
+      assigneeIds: t.assigneeIds,
+      pedidoPor: t.pedidoPor,
+      entrouEm: t.entrouEm,
+      criadaEm: t.criadaEm,
+      prioridade: t.prioridade,
+      complexidade: t.complexidade,
+      checklist: t.checklist.total > 0 ? { feitos: t.checklist.feitos, total: t.checklist.total } : null,
     }))
 
   // Sem data vai para o fim: não dá para priorizar o que ninguém datou.
   const itens = [...daEntrega, ...dasTarefas].sort((a, b) =>
     (a.data ?? '9999-12-31').localeCompare(b.data ?? '9999-12-31'))
 
-  return <Trabalhar orgSlug={orgSlug} itens={itens} statusCfg={fila.statusCfg} />
+  return <Trabalhar orgSlug={orgSlug} itens={itens} statusCfg={fila.statusCfg} meuId={userId} />
 }

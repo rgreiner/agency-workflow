@@ -4,13 +4,18 @@ import { statusDaMidia } from '@/lib/midia-hub'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 /**
- * Fonte única da fila da mídia — usada pela tela **Trabalhar** (`/midia`) e pela
- * **Visão geral** (`/midia/visao-geral`).
+ * Fonte única da fila da mídia — usada pela tela **Trabalhar** (`/midia`), pela
+ * **Visão geral** (`/midia/visao-geral`) e pela Agenda (itens datados).
  *
- * A separação pedido × rotina mora aqui de propósito: as duas telas precisam
+ * A separação pedido × rotina mora aqui de propósito: as telas precisam
  * dela e, duplicada, uma passaria a discordar da outra na primeira mudança do
  * catálogo de rotinas.
  */
+
+/** Item do checklist da tarefa como a fila enxerga: texto, data opcional e feito. */
+export interface ChecklistItemFila { id: string; texto: string; data: string | null; feito: boolean }
+
+export interface ChecklistResumo { feitos: number; total: number; itens: ChecklistItemFila[] }
 
 export interface FilaTarefa {
   id: string; titulo: string; status: string; prazo: string | null
@@ -20,6 +25,16 @@ export interface FilaTarefa {
   redacaoUrl: string | null; previewUrl: string | null; finalUrl: string | null
   /** Preenchido só quando a tarefa é a instância viva de uma rotina do catálogo. */
   rotina: { nome: string; frequencia: string } | null
+  /** Quem está na tarefa — é o que o filtro "Eu" lê. */
+  assigneeIds: string[]
+  /** Quem criou a tarefa (nome), para o "pedido por" do bloco de pedidos. */
+  pedidoPor: string | null
+  /** Primeira vez que a tarefa entrou num status da mídia; null quando não há histórico. */
+  entrouEm: string | null
+  criadaEm: string
+  prioridade: string
+  complexidade: string
+  checklist: ChecklistResumo
 }
 
 export interface FilaEntrega {
@@ -45,6 +60,22 @@ export interface FilaMidia {
   operacoes: OperacaoMidia[]
 }
 
+const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/
+
+/** Lê o jsonb do checklist sem confiar no formato: item sem texto é ignorado. */
+export function resumoChecklist(raw: unknown): ChecklistResumo {
+  const itens: ChecklistItemFila[] = []
+  if (Array.isArray(raw)) {
+    for (const it of raw as any[]) {
+      const texto = String(it?.text ?? '').trim()
+      if (!it?.id || !texto) continue
+      const data = typeof it.data === 'string' && DATA_ISO.test(it.data) ? it.data : null
+      itens.push({ id: String(it.id), texto, data, feito: !!it.done })
+    }
+  }
+  return { feitos: itens.filter(i => i.feito).length, total: itens.length, itens }
+}
+
 export async function carregarFilaMidia(sb: any, orgId: string): Promise<FilaMidia> {
   const statusMidia = await statusDaMidia(sb, orgId)
 
@@ -66,7 +97,7 @@ export async function carregarFilaMidia(sb: any, orgId: string): Promise<FilaMid
 
   const { data: ativRaw, error: errAtiv } = await sb
     .from('activities')
-    .select('id, title, status, due_date, drive_folder_url, drive_path, redacao_url, preview_url, finalizacao_url, campaign_id, campaigns!inner(id, name, workspace_id, workspaces!inner(id, name, org_id))')
+    .select('id, title, status, due_date, created_at, created_by, priority, complexity, checklist, drive_folder_url, drive_path, redacao_url, preview_url, finalizacao_url, campaign_id, activity_assignees(user_id), campaigns!inner(id, name, workspace_id, workspaces!inner(id, name, org_id))')
     .eq('campaigns.workspaces.org_id', orgId)
     .eq('archived', false)
     .in('status', statusMidia)
@@ -74,6 +105,30 @@ export async function carregarFilaMidia(sb: any, orgId: string): Promise<FilaMid
   if (errAtiv) throw new Error(`Falha ao carregar a fila da mídia: ${errAtiv.message}`)
 
   const todas = (ativRaw ?? []) as any[]
+  const ids = todas.map(a => a.id as string)
+
+  // Quem pediu e quando entrou na mídia — duas consultas pequenas, só sobre a fila.
+  // A entrada é a PRIMEIRA vez num status da mídia (uma peça pode ir e voltar
+  // entre validação e implantação; o que interessa é desde quando está aqui).
+  const criadores = [...new Set(todas.map(a => a.created_by).filter(Boolean) as string[])]
+  const [resPerfis, resHist] = ids.length
+    ? await Promise.all([
+        criadores.length
+          ? sb.from('profiles').select('id, full_name').in('id', criadores)
+          : Promise.resolve({ data: [], error: null }),
+        sb.from('activity_history').select('activity_id, changed_at')
+          .in('activity_id', ids).in('to_status', statusMidia)
+          .order('changed_at', { ascending: true }),
+      ])
+    : [{ data: [], error: null }, { data: [], error: null }]
+  const nomePorId = new Map<string, string>(
+    ((resPerfis.data ?? []) as any[]).map(p => [p.id, p.full_name ?? '']))
+  const entradaPorAtividade = new Map<string, string>()
+  for (const h of (resHist.data ?? []) as any[]) {
+    if (!entradaPorAtividade.has(h.activity_id)) {
+      entradaPorAtividade.set(h.activity_id, String(h.changed_at).slice(0, 10))
+    }
+  }
 
   // Qual tarefa é instância de rotina — o resto é pedido do time.
   const rotinaPorAtividade = new Map<string, { nome: string; frequencia: string }>()
@@ -101,6 +156,13 @@ export async function carregarFilaMidia(sb: any, orgId: string): Promise<FilaMid
       redacaoUrl: a.redacao_url ?? null, previewUrl: a.preview_url ?? null,
       finalUrl: a.finalizacao_url ?? null,
       rotina: rot,
+      assigneeIds: ((a.activity_assignees ?? []) as any[]).map(x => x.user_id as string).filter(Boolean),
+      pedidoPor: a.created_by ? (nomePorId.get(a.created_by) || null) : null,
+      entrouEm: entradaPorAtividade.get(a.id) ?? null,
+      criadaEm: String(a.created_at ?? '').slice(0, 10),
+      prioridade: a.priority ?? 'medium',
+      complexidade: a.complexity ?? 'medium',
+      checklist: resumoChecklist(a.checklist),
     }
   })
 
