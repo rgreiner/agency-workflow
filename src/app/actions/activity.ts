@@ -498,17 +498,29 @@ export async function setActivityExtraLinks(
 }
 
 /** Salva o checklist do job — array [{id, text, done}] (itens sem texto são descartados). */
+/** YYYY-MM-DD que existe no calendário (31/02 não passa). */
+function dataDeCalendario(iso: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false
+  const d = new Date(iso + 'T12:00:00Z')
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === iso
+}
+
 export async function setActivityChecklist(
   path: string,
   activityId: string,
-  items: { id: string; text: string; done: boolean }[],
+  items: { id: string; text: string; done: boolean; data?: string | null }[],
 ) {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const clean = (items ?? [])
-    .map(it => ({ id: String(it.id), text: (it.text ?? '').trim(), done: !!it.done }))
+    .map(it => ({
+      id: String(it.id), text: (it.text ?? '').trim(), done: !!it.done,
+      // Data opcional: item datado vira linha própria na fila da mídia. Formato
+      // inválido cai fora em vez de gravar lixo no jsonb.
+      data: typeof it.data === 'string' && dataDeCalendario(it.data) ? it.data : null,
+    }))
     .filter(it => it.text)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -6,7 +6,8 @@
 import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { dispatchPushNotificacoes } from '@/lib/push'
-import { assertMidiaAccess } from '@/lib/midia-hub'
+import { assertMidiaAccess, statusDaMidia } from '@/lib/midia-hub'
+import { resumoChecklist } from '@/lib/midia-fila'
 import { provisionActivitiesDrive } from '@/lib/drive-provision'
 import { porNome } from '@/lib/utils'
 
@@ -865,7 +866,7 @@ export interface CoberturaRow {
 }
 
 export interface AgendaRow {
-  dia: string; tipo: 'prazo' | 'feito' | 'entrega' | 'pedido'
+  dia: string; tipo: 'prazo' | 'feito' | 'entrega' | 'pedido' | 'item'
   titulo: string; cliente: string
   activity_id: string | null; workspace_id: string | null
   campaign_id: string | null; frequencia: string | null
@@ -875,14 +876,60 @@ export interface AgendaRow {
 export async function carregarCicloMidia(orgSlug: string, ini: string, fim: string) {
   const { supabase, orgId } = await assertMidiaAccess(orgSlug)
   const sb = supabase as any
-  const [cob, age] = await Promise.all([
+  const statusMidia = await statusDaMidia(sb, orgId)
+  const [cob, age, ativ] = await Promise.all([
     sb.rpc('midia_cobertura', { p_org: orgId, p_ini: ini, p_fim: fim }),
     sb.rpc('midia_agenda', { p_org: orgId, p_ini: ini, p_fim: fim }),
+    sb.from('activities')
+      .select('id, title, checklist, campaign_id, campaigns!inner(workspace_id, workspaces!inner(name, org_id))')
+      .eq('campaigns.workspaces.org_id', orgId).eq('archived', false).in('status', statusMidia),
   ])
   if (cob.error) return { error: cob.error.message }
   if (age.error) return { error: age.error.message }
+  if (ativ.error) return { error: ativ.error.message }
+
+  // Item datado do checklist é uma demanda própria no calendário (o post da
+  // data X): pendente entra como 'item', feito no período entra como 'feito' —
+  // é o "o que já foi feito" que o time pediu em 17/08.
+  const itens: AgendaRow[] = []
+  for (const a of (ativ.data ?? []) as any[]) {
+    for (const it of resumoChecklist(a.checklist).itens) {
+      if (!it.data || it.data < ini || it.data > fim) continue
+      itens.push({
+        dia: it.data, tipo: it.feito ? 'feito' : 'item',
+        titulo: `${a.title} · ${it.texto}`, cliente: a.campaigns.workspaces.name,
+        activity_id: a.id, workspace_id: a.campaigns.workspace_id,
+        campaign_id: a.campaign_id, frequencia: null,
+      })
+    }
+  }
   return {
     cobertura: (cob.data ?? []) as CoberturaRow[],
-    agenda: (age.data ?? []) as AgendaRow[],
+    agenda: [...((age.data ?? []) as AgendaRow[]), ...itens],
   }
+}
+
+/**
+ * Marca um item datado do checklist como feito, a partir da fila. Lê e regrava
+ * o array inteiro pela mesma RPC do detalhe (set_activity_checklist): com duas
+ * pessoas marcando ao mesmo tempo, a segunda pode sobrescrever a primeira —
+ * risco aceito por ora; RPC por item só se acontecer.
+ */
+export async function marcarItemChecklist(orgSlug: string, activityId: string, itemId: string) {
+  const { supabase, userId } = await assertMidiaAccess(orgSlug)
+  const sb = supabase as any
+  const { data: a, error } = await sb.from('activities').select('checklist').eq('id', activityId).maybeSingle()
+  if (error) return { error: error.message }
+  if (!a) return { error: 'Tarefa não encontrada.' }
+  const itens = Array.isArray(a.checklist) ? (a.checklist as any[]) : []
+  if (!itens.some(it => it?.id === itemId)) return { error: 'Esse item já não está no checklist.' }
+  const novo = itens.map(it => (it?.id === itemId ? { ...it, done: true } : it))
+  const { error: e2 } = await sb.rpc('set_activity_checklist', {
+    p_user_id: userId, p_activity_id: activityId, p_items: novo,
+  })
+  if (e2) return { error: e2.message }
+  const restantes = novo.filter(it => !it?.done && typeof it?.data === 'string' && it.data).length
+  revalidatePath(`/${orgSlug}/midia`)
+  revalidatePath(`/${orgSlug}/midia/agenda`)
+  return { restantes }
 }

@@ -16,6 +16,7 @@ const TIPO: Record<string, { chip: string; ponto: string; label: string }> = {
   prazo:   { chip: 'bg-orange-50 text-orange-700 border-orange-100',    ponto: 'bg-orange-500',  label: 'rotina' },
   entrega: { chip: 'bg-teal-50 text-teal-700 border-teal-100',          ponto: 'bg-teal-500',    label: 'entrega' },
   pedido:  { chip: 'bg-gray-100 text-gray-600 border-gray-200',         ponto: 'bg-gray-400',    label: 'pedido' },
+  item:    { chip: 'bg-sky-50 text-sky-700 border-sky-100',             ponto: 'bg-sky-500',     label: 'item datado' },
 }
 
 function mesVizinho(ym: string, delta: number) {

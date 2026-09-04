@@ -342,7 +342,7 @@ export default async function ActivityPage({
 
   // checklist (coluna nova, jsonb [{id,text,done}]) → acesso por cast.
   const checklistRaw = (activity as { checklist?: unknown }).checklist
-  const checklist = Array.isArray(checklistRaw) ? (checklistRaw as { id: string; text: string; done: boolean }[]) : []
+  const checklist = Array.isArray(checklistRaw) ? (checklistRaw as { id: string; text: string; done: boolean; data?: string | null }[]) : []
 
   // "Drive" (a pasta) NÃO entra aqui — é o caminho da máquina (G:\ / Mac), logo
   // acima. Estes são os links web do Google Drive.
@@ -658,7 +658,8 @@ export default async function ActivityPage({
               </div>
             </div>
 
-            <Checklist path={path} activityId={activityId} canEdit={isOrgMember} items={checklist} />
+            <Checklist path={path} activityId={activityId} canEdit={isOrgMember} items={checklist}
+              dueDate={activity.due_date ?? null} startDate={activity.start_date ?? null} />
 
             <ExtraLinks path={path} activityId={activityId} canEdit={isOrgMember} links={extraLinks} />
           </div>

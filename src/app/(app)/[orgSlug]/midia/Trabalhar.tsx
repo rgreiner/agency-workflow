@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity } from '@/types'
 import { MachinePath } from '@/components/ui/MachinePath'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { concluirTarefaMidia, mudarSituacaoEntrega } from '@/app/actions/midia-hub'
+import { concluirTarefaMidia, marcarItemChecklist, mudarSituacaoEntrega } from '@/app/actions/midia-hub'
 
 export interface ItemFila {
   chave: string
@@ -42,7 +42,12 @@ export interface ItemFila {
   prioridade: string
   complexidade: string
   checklist: { feitos: number; total: number } | null
+  /** Linha de um item datado do checklist da tarefa (a demanda da data X). */
+  item: { id: string; texto: string } | null
 }
+
+/** Quantos dias antes o planejador de posts aceita agendar — só para o chip. */
+const JANELA_AGENDAMENTO = 30
 
 interface StatusCfg { valor: string; label: string; bg: string; txt: string }
 
@@ -256,6 +261,17 @@ function Item({ orgSlug, item, cfg, destaque = false, onFeito }: {
     })
   }
 
+  function feitoItem() {
+    start(async () => {
+      const r = await marcarItemChecklist(orgSlug, item.activityId!, item.item!.id)
+      if (r.error) { toast.error(r.error); return }
+      if (r.restantes === 0) toast.success('Último item feito. A tarefa voltou para a fila.')
+      else toast.success(`Feito. ${r.restantes === 1 ? 'Falta 1 item datado.' : `Faltam ${r.restantes} itens datados.`}`)
+      onFeito(item.chave)
+      router.refresh()
+    })
+  }
+
   function feito() {
     start(async () => {
       const r = await concluirTarefaMidia(orgSlug, item.activityId!)
@@ -289,6 +305,7 @@ function Item({ orgSlug, item, cfg, destaque = false, onFeito }: {
           <div className="flex items-center gap-2 flex-wrap">
             {item.tipo === 'entrega' && <Truck className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
             {item.tipo === 'rotina' && <Repeat className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
+            {item.item && <ListChecks className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
             {linkTarefa ? (
               <Link href={linkTarefa}
                 className={cn('font-medium text-gray-900 hover:text-orange-600 transition-colors',
@@ -298,6 +315,18 @@ function Item({ orgSlug, item, cfg, destaque = false, onFeito }: {
             ) : (
               <span className={cn('font-medium text-gray-900', destaque ? 'text-base' : 'text-sm')}>
                 {item.titulo}
+              </span>
+            )}
+            {item.item && (
+              <>
+                <span className="text-gray-300">·</span>
+                <span className={cn('font-medium text-gray-900', destaque ? 'text-base' : 'text-sm')}>{item.item.texto}</span>
+              </>
+            )}
+            {item.item && p.dias >= 0 && p.dias <= JANELA_AGENDAMENTO && (
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-sky-50 text-sky-700"
+                title={`Dentro dos ${JANELA_AGENDAMENTO} dias que o planejador aceita`}>
+                dá para agendar
               </span>
             )}
             {st && (
@@ -357,6 +386,12 @@ function Item({ orgSlug, item, cfg, destaque = false, onFeito }: {
               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 text-[#fff] hover:bg-emerald-700 transition-colors disabled:opacity-60">
               {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
               Enviei ao veículo
+            </button>
+          ) : item.item && item.activityId ? (
+            <button onClick={feitoItem} disabled={pending}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-60">
+              {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+              Feito
             </button>
           ) : item.activityId ? (
             <button onClick={feito} disabled={pending}

@@ -44,12 +44,13 @@ export default async function MidiaTrabalharPage({ params }: { params: Promise<{
       prioridade: t?.prioridade ?? 'medium',
       complexidade: t?.complexidade ?? 'medium',
       checklist: t && t.checklist.total > 0 ? { feitos: t.checklist.feitos, total: t.checklist.total } : null,
+      item: null,
     }
   })
 
-  const dasTarefas: ItemFila[] = fila.tarefas
-    .filter(t => !comEntrega.has(t.id))
-    .map(t => ({
+  const dasTarefas: ItemFila[] = []
+  for (const t of fila.tarefas) {
+    const linha: ItemFila = {
       chave: `t:${t.id}`,
       tipo: t.rotina ? 'rotina' : 'pedido',
       titulo: t.titulo,
@@ -74,7 +75,17 @@ export default async function MidiaTrabalharPage({ params }: { params: Promise<{
       prioridade: t.prioridade,
       complexidade: t.complexidade,
       checklist: t.checklist.total > 0 ? { feitos: t.checklist.feitos, total: t.checklist.total } : null,
-    }))
+      item: null,
+    }
+    // Item datado do checklist é uma demanda própria (o post da data X): vira
+    // linha com a data dele. A tarefa some enquanto tiver item datado pendente e
+    // volta, com "Feito", quando o último sai. Entrega vinculada segue valendo.
+    const datados = t.checklist.itens.filter(i => !i.feito && i.data)
+    for (const it of datados) {
+      dasTarefas.push({ ...linha, chave: `c:${t.id}:${it.id}`, data: it.data, item: { id: it.id, texto: it.texto } })
+    }
+    if (datados.length === 0 && !comEntrega.has(t.id)) dasTarefas.push(linha)
+  }
 
   // Sem data vai para o fim: não dá para priorizar o que ninguém datou.
   const itens = [...daEntrega, ...dasTarefas].sort((a, b) =>
