@@ -5,43 +5,12 @@ import { Check, Plus, Trash2, Loader2, ListChecks, CalendarDays } from 'lucide-r
 import { setActivityChecklist, updateActivityDates } from '@/app/actions/activity'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { lerLinhaComData } from '@/lib/checklist-datas'
 
 /** `data` (YYYY-MM-DD) é opcional: item datado vira linha própria na fila da mídia. */
 export interface ChecklistItem { id: string; text: string; done: boolean; data?: string | null }
 
-const hojeISO = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
 const fmt = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
-
-/** Data de calendário válida em YYYY-MM-DD (31/02 não passa). */
-export function dataValida(iso: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false
-  const d = new Date(iso + 'T12:00:00')
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === iso
-}
-
-/**
- * Lê "10/05 Dia das Mães", "10/05/2027 Natal" ou "2026-05-10 Dia das Mães".
- * Sem ano é a PRÓXIMA ocorrência da data: hoje ou à frente fica no ano corrente,
- * o que já passou vai para o ano que vem (a lista de datas comemorativas
- * digitada em dezembro é do ano seguinte). Data inválida vira item sem data.
- */
-export function lerLinhaComData(linha: string): { text: string; data: string | null } {
-  const s = linha.trim()
-  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})\s*[-–:·]?\s*(.*)$/)
-  if (m) {
-    const iso = `${m[1]}-${m[2]}-${m[3]}`
-    return dataValida(iso) ? { text: m[4].trim() || s, data: iso } : { text: s, data: null }
-  }
-  m = s.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s*[-–:·]?\s*(.*)$/)
-  if (!m) return { text: s, data: null }
-  const dd = Number(m[1]), mm = Number(m[2])
-  const hoje = hojeISO()
-  const iso = (ano: number) => `${ano}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`
-  let ano = m[3] ? Number(m[3].length === 2 ? `20${m[3]}` : m[3]) : Number(hoje.slice(0, 4))
-  if (!m[3] && dataValida(iso(ano)) && iso(ano) < hoje) ano += 1
-  if (!dataValida(iso(ano))) return { text: s, data: null }
-  return { text: m[4].trim() || s, data: iso(ano) }
-}
 
 export function Checklist({ path, activityId, items: initial, canEdit, dueDate = null, startDate = null }: {
   path: string

@@ -12,7 +12,9 @@ import { cn } from '@/lib/utils'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity } from '@/types'
 import { MachinePath } from '@/components/ui/MachinePath'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { concluirTarefaMidia, marcarItemChecklist, mudarSituacaoEntrega } from '@/app/actions/midia-hub'
+import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { lerLinhaComData } from '@/lib/checklist-datas'
+import { concluirTarefaMidia, desdobrarEmDatas, marcarItemChecklist, mudarSituacaoEntrega } from '@/app/actions/midia-hub'
 
 /** Onde a linha mora: trabalhos solicitados (cima), peças a entregar (esquerda), rotinas (direita). */
 export type Regiao = 'solicitado' | 'peca' | 'rotina'
@@ -61,8 +63,8 @@ const FREQ: Record<string, string> = {
   bimonthly: 'bimestral', quarterly: 'trimestral', semiannual: 'semestral', annual: 'anual',
 }
 
-/** Quantos dias antes o planejador de posts aceita agendar — só para o chip. */
-const JANELA_AGENDAMENTO = 30
+/** Quantos dias antes o planejador de posts aceita agendar (Meta: 28) — só para o chip. */
+const JANELA_AGENDAMENTO = 28
 
 // ── Preferências locais (por navegador), lidas sem setState em effect ────────
 // Versionar a chave quando o default mudar.
@@ -320,6 +322,7 @@ function Linha({ orgSlug, item, cfg, links, variante, onFeito }: {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [confirmar, setConfirmar] = useState(false)
+  const [desdobrar, setDesdobrar] = useState(false)
   const p = prazo(item.data)
   const st = item.status ? cfg.get(item.status) : null
   const prio = PRIORITY_CONFIG[item.prioridade as ActivityPriority]
@@ -474,13 +477,25 @@ function Linha({ orgSlug, item, cfg, links, variante, onFeito }: {
               Feito
             </button>
           ) : item.activityId ? (
-            <button onClick={feito} disabled={pending} className={BTN_NEUTRO}>
-              {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-              Feito
-            </button>
+            <div className="flex items-center gap-1.5">
+              {item.tipo === 'pedido' && (
+                <button onClick={() => setDesdobrar(true)} disabled={pending} className={BTN_NEUTRO}
+                  title="Desdobrar em datas: uma linha por post, cada uma com a data dela">
+                  <ListChecks className="w-3.5 h-3.5" /> Datas
+                </button>
+              )}
+              <button onClick={feito} disabled={pending} className={BTN_NEUTRO}>
+                {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                Feito
+              </button>
+            </div>
           ) : null}
         </div>
       </div>
+
+      {desdobrar && item.activityId && (
+        <ModalDesdobrar orgSlug={orgSlug} item={item} onClose={() => setDesdobrar(false)} />
+      )}
 
       <ConfirmDialog
         open={confirmar}
@@ -494,6 +509,132 @@ function Linha({ orgSlug, item, cfg, links, variante, onFeito }: {
         onCancel={() => setConfirmar(false)}
       />
     </li>
+  )
+}
+
+const CAMPO = 'w-full mt-0.5 bg-gray-100 border border-transparent rounded-xl px-3 py-2 text-sm text-gray-800 placeholder:text-gray-400 focus:bg-white focus:border-orange-300 focus:outline-none transition-colors'
+
+/**
+ * Desdobrar um pedido em datas, direto da fila: cola-se a lista (uma linha por
+ * post, data na frente) e cada linha vira item datado do checklist da tarefa.
+ * A lista do briefing vem com o mês como título ("MARÇO") — linha sem data nasce
+ * desmarcada, e data que já passou também; é só clicar para incluir.
+ */
+function ModalDesdobrar({ orgSlug, item, onClose }: { orgSlug: string; item: ItemFila; onClose: () => void }) {
+  const router = useRouter()
+  const [pending, start] = useTransition()
+  const [texto, setTexto] = useState('')
+  const [ano, setAno] = useState(item.titulo.match(/\b(20\d{2})\b/)?.[1] ?? hojeBR().slice(0, 4))
+  const [alternadas, setAlternadas] = useState<Set<string>>(new Set())
+  const [ajustar, setAjustar] = useState(true)
+  const hoje = hojeBR()
+
+  const linhas = useMemo(() => {
+    const anoNum = Number(ano)
+    return texto.split(/\r?\n/).map(l => l.trim()).filter(Boolean).map(l => {
+      const r = lerLinhaComData(l, anoNum >= 2000 && anoNum <= 2100 ? anoNum : undefined)
+      const chave = `${r.data ?? ''}|${r.text}`
+      const padrao = !!r.data && r.data >= hoje
+      const incluida = alternadas.has(chave) ? !padrao : padrao
+      return { ...r, chave, passou: !!r.data && r.data < hoje, incluida }
+    })
+  }, [texto, ano, alternadas, hoje])
+
+  const selecionadas = linhas.filter(l => l.incluida)
+  const ultima = selecionadas.map(l => l.data).filter(Boolean).sort().at(-1) ?? null
+  const podeAjustar = !!ultima && (!item.data || ultima > item.data)
+
+  function alternar(chave: string) {
+    setAlternadas(prev => {
+      const n = new Set(prev)
+      if (n.has(chave)) n.delete(chave); else n.add(chave)
+      return n
+    })
+  }
+
+  function salvar() {
+    if (!selecionadas.length) { toast.error('Marque pelo menos uma linha.'); return }
+    start(async () => {
+      const r = await desdobrarEmDatas(orgSlug, item.activityId!,
+        selecionadas.map(l => ({ text: l.text, data: l.data })), ajustar && podeAjustar)
+      if ('error' in r && r.error) { toast.error(r.error); return }
+      const n = r.adicionados ?? 0
+      toast.success(`${n} ${n === 1 ? 'item entrou' : 'itens entraram'} nas peças a entregar`
+        + (r.novoPrazo ? ` · prazo da tarefa ajustado para ${fmt(r.novoPrazo)}` : '') + '.')
+      onClose()
+      router.refresh()
+    })
+  }
+
+  return (
+    <Modal open onClose={onClose} size="lg" label="Desdobrar em datas" dismissOnBackdrop={false} dismissable={!pending}>
+      <ModalHeader title="Desdobrar em datas" onClose={onClose} />
+      <div className="px-6 py-5 space-y-4">
+        <p className="text-sm text-gray-600">
+          <span className="font-medium text-gray-900">{item.titulo}</span> — uma linha por post, com a data na
+          frente. Cada data vira uma linha própria na fila; a tarefa continua uma só.
+        </p>
+
+        <div className="grid sm:grid-cols-[1fr_7rem] gap-3">
+          <label className="block">
+            <span className="text-[11px] text-gray-500">Lista (cole do briefing)</span>
+            <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={7} autoFocus
+              placeholder={'10/05 Dia das Mães\n12/06 Dia dos Namorados\n25/12 Natal'}
+              className={cn(CAMPO, 'font-mono text-[13px] leading-relaxed resize-y')} />
+          </label>
+          <label className="block">
+            <span className="text-[11px] text-gray-500">Ano (datas sem ano)</span>
+            <input type="number" inputMode="numeric" value={ano} onChange={e => setAno(e.target.value)}
+              min={2000} max={2100} className={cn(CAMPO, 'tabular-nums')} />
+          </label>
+        </div>
+
+        {linhas.length > 0 && (
+          <ul className="max-h-60 overflow-y-auto rounded-xl border border-gray-200 divide-y divide-gray-100" aria-label="Linhas lidas">
+            {linhas.map((l, i) => (
+              <li key={`${l.chave}-${i}`}>
+                <button type="button" role="checkbox" aria-checked={l.incluida} onClick={() => alternar(l.chave)}
+                  className={cn('flex items-center gap-3 w-full px-3 py-2 text-left text-sm hover:bg-gray-50 transition-colors', FOCO,
+                    !l.incluida && 'text-gray-400')}>
+                  <span className={cn('w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-colors',
+                    l.incluida ? 'bg-orange-600 border-orange-600' : 'border-gray-300')}>
+                    {l.incluida && <Check className="w-2.5 h-2.5 text-[#fff]" strokeWidth={3} />}
+                  </span>
+                  <span className={cn('shrink-0 w-[6.75rem] text-center rounded-lg px-2 py-0.5 text-[11px] font-medium tabular-nums',
+                    !l.data ? 'bg-gray-100 text-gray-500' : l.passou ? 'bg-amber-50 text-amber-700' : 'bg-orange-50 text-orange-700')}>
+                    {!l.data ? 'sem data' : l.passou ? `${fmt(l.data)} · passou` : fmt(l.data)}
+                  </span>
+                  <span className="min-w-0 truncate">{l.text}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {podeAjustar && (
+          <button type="button" role="checkbox" aria-checked={ajustar} onClick={() => setAjustar(a => !a)}
+            className={cn('flex items-center gap-2.5 text-sm text-gray-700 rounded-lg px-1 -mx-1 py-1', FOCO)}>
+            <span className={cn('w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-colors',
+              ajustar ? 'bg-orange-600 border-orange-600' : 'border-gray-300')}>
+              {ajustar && <Check className="w-2.5 h-2.5 text-[#fff]" strokeWidth={3} />}
+            </span>
+            Ajustar o prazo da tarefa para {fmt(ultima)}{item.data ? ` (hoje ${fmt(item.data)})` : ''}
+          </button>
+        )}
+
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <button type="button" onClick={onClose} disabled={pending}
+            className={cn('px-3.5 py-2 text-sm font-medium rounded-xl text-gray-600 hover:bg-gray-100 transition-colors', FOCO)}>
+            Cancelar
+          </button>
+          <button type="button" onClick={salvar} disabled={pending || selecionadas.length === 0}
+            className={cn('inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-orange-600 text-[#fff] hover:bg-orange-700 transition-colors disabled:opacity-60', FOCO)}>
+            {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ListChecks className="w-4 h-4" />}
+            Desdobrar {selecionadas.length > 0 ? selecionadas.length : ''}
+          </button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 

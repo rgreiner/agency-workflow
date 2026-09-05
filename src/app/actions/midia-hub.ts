@@ -8,6 +8,7 @@ import { after } from 'next/server'
 import { dispatchPushNotificacoes } from '@/lib/push'
 import { assertMidiaAccess, statusDaMidia } from '@/lib/midia-hub'
 import { resumoChecklist } from '@/lib/midia-fila'
+import { dataValida } from '@/lib/checklist-datas'
 import { provisionActivitiesDrive } from '@/lib/drive-provision'
 import { porNome } from '@/lib/utils'
 
@@ -919,6 +920,52 @@ export async function carregarCicloMidia(orgSlug: string, ini: string, fim: stri
     cobertura: (cob.data ?? []) as CoberturaRow[],
     agenda: [...((age.data ?? []) as AgendaRow[]), ...itens],
   }
+}
+
+/**
+ * Desdobra um pedido em datas a partir da fila: cada linha vira item do checklist
+ * da tarefa (com data quando há), somando ao que já existe. A tarefa continua UMA
+ * na pauta; na fila da mídia cada item datado pendente vira linha própria. Com
+ * `ajustarPrazo`, o prazo da tarefa vai para a última data quando ela passa do
+ * prazo atual — é o que substitui o prazo empurrado à mão.
+ */
+export async function desdobrarEmDatas(
+  orgSlug: string, activityId: string,
+  itens: { text: string; data: string | null }[], ajustarPrazo: boolean,
+) {
+  const { supabase, userId } = await assertMidiaAccess(orgSlug)
+  const sb = supabase as any
+  const limpos = itens
+    .map(i => ({ text: (i.text ?? '').trim(), data: i.data && dataValida(i.data) ? i.data : null }))
+    .filter(i => i.text)
+  if (!limpos.length) return { error: 'Nenhum item para adicionar.' }
+
+  const { data: a, error } = await sb.from('activities')
+    .select('checklist, due_date, start_date').eq('id', activityId).maybeSingle()
+  if (error) return { error: error.message }
+  if (!a) return { error: 'Tarefa não encontrada.' }
+
+  const atual = Array.isArray(a.checklist) ? (a.checklist as any[]) : []
+  const novos = limpos.map(i => ({ id: crypto.randomUUID(), text: i.text, done: false, data: i.data }))
+  const { error: e2 } = await sb.rpc('set_activity_checklist', {
+    p_user_id: userId, p_activity_id: activityId, p_items: [...atual, ...novos],
+  })
+  if (e2) return { error: e2.message }
+
+  let novoPrazo: string | null = null
+  const ultima = novos.map(n => n.data).filter(Boolean).sort().at(-1) ?? null
+  if (ajustarPrazo && ultima && (!a.due_date || ultima > String(a.due_date).slice(0, 10))) {
+    const { error: e3 } = await sb.rpc('update_activity_dates', {
+      p_user_id: userId, p_activity_id: activityId,
+      p_start_date: a.start_date ?? null, p_due_date: ultima,
+    })
+    if (e3) return { error: `Itens adicionados, mas o prazo não mudou: ${e3.message}` }
+    novoPrazo = ultima
+  }
+
+  revalidatePath(`/${orgSlug}/midia`)
+  revalidatePath(`/${orgSlug}/midia/agenda`)
+  return { adicionados: novos.length, comData: novos.filter(n => n.data).length, novoPrazo }
 }
 
 /**
