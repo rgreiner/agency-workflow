@@ -329,9 +329,17 @@ function Item({ orgSlug, item, cfg, destaque = false, onFeito }: {
                 dá para agendar
               </span>
             )}
-            {st && (
+            {/* Na entrega, o status da tarefa só interessa enquanto a peça está com a
+                criação; depois disso (inclusive concluída) o que a mídia precisa saber
+                é que o material está pronto para ir ao veículo. */}
+            {st && !(item.tipo === 'entrega' && !item.esperandoCriacao) && (
               <span className="text-[11px] font-medium px-2 py-0.5 rounded-full"
                 style={{ backgroundColor: st.bg, color: st.txt }}>{st.label}</span>
+            )}
+            {item.tipo === 'entrega' && item.activityId && !item.esperandoCriacao && (
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                material pronto
+              </span>
             )}
             {item.esperandoCriacao && (
               <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
