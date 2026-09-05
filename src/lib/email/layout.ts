@@ -18,7 +18,14 @@ export interface EmailLayoutOpts {
   brand?: string
 }
 
-const ORANGE = '#ea580c'
+/**
+ * Laranja dos e-mails = o `orange-600` que o app deriva do accent padrão
+ * (#ff6a00 misturado 88% com preto em oklab, ver globals.css). E-mail não
+ * conhece o accent da org, então fica o da identidade. Branco sobre ele passa
+ * de 4:1 de contraste; o accent puro não passa.
+ */
+export const EMAIL_ACCENT = '#d75800'
+const ORANGE = EMAIL_ACCENT
 /** Charcoal do ícone da identidade (brand/README.md) — o header casa com o app e com o preview de link. */
 const CHARCOAL = '#0f0f0f'
 const SITE = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://flow.oneaone.com.br').replace(/\/$/, '')

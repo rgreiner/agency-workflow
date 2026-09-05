@@ -277,7 +277,7 @@ const MODE_TABS: { m: SidebarMode; Icon: LucideIcon; label: string }[] = [
 ]
 
 export function Sidebar({
-  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#f97316', canManage,
+  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#ff6a00', canManage,
   positionName, canMidias = false, canProducao = false, canFinance = false, canCadastros = false, canRh = false,
   canMidiaHub = false,
   canListaGlobal = false,

@@ -4,7 +4,7 @@ import { Resend } from 'resend'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { logSystemError } from '@/lib/system-error'
-import { emailHeader } from '@/lib/email/layout'
+import { emailHeader, EMAIL_ACCENT } from '@/lib/email/layout'
 
 const FROM = process.env.RESEND_FROM ?? 'Flow <onboarding@resend.dev>'
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
@@ -73,12 +73,12 @@ export async function sendInviteEmail(
       </p>
 
       <a href="${inviteUrl}"
-         style="display: block; background: #ea580c; color: white; text-decoration: none; text-align: center; padding: 14px 24px; border-radius: 10px; font-weight: 600; font-size: 15px;">
+         style="display: block; background: ${EMAIL_ACCENT}; color: white; text-decoration: none; text-align: center; padding: 14px 24px; border-radius: 10px; font-weight: 600; font-size: 15px;">
         Aceitar convite
       </a>
 
       <p style="color: #9ca3af; font-size: 12px; margin: 20px 0 0; text-align: center;">
-        Ou acesse: <a href="${inviteUrl}" style="color: #ea580c;">${inviteUrl}</a>
+        Ou acesse: <a href="${inviteUrl}" style="color: ${EMAIL_ACCENT};">${inviteUrl}</a>
       </p>
     </div>
 
@@ -130,12 +130,12 @@ export async function sendPasswordResetEmail(
       </p>
 
       <a href="${resetUrl}"
-         style="display: block; background: #ea580c; color: white; text-decoration: none; text-align: center; padding: 14px 24px; border-radius: 10px; font-weight: 600; font-size: 15px;">
+         style="display: block; background: ${EMAIL_ACCENT}; color: white; text-decoration: none; text-align: center; padding: 14px 24px; border-radius: 10px; font-weight: 600; font-size: 15px;">
         Criar nova senha
       </a>
 
       <p style="color: #9ca3af; font-size: 12px; margin: 20px 0 0; text-align: center;">
-        Ou acesse: <a href="${resetUrl}" style="color: #ea580c;">${resetUrl}</a>
+        Ou acesse: <a href="${resetUrl}" style="color: ${EMAIL_ACCENT};">${resetUrl}</a>
       </p>
       <p style="color: #9ca3af; font-size: 12px; margin: 12px 0 0; text-align: center;">
         Este link expira em 1 hora.

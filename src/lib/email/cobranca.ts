@@ -98,5 +98,7 @@ export function htmlCobranca(o: {
     heading: assuntoCobranca(tom, dias),
     bodyHtml: body,
     footerNote: `Aviso de cobrança · ${esc(o.orgName)}`,
+    // Quem cobra é a agência: header com o nome dela, não a marca do Flow.
+    brand: o.orgName,
   })
 }

@@ -16,7 +16,7 @@ export interface OrgSettings {
 const OrgSettingsContext = createContext<OrgSettings>({
   orgId:           '',
   logoUrl:         null,
-  accentColor:     '#f97316',
+  accentColor:     '#ff6a00',
   statusOverrides: [],
   statuses:        [],
 })

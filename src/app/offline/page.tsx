@@ -22,7 +22,7 @@ export default function OfflinePage() {
         .off-mark { display: block; width: 56px; height: 56px; margin: 0 auto 14px; }
         .off-title { font-size: 20px; font-weight: 600; margin: 0 0 8px; }
         .off-text { font-size: 14px; color: #6b7280; margin: 0 0 20px; line-height: 1.5; }
-        .off-btn { display: inline-block; padding: 10px 20px; border-radius: 12px; border: none; background: #f97316; color: #fff; font-size: 14px; font-weight: 500; cursor: pointer; }
+        .off-btn { display: inline-block; padding: 10px 20px; border-radius: 12px; border: none; background: #ff6a00; color: #fff; font-size: 14px; font-weight: 500; cursor: pointer; }
         @media (prefers-color-scheme: dark) {
           .off-wrap { background: #1c1917; color: #f0ece8; }
           .off-text { color: #a8a29e; }

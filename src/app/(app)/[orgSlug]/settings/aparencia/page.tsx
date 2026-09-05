@@ -15,8 +15,8 @@ const ACCENT_PRESETS = [
   '#8b5cf6', // violet
   '#ec4899', // pink
   '#ef4444', // red
-  '#ff6a00', // laranja da identidade do Flow (brand/README.md)
-  '#f97316', // orange (default)
+  '#ff6a00', // laranja da identidade do Flow (default — brand/README.md)
+  '#f97316', // orange
   '#eab308', // yellow
   '#22c55e', // green
   '#14b8a6', // teal

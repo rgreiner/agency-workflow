@@ -19,7 +19,7 @@ export default async function LoginPage({
         <div className="mb-6 text-center">
           <FlowMark size={56} className="mx-auto mb-4 drop-shadow-md" />
           <h1 className="text-2xl font-semibold text-gray-900">Flow</h1>
-          <p className="text-gray-500 mt-1 text-sm">One a One · Gestão de pauta, produção e mídia</p>
+          <p className="text-gray-500 mt-1 text-sm">Gestão em movimento</p>
         </div>
 
         <p className="mb-6 text-center text-sm text-gray-500 leading-relaxed">

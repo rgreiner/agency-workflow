@@ -114,7 +114,7 @@ export default async function OrgLayout({
   const orgSettings = {
     orgId:           org.id,
     logoUrl:         rawSettings?.logo_url ?? null,
-    accentColor:     rawSettings?.accent_color ?? '#f97316',
+    accentColor:     rawSettings?.accent_color ?? '#ff6a00',
     statusOverrides: (rawSettings?.status_overrides as unknown[] ?? []) as import('@/types').StatusOverride[],
     statuses:        statusRows ?? [],
   }
