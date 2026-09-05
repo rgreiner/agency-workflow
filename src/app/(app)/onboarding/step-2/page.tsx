@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { createOrganizationWithProfile } from '@/app/actions/org'
+import { FlowMark } from '@/components/brand/FlowMark'
 
 function maskPhone(value: string) {
   const digits = value.replace(/\D/g, '').slice(0, 11)
@@ -52,6 +53,12 @@ export default function OnboardingStep2() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-10 w-full max-w-lg">
+
+        {/* Marca */}
+        <div className="flex items-center gap-2.5 mb-6">
+          <FlowMark size={32} className="drop-shadow-sm" />
+          <span className="text-sm font-semibold text-gray-900">Flow</span>
+        </div>
 
         {/* Progress */}
         <div className="flex items-center gap-2 mb-8">
