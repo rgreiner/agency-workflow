@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
+import { Combobox } from '@/components/ui/Combobox'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import {
   salvarEntrega, mudarSituacaoEntrega, excluirEntrega, tarefasDoCliente,
@@ -22,6 +23,9 @@ export interface EntregaRow {
   campanha: string | null
   campaignId: string | null
   veiculo: string | null
+  /** Veículo do cadastro (mig. 278); null nas entregas antigas só com texto. */
+  veiculoId: string | null
+  veiculoContato: string | null
   formato: string | null
   prazoEnvio: string | null
   situacao: 'aguardando' | 'liberado' | 'cancelado'
@@ -36,6 +40,12 @@ export interface EntregaRow {
 }
 
 interface StatusCfg { valor: string; label: string; bg: string; txt: string }
+
+/** Veículo do cadastro, com o contato já em uma linha (e-mail · telefone). */
+export interface VeiculoOpt { id: string; nome: string; contato: string | null }
+
+/** Sentinela: entrega antiga cujo veículo é só texto, fora do cadastro. */
+const VEICULO_TEXTO = '__texto__'
 
 const hojeBR = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
 const fmt = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '—')
@@ -74,10 +84,11 @@ const ROTULO_FILTRO: Record<Filtro, string> = {
   pendentes: 'pendentes', liberadas: 'enviadas', todas: 'todas',
 }
 
-export function EntregasMidia({ orgSlug, entregas, clientes, statusCfg }: {
+export function EntregasMidia({ orgSlug, entregas, clientes, veiculos, statusCfg }: {
   orgSlug: string
   entregas: EntregaRow[]
   clientes: { id: string; nome: string }[]
+  veiculos: VeiculoOpt[]
   statusCfg: StatusCfg[]
 }) {
   const [filtro, setFiltro] = useState<Filtro>('pendentes')
@@ -141,7 +152,7 @@ export function EntregasMidia({ orgSlug, entregas, clientes, statusCfg }: {
       )}
 
       {editando && (
-        <ModalEntrega orgSlug={orgSlug} clientes={clientes}
+        <ModalEntrega orgSlug={orgSlug} clientes={clientes} veiculos={veiculos}
           entrega={editando === 'nova' ? null : editando}
           onClose={() => setEditando(null)} />
       )}
@@ -177,6 +188,7 @@ function LinhaEntrega({ orgSlug, e, cfg, onEditar }: {
               {e.titulo}
             </button>
             {e.veiculo && <span className="text-[11px] text-gray-500 inline-flex items-center gap-1"><Truck className="w-3 h-3" /> {e.veiculo}</span>}
+            {e.veiculoContato && <span className="text-[11px] text-gray-500">{e.veiculoContato}</span>}
             {e.formato && <span className="text-[11px] text-gray-400">{e.formato}</span>}
           </div>
           <p className="text-[11px] text-gray-400 mt-0.5">
@@ -252,9 +264,10 @@ function Atalho({ url, label }: { url: string; label: string }) {
   )
 }
 
-function ModalEntrega({ orgSlug, clientes, entrega, onClose }: {
+function ModalEntrega({ orgSlug, clientes, veiculos, entrega, onClose }: {
   orgSlug: string
   clientes: { id: string; nome: string }[]
+  veiculos: VeiculoOpt[]
   entrega: EntregaRow | null
   onClose: () => void
 }) {
@@ -263,6 +276,9 @@ function ModalEntrega({ orgSlug, clientes, entrega, onClose }: {
     workspaceId: entrega?.workspaceId ?? '',
     titulo: entrega?.titulo ?? '',
     veiculo: entrega?.veiculo ?? '',
+    // Entrega antiga só com texto entra como opção própria — trocar pelo cadastro é
+    // um clique, mas ninguém é obrigado a recadastrar o que já estava salvo.
+    veiculoId: entrega?.veiculoId ?? (entrega?.veiculo ? VEICULO_TEXTO : ''),
     formato: entrega?.formato ?? '',
     prazoEnvio: entrega?.prazoEnvio?.slice(0, 10) ?? '',
     activityId: entrega?.tarefa?.id ?? '',
@@ -284,6 +300,22 @@ function ModalEntrega({ orgSlug, clientes, entrega, onClose }: {
     if ('error' in r && r.error) { toast.error(r.error); return }
     setTarefas(r.tarefas ?? [])
     setCampanhas(r.campanhas ?? [])
+  }
+
+  const opcoesVeiculo = useMemo(() => {
+    const base = veiculos.map(v => ({ value: v.id, label: v.nome }))
+    return entrega?.veiculo && !entrega.veiculoId
+      ? [{ value: VEICULO_TEXTO, label: `${entrega.veiculo} · texto antigo, fora do cadastro` }, ...base]
+      : base
+  }, [veiculos, entrega])
+  const veiculoEscolhido = veiculos.find(v => v.id === form.veiculoId) ?? null
+
+  function trocarVeiculo(id: string) {
+    setForm(f => ({
+      ...f,
+      veiculoId: id,
+      veiculo: id === VEICULO_TEXTO ? (entrega?.veiculo ?? '') : (veiculos.find(v => v.id === id)?.nome ?? ''),
+    }))
   }
 
   // Espelha tituloDaTarefa() do servidor: DATA - VEÍCULO - FORMATO - JOB, sem
@@ -327,6 +359,7 @@ function ModalEntrega({ orgSlug, clientes, entrega, onClose }: {
         workspaceId: form.workspaceId,
         titulo: form.titulo,
         veiculo: form.veiculo,
+        veiculoId: form.veiculoId && form.veiculoId !== VEICULO_TEXTO ? form.veiculoId : null,
         formato: form.formato,
         prazoEnvio: form.prazoEnvio || null,
         activityId: abrindoBriefing ? null : (form.activityId || null),
@@ -386,11 +419,23 @@ function ModalEntrega({ orgSlug, clientes, entrega, onClose }: {
         </label>
 
         <div className="grid sm:grid-cols-2 gap-3">
-          <label className="block">
+          <div className="block">
             <span className="text-[11px] text-gray-400">Veículo</span>
-            <input value={form.veiculo} onChange={e => setForm(f => ({ ...f, veiculo: e.target.value }))}
-              placeholder="Revista Rural" className={campo} />
-          </label>
+            <div className="mt-0.5">
+              <Combobox value={form.veiculoId} onChange={trocarVeiculo} options={opcoesVeiculo}
+                minChars={2} placeholder="Digite o nome do veículo" />
+            </div>
+            {veiculoEscolhido ? (
+              <span className="text-[11px] text-gray-500 mt-1 block">
+                {veiculoEscolhido.contato ?? 'Sem e-mail nem telefone no cadastro.'}
+              </span>
+            ) : (
+              <a href={`/${orgSlug}/cadastros/veiculos`} target="_blank" rel="noopener noreferrer"
+                className="text-[11px] text-gray-400 hover:text-orange-600 transition-colors mt-1 inline-flex items-center gap-1">
+                Não está na lista? Cadastrar veículo <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
           <label className="block">
             <span className="text-[11px] text-gray-400">Especificação</span>
             <input value={form.formato} onChange={e => setForm(f => ({ ...f, formato: e.target.value }))}

@@ -81,6 +81,8 @@ export interface EntregaInput {
   workspaceId: string
   titulo: string
   veiculo?: string | null
+  /** Veículo do cadastro (mig. 278). Com ele, o nome canônico vence o texto. */
+  veiculoId?: string | null
   formato?: string | null
   prazoEnvio?: string | null
   activityId?: string | null
@@ -129,6 +131,13 @@ export async function salvarEntrega(orgSlug: string, e: EntregaInput) {
   const { supabase, userId } = await assertMidiaAccess(orgSlug)
   const abrirEm = (e.briefingEmCampanha ?? '').trim()
 
+  // Com veículo do cadastro, o nome canônico é o que vai para o título da tarefa
+  // (o cliente manda o rótulo, mas quem decide é o cadastro).
+  if (e.veiculoId) {
+    const { data: v } = await (supabase as any).from('veiculos').select('name').eq('id', e.veiculoId).maybeSingle()
+    if (v?.name) e = { ...e, veiculo: v.name as string }
+  }
+
   const { data, error } = await (supabase as any).rpc('midia_entrega_salvar', {
     p_id: e.id || null,
     p_workspace_id: e.workspaceId,
@@ -139,6 +148,7 @@ export async function salvarEntrega(orgSlug: string, e: EntregaInput) {
     p_activity_id: abrirEm ? null : (e.activityId || null),
     p_campaign_id: abrirEm || e.campaignId || null,
     p_observacao: e.observacao || null,
+    p_veiculo_id: e.veiculoId || null,
   })
   if (error) return { error: error.message }
   const id = data as string
@@ -193,6 +203,7 @@ async function abrirBriefing(
     p_activity_id: activityId,
     p_campaign_id: campaignId,
     p_observacao: e.observacao || null,
+    p_veiculo_id: e.veiculoId || null,
   })
   if (errVinculo) return { activityId: activityId as string, erro: errVinculo.message }
 
@@ -419,7 +430,7 @@ export async function vincularEntregaTarefa(orgSlug: string, entregaId: string, 
 
   const [{ data: e }, { data: a }] = await Promise.all([
     sb.from('midia_entrega')
-      .select('workspace_id, titulo, veiculo, formato, prazo_envio, observacao')
+      .select('workspace_id, titulo, veiculo, veiculo_id, formato, prazo_envio, observacao')
       .eq('id', entregaId).maybeSingle(),
     sb.from('activities').select('campaign_id').eq('id', activityId).maybeSingle(),
   ])
@@ -436,6 +447,7 @@ export async function vincularEntregaTarefa(orgSlug: string, entregaId: string, 
     p_activity_id: activityId,
     p_campaign_id: a.campaign_id ?? null,
     p_observacao: e.observacao ?? null,
+    p_veiculo_id: e.veiculo_id ?? null,
   })
   if (error) return { error: error.message }
 

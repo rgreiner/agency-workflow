@@ -1,13 +1,15 @@
 import { assertMidiaAccess, statusDaMidia } from '@/lib/midia-hub'
 import { unwrap } from '@/lib/supabase/unwrap'
 import { porNome } from '@/lib/utils'
-import { EntregasMidia, type EntregaRow } from './EntregasMidia'
+import { contatoDoVeiculo } from '@/lib/veiculo-contato'
+import { EntregasMidia, type EntregaRow, type VeiculoOpt } from './EntregasMidia'
 
 export const metadata = { title: 'Mídia — Entregas' }
 
 interface ViewRow {
   id: string; workspace_id: string; campaign_id: string | null
   titulo: string; veiculo: string | null; formato: string | null
+  veiculo_id: string | null; veiculo_emails: unknown; veiculo_telefones: unknown
   prazo_envio: string | null; activity_id: string | null
   situacao: string; liberado_em: string | null; observacao: string | null
   cliente: string; campanha: string | null
@@ -25,15 +27,20 @@ export default async function EntregasPage({ params }: { params: Promise<{ orgSl
   const sb = supabase as any
 
   const statusMidia = await statusDaMidia(sb, orgId)
-  const [resEntregas, resWs, resStatus] = await Promise.all([
+  const [resEntregas, resWs, resStatus, resVeic] = await Promise.all([
     sb.from('midia_entrega_view').select('*').eq('org_id', orgId).order('prazo_envio', { ascending: true, nullsFirst: false }),
     sb.from('workspaces').select('id, name, archived').eq('org_id', orgId),
     sb.from('org_status').select('valor, label, bg, txt, papel').eq('org_id', orgId),
+    // O mesmo cadastro que o comercial usa em PI/MX (mig. 278): a entrega escolhe daqui.
+    sb.from('veiculos').select('id, name, emails, telefones').eq('org_id', orgId).eq('archived', false),
   ])
 
   const rows = unwrap<ViewRow>(resEntregas, 'entregas')
   const workspaces = unwrap<{ id: string; name: string; archived: boolean }>(resWs, 'clientes').filter(w => !w.archived)
   const statusCfg = unwrap<{ valor: string; label: string; bg: string; txt: string; papel: string | null }>(resStatus, 'status')
+  const veiculos: VeiculoOpt[] = unwrap<{ id: string; name: string; emails: unknown; telefones: unknown }>(resVeic, 'veículos')
+    .sort(porNome(v => v.name))
+    .map(v => ({ id: v.id, nome: v.name, contato: contatoDoVeiculo(v.emails, v.telefones) }))
 
   // "Material pronto" = a tarefa da criação já chegou num status que a MÍDIA
   // opera (ou concluiu). É derivado do status, não um campo que alguém marca —
@@ -48,6 +55,8 @@ export default async function EntregasPage({ params }: { params: Promise<{ orgSl
     campanha: r.campanha,
     campaignId: r.campaign_id,
     veiculo: r.veiculo,
+    veiculoId: r.veiculo_id,
+    veiculoContato: contatoDoVeiculo(r.veiculo_emails, r.veiculo_telefones),
     formato: r.formato,
     prazoEnvio: r.prazo_envio,
     situacao: r.situacao as EntregaRow['situacao'],
@@ -75,6 +84,7 @@ export default async function EntregasPage({ params }: { params: Promise<{ orgSl
       orgSlug={orgSlug}
       entregas={entregas}
       clientes={[...workspaces].sort(porNome(w => w.name)).map(w => ({ id: w.id, nome: w.name }))}
+      veiculos={veiculos}
       statusCfg={statusCfg}
     />
   )

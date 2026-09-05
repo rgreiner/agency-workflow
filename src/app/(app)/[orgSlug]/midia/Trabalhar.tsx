@@ -35,6 +35,8 @@ export interface ItemFila {
   finalUrl: string | null
   entregaId: string | null
   veiculo: string | null
+  /** Contato do cadastro do veículo, quando a entrega aponta para ele. */
+  veiculoContato: string | null
   conflito: boolean
   /** Entrega cuja tarefa ainda não chegou num status da mídia. */
   esperandoCriacao: boolean
@@ -379,6 +381,7 @@ function Linha({ orgSlug, item, cfg, links, variante, onFeito }: {
   const meta = [
     item.cliente,
     item.veiculo,
+    item.veiculoContato,
     item.frequencia ? (FREQ[item.frequencia] ?? item.frequencia) : null,
     origem || null,
   ].filter(Boolean).join(' · ')

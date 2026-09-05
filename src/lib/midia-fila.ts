@@ -1,5 +1,6 @@
 import 'server-only'
 import { statusDaMidia } from '@/lib/midia-hub'
+import { contatoDoVeiculo } from '@/lib/veiculo-contato'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -39,6 +40,8 @@ export interface FilaTarefa {
 
 export interface FilaEntrega {
   id: string; titulo: string; cliente: string; veiculo: string | null
+  /** E-mail e telefone do cadastro do veículo (mig. 278), quando a entrega aponta para ele. */
+  veiculoContato: string | null
   prazoEnvio: string | null; conflito: boolean
   activityId: string | null
   tarefaTitulo: string | null; tarefaStatus: string | null
@@ -85,7 +88,7 @@ export async function carregarFilaMidia(sb: any, orgId: string): Promise<FilaMid
       .eq('org_id', orgId).eq('ativo', true),
     sb.from('org_status').select('valor, label, bg, txt').eq('org_id', orgId),
     sb.from('midia_entrega_view')
-      .select('id, titulo, cliente, veiculo, prazo_envio, conflito_prazo, activity_id, tarefa_titulo, tarefa_status')
+      .select('id, titulo, cliente, veiculo, veiculo_emails, veiculo_telefones, prazo_envio, conflito_prazo, activity_id, tarefa_titulo, tarefa_status')
       .eq('org_id', orgId).eq('situacao', 'aguardando')
       .order('prazo_envio', { ascending: true, nullsFirst: false }),
   ])
@@ -169,6 +172,7 @@ export async function carregarFilaMidia(sb: any, orgId: string): Promise<FilaMid
   const prontos = new Set(statusMidia)
   const entregas: FilaEntrega[] = ((resEntregas.data ?? []) as any[]).map(e => ({
     id: e.id, titulo: e.titulo, cliente: e.cliente, veiculo: e.veiculo ?? null,
+    veiculoContato: contatoDoVeiculo(e.veiculo_emails, e.veiculo_telefones),
     prazoEnvio: e.prazo_envio ?? null, conflito: !!e.conflito_prazo,
     activityId: e.activity_id ?? null,
     tarefaTitulo: e.tarefa_titulo ?? null, tarefaStatus: e.tarefa_status ?? null,
