@@ -5,7 +5,9 @@ import { ThemeApplier } from "@/components/layout/ThemeApplier";
 import { PwaRegister } from "@/components/pwa/PwaRegister";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://flow.oneaone.com.br";
-const DESCRIPTION = "Gestão de pauta, produção e mídia para agências.";
+const DESCRIPTION = "Gestão de pauta, produção, mídia e financeiro para agências.";
+// Tagline da identidade — é o que aparece em negrito no preview do WhatsApp/Slack.
+const OG_TITLE = "Flow · Gestão em movimento";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -13,13 +15,13 @@ export const metadata: Metadata = {
   title: { default: "Flow — One a One", template: "%s · Flow" },
   description: DESCRIPTION,
   openGraph: {
-    title: "Flow",
+    title: OG_TITLE,
     description: DESCRIPTION,
     siteName: "Flow",
     type: "website",
     locale: "pt_BR",
   },
-  twitter: { card: "summary_large_image", title: "Flow", description: DESCRIPTION },
+  twitter: { card: "summary_large_image", title: OG_TITLE, description: DESCRIPTION },
   appleWebApp: { capable: true, title: "Flow", statusBarStyle: "black-translucent" },
 };
 
@@ -32,7 +34,9 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0d1117" },
+    // Mesmo valor de --background do .dark (globals.css): a barra do sistema no
+    // celular casa com o fundo do app em vez de puxar pro azul.
+    { media: "(prefers-color-scheme: dark)", color: "#171513" },
   ],
 };
 

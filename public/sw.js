@@ -49,8 +49,10 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(d.title || 'Flow', {
       body: d.body || '',
-      icon: '/apple-icon',
-      badge: '/apple-icon',
+      // icon = arte full-bleed (Android mostra como miniatura); badge = silhueta
+      // branca do F (o sistema pinta pelo alfa — imagem colorida vira um borrão).
+      icon: '/icons/maskable-192.png',
+      badge: '/icons/badge-96.png',
       tag: d.tag || undefined,
       data: { url: d.url || '/' },
     }),

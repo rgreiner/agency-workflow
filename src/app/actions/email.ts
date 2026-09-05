@@ -4,6 +4,7 @@ import { Resend } from 'resend'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { logSystemError } from '@/lib/system-error'
+import { emailHeader } from '@/lib/email/layout'
 
 const FROM = process.env.RESEND_FROM ?? 'Flow <onboarding@resend.dev>'
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
@@ -62,13 +63,7 @@ export async function sendInviteEmail(
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9fafb; margin: 0; padding: 40px 16px;">
   <div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 16px; border: 1px solid #e5e7eb; overflow: hidden;">
 
-    <!-- Header -->
-    <div style="background: #ea580c; padding: 32px; text-align: center;">
-      <div style="width: 48px; height: 48px; background: rgba(255,255,255,0.2); border-radius: 12px; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center;">
-        <span style="color: white; font-size: 22px; font-weight: 700;">${orgName.charAt(0).toUpperCase()}</span>
-      </div>
-      <p style="color: rgba(255,255,255,0.8); margin: 0; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase;">Flow</p>
-    </div>
+    ${emailHeader()}
 
     <!-- Body -->
     <div style="padding: 32px;">
@@ -126,9 +121,7 @@ export async function sendPasswordResetEmail(
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9fafb; margin: 0; padding: 40px 16px;">
   <div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 16px; border: 1px solid #e5e7eb; overflow: hidden;">
 
-    <div style="background: #ea580c; padding: 32px; text-align: center;">
-      <p style="color: rgba(255,255,255,0.85); margin: 0; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase;">Flow</p>
-    </div>
+    ${emailHeader()}
 
     <div style="padding: 32px;">
       <h1 style="font-size: 22px; font-weight: 700; color: #111827; margin: 0 0 8px;">Redefinir senha</h1>

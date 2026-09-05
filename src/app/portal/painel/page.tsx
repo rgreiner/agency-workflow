@@ -7,6 +7,7 @@ import { AutoRefresh } from '@/components/ui/AutoRefresh'
 import { LogOut, Clock, Building2, BadgeCheck, Plus, ArrowRight } from 'lucide-react'
 import { PortalThemeToggle } from '../PortalThemeToggle'
 import { SenhaPortalButton } from './SenhaPortalButton'
+import { FlowMark } from '@/components/brand/FlowMark'
 
 export const dynamic = 'force-dynamic'
 
@@ -97,9 +98,7 @@ export default async function PortalPainelPage() {
 
       <header className="flex items-center justify-between gap-4 mb-8">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-orange-600 shrink-0">
-            <span className="text-[#fff] font-bold text-xl">F</span>
-          </div>
+          <FlowMark size={40} />
           <div className="min-w-0">
             <h1 className="text-lg font-semibold text-gray-900 truncate">
               {dash.cliente?.nome ?? 'Painel'}

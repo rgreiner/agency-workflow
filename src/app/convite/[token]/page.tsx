@@ -2,7 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { redirect } from 'next/navigation'
 import { ConviteLoginButton } from './ConviteLoginButton'
-import { AlertTriangle, Users } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
+import { FlowMark } from '@/components/brand/FlowMark'
 
 const ROLE_LABELS: Record<string, string> = {
   owner: 'Proprietário',
@@ -109,13 +110,11 @@ export default async function ConvitePage({
   const roleColor = ROLE_COLORS[invite.role] ?? 'bg-orange-100 text-orange-700'
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-purple-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-amber-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo / branding */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-orange-600 rounded-2xl shadow-lg mb-4">
-            <Users className="w-7 h-7 text-[#fff]" />
-          </div>
+          <FlowMark size={64} className="mx-auto mb-4 drop-shadow-lg" />
           <p className="text-sm font-medium text-orange-600 tracking-wide uppercase">
             One a One · Flow
           </p>

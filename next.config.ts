@@ -53,6 +53,12 @@ const nextConfig: NextConfig = {
         headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
       },
       {
+        // Ícones da marca (manifest, push, e-mail): mudam junto com a identidade,
+        // não com o deploy. Um dia de cache + revalidação em segundo plano.
+        source: "/icons/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }],
+      },
+      {
         source: "/(.*)",
         headers: [
           { key: "Content-Security-Policy", value: csp },

@@ -3,6 +3,7 @@ import { login } from '@/app/actions/auth'
 import { SubmitButton } from '@/components/ui/SubmitButton'
 import { FormComTrava } from '@/components/ui/FormComTrava'
 import { emailLembrado } from '@/lib/auth/ultimo-email'
+import { FlowMark } from '@/components/brand/FlowMark'
 
 export default async function LoginPage({
   searchParams,
@@ -16,9 +17,7 @@ export default async function LoginPage({
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-10 w-full max-w-md">
         <div className="mb-6 text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-orange-600 mb-4">
-            <span className="text-[#fff] font-bold text-2xl">F</span>
-          </div>
+          <FlowMark size={56} className="mx-auto mb-4 drop-shadow-md" />
           <h1 className="text-2xl font-semibold text-gray-900">Flow</h1>
           <p className="text-gray-500 mt-1 text-sm">One a One · Gestão de pauta, produção e mídia</p>
         </div>
