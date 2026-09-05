@@ -16,11 +16,15 @@ export default async function MidiaTrabalharPage({ params }: { params: Promise<{
   const porId = new Map(fila.tarefas.map(t => [t.id, t]))
   const comEntrega = new Set(fila.entregas.map(e => e.activityId).filter(Boolean) as string[])
 
+  // Três regiões da tela (decisão do Rafael, 04/09): trabalhos solicitados em
+  // cima, peças a entregar à esquerda (entrega ao veículo e post datado), rotinas
+  // à direita.
   const daEntrega: ItemFila[] = fila.entregas.map(e => {
     const t = e.activityId ? porId.get(e.activityId) ?? null : null
     return {
       chave: `e:${e.id}`,
       tipo: 'entrega',
+      regiao: 'peca',
       titulo: e.titulo,
       cliente: e.cliente,
       data: e.prazoEnvio,
@@ -29,6 +33,8 @@ export default async function MidiaTrabalharPage({ params }: { params: Promise<{
       workspaceId: t?.workspaceId ?? null,
       campaignId: t?.campaignId ?? null,
       pastaPath: t?.pastaPath ?? null,
+      pastaUrl: t?.pastaUrl ?? null,
+      redacaoUrl: t?.redacaoUrl ?? null,
       previewUrl: t?.previewUrl ?? null,
       finalUrl: t?.finalUrl ?? null,
       entregaId: e.id,
@@ -53,6 +59,7 @@ export default async function MidiaTrabalharPage({ params }: { params: Promise<{
     const linha: ItemFila = {
       chave: `t:${t.id}`,
       tipo: t.rotina ? 'rotina' : 'pedido',
+      regiao: t.rotina ? 'rotina' : 'solicitado',
       titulo: t.titulo,
       cliente: t.cliente,
       data: t.prazo,
@@ -61,6 +68,8 @@ export default async function MidiaTrabalharPage({ params }: { params: Promise<{
       workspaceId: t.workspaceId,
       campaignId: t.campaignId,
       pastaPath: t.pastaPath,
+      pastaUrl: t.pastaUrl,
+      redacaoUrl: t.redacaoUrl,
       previewUrl: t.previewUrl,
       finalUrl: t.finalUrl,
       entregaId: null,
@@ -78,11 +87,12 @@ export default async function MidiaTrabalharPage({ params }: { params: Promise<{
       item: null,
     }
     // Item datado do checklist é uma demanda própria (o post da data X): vira
-    // linha com a data dele. A tarefa some enquanto tiver item datado pendente e
-    // volta, com "Feito", quando o último sai. Entrega vinculada segue valendo.
+    // linha com a data dele, entre as peças a entregar. A tarefa some enquanto
+    // tiver item datado pendente e volta quando o último sai. Entrega vinculada
+    // segue valendo.
     const datados = t.checklist.itens.filter(i => !i.feito && i.data)
     for (const it of datados) {
-      dasTarefas.push({ ...linha, chave: `c:${t.id}:${it.id}`, data: it.data, item: { id: it.id, texto: it.texto } })
+      dasTarefas.push({ ...linha, chave: `c:${t.id}:${it.id}`, regiao: 'peca', data: it.data, item: { id: it.id, texto: it.texto } })
     }
     if (datados.length === 0 && !comEntrega.has(t.id)) dasTarefas.push(linha)
   }
