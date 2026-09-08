@@ -15,12 +15,13 @@ export async function EntregaMidiaAviso({ orgSlug, activityId }: { orgSlug: stri
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data } = await (supabase as any)
     .from('midia_entrega_view')
-    .select('id, titulo, veiculo, prazo_envio, situacao, conflito_prazo, tarefa_prazo')
+    .select('id, titulo, veiculo, formato, especificacao, prazo_envio, situacao, conflito_prazo, tarefa_prazo')
     .eq('activity_id', activityId)
     .neq('situacao', 'cancelado')
 
   const entregas = (data ?? []) as {
     id: string; titulo: string; veiculo: string | null; prazo_envio: string | null
+    formato: string | null; especificacao: string | null
     situacao: string; conflito_prazo: boolean | null; tarefa_prazo: string | null
   }[]
   if (entregas.length === 0) return null
@@ -44,6 +45,11 @@ export async function EntregaMidiaAviso({ orgSlug, activityId }: { orgSlug: stri
               <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">já liberada</span>
             )}
           </div>
+          {(e.formato || e.especificacao) && (
+            <p className="text-[11px] text-gray-600 mt-1">
+              {[e.formato, e.especificacao].filter(Boolean).join(' · ')}
+            </p>
+          )}
           {e.conflito_prazo && (
             <p className="text-[11px] text-red-700 mt-1 inline-flex items-start gap-1">
               <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />

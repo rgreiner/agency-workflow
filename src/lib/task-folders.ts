@@ -169,3 +169,20 @@ export async function moveTaskFolder(taskRef: string, newParentRef: string): Pro
   const r = await drive.moveTaskFolder(taskRef, newParentRef)
   return { drivePath: r.drivePath, newRef: null }
 }
+
+/** Tem arquivo na pasta da tarefa (ou nas subpastas)? */
+export async function taskFolderHasFiles(taskRef: string): Promise<boolean> {
+  if (backendForRef(taskRef) === 's3') return (await s3.listFolderFilesS3(taskRef)).length > 0
+  return drive.taskFolderHasFiles(taskRef)
+}
+
+/**
+ * Renomear só existe no Drive: no S3 o caminho É a identidade da pasta —
+ * renomear seria mover tudo e trocar todos os links (é o Re-vincular).
+ */
+export async function renameTaskFolder(taskRef: string, newName: string): Promise<{ drivePath: string }> {
+  if (backendForRef(taskRef) === 's3') {
+    throw new Error('No storage S3 a pasta é o caminho — renomear trocaria todos os links. Use Re-vincular.')
+  }
+  return drive.renameTaskFolder(taskRef, newName)
+}

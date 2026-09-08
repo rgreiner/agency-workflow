@@ -10,6 +10,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { Combobox } from '@/components/ui/Combobox'
+import { FORMATOS } from '@/lib/atividade-titulo'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import {
   salvarEntrega, mudarSituacaoEntrega, excluirEntrega, tarefasDoCliente,
@@ -27,6 +28,8 @@ export interface EntregaRow {
   veiculoId: string | null
   veiculoContato: string | null
   formato: string | null
+  especificacao: string | null
+  pedido: string | null
   prazoEnvio: string | null
   situacao: 'aguardando' | 'liberado' | 'cancelado'
   observacao: string | null
@@ -46,6 +49,11 @@ export interface VeiculoOpt { id: string; nome: string; contato: string | null }
 
 /** Sentinela: entrega antiga cujo veículo é só texto, fora do cadastro. */
 const VEICULO_TEXTO = '__texto__'
+
+const FORMATO_OPTIONS = FORMATOS.map(f => ({ value: f, label: f }))
+const formatoConhecido = (v: string) => !!v && v !== 'Outro' && (FORMATOS as readonly string[]).includes(v)
+/** Acima disso o nome está virando pedido — e o pedido tem campo próprio. */
+const NOME_LONGO = 45
 
 const hojeBR = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
 const fmt = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '—')
@@ -189,7 +197,8 @@ function LinhaEntrega({ orgSlug, e, cfg, onEditar }: {
             </button>
             {e.veiculo && <span className="text-[11px] text-gray-500 inline-flex items-center gap-1"><Truck className="w-3 h-3" /> {e.veiculo}</span>}
             {e.veiculoContato && <span className="text-[11px] text-gray-500">{e.veiculoContato}</span>}
-            {e.formato && <span className="text-[11px] text-gray-400">{e.formato}</span>}
+            {e.formato && <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{e.formato}</span>}
+            {e.especificacao && <span className="text-[11px] text-gray-500">{e.especificacao}</span>}
           </div>
           <p className="text-[11px] text-gray-400 mt-0.5">
             {e.cliente}{e.campanha ? ` · ${e.campanha}` : ''}
@@ -279,7 +288,11 @@ function ModalEntrega({ orgSlug, clientes, veiculos, entrega, onClose }: {
     // Entrega antiga só com texto entra como opção própria — trocar pelo cadastro é
     // um clique, mas ninguém é obrigado a recadastrar o que já estava salvo.
     veiculoId: entrega?.veiculoId ?? (entrega?.veiculo ? VEICULO_TEXTO : ''),
-    formato: entrega?.formato ?? '',
+    // Formato do catálogo; o que não está na lista (entrega antiga) vira "Outro" + texto.
+    formato: !entrega?.formato ? '' : formatoConhecido(entrega.formato) ? entrega.formato : 'Outro',
+    formatoCustom: entrega?.formato && !formatoConhecido(entrega.formato) ? entrega.formato : '',
+    especificacao: entrega?.especificacao ?? '',
+    pedido: entrega?.pedido ?? '',
     prazoEnvio: entrega?.prazoEnvio?.slice(0, 10) ?? '',
     activityId: entrega?.tarefa?.id ?? '',
     campaignId: entrega?.campaignId ?? '',
@@ -318,14 +331,17 @@ function ModalEntrega({ orgSlug, clientes, veiculos, entrega, onClose }: {
     }))
   }
 
+  const formatoFinal = form.formato === 'Outro' ? form.formatoCustom : form.formato
+  const nomeLongo = form.titulo.trim().length > NOME_LONGO
+
   // Espelha tituloDaTarefa() do servidor: DATA - VEÍCULO - FORMATO - JOB, sem
   // deduplicar nada. Mostrar aqui evita a surpresa de descobrir o nome depois.
   const nomeTarefa = useMemo(() => {
     const d = hojeBR()
     const data = `${d.slice(2, 4)}${d.slice(5, 7)}${d.slice(8, 10)}`
-    return [data, form.veiculo, form.formato, form.titulo]
+    return [data, form.veiculo, formatoFinal, form.titulo]
       .map(x => x.trim()).filter(Boolean).join(' - ')
-  }, [form.veiculo, form.formato, form.titulo])
+  }, [form.veiculo, formatoFinal, form.titulo])
 
   // Projeto sugerido: o último usado neste cliente, se ainda existir.
   function sugerirCampanha(): string {
@@ -360,7 +376,9 @@ function ModalEntrega({ orgSlug, clientes, veiculos, entrega, onClose }: {
         titulo: form.titulo,
         veiculo: form.veiculo,
         veiculoId: form.veiculoId && form.veiculoId !== VEICULO_TEXTO ? form.veiculoId : null,
-        formato: form.formato,
+        formato: formatoFinal,
+        especificacao: form.especificacao,
+        pedido: form.pedido,
         prazoEnvio: form.prazoEnvio || null,
         activityId: abrindoBriefing ? null : (form.activityId || null),
         // A campanha vem da tarefa quando há vínculo — evita escolher duas vezes.
@@ -413,9 +431,17 @@ function ModalEntrega({ orgSlug, clientes, veiculos, entrega, onClose }: {
         </div>
 
         <label className="block">
-          <span className="text-[11px] text-gray-400">O que é a entrega</span>
+          <span className="text-[11px] text-gray-400">
+            Nome da peça <span className="text-gray-300">· curto: vira o fim do nome da tarefa e da pasta</span>
+          </span>
           <input value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))}
-            placeholder="Anúncio 1/2 página — Revista Rural" className={campo} />
+            placeholder="Quem somos" className={campo} />
+          {nomeLongo && (
+            <span className="text-[11px] text-amber-700 mt-1 block">
+              Nome longo: isso vai para o título da tarefa e para a pasta. O que a criação precisa fazer entra em
+              &ldquo;Pedido para a criação&rdquo;, logo abaixo.
+            </span>
+          )}
         </label>
 
         <div className="grid sm:grid-cols-2 gap-3">
@@ -436,12 +462,26 @@ function ModalEntrega({ orgSlug, clientes, veiculos, entrega, onClose }: {
               </a>
             )}
           </div>
-          <label className="block">
-            <span className="text-[11px] text-gray-400">Especificação</span>
-            <input value={form.formato} onChange={e => setForm(f => ({ ...f, formato: e.target.value }))}
-              placeholder="21×14cm · CMYK · PDF/X-1a" className={campo} />
-          </label>
+          <div className="block">
+            <span className="text-[11px] text-gray-400">Formato</span>
+            <div className="mt-0.5">
+              <Select value={form.formato} onChange={v => setForm(f => ({ ...f, formato: v }))}
+                options={FORMATO_OPTIONS} placeholder="Stories, Post, Carrossel…" />
+            </div>
+            {form.formato === 'Outro' && (
+              <input value={form.formatoCustom} onChange={e => setForm(f => ({ ...f, formatoCustom: e.target.value }))}
+                placeholder="Qual formato?" className={campo} />
+            )}
+          </div>
         </div>
+
+        <label className="block">
+          <span className="text-[11px] text-gray-400">
+            Especificação <span className="text-gray-300">· vai para o briefing, não para o nome</span>
+          </span>
+          <input value={form.especificacao} onChange={e => setForm(f => ({ ...f, especificacao: e.target.value }))}
+            placeholder="1080×1920 px · legenda até 2.000 caracteres · 21×14 cm CMYK" className={campo} />
+        </label>
 
         <label className="block">
           <span className="text-[11px] text-gray-400">
@@ -480,10 +520,16 @@ function ModalEntrega({ orgSlug, clientes, veiculos, entrega, onClose }: {
                   placeholder={campanhas.length ? 'Escolha o projeto' : 'Este cliente não tem projeto ativo'} />
               </div>
             </label>
+            <label className="block">
+              <span className="text-[11px] text-orange-800">Pedido para a criação · vira o briefing da tarefa</span>
+              <textarea value={form.pedido} onChange={e => setForm(f => ({ ...f, pedido: e.target.value }))} rows={4}
+                placeholder="O que precisa ser criado, para quem, com que foco. Ex.: capas para os destaques 'News' e 'Quem somos' do perfil, com fotos da fábrica."
+                className={cn(campo, 'resize-y')} />
+            </label>
             <p className="text-[11px] text-orange-800/80">
               A tarefa nasce em <b>Briefing</b>, <b>sem responsável</b> — cai na fila &ldquo;Sem responsável&rdquo;
-              do atendimento — com prazo {form.prazoEnvio ? fmt(form.prazoEnvio) : 'igual ao do envio'} e a pasta
-              do Drive já criada com o mesmo nome. O briefing nasce em branco, para o atendimento escrever.
+              do atendimento — com prazo {form.prazoEnvio ? fmt(form.prazoEnvio) : 'igual ao do envio'}, a pasta
+              do Drive já criada com o mesmo nome e o briefing com o pedido e a especificação acima.
             </p>
             <p className="text-[11px] text-orange-800/70">
               Nome da tarefa: <span className="font-mono text-orange-900">{nomeTarefa}</span>

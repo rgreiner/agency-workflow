@@ -6,7 +6,7 @@ import { redirect, RedirectType } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { dispatchPushNotificacoes } from '@/lib/push'
-import { provisionActivitiesDrive, moveActivityDrive, regenerateActivityDrive } from '@/lib/drive-provision'
+import { provisionActivitiesDrive, moveActivityDrive, regenerateActivityDrive, renameActivityDrive } from '@/lib/drive-provision'
 import { scheduleReview, reviewKindForAdvance, ordemStatusDaAtividade } from '@/lib/review-gate'
 import { scheduleRecurrence, isConclusion } from '@/lib/recurrence-gate'
 
@@ -445,6 +445,27 @@ export async function regenerarPastaDrive(orgSlug: string, path: string, activit
   if (!res.ok) return { error: res.error }
   revalidatePath(path)
   return { url: res.url }
+}
+
+/** Renomeia a pasta do Drive para acompanhar o título — só com a pasta vazia. */
+export async function renomearPastaDrive(orgSlug: string, path: string, activityId: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: act } = await (supabase as any)
+    .from('activities').select('campaign_id, title, start_date, due_date, drive_folder_id').eq('id', activityId).single()
+  if (!act) return { error: 'Tarefa não encontrada' }
+  if (!act.drive_folder_id) return { error: 'Esta tarefa não tem pasta vinculada.' }
+
+  const res = await renameActivityDrive(supabase, {
+    campaignId: act.campaign_id, userId: user.id, activityId,
+    folderId: act.drive_folder_id, title: act.title, date: act.start_date || act.due_date || null,
+  })
+  if (!res.ok) return { error: res.error }
+  revalidatePath(path)
+  return { nome: res.nome }
 }
 
 /** Edita um comentário (só o autor). */

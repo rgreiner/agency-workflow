@@ -2,7 +2,7 @@ import 'server-only'
 import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
-import { createTaskFolders, moveTaskFolder, inspectTaskFolder, completarSubpastas, folderConfigured, resolvePathPrefix, backendForRef, refIncompativel } from '@/lib/task-folders'
+import { createTaskFolders, moveTaskFolder, inspectTaskFolder, completarSubpastas, folderConfigured, resolvePathPrefix, backendForRef, refIncompativel, renameTaskFolder, taskFolderHasFiles } from '@/lib/task-folders'
 import { logSystemError } from '@/lib/system-error'
 
 /**
@@ -237,4 +237,40 @@ export async function moveActivityDrive(
       await logSystemError(supabase, { userId: params.userId, context: 'drive:move', error: e, activityId: params.activityId })
     }
   })
+}
+
+/**
+ * Renomeia a pasta da tarefa para acompanhar o título — só enquanto ela está
+ * VAZIA. Depois que entra arquivo, renomear quebra link de arquivo criativo e
+ * não vale o risco (artefato do Hub, passo 4). O ID não muda; o caminho local e
+ * os links das subpastas são relidos e regravados.
+ */
+export async function renameActivityDrive(
+  supabase: SupabaseClient<Database>,
+  params: { campaignId: string; userId: string; activityId: string; folderId: string; title: string; date: string | null },
+): Promise<{ ok: boolean; error?: string; nome?: string }> {
+  if (!folderConfigured()) return { ok: false, error: 'Integração de pastas não está configurada.' }
+  const nome = taskFolderName(params.title, params.date)
+  try {
+    if (await taskFolderHasFiles(params.folderId)) {
+      return { ok: false, error: 'A pasta já tem arquivos — renomear quebraria links. Se precisar, ajuste o nome no Drive.' }
+    }
+    await renameTaskFolder(params.folderId, nome)
+    const cfg = await resolve(supabase, params.campaignId)
+    const prefix = cfg?.prefix ?? resolvePathPrefix(null, backendForRef(params.folderId))
+    const r = await inspectTaskFolder(params.folderId)
+    await supabase.rpc('set_activity_drive', {
+      p_user_id: params.userId,
+      p_activity_id: params.activityId,
+      p_drive_folder_id: r.taskFolderId,
+      p_drive_path: joinLocalPath(prefix, r.drivePath),
+      p_drive_folder_url: r.taskFolderLink,
+      p_redacao_url: r.sub['Redação']?.link ?? null,
+      p_finalizacao_url: r.sub['Final']?.link ?? null,
+      p_preview_url: r.sub['Preview']?.link ?? null,
+    })
+    return { ok: true, nome }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Falha ao renomear a pasta' }
+  }
 }

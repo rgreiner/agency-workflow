@@ -20,6 +20,8 @@ import { ScrollFeedBottom } from './ScrollFeedBottom'
 import { FeedFilter } from './FeedFilter'
 import { HistoryGroup } from './HistoryGroup'
 import { RegenerateDriveButton } from './RegenerateDriveButton'
+import { RenameDriveButton } from './RenameDriveButton'
+import { taskFolderName } from '@/lib/drive-provision'
 import { MuteButton } from './MuteButton'
 import { AssigneeSelector } from './AssigneeSelector'
 import { FieldEditor } from './FieldEditor'
@@ -362,6 +364,11 @@ export default async function ActivityPage({
   const driveWebUrl   = /^https?:\/\//i.test(driveUrlRaw) ? driveUrlRaw : null
   const driveLooksPath = /^[A-Za-z]:[\\/]/.test(driveUrlRaw) || driveUrlRaw.includes('\\')
   const driveWinPath  = (activity.drive_path ?? '').trim() || (driveLooksPath ? driveUrlRaw : '')
+  // Pasta × nome do job (artefato do Hub, passo 4): o nome real da pasta é o último
+  // segmento do caminho salvo. Quando diverge do título, a tarefa oferece renomear.
+  const nomePastaAtual = (driveWinPath ?? '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? ''
+  const nomePastaEsperado = taskFolderName(activity.title, activity.start_date || activity.due_date || null)
+  const pastaDiverge = !!driveWebUrl && !!nomePastaAtual && nomePastaAtual !== nomePastaEsperado
 
   // Backend da pasta pelo formato da ref (igual backendForRef): ID do Drive = 20+
   // chars sem "/" nem espaço; qualquer outra coisa = caminho de bucket (S3). Numa
@@ -594,6 +601,10 @@ export default async function ActivityPage({
                     )}
                     {isOrgMember && (
                       <RegenerateDriveButton orgSlug={orgSlug} path={path} activityId={activityId} hasFolder={!!driveWebUrl} />
+                    )}
+                    {isOrgMember && pastaDiverge && (
+                      <RenameDriveButton orgSlug={orgSlug} path={path} activityId={activityId}
+                        atual={nomePastaAtual} esperado={nomePastaEsperado} />
                     )}
                   </div>
                 </div>

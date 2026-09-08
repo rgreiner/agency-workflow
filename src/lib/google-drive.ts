@@ -464,3 +464,34 @@ export async function inspectTaskFolder(folderId: string): Promise<TaskFoldersRe
   const drivePath = await buildDrivePath(folderId)
   return { taskFolderId: folderId, taskFolderLink: folderLink(folderId), sub, drivePath }
 }
+
+// ── Renomear a pasta da tarefa (só vazia) ───────────────────────────────────
+
+/**
+ * A pasta da tarefa tem algum ARQUIVO — nela ou dentro das subpastas? Subpasta
+ * vazia (as cinco que a provisão cria) não conta como conteúdo.
+ */
+export async function taskFolderHasFiles(folderId: string): Promise<boolean> {
+  const drive = getDrive()
+  const listar = (parent: string, fields: string, pageSize: number) => comRetry(() => drive.files.list({
+    q: `'${parent}' in parents and trashed = false`,
+    fields, pageSize, supportsAllDrives: true, includeItemsFromAllDrives: true,
+  }))
+  const filhos = (await listar(folderId, 'files(id, mimeType)', 200)).data.files ?? []
+  if (filhos.some(f => f.mimeType !== FOLDER_MIME)) return true
+  for (const sub of filhos) {
+    if (!sub.id) continue
+    const dentro = (await listar(sub.id, 'files(id)', 1)).data.files ?? []
+    if (dentro.length) return true
+  }
+  return false
+}
+
+/** Renomeia a pasta da tarefa. O ID não muda — links das subpastas seguem válidos. */
+export async function renameTaskFolder(folderId: string, newName: string): Promise<{ drivePath: string }> {
+  const drive = getDrive()
+  await comRetry(() => drive.files.update({
+    fileId: folderId, requestBody: { name: newName }, fields: 'id, name', supportsAllDrives: true,
+  }))
+  return { drivePath: await buildDrivePath(folderId) }
+}

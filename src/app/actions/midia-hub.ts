@@ -84,7 +84,12 @@ export interface EntregaInput {
   veiculo?: string | null
   /** Veículo do cadastro (mig. 278). Com ele, o nome canônico vence o texto. */
   veiculoId?: string | null
+  /** Formato do catálogo (Stories, Post, Carrossel…): entra no título da tarefa. */
   formato?: string | null
+  /** Dimensões/regras da peça: vai para o briefing e o card, nunca para o título. */
+  especificacao?: string | null
+  /** O que a criação precisa fazer: vira o briefing da tarefa aberta pela entrega. */
+  pedido?: string | null
   prazoEnvio?: string | null
   activityId?: string | null
   campaignId?: string | null
@@ -150,6 +155,8 @@ export async function salvarEntrega(orgSlug: string, e: EntregaInput) {
     p_campaign_id: abrirEm || e.campaignId || null,
     p_observacao: e.observacao || null,
     p_veiculo_id: e.veiculoId || null,
+    p_especificacao: e.especificacao || null,
+    p_pedido: e.pedido || null,
   })
   if (error) return { error: error.message }
   const id = data as string
@@ -169,6 +176,21 @@ export async function salvarEntrega(orgSlug: string, e: EntregaInput) {
   return { id, briefingErro, briefingId }
 }
 
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+/**
+ * O briefing da tarefa aberta pela entrega: o PEDIDO da mídia (parágrafo por
+ * linha em branco) + a especificação da peça. Contato do veículo e forma de envio
+ * continuam de fora — são assunto da mídia, não da criação (decisão de 01/09).
+ */
+function briefingDaEntrega(e: EntregaInput): string {
+  const blocos = (e.pedido ?? '').trim().split(/\n\s*\n/).map(b => b.trim()).filter(Boolean)
+  const html = blocos.map(b => `<p>${esc(b).replace(/\n/g, '<br>')}</p>`)
+  const spec = [e.formato, e.especificacao].map(x => (x ?? '').trim()).filter(Boolean).join(' · ')
+  if (spec) html.push(`<p><strong>Especificação:</strong> ${esc(spec)}</p>`)
+  return html.join('')
+}
+
 /** Cria a tarefa de briefing e devolve o vínculo pra entrega. Não lança. */
 async function abrirBriefing(
   supabase: any, userId: string, orgSlug: string,
@@ -176,15 +198,14 @@ async function abrirBriefing(
 ): Promise<{ activityId?: string; erro?: string }> {
   // Sem p_assignees de propósito (mig. 253): a mídia não decide quem produz.
   const titulo = tituloDaTarefa(e)
-  // Briefing nasce VAZIO de propósito: o que a mídia sabe já está no título
-  // (data/veículo/formato/job) e no aviso dentro da tarefa (prazo do veículo e
-  // conflito). Contato e forma de envio são assunto da mídia, não da criação —
-  // repetir isso aqui só polui o campo que o atendimento vai escrever.
+  // O briefing nasce com o PEDIDO da mídia e a especificação (08/09): antes
+  // nascia vazio e o pedido acabava no título — e no nome da pasta. Contato e
+  // forma de envio continuam de fora (assunto da mídia, não da criação).
   const { data: activityId, error } = await supabase.rpc('create_activity', {
     p_user_id: userId,
     p_campaign_id: campaignId,
     p_title: titulo,
-    p_description: '',
+    p_description: briefingDaEntrega(e),
     p_status: 'briefing',
     p_priority: 'medium',
     p_complexity: 'medium',
@@ -205,6 +226,8 @@ async function abrirBriefing(
     p_campaign_id: campaignId,
     p_observacao: e.observacao || null,
     p_veiculo_id: e.veiculoId || null,
+    p_especificacao: e.especificacao || null,
+    p_pedido: e.pedido || null,
   })
   if (errVinculo) return { activityId: activityId as string, erro: errVinculo.message }
 
@@ -431,7 +454,7 @@ export async function vincularEntregaTarefa(orgSlug: string, entregaId: string, 
 
   const [{ data: e }, { data: a }] = await Promise.all([
     sb.from('midia_entrega')
-      .select('workspace_id, titulo, veiculo, veiculo_id, formato, prazo_envio, observacao')
+      .select('workspace_id, titulo, veiculo, veiculo_id, formato, especificacao, pedido, prazo_envio, observacao')
       .eq('id', entregaId).maybeSingle(),
     sb.from('activities').select('campaign_id').eq('id', activityId).maybeSingle(),
   ])
@@ -449,6 +472,8 @@ export async function vincularEntregaTarefa(orgSlug: string, entregaId: string, 
     p_campaign_id: a.campaign_id ?? null,
     p_observacao: e.observacao ?? null,
     p_veiculo_id: e.veiculo_id ?? null,
+    p_especificacao: e.especificacao ?? null,
+    p_pedido: e.pedido ?? null,
   })
   if (error) return { error: error.message }
 

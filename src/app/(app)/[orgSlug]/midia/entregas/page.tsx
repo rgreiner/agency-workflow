@@ -10,6 +10,7 @@ interface ViewRow {
   id: string; workspace_id: string; campaign_id: string | null
   titulo: string; veiculo: string | null; formato: string | null
   veiculo_id: string | null; veiculo_emails: unknown; veiculo_telefones: unknown
+  especificacao: string | null; pedido: string | null
   prazo_envio: string | null; activity_id: string | null
   situacao: string; liberado_em: string | null; observacao: string | null
   cliente: string; campanha: string | null
@@ -58,6 +59,8 @@ export default async function EntregasPage({ params }: { params: Promise<{ orgSl
     veiculoId: r.veiculo_id,
     veiculoContato: contatoDoVeiculo(r.veiculo_emails, r.veiculo_telefones),
     formato: r.formato,
+    especificacao: r.especificacao,
+    pedido: r.pedido,
     prazoEnvio: r.prazo_envio,
     situacao: r.situacao as EntregaRow['situacao'],
     observacao: r.observacao,
