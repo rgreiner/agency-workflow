@@ -6,6 +6,7 @@ import { ChevronRight, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
 import { docNumero } from '@/lib/doc-series'
+import { canonizarCentro } from '@/lib/finance-centros'
 import { setProducaoSituacao } from '@/app/actions/producao'
 import { setProducaoAnexos, enviarFaturamentoEmail, type Anexo } from '@/app/actions/financeiro'
 import { DocsBox, faltando } from './DocsBox'
@@ -67,9 +68,10 @@ function FeeRow({ orgSlug, fee, cat }: { orgSlug: string; fee: FeeView; cat: Cat
   const [open, setOpen] = useState(true)
   const [anexos, setAnexos] = useState<Anexo[]>(fee.anexos)
   const [, startTransition] = useTransition()
-  // Pré-preenchido: centro = cliente, categoria pelo tipo (Fee/Job), conta = padrão.
+  // Pré-preenchido: centro = cliente (na grafia do cadastro de centros), categoria
+  // pelo tipo (Fee/Job), conta = padrão.
   const [cls, setCls] = useState<Classificacao>({
-    conta: cat.defaultConta, categoria: CATEGORIA_PADRAO[fee.tipo] ?? 'Job', centro: fee.cliente, forma: '',
+    conta: cat.defaultConta, categoria: CATEGORIA_PADRAO[fee.tipo] ?? 'Job', centro: canonizarCentro(cat.centros, fee.cliente), forma: '',
   })
   const n = fee.parcelas.length
   const temComissao = fee.parcelas.some(p => p.comissao)

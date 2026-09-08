@@ -21,6 +21,7 @@ import {
   type FinanceCategoriaGrupo, type FinanceCentro, type Anexo, type ImpactoExclusao,
 } from '@/app/actions/financeiro'
 import { categoriaNomes, isTransferenciaCategoria } from '@/lib/finance-categorias'
+import { canonizarCentro, opcoesDeCentro } from '@/lib/finance-centros'
 import { EMITENTES, EMITENTE_LABEL, chipDocumento, numeroDoNome, textoBuscavel } from '@/lib/documento-fiscal'
 import { uploadFile } from '@/lib/storage/upload-client'
 import { Paperclip, ExternalLink, CalendarClock, Landmark } from 'lucide-react'
@@ -904,6 +905,9 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
     const t = setTimeout(() => { vencRef.current?.focus(); vencRef.current?.showPicker?.() }, 80)
     return () => clearTimeout(t)
   }, [foco])
+  // O centro gravado na grafia do CADASTRO ("É O Amor" do cliente → "É o Amor"):
+  // é o que o Select consegue mostrar como ativo, e salvar alinha o lançamento.
+  const centroAtual = canonizarCentro(centros, lancamento?.centro_custo)
   const [form, setForm] = useState({
     tipo: lancamento?.tipo ?? 'saida',
     descricao: lancamento?.descricao ?? '',
@@ -914,7 +918,7 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
     // Novo/importado sem conta cai na conta favorita da org (contaPadrao).
     conta_id: lancamento?.conta_id ?? contaPadrao ?? '',
     categoria: lancamento?.categoria ?? '',
-    centro_custo: lancamento?.centro_custo ?? '',
+    centro_custo: centroAtual,
     forma_pagamento: lancamento?.forma_pagamento ?? '',
     observacao: lancamento?.observacao ?? '',
   })
@@ -933,13 +937,13 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
   // Compra no cartão: a data que se digita é a da COMPRA, e o vencimento vira o
   // da fatura do ciclo (migration 191). Só troca o rótulo — o cálculo é do banco.
   const ehCartao = form.tipo === 'saida' && contas.find(c => c.id === form.conta_id)?.tipo === 'cartao'
-  const centroOptions = useMemo(() => {
-    const ativos = centros.filter(c => !c.arquivado)
-    const atual = lancamento?.centro_custo
-    // mantém o centro atual visível/selecionável mesmo se já estiver arquivado
-    const extra = atual && !ativos.some(c => c.nome === atual) ? [{ value: atual, label: `${atual} (arquivado)` }] : []
-    return [{ value: '', label: '—' }, ...ativos.map(c => ({ value: c.nome, label: c.nome })), ...extra]
-  }, [centros, lancamento])
+  // Ativos + o centro atual quando não é um ativo, com o motivo real no rótulo:
+  // "(arquivado)" só se o cadastro diz que está, "(fora do cadastro)" se não
+  // existe lá. Antes tudo que não batia exato virava "(arquivado)" — inclusive
+  // um O maiúsculo de diferença.
+  const centroOptions = useMemo(
+    () => [{ value: '', label: '—' }, ...opcoesDeCentro(centros, centroAtual)],
+    [centros, centroAtual])
 
   const liquidado = !!lancamento && !imported && (lancamento.situacao === 'pago' || lancamento.situacao === 'recebido')
   const contaNome = lancamento?.conta_id ? contas.find(c => c.id === lancamento.conta_id)?.nome : null

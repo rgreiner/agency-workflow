@@ -3,6 +3,7 @@
 import { useMemo } from 'react'
 import { Select } from '@/components/ui/Select'
 import { categoriaNomes } from '@/lib/finance-categorias'
+import { opcoesDeCentro } from '@/lib/finance-centros'
 import type { FinanceCentro, FinanceCategoriaGrupo } from '@/app/actions/financeiro'
 
 export interface ContaRef { id: string; nome: string }
@@ -40,12 +41,11 @@ export function ClassificacaoFields({
     return [...nomes, ...extra].map(n => ({ value: n, label: n }))
   }, [categorias, value.categoria])
 
-  const centroOptions = useMemo(() => {
-    const ativos = centros.filter(c => !c.arquivado)
-    const extra = value.centro && !ativos.some(c => c.nome === value.centro)
-      ? [{ value: value.centro, label: `${value.centro}${centros.some(c => c.nome === value.centro) ? ' (arquivado)' : ''}` }] : []
-    return [{ value: '', label: '—' }, ...ativos.map(c => ({ value: c.nome, label: c.nome })), ...extra]
-  }, [centros, value.centro])
+  // Ativos + o valor atual quando não é um ativo, com o motivo real no rótulo
+  // ("arquivado" só se o cadastro diz; "fora do cadastro" se não existe lá).
+  const centroOptions = useMemo(
+    () => [{ value: '', label: '—' }, ...opcoesDeCentro(centros, value.centro)],
+    [centros, value.centro])
 
   const contaOptions = useMemo(
     () => [{ value: '', label: '—' }, ...contas.map(c => ({ value: c.id, label: c.nome }))],

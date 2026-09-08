@@ -6,6 +6,7 @@ import { AlertTriangle, ChevronRight, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
 import { docNumero } from '@/lib/doc-series'
+import { canonizarCentro } from '@/lib/finance-centros'
 import { lancarMidia, setMidiaAnexos, enviarFaturamentoEmail, type Anexo, type FinanceCentro, type FinanceCategoriaGrupo } from '@/app/actions/financeiro'
 import { DocsBox, faltando } from './DocsBox'
 import { FaturarButton } from './FaturarButton'
@@ -69,9 +70,10 @@ function MidiaRow({ orgSlug, midia, cat }: { orgSlug: string; midia: MidiaView; 
   const [open, setOpen] = useState(true)
   const [anexos, setAnexos] = useState<Anexo[]>(midia.anexos)
   const [, startTransition] = useTransition()
-  // Pré-preenchido: centro = cliente, categoria = Comissão, conta = padrão da org.
+  // Pré-preenchido: centro = cliente (na GRAFIA do cadastro de centros — "É O
+  // Amor" do cliente vira "É o Amor" do cadastro), categoria = Comissão, conta = padrão da org.
   const [cls, setCls] = useState<Classificacao>({
-    conta: cat.defaultConta, categoria: 'Comissão', centro: midia.cliente, forma: '',
+    conta: cat.defaultConta, categoria: 'Comissão', centro: canonizarCentro(cat.centros, midia.cliente), forma: '',
   })
   // Sem comissão nenhuma: o documento existe só para constar no Relatório de
   // Autorização (o cliente paga o veículo direto). Faturar não gera lançamento.
