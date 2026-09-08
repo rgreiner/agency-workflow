@@ -9,6 +9,7 @@ import { MarcacoesEditor, validarMarcacoes } from '@/components/ponto/MarcacoesE
 import { ExtraContextoModal, extraNascida, type ExtraNascida } from '@/components/ponto/ExtraContextoModal'
 import { downscaleImage } from '@/lib/image-resize'
 import { baterPonto, criarJustificativa } from '@/app/actions/rh-ponto'
+import { DicaPresenca } from '@/components/rh/DicaPresenca'
 import { anunciarPonto } from '@/components/ponto/ponto-sync'
 
 export interface PontoDia {
@@ -330,6 +331,7 @@ function JustificarModal({ orgSlug, colaboradorId, dias, onClose, diaInicial }: 
                 </p>
               </div>
               <MarcacoesEditor horas={horas} onChange={setHoras} />
+              <DicaPresenca orgSlug={orgSlug} colaboradorId={colaboradorId} dia={dia} />
               <p className="text-[11px] text-gray-400">Ex.: chegou 8h39 e só bateu 9h37 → corrija a Entrada. Ao aprovar, o RH grava essas marcações — a original fica no histórico.</p>
             </div>
           )}

@@ -6,6 +6,7 @@ import { Clock, FileText, Check, X, Ban, CalendarX, CalendarClock, Paperclip } f
 import { toast } from 'sonner'
 import { decidirExtra, decidirJustificativa, setPontoObrigatorio } from '@/app/actions/rh-ponto'
 import { MarcacoesEditor, validarMarcacoes } from '@/components/ponto/MarcacoesEditor'
+import { DicaPresenca } from '@/components/rh/DicaPresenca'
 import { LocaisPonto } from '@/components/rh/LocaisPonto'
 import { FilaForaLocal, type MarcacaoFora } from '@/components/rh/FilaForaLocal'
 import type { LocalRh } from '@/app/actions/rh-local'
@@ -346,6 +347,9 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
                       <span className="text-[11px] text-gray-400 tabular-nums">hoje: {(j.atuais ?? []).join(' · ') || 'sem marcação'}</span>
                     </div>
                     <MarcacoesEditor horas={pares[j.id] ?? ['', '']} onChange={v => setPares(p => ({ ...p, [j.id]: v }))} />
+                    {j.data_ini === j.data_fim && (
+                      <DicaPresenca orgSlug={orgSlug} colaboradorId={j.colaborador_id} dia={j.data_ini} className="mt-2" />
+                    )}
                     <p className="text-[11px] text-gray-400 mt-1.5">Igual às marcações atuais (ou tudo em branco) = só decide, não altera o ponto.</p>
                   </div>
                 ) : (

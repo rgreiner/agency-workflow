@@ -72,9 +72,21 @@ export function ChatDock({ orgId, orgSlug, meId, members }: { orgId: string; org
     try { localStorage.setItem(STORE, JSON.stringify({ windows, minimized: [...minimized] })) } catch { /* noop */ }
   }, [windows, minimized, STORE])
 
+  // ── Interação real (mouse/teclado/toque) ────────────────────────────────
+  // O histórico diário de presença (mig. 281) só conta batidas com interação nos
+  // últimos minutos — aba esquecida aberta na tela não vale como "ainda aqui".
+  const lastInput = useRef(0)
+  useEffect(() => {
+    const mark = () => { lastInput.current = Date.now() }
+    const evs: (keyof WindowEventMap)[] = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart']
+    evs.forEach(e => window.addEventListener(e, mark, { passive: true }))
+    mark()   // abrir a aba já conta
+    return () => evs.forEach(e => window.removeEventListener(e, mark))
+  }, [])
+
   // ── Heartbeat de presença ───────────────────────────────────────────────
   useEffect(() => {
-    const beat = () => { if (!hidden()) touchPresence() }
+    const beat = () => { if (!hidden()) touchPresence(Date.now() - lastInput.current < INTERACAO_MS) }
     beat()
     const t = setInterval(beat, 25_000)
     return () => clearInterval(t)
@@ -367,6 +379,8 @@ function TaskPicker({ orgSlug, onPick, onClose }: {
 
 // Só http(s) vira link — nada de javascript:/data:. O texto é renderizado como nós
 // React (nunca innerHTML), então continua escapado.
+// Janela em que mouse/teclado ainda contam como "interagindo" pro histórico diário.
+const INTERACAO_MS = 5 * 60_000
 const URL_RE = /(https?:\/\/[^\s]+)/g
 const JOB_RE = /\/j\/[0-9a-f-]{8,}/i
 

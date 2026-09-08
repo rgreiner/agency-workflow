@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, Loader2, Check, Pencil, AlertTriangle, History, X, Plus, Trash2, Lock, Download, Paperclip } from 'lucide-react'
 import { toast } from 'sonner'
 import { carregarEspelho, editarPonto, type Espelho, type EspelhoDia } from '@/app/actions/rh-calendario'
+import { DicaPresenca } from '@/components/rh/DicaPresenca'
 import { AssinaturaPanel } from '../AssinaturaPanel'
 
 const hm = (m: number) => `${m < 0 ? '-' : ''}${Math.floor(Math.abs(m) / 60)}:${String(Math.abs(m) % 60).padStart(2, '0')}`
@@ -277,6 +278,7 @@ function EditarDia({ orgSlug, colaboradorId, dia, onClose, onOk }: {
             <button onClick={add} className="mt-2 inline-flex items-center gap-1 text-xs text-gray-500 hover:text-orange-600 transition">
               <Plus className="w-3.5 h-3.5" /> Adicionar par (pausa)
             </button>
+            <DicaPresenca orgSlug={orgSlug} colaboradorId={colaboradorId} dia={dia.data} className="mt-2" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Motivo da alteração *</label>

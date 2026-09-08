@@ -75,11 +75,15 @@ export async function markChatRead(orgId: string, otherId: string) {
   await (supabase as any).rpc('mark_chat_read', { p_user_id: user.id, p_other_id: otherId, p_org_id: orgId })
 }
 
-/** Heartbeat de presença (marca o usuário como visto agora). */
-export async function touchPresence() {
+/**
+ * Heartbeat de presença (marca o usuário como visto agora). `interagiu` = houve
+ * mouse/teclado há pouco: só assim o dia entra no histórico user_presence_dia
+ * (mig. 281), que vira a dica "Última interação no Flow" no ponto.
+ */
+export async function touchPresence(interagiu = true) {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).rpc('touch_presence', { p_user_id: user.id })
+  await (supabase as any).rpc('touch_presence', { p_user_id: user.id, p_interagiu: interagiu })
 }

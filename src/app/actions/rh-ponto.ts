@@ -4,6 +4,7 @@ import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { revalidatePath } from 'next/cache'
+import { presencaPorDia, type PresencaDia } from '@/lib/rh/presenca'
 
 async function ctx(orgSlug: string) {
   const supabase = await createClient()
@@ -261,4 +262,22 @@ export async function baterEntradaRetro(orgSlug: string) {
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/ponto`)
   return { ok: true, hora: (data as { hora?: string })?.hora }
+}
+
+
+/**
+ * Presença no Flow por dia (user_presence_dia, mig. 281): primeiro acesso e última
+ * INTERAÇÃO (mouse/teclado), em HH:MM de Brasília. É a dica "que horas a pessoa
+ * ainda estava aqui" pra quem esqueceu de bater — sugestão, nunca preenche nada.
+ * A RPC só devolve pra própria pessoa ou pra quem tem RH na org.
+ */
+export async function presencaDosDias(orgSlug: string, colaboradorId: string, datas: string[]) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  if (!datas.length) return { porDia: {} as Record<string, PresencaDia> }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (c.supabase as any)
+    .rpc('rh_presenca_dias', { p_colaborador_ids: [colaboradorId], p_datas: datas })
+  if (error) return { error: error.message }
+  return { porDia: presencaPorDia(data) }
 }
