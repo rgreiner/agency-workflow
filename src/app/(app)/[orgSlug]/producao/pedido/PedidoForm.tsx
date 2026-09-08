@@ -1,11 +1,12 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Check, Loader2, Plus, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { Combobox } from '@/components/ui/Combobox'
+import { useFornecedorRapido } from '@/components/fornecedor/useFornecedorRapido'
 import { PRODUCAO_SITUACAO_OPTIONS, MIDIA_PRAZO_OPTIONS, formatBRL, parseMoney } from '@/lib/midia'
 import type { ClienteOpt, MemberOpt } from '../../midias/simplificada/MidiaForm'
 import type { FornecedorOpt } from '@/lib/midia-selectors'
@@ -224,7 +225,9 @@ export function PedidoForm({
   }
 
   const clienteOptions = clientes.map(c => ({ value: c.id, label: c.name }))
-  const fornecedorOptions = fornecedores.map(f => ({ value: f.id, label: f.name }))
+  // Fornecedor novo nasce aqui mesmo (só o nome) e já fica selecionado.
+  const { orgSlug } = useParams<{ orgSlug: string }>()
+  const { options: fornecedorOptions, criar: criarFornecedor } = useFornecedorRapido(orgSlug, fornecedores)
   const memberOptions = members.map(m => ({ value: m.id, label: m.name }))
 
   return (
@@ -245,7 +248,8 @@ export function PedidoForm({
             <div><label className={labelCls}>Campanha</label>
               <Select value={form.campaign_id} onChange={v => set('campaign_id', v)} options={campanhaOptions} placeholder={form.workspace_id ? 'Selecionar' : 'Escolha o cliente'} /></div>
             <div><label className={labelCls}>Fornecedor <span className="text-red-500">*</span></label>
-              <Combobox value={form.fornecedor_id} onChange={v => set('fornecedor_id', v)} options={fornecedorOptions} placeholder="Buscar fornecedor" /></div>
+              <Combobox value={form.fornecedor_id} onChange={v => set('fornecedor_id', v)} options={fornecedorOptions} placeholder="Buscar fornecedor"
+                onCreate={async nome => { const id = await criarFornecedor(nome); if (id) set('fornecedor_id', id) }} /></div>
             <div><label className={labelCls}>Emissão</label><input type="date" value={form.emissao} onChange={e => set('emissao', e.target.value)} className={inputCls} /></div>
             <div><label className={labelCls}>Entrega</label><input type="date" value={form.entrega} onChange={e => set('entrega', e.target.value)} className={inputCls} /></div>
           </div>

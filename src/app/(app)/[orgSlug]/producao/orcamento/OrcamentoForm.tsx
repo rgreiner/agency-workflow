@@ -1,11 +1,12 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Check, Loader2, Plus, Trash2, CircleCheck, Circle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { Combobox } from '@/components/ui/Combobox'
+import { useFornecedorRapido } from '@/components/fornecedor/useFornecedorRapido'
 import { PRODUCAO_SITUACAO_OPTIONS, formatBRL, parseMoney } from '@/lib/midia'
 import { ItemImageField } from '@/components/ui/ItemImageField'
 import type { ClienteOpt, MemberOpt } from '../../midias/simplificada/MidiaForm'
@@ -124,7 +125,9 @@ export function OrcamentoForm({
   }
 
   const clienteOptions = clientes.map(c => ({ value: c.id, label: c.name }))
-  const fornecedorOptions = fornecedores.map(f => ({ value: f.id, label: f.name }))
+  // Fornecedor novo nasce aqui mesmo (só o nome) e já fica selecionado na opção.
+  const { orgSlug } = useParams<{ orgSlug: string }>()
+  const { options: fornecedorOptions, criar: criarFornecedor } = useFornecedorRapido(orgSlug, fornecedores)
   const memberOptions = members.map(m => ({ value: m.id, label: m.name }))
 
   return (
@@ -191,7 +194,8 @@ export function OrcamentoForm({
                             {o.selecionado ? <CircleCheck className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
                           </button>
                         </td>
-                        <td className="px-1 py-1"><Combobox size="sm" value={o.fornecedor_id} onChange={v => setOpcao(ii, oi, 'fornecedor_id', v)} options={fornecedorOptions} placeholder="Fornecedor" /></td>
+                        <td className="px-1 py-1"><Combobox size="sm" value={o.fornecedor_id} onChange={v => setOpcao(ii, oi, 'fornecedor_id', v)} options={fornecedorOptions} placeholder="Fornecedor"
+                          onCreate={async nome => { const id = await criarFornecedor(nome); if (id) setOpcao(ii, oi, 'fornecedor_id', id) }} /></td>
                         <td className="px-1 py-1"><input value={o.n_orc} onChange={e => setOpcao(ii, oi, 'n_orc', e.target.value)} className={cellCls} /></td>
                         <td className="px-1 py-1"><input value={o.pgto} onChange={e => setOpcao(ii, oi, 'pgto', e.target.value)} className={cellCls} /></td>
                         <td className="px-1 py-1"><input inputMode="numeric" value={o.quant} onChange={e => setOpcaoQuant(ii, oi, e.target.value)} className={cn(cellCls, 'text-right')} /></td>

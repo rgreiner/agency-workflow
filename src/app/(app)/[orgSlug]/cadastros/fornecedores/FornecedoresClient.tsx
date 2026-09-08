@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, X, Check, Loader2, Archive, ArchiveRestore, Pencil, Truck, Search, Tag } from 'lucide-react'
+import { Plus, X, Check, Loader2, Archive, ArchiveRestore, Pencil, Truck, Search, Tag, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { createFornecedor, updateFornecedor, setFornecedorArchived } from '@/app/actions/fornecedor'
@@ -21,14 +21,29 @@ export interface Fornecedor {
 /** Sem acento e sem caixa: quem busca "grafica" tem que achar "Gráfica". */
 const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim()
 
+/**
+ * O que falta num cadastro pra ele valer como completo: tipo, CNPJ e algum
+ * contato. É o rastro do cadastro RÁPIDO feito no orçamento (só o nome) — e
+ * também dos antigos importados pela metade.
+ */
+function lacunas(f: Fornecedor): string[] {
+  const out: string[] = []
+  if (!(f.tipo ?? '').trim()) out.push('tipo')
+  if (!(f.tax_id ?? '').trim()) out.push('CNPJ')
+  if (!(f.telefones?.length) && !(f.emails?.length)) out.push('contato')
+  return out
+}
+
 const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 
-export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
+export function FornecedoresClient({ orgSlug, fornecedores, archivedView, editarId }: {
   orgSlug: string; fornecedores: Fornecedor[]; archivedView: boolean
+  /** `?editar=<id>`: abre direto o cadastro (link do toast "Completar" do orçamento). */
+  editarId?: string | null
 }) {
   const router = useRouter()
-  const [editing, setEditing] = useState<Fornecedor | null>(null)
+  const [editing, setEditing] = useState<Fornecedor | null>(() => (editarId && fornecedores.find(f => f.id === editarId)) || null)
   const [creating, setCreating] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [busca, setBusca] = useState('')
@@ -36,6 +51,7 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
   // Filtros de LACUNA: o cadastro só melhora se der pra ver o que falta nele.
   const [semTipo, setSemTipo] = useState(false)
   const [semTag, setSemTag] = useState(false)
+  const [soIncompletos, setSoIncompletos] = useState(false)
 
   // Tags que existem na org, por frequência — as mais usadas viram os primeiros chips.
   const tagsDaOrg = useMemo(() => {
@@ -47,6 +63,7 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
   const faltando = useMemo(() => ({
     tipo: fornecedores.filter(f => !(f.tipo ?? '').trim()).length,
     tag: fornecedores.filter(f => !(f.tags?.length)).length,
+    incompleto: fornecedores.filter(f => lacunas(f).length > 0).length,
   }), [fornecedores])
 
   const tiposDaOrg = useMemo(
@@ -65,6 +82,7 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
     return fornecedores.filter(f => {
       if (semTipo && (f.tipo ?? '').trim()) return false
       if (semTag && (f.tags?.length ?? 0) > 0) return false
+      if (soIncompletos && lacunas(f).length === 0) return false
       // Várias tags = interseção: quem faz gráfica E brinde.
       if (tagsAtivas.length && !tagsAtivas.every(t => (f.tags ?? []).some(x => norm(x) === norm(t)))) return false
       if (!q) return true
@@ -76,7 +94,7 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
       ]
       return campos.some(c => c && norm(String(c)).includes(q))
     })
-  }, [fornecedores, busca, tagsAtivas, semTipo, semTag])
+  }, [fornecedores, busca, tagsAtivas, semTipo, semTag, soIncompletos])
 
   function archive(f: Fornecedor) {
     startTransition(async () => { await setFornecedorArchived(orgSlug, f.id, !f.archived); router.refresh() })
@@ -142,10 +160,13 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
 
         {/* O que falta preencher. Separado das tags por uma barra: não é "que serviço
             faz", é "este cadastro está pela metade". */}
-        {(faltando.tipo > 0 || faltando.tag > 0) && (
+        {(faltando.tipo > 0 || faltando.tag > 0 || faltando.incompleto > 0) && (
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="w-3.5 shrink-0" />
             <span className="text-[11px] text-gray-400 mr-1">falta preencher:</span>
+            {faltando.incompleto > 0 && (
+              <ChipLacuna label="cadastro incompleto" n={faltando.incompleto} ativo={soIncompletos} onClick={() => setSoIncompletos(v => !v)} />
+            )}
             {faltando.tipo > 0 && (
               <ChipLacuna label="sem tipo" n={faltando.tipo} ativo={semTipo} onClick={() => setSemTipo(v => !v)} />
             )}
@@ -155,7 +176,7 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
           </div>
         )}
 
-        {(busca || tagsAtivas.length > 0 || semTipo || semTag) && (
+        {(busca || tagsAtivas.length > 0 || semTipo || semTag || soIncompletos) && (
           <p className="text-xs text-gray-400">
             {lista.length} de {fornecedores.length} fornecedor(es)
             {tagsAtivas.length > 1 && ' · quem tem todas as tags marcadas'}
@@ -192,6 +213,12 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView }: {
                       </div>
                     )}
                     {f.notes && <p className="text-xs text-gray-400 truncate max-w-xs">{f.notes}</p>}
+                    {!archivedView && lacunas(f).length > 0 && (
+                      <button onClick={() => setEditing(f)} title={`Falta: ${lacunas(f).join(', ')}`}
+                        className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[10px] font-medium hover:bg-amber-100 transition-colors active:scale-[0.97]">
+                        <AlertCircle className="w-3 h-3" /> Completar cadastro · falta {lacunas(f).join(', ')}
+                      </button>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{f.tipo || '—'}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{f.tax_id || '—'}</td>

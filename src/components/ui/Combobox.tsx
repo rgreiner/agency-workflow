@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronDown } from 'lucide-react'
+import { Check, ChevronDown, Loader2, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAnchoredPanel, type SelectOption } from './Select'
 
@@ -18,6 +18,14 @@ interface Props {
   className?: string
   /** Só mostra sugestões depois de N letras digitadas (default 3). */
   minChars?: number
+  /**
+   * Cadastro rápido: quando o que foi digitado não existe na lista, o painel
+   * oferece "Cadastrar «texto»". Quem cria é o chamador (e ele seleciona o novo
+   * valor via onChange). Sem isso o Combobox só escolhe.
+   */
+  onCreate?: (label: string) => void | Promise<void>
+  /** Verbo do botão de criar (default "Cadastrar"). */
+  createLabel?: string
 }
 
 /**
@@ -28,10 +36,12 @@ interface Props {
  */
 export function Combobox({
   value, onChange, options, placeholder = 'Buscar…', size = 'md', align = 'left', className, minChars = 3,
+  onCreate, createLabel = 'Cadastrar',
 }: Props) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [activeIdx, setActiveIdx] = useState(0)
+  const [creating, setCreating] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -48,9 +58,21 @@ export function Combobox({
   function close() { setOpen(false); setQuery('') }
   function choose(v: string) { onChange(v); close() }
 
+  // Criar só quando há texto de verdade e ele não é igual a nenhuma opção (aí é escolher).
+  const q0 = norm(query)
+  const canCreate = !!onCreate && !creating && q0.length >= 2 && !options.some(o => norm(o.label) === q0)
+  const nomeNovo = query.trim()
+
+  async function criar() {
+    if (!onCreate || !canCreate) return
+    setCreating(true)
+    try { await onCreate(nomeNovo) } finally { setCreating(false); close() }
+  }
+
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') { close(); return }
-    if (!filtered.length) return
+    // Enter sem resultado = cadastrar o que foi digitado (quando o chamador permite).
+    if (!filtered.length) { if (e.key === 'Enter' && canCreate) { e.preventDefault(); criar() } return }
     if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, filtered.length - 1)) }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIdx(i => Math.max(i - 1, 0)) }
     else if (e.key === 'Enter') { e.preventDefault(); const o = filtered[activeIdx]; if (o) choose(o.value) }
@@ -88,10 +110,10 @@ export function Combobox({
           style={{ position: 'fixed', top: pos?.top ?? -9999, left: pos?.left ?? -9999, minWidth: pos?.minWidth, visibility: pos ? 'visible' : 'hidden' }}
           className="pop-in z-[100] max-h-72 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-xl py-1.5"
         >
-          {showHint ? (
+          {showHint && !canCreate ? (
             <p className="px-3 py-2 text-xs text-gray-400">Digite {minChars} letras para buscar…</p>
           ) : filtered.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-gray-400">Nenhum resultado.</p>
+            !canCreate && <p className="px-3 py-2 text-xs text-gray-400">Nenhum resultado.</p>
           ) : (
             filtered.map((o, i) => {
               const isSel = o.value === value
@@ -115,6 +137,18 @@ export function Combobox({
                 </button>
               )
             })
+          )}
+          {(canCreate || creating) && (
+            <button
+              type="button"
+              disabled={creating}
+              onMouseDown={e => { e.preventDefault(); criar() }}
+              className={cn('w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-orange-700 hover:bg-orange-50 transition-colors disabled:opacity-60',
+                filtered.length > 0 && 'border-t border-gray-100 mt-1')}
+            >
+              {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> : <Plus className="w-3.5 h-3.5 shrink-0" />}
+              <span className="truncate">{createLabel} <strong className="font-semibold">&ldquo;{nomeNovo}&rdquo;</strong></span>
+            </button>
           )}
         </div>,
         document.body,

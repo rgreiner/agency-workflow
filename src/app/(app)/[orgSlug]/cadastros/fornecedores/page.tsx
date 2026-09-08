@@ -6,10 +6,10 @@ export default async function FornecedoresPage({
   searchParams,
 }: {
   params: Promise<{ orgSlug: string }>
-  searchParams: Promise<{ view?: string }>
+  searchParams: Promise<{ view?: string; editar?: string }>
 }) {
   const { orgSlug } = await params
-  const { view } = await searchParams
+  const { view, editar } = await searchParams
   const archivedView = view === 'arquivados'
   const supabase = await createClient()
 
@@ -22,5 +22,5 @@ export default async function FornecedoresPage({
     .eq('org_id', org.id).eq('archived', archivedView).order('name', { ascending: true })
 
   const fornecedores = (raw ?? []) as Fornecedor[]
-  return <FornecedoresClient orgSlug={orgSlug} fornecedores={fornecedores} archivedView={archivedView} />
+  return <FornecedoresClient orgSlug={orgSlug} fornecedores={fornecedores} archivedView={archivedView} editarId={editar ?? null} />
 }
