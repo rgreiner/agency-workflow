@@ -1,17 +1,20 @@
 'use client'
 
-import { useState, useTransition, useRef, useEffect } from 'react'
+import { useState, useTransition } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { EditorContent } from '@tiptap/react'
 import { createActivity } from '@/app/actions/activity'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity } from '@/types'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
-import { ArrowLeft, FolderOpen, ExternalLink, Sparkles, UserPlus, X, Flag, Copy } from 'lucide-react'
+import { ArrowLeft, FolderOpen, ExternalLink, Sparkles, X, Flag, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { Select } from '@/components/ui/Select'
 import { VEICULOS, FORMATOS, composedTitle, hojeISO, somarDias, prefixoDaData } from '@/lib/atividade-titulo'
+import { MembrosPicker, type MembroSelecionavel } from '@/components/MembrosPicker'
+
+export type { MembroSelecionavel }
 import {
   useBriefingEditor, useBriefingVazio, BriefingToolbar, FaltandoIA,
   toHTML, isEmptyHtml, briefingToEditorHTML, faltandoToChecklistHTML,
@@ -29,13 +32,6 @@ const ATALHOS_PRAZO = [3, 7, 14]
 const PRIORIDADES: ActivityPriority[] = ['medium', 'high', 'urgent']
 // Semáforo: verde = Simples (default), amarelo = Médio, vermelho = Complexo.
 const COMPLEXIDADES: ActivityComplexity[] = ['simple', 'medium', 'complex']
-
-export interface MembroSelecionavel {
-  userId: string
-  fullName: string | null
-  email: string
-  avatarUrl: string | null
-}
 
 /** Valores herdados ao duplicar uma tarefa (?from=<id>). Data e período são de hoje. */
 export interface NovaAtividadeInicial {
@@ -67,122 +63,6 @@ function driveOpenUrl(id: string) {
   return `https://drive.google.com/drive/folders/${id}`
 }
 
-function MemberAvatar({ member, size = 'sm' }: { member: MembroSelecionavel; size?: 'sm' | 'md' }) {
-  const initials = (member.fullName ?? member.email).charAt(0).toUpperCase()
-  const dim = size === 'sm' ? 'w-6 h-6 text-[10px]' : 'w-7 h-7 text-xs'
-  return member.avatarUrl ? (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={member.avatarUrl} alt={member.fullName ?? member.email}
-      className={cn(dim, 'rounded-full object-cover shrink-0')} />
-  ) : (
-    <div className={cn(dim, 'rounded-full bg-orange-100 text-orange-600 font-semibold flex items-center justify-center shrink-0')}>
-      {initials}
-    </div>
-  )
-}
-
-/** Seletor de responsáveis da criação: a tarefa não pode nascer sem dono, então
- *  o campo é obrigatório e fica marcado em vermelho quando falta. */
-function ResponsavelField({
-  members, currentUserId, selected, onChange, showError,
-}: {
-  members: MembroSelecionavel[]
-  currentUserId: string | null
-  selected: string[]
-  onChange: (ids: string[]) => void
-  showError: boolean
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
-  function toggle(userId: string) {
-    onChange(selected.includes(userId) ? selected.filter(id => id !== userId) : [...selected, userId])
-  }
-
-  const assigned = members.filter(m => selected.includes(m.userId))
-  const eu = currentUserId ? members.find(m => m.userId === currentUserId) : null
-
-  return (
-    <div ref={ref} className="relative">
-      <div className={cn(
-        'w-full rounded-xl border px-3 py-2.5 min-h-[46px] flex flex-wrap items-center gap-2 transition-colors',
-        showError ? 'border-red-300 bg-red-50/60 ring-2 ring-red-100' : 'border-transparent bg-gray-100'
-      )}>
-        {assigned.map(m => (
-          <span key={m.userId}
-            className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-full pl-1 pr-2 py-0.5">
-            <MemberAvatar member={m} size="sm" />
-            <span className="text-xs font-medium text-gray-700 max-w-[110px] truncate">
-              {m.fullName ?? m.email.split('@')[0]}
-            </span>
-            <button type="button" onClick={() => toggle(m.userId)}
-              aria-label={`Remover ${m.fullName ?? m.email.split('@')[0]}`}
-              className="text-gray-400 hover:text-red-400 transition-colors ml-0.5">
-              <X aria-hidden className="w-3 h-3" />
-            </button>
-          </span>
-        ))}
-
-        <button type="button" onClick={() => setOpen(o => !o)}
-          className={cn(
-            'flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed text-xs transition-colors',
-            showError
-              ? 'border-red-300 text-red-500 hover:border-red-400'
-              : 'border-gray-300 text-gray-500 hover:border-orange-400 hover:text-orange-500'
-          )}>
-          <UserPlus className="w-3 h-3" />
-          {selected.length === 0 ? 'Escolher responsável' : 'Adicionar'}
-        </button>
-
-        {/* Atalho: assumir a tarefa explicitamente, em um clique. */}
-        {eu && !selected.includes(eu.userId) && (
-          <button type="button" onClick={() => toggle(eu.userId)}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-full border border-gray-200 bg-white text-xs text-gray-600 hover:border-orange-400 hover:text-orange-600 transition-colors">
-            Eu
-          </button>
-        )}
-      </div>
-
-      {open && (
-        <div className="pop-in absolute left-0 top-full mt-1 w-64 bg-white rounded-xl border border-gray-200 shadow-lg z-20 py-1 max-h-56 overflow-y-auto">
-          {members.length === 0 ? (
-            <p className="text-xs text-gray-500 px-3 py-2">Nenhum membro na organização.</p>
-          ) : members.map(m => {
-            const on = selected.includes(m.userId)
-            return (
-              <button key={m.userId} type="button"
-                onClick={() => toggle(m.userId)}
-                className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-gray-50 transition-colors text-left">
-                <MemberAvatar member={m} size="md" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-gray-800 font-medium truncate">
-                    {m.fullName ?? m.email.split('@')[0]}
-                    {m.userId === currentUserId && <span className="text-gray-400 font-normal"> (você)</span>}
-                  </p>
-                  <p className="text-xs text-gray-500 truncate">{m.email}</p>
-                </div>
-                <span className={cn('w-4 h-4 rounded border flex items-center justify-center shrink-0',
-                  on ? 'bg-orange-600 border-orange-600' : 'border-gray-300')}>
-                  {on && <span className="w-1.5 h-1.5 rounded-sm bg-white" />}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
 /** Semáforo com uma lâmpada acesa — o ícone da complexidade. */
 function Semaforo({ aceso, className }: { aceso: ActivityComplexity; className?: string }) {
   const lampada = (nivel: ActivityComplexity, cy: number) => {
@@ -200,10 +80,12 @@ function Semaforo({ aceso, className }: { aceso: ActivityComplexity; className?:
   )
 }
 
-export function NewActivityForm({ members, currentUserId, inicial, modal = false }: {
+export function NewActivityForm({ members, currentUserId, inicial, equipeIds, modal = false }: {
   members: MembroSelecionavel[]
   currentUserId: string | null
   inicial?: NovaAtividadeInicial | null
+  /** Equipe do cliente (workspaces.equipe, mig. 280): ponto de partida dos responsáveis. */
+  equipeIds?: string[]
   /** Dentro do TaskModal (fill): ocupa a altura do card e só o briefing rola. */
   modal?: boolean
 }) {
@@ -228,10 +110,11 @@ export function NewActivityForm({ members, currentUserId, inicial, modal = false
   const [formatoCustom, setFormatoCustom] = useState(() => inicial?.formato && !conhecido(FORMATOS, inicial.formato) ? inicial.formato : '')
   const [titulo, setTitulo] = useState(inicial?.titulo ?? '')
 
-  // Tarefa não nasce sem dono: o campo começa vazio DE PROPÓSITO (nada de
-  // pré-selecionar quem cria) e trava o envio até alguém ser escolhido. Ao
-  // duplicar, herda os responsáveis da origem — escolha explícita, à vista.
-  const [assignees, setAssignees] = useState<string[]>(inicial?.assigneeIds ?? [])
+  // Tarefa não nasce sem dono e quem cria NÃO vira dono por padrão (mig. 253). O
+  // ponto de partida é a EQUIPE DO CLIENTE (mig. 280) — ou, ao duplicar, os
+  // responsáveis da origem. Fica à vista pra pessoa ajustar antes de criar.
+  const [assignees, setAssignees] = useState<string[]>(inicial?.assigneeIds ?? equipeIds ?? [])
+  const [deEquipe, setDeEquipe] = useState(!inicial && (equipeIds?.length ?? 0) > 0)
   const [respError, setRespError] = useState(false)
 
   const [form, setForm] = useState({
@@ -447,18 +330,20 @@ export function NewActivityForm({ members, currentUserId, inicial, modal = false
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 Responsáveis <span className="text-red-500">*</span>
               </label>
-              <ResponsavelField
+              <MembrosPicker
                 members={members}
                 currentUserId={currentUserId}
                 selected={assignees}
-                onChange={(ids) => { setAssignees(ids); if (ids.length > 0) setRespError(false) }}
+                onChange={(ids) => { setAssignees(ids); setDeEquipe(false); if (ids.length > 0) setRespError(false) }}
                 showError={respError}
               />
-              {respError && (
+              {respError ? (
                 <p className="text-xs text-red-600 mt-1.5">
                   Escolha quem responde pela tarefa antes de criar.
                 </p>
-              )}
+              ) : deEquipe ? (
+                <p className="text-xs text-gray-400 mt-1.5">Equipe do cliente. Ajuste se esta tarefa for de outra pessoa.</p>
+              ) : null}
             </div>
 
             {/* Status inicial */}

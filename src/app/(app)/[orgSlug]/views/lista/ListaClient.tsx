@@ -126,11 +126,13 @@ interface Props {
   secondaryActions?: ReactNode
   /** Quando definido, "Nova atividade" vai direto p/ esta campanha (sem seletor). */
   newActivityCampaign?: { workspaceId: string; campaignId: string }
+  /** Equipe do cliente por workspace (mig. 280): ponto de partida do responsável no "+ Tarefa". */
+  equipePorWorkspace?: Record<string, string[]>
 }
 
 // ── Component ─────────────────────────────────────────────────────────────
 
-export function ListaClient({ orgSlug, activities, campMap, members, initialWorkspace, initialPersons, initialStatuses, initialDate, initialRespEtapa, dbPrefs, view, title = 'Lista de atividades', routeBase = 'views/lista', breadcrumb, titleActions, secondaryActions, newActivityCampaign }: Props) {
+export function ListaClient({ orgSlug, activities, campMap, members, initialWorkspace, initialPersons, initialStatuses, initialDate, initialRespEtapa, dbPrefs, view, title = 'Lista de atividades', routeBase = 'views/lista', breadcrumb, titleActions, secondaryActions, newActivityCampaign, equipePorWorkspace }: Props) {
   const listPath = `/${orgSlug}/${routeBase}`
   const statusConfig = useStatusConfig()
   const isArchivedView = view === 'arquivadas'
@@ -1016,6 +1018,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                         campMap={campMap}
                         members={members}
                         fixedCampaign={newActivityCampaign}
+                        equipePorWorkspace={equipePorWorkspace}
                       />
                     )}
                   </div>
@@ -1303,12 +1306,14 @@ function GroupAddTask({
   campMap,
   members,
   fixedCampaign,
+  equipePorWorkspace,
 }: {
   listPath: string
   status: string
   campMap: Record<string, CampInfo>
   members: Member[]
   fixedCampaign?: { workspaceId: string; campaignId: string }
+  equipePorWorkspace?: Record<string, string[]>
 }) {
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
@@ -1316,8 +1321,11 @@ function GroupAddTask({
   const [campOpen, setCampOpen] = useState(false)
   const [q, setQ] = useState('')
   // Responsável é obrigatório na criação (mig. 253): sem dono não salva, e o
-  // chip fica marcado em âmbar pra mostrar o que falta.
-  const [resp, setResp] = useState<string[]>([])
+  // chip fica marcado em âmbar pra mostrar o que falta. A equipe do cliente
+  // (mig. 280) entra como ponto de partida; qualquer mexida da pessoa vence.
+  const [resp, setRespRaw] = useState<string[]>([])
+  const [respTocado, setRespTocado] = useState(false)
+  const setResp: typeof setRespRaw = (v) => { setRespTocado(true); setRespRaw(v) }
   const [respOpen, setRespOpen] = useState(false)
   const [pending, startSave] = useTransition()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -1329,6 +1337,16 @@ function GroupAddTask({
   const campaignId = fixedCampaign?.campaignId ?? camp?.id ?? null
   const canSave = !!title.trim() && !!campaignId && resp.length > 0
 
+  // Equipe do cliente (mig. 280) como ponto de partida — disparada ao abrir e ao
+  // escolher a campanha, e só enquanto a pessoa não mexeu no responsável.
+  function equipeDe(campId: string | null): string[] {
+    if (!campId) return []
+    const wsId = fixedCampaign?.workspaceId ?? campMap[campId]?.workspaceId
+    const equipe = (wsId && equipePorWorkspace?.[wsId]) || []
+    return equipe.filter(id => members.some(m => m.userId === id))
+  }
+  function sugerirEquipe(campId: string | null) { if (!respTocado) setRespRaw(equipeDe(campId)) }
+
   useEffect(() => {
     if (!campOpen && !respOpen) return
     function onOut(e: MouseEvent) {
@@ -1339,7 +1357,7 @@ function GroupAddTask({
     return () => document.removeEventListener('mousedown', onOut)
   }, [campOpen, respOpen])
 
-  function close() { setOpen(false); setTitle(''); setCampOpen(false); setQ(''); setResp([]); setRespOpen(false) }
+  function close() { setOpen(false); setTitle(''); setCampOpen(false); setQ(''); setRespRaw([]); setRespTocado(false); setRespOpen(false) }
 
   function submit() {
     if (pending) return
@@ -1365,7 +1383,7 @@ function GroupAddTask({
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => { setOpen(true); sugerirEquipe(fixedCampaign?.campaignId ?? camp?.id ?? null) }}
         className="w-full flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-gray-400 hover:text-orange-600 hover:bg-gray-50/60 transition"
       >
         <Plus className="w-3.5 h-3.5" /> Tarefa
@@ -1414,7 +1432,7 @@ function GroupAddTask({
                   <button
                     key={i.id}
                     type="button"
-                    onClick={() => { setCamp({ id: i.id, label: `${i.client} / ${i.name}` }); setCampOpen(false); requestAnimationFrame(() => inputRef.current?.focus()) }}
+                    onClick={() => { setCamp({ id: i.id, label: `${i.client} / ${i.name}` }); sugerirEquipe(i.id); setCampOpen(false); requestAnimationFrame(() => inputRef.current?.focus()) }}
                     className="block w-full text-left px-3 py-2 hover:bg-gray-50 transition"
                   >
                     <span className="text-[11px] text-gray-400 block leading-tight">{i.client}</span>

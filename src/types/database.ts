@@ -585,6 +585,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           description: string | null
+          equipe: string[]
           id: string
           name: string
           org_id: string
@@ -596,6 +597,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          equipe?: string[]
           id?: string
           name: string
           org_id: string
@@ -607,6 +609,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          equipe?: string[]
           id?: string
           name?: string
           org_id?: string

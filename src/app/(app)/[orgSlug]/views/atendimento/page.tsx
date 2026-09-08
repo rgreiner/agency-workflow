@@ -54,6 +54,7 @@ export default async function AtendimentoPage({
       activities={data.activities}
       campMap={data.campMap}
       members={data.members}
+        equipePorWorkspace={data.equipePorWorkspace}
       initialWorkspace={ws}
       dbPrefs={dbPrefs}
       view={archivedView ? 'arquivadas' : 'ativas'}

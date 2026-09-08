@@ -165,10 +165,15 @@ export async function updateWorkspace(
 
   // cobranca_auto (opt-in por cliente) vai na MESMA RPC — o update direto sumia em
   // silêncio pra can_vendas (policy da tabela = manager+, RPC aceita can_vendas).
+  // Equipe do cliente (mig. 280) só quando o form mandou a seção: sem a chave, a
+  // RPC deixa o array como está (o cadastro novo não mostra a seção).
+  const equipe = formData.get('equipe_presente') === '1'
+    ? { equipe: formData.getAll('equipe_ids').map(String).filter(Boolean) }
+    : {}
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any).rpc('update_workspace_cadastro', {
     p_user_id: user.id, p_workspace_id: workspaceId,
-    p_data: { ...data, ...readContato(formData), cobranca_auto: formData.get('cobranca_auto') === 'true' },
+    p_data: { ...data, ...readContato(formData), ...equipe, cobranca_auto: formData.get('cobranca_auto') === 'true' },
   })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/workspaces/${workspaceId}`)

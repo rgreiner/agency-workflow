@@ -28,7 +28,7 @@ export default async function NewActivityPage({ params, searchParams, modal = fa
   const user = await getUsuario()
 
   const { data: ws } = await supabase
-    .from('workspaces').select('org_id').eq('id', workspaceId).single()
+    .from('workspaces').select('org_id, equipe').eq('id', workspaceId).single()
 
   type Raw = { user_id: string; profiles: unknown }
   const { data: membersRaw } = ws
@@ -44,6 +44,9 @@ export default async function NewActivityPage({ params, searchParams, modal = fa
       avatarUrl: p?.avatar_url ?? null,
     }
   }).filter(m => m.email || m.fullName).sort(porNome(m => m.fullName ?? m.email))
+
+  // Equipe do cliente (mig. 280) já filtrada por quem ainda está ativo na org.
+  const equipeIds = (ws?.equipe ?? []).filter(id => members.some(m => m.userId === id))
 
   let inicial: NovaAtividadeInicial | null = null
   if (from && UUID_RE.test(from)) {
@@ -66,5 +69,5 @@ export default async function NewActivityPage({ params, searchParams, modal = fa
     }
   }
 
-  return <NewActivityForm members={members} currentUserId={user?.id ?? null} inicial={inicial} modal={modal} />
+  return <NewActivityForm members={members} currentUserId={user?.id ?? null} inicial={inicial} equipeIds={equipeIds} modal={modal} />
 }

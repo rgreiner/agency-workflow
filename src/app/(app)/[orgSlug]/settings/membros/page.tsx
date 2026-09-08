@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { notFound } from 'next/navigation'
+import { porNome } from '@/lib/utils'
 import { MemberRow } from './MemberRow'
 import { InviteButton } from './InviteButton'
 
@@ -74,6 +75,12 @@ export default async function MembrosPage({
     .eq('org_id', org.id)
     .order('name')
 
+  // Equipe do cliente (mig. 280), vista pela pessoa: "Luka — IMDM, GO ON, Di Napoli".
+  const { data: wsEquipe } = await supabase
+    .from('workspaces').select('name, equipe').eq('org_id', org.id).eq('archived', false)
+  const clientesDe = (userId: string) =>
+    (wsEquipe ?? []).filter(w => (w.equipe ?? []).includes(userId)).map(w => w.name).sort(porNome(n => n))
+
   return (
     // 6xl (1152px) porque a linha do membro pede ~980: pessoa + cargo + papel + as três
     // chaves + a ação. Abaixo disso a tabela rola na horizontal.
@@ -126,6 +133,7 @@ export default async function MembrosPage({
                   isMe={isMe}
                   isOwner={isOwner}
                   roleLabels={ROLE_LABELS}
+                  clientes={profile ? clientesDe(profile.id) : []}
                   arquivado={!!m.arquivado}
                   arquivadoEm={m.arquivado_em}
                   // Destinos possíveis das atividades ao arquivar esta pessoa.

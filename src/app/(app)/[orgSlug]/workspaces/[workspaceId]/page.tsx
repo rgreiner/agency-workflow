@@ -6,6 +6,7 @@ import { ListaClient } from '../../views/lista/ListaClient'
 import { WorkspaceEditButton } from './WorkspaceEditButton'
 import { PortalAccessButton, type PortalUserRow } from './PortalAccessButton'
 import { UnarchiveButton } from '@/components/ui/UnarchiveButton'
+import { AvatarGroup } from '@/components/ui/Avatar'
 import { ImportSpecsButton } from './campaigns/[campaignId]/ImportSpecsButton'
 
 export default async function WorkspacePage({
@@ -23,7 +24,7 @@ export default async function WorkspacePage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: workspace } = await (supabase as any)
     .from('workspaces')
-    .select('id, name, color, description, archived, legal_name, trade_name, tax_id, state_registration, city_registration, finance_email, phone, contact_name, address_zip, address_street, address_number, address_complement, address_district, address_city, address_state, payment_terms, atividade, cobranca_auto, enderecos, telefones, emails, contas_bancarias')
+    .select('id, name, color, description, archived, legal_name, trade_name, tax_id, state_registration, city_registration, finance_email, phone, contact_name, address_zip, address_street, address_number, address_complement, address_district, address_city, address_state, payment_terms, atividade, cobranca_auto, enderecos, telefones, emails, contas_bancarias, equipe')
     .eq('id', workspaceId).single()
   if (!workspace) return null
 
@@ -43,6 +44,10 @@ export default async function WorkspacePage({
 
   const campaignOptions = Object.entries(data.campMap).map(([id, c]) => ({ id, name: c.name }))
 
+  // Equipe do cliente (mig. 280) — só quem ainda está ativo na org.
+  const equipeIds: string[] = workspace.equipe ?? []
+  const equipe = data.members.filter(m => equipeIds.includes(m.userId))
+
   return (
     <>
       <ListaClient
@@ -50,12 +55,19 @@ export default async function WorkspacePage({
         activities={data.activities}
         campMap={data.campMap}
         members={data.members}
+        equipePorWorkspace={data.equipePorWorkspace}
         view={archivedView ? 'arquivadas' : 'ativas'}
         title={workspace.name}
         routeBase={`workspaces/${workspaceId}`}
         breadcrumb={<Link href={`/${orgSlug}/workspaces`} className="hover:text-gray-600 transition">Clientes</Link>}
         titleActions={
           <>
+          {equipe.length > 0 && (
+            <div className="hidden sm:flex items-center mr-1"
+              title={`Equipe: ${equipe.map(m => m.fullName ?? m.email).join(', ')}`}>
+              <AvatarGroup users={equipe.map(m => ({ full_name: m.fullName, avatar_url: m.avatarUrl }))} max={4} />
+            </div>
+          )}
           <PortalAccessButton
             orgSlug={orgSlug}
             workspaceId={workspaceId}
@@ -95,6 +107,8 @@ export default async function WorkspacePage({
               emails: workspace.emails ?? [],
               contas_bancarias: workspace.contas_bancarias ?? [],
             }}
+            membros={data.members}
+            equipe={equipeIds}
           />
           </>
         }

@@ -38,6 +38,7 @@ export default async function CampaignPage({
       activities={data.activities}
       campMap={data.campMap}
       members={data.members}
+        equipePorWorkspace={data.equipePorWorkspace}
       view={archivedView ? 'arquivadas' : 'ativas'}
       title={campaign.name}
       routeBase={`workspaces/${workspaceId}/campaigns/${campaignId}`}

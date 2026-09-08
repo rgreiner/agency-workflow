@@ -5,6 +5,7 @@ import { Check, Loader2, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ContatoBlocks, emptyContato, type ContatoData } from '@/components/ui/ContatoBlocks'
+import { MembrosPicker, type MembroSelecionavel } from '@/components/MembrosPicker'
 import { buscarCnpj, buscarCep } from '@/app/actions/lookup'
 
 export interface ClientFormValues {
@@ -59,11 +60,15 @@ interface Props {
   footerLeft?: React.ReactNode
   /** Bloco extra antes do rodapé (ex.: "ativar mídia" na criação). */
   extra?: React.ReactNode
+  /** Membros ativos da org: com a lista, o form mostra a seção "Equipe" (mig. 280). */
+  membros?: MembroSelecionavel[]
+  initialEquipe?: string[]
 }
 
-export function ClientForm({ initial, initialContato, submitLabel = 'Salvar', onSubmit, onSuccess, onCancel, footerLeft, extra }: Props) {
+export function ClientForm({ initial, initialContato, submitLabel = 'Salvar', onSubmit, onSuccess, onCancel, footerLeft, extra, membros, initialEquipe }: Props) {
   const [form, setForm] = useState<ClientFormValues>({ ...EMPTY, ...initial })
   const [contato, setContato] = useState<ContatoData>(initialContato ?? emptyContato())
+  const [equipe, setEquipe] = useState<string[]>(initialEquipe ?? [])
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
   const [cnpjBusy, setCnpjBusy] = useState(false)
@@ -138,6 +143,11 @@ export function ClientForm({ initial, initialContato, submitLabel = 'Salvar', on
     fd.set('telefones', JSON.stringify(contato.telefones))
     fd.set('emails', JSON.stringify(contato.emails))
     fd.set('contas_bancarias', JSON.stringify(contato.contas_bancarias))
+    // Equipe só vai quando a seção existe — a RPC deixa o array como está sem a chave.
+    if (membros) {
+      fd.set('equipe_presente', '1')
+      for (const id of equipe) fd.append('equipe_ids', id)
+    }
     startTransition(async () => {
       const res = await onSubmit(fd)
       if (res?.error) { setError(res.error); return }
@@ -193,6 +203,19 @@ export function ClientForm({ initial, initialContato, submitLabel = 'Salvar', on
           ))}
         </div>
       </div>
+
+      {/* Equipe do cliente (mig. 280): quem atende — vira o ponto de partida dos
+          responsáveis em toda tarefa nova deste cliente. */}
+      {membros && (
+        <div>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Equipe</h3>
+          <MembrosPicker members={membros} selected={equipe} onChange={setEquipe}
+            placeholder="Escolher pessoa" atalhoEu={false} />
+          <p className="text-xs text-gray-400 mt-1.5">
+            Quem atende este cliente. Toda tarefa nova dele já abre com estas pessoas como responsáveis.
+          </p>
+        </div>
+      )}
 
       {/* Contato */}
       <div>

@@ -48,6 +48,8 @@ export interface ActivityListData {
   activities: ListActivity[]
   campMap: Record<string, { name: string; client: string; workspaceId: string }>
   members: ListMember[]
+  /** Equipe do cliente (workspaces.equipe, mig. 280) por workspace, só membros ativos. */
+  equipePorWorkspace: Record<string, string[]>
 }
 
 /**
@@ -74,12 +76,12 @@ export async function loadActivityList(
     .from('organizations').select('id').eq('slug', orgSlug).single()
   if (!org) return null
 
-  type CampRow = { id: string; name: string; workspace_id: string; workspaces: { name: string } | null }
+  type CampRow = { id: string; name: string; workspace_id: string; workspaces: { name: string; equipe?: string[] | null } | null }
   let campaigns: CampRow[] = []
   if (opts.scopeCampaignId) {
     // Página da campanha: só esta campanha (mesmo se arquivada).
     const { data } = await supabase
-      .from('campaigns').select('id, name, workspace_id, workspaces(name)').eq('id', opts.scopeCampaignId)
+      .from('campaigns').select('id, name, workspace_id, workspaces(name, equipe)').eq('id', opts.scopeCampaignId)
     campaigns = (data ?? []) as unknown as CampRow[]
   } else {
     // Página do cliente (escopo a 1 workspace, mesmo arquivado) ou visão geral
@@ -90,7 +92,7 @@ export async function loadActivityList(
     const wsIds = workspaces?.map(w => w.id) ?? []
     if (wsIds.length) {
       const { data } = await supabase
-        .from('campaigns').select('id, name, workspace_id, workspaces(name)').in('workspace_id', wsIds).eq('archived', false).order('name')
+        .from('campaigns').select('id, name, workspace_id, workspaces(name, equipe)').in('workspace_id', wsIds).eq('archived', false).order('name')
       campaigns = (data ?? []) as unknown as CampRow[]
     }
   }
@@ -181,6 +183,13 @@ export async function loadActivityList(
     }])
   )
 
+  // Equipe do cliente vem no embed da campanha; arquivado da org não entra na sugestão.
+  const equipePorWorkspace: Record<string, string[]> = {}
+  for (const c of campaigns ?? []) {
+    const equipe = c.workspaces?.equipe ?? []
+    equipePorWorkspace[c.workspace_id] = equipe.filter(id => members.some(m => m.userId === id))
+  }
+
   const activities: ListActivity[] = rows.map(a => ({
     id: a.id,
     title: a.title,
@@ -199,5 +208,5 @@ export async function loadActivityList(
     checklist: checklistProgress((a as { checklist?: unknown }).checklist),
   }))
 
-  return { orgId: org.id, activities, campMap, members }
+  return { orgId: org.id, activities, campMap, members, equipePorWorkspace }
 }

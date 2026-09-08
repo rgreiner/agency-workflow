@@ -7,6 +7,7 @@ import { Settings, X, Trash2, Archive, ArchiveRestore } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { ClientForm, type ClientFormValues } from '../ClientForm'
 import type { ContatoData } from '@/components/ui/ContatoBlocks'
+import type { MembroSelecionavel } from '@/components/MembrosPicker'
 
 interface Props {
   orgSlug: string
@@ -15,9 +16,12 @@ interface Props {
   archived?: boolean
   initial: Partial<ClientFormValues>
   initialContato?: ContatoData
+  /** Equipe do cliente (mig. 280): membros ativos + quem já está na equipe. */
+  membros?: MembroSelecionavel[]
+  equipe?: string[]
 }
 
-export function WorkspaceEditButton({ orgSlug, workspaceId, name, archived = false, initial, initialContato }: Props) {
+export function WorkspaceEditButton({ orgSlug, workspaceId, name, archived = false, initial, initialContato, membros, equipe }: Props) {
   const [open, setOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -63,6 +67,8 @@ export function WorkspaceEditButton({ orgSlug, workspaceId, name, archived = fal
               <ClientForm
                 initial={initial}
                 initialContato={initialContato}
+                membros={membros}
+                initialEquipe={equipe}
                 submitLabel="Salvar"
                 onSubmit={(fd) => updateWorkspace(orgSlug, workspaceId, fd)}
                 onSuccess={() => { setOpen(false); router.refresh() }}

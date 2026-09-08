@@ -22,6 +22,8 @@ interface Props {
   canVendas: boolean
   canRh: boolean
   positions: { id: string; name: string; color: string }[]
+  /** Clientes em que a pessoa está na equipe (workspaces.equipe, mig. 280). */
+  clientes?: string[]
   isAdmin: boolean
   isMe: boolean
   isOwner: boolean
@@ -37,7 +39,7 @@ const ROLES = ['owner', 'admin', 'manager', 'member', 'viewer']
 
 export function MemberRow({
   memberId, orgSlug, orgId, profile, position, role, canFinance, canVendas, canRh,
-  positions, isAdmin, isMe, isOwner, roleLabels, outrosMembros, arquivado = false, arquivadoEm,
+  positions, isAdmin, isMe, isOwner, roleLabels, outrosMembros, clientes, arquivado = false, arquivadoEm,
 }: Props) {
   const [selectedPosition, setSelectedPosition] = useState(position?.id ?? '')
   const [selectedRole, setSelectedRole] = useState(role)
@@ -202,6 +204,11 @@ export function MemberRow({
               {profile?.email}
               {arquivado && arquivadoEm && <span className="ml-1.5">· saiu em {arquivadoEm.slice(0, 10).split('-').reverse().join('/')}</span>}
             </p>
+            {clientes && clientes.length > 0 && (
+              <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[280px]" title={clientes.join(', ')}>
+                Clientes: {clientes.join(', ')}
+              </p>
+            )}
           </div>
         </div>
       </td>

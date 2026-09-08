@@ -35,6 +35,7 @@ export default async function ListaPage({
       activities={data.activities}
       campMap={data.campMap}
       members={data.members}
+        equipePorWorkspace={data.equipePorWorkspace}
       initialWorkspace={ws}
       initialPersons={csv(persons)}
       initialStatuses={csv(statuses)}
