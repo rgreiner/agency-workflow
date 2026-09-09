@@ -61,7 +61,7 @@ export interface ItemFila {
 interface StatusCfg { valor: string; label: string; bg: string; txt: string }
 
 const FREQ: Record<string, string> = {
-  weekly: 'semanal', biweekly: 'quinzenal', monthly: 'mensal',
+  daily: 'diária', weekly: 'semanal', biweekly: 'quinzenal', monthly: 'mensal',
   bimonthly: 'bimestral', quarterly: 'trimestral', semiannual: 'semestral', annual: 'anual',
 }
 

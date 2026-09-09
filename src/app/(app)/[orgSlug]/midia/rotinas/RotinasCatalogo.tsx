@@ -16,6 +16,7 @@ export interface RotinaCat {
 }
 
 const FREQUENCIAS = [
+  { value: 'daily', label: 'Diária (dias úteis)' },
   { value: 'weekly', label: 'Semanal' },
   { value: 'biweekly', label: 'Quinzenal' },
   { value: 'monthly', label: 'Mensal' },
@@ -26,8 +27,9 @@ const FREQUENCIAS = [
 ]
 const DIAS_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 
-/** Só a frequência semanal usa dia da semana; as demais usam dia do mês. */
+/** Semanal usa dia da semana; diária não usa dia nenhum; as demais usam dia do mês. */
 const usaDiaSemana = (f: string) => f === 'weekly' || f === 'biweekly'
+const usaDiaMes = (f: string) => !usaDiaSemana(f) && f !== 'daily'
 
 function quando(r: RotinaCat): string {
   const base = FREQUENCIAS.find(f => f.value === r.frequencia)?.label ?? r.frequencia
@@ -141,6 +143,7 @@ function ModalRotina({ orgSlug, status, rotina, proximaOrdem, onClose }: {
     padrao: rotina?.padrao ?? true,
   })
   const semanal = usaDiaSemana(form.frequencia)
+  const mensal = usaDiaMes(form.frequencia)
 
   function salvar() {
     if (!form.nome.trim()) { toast.error('Dê um nome à rotina.'); return }
@@ -151,7 +154,7 @@ function ModalRotina({ orgSlug, status, rotina, proximaOrdem, onClose }: {
       frequencia: form.frequencia,
       // Guarda só o que a frequência usa: dia do mês numa rotina semanal ficaria
       // órfão e voltaria a valer se alguém trocasse a frequência depois.
-      diaMes: !semanal && form.diaMes ? Number(form.diaMes) : null,
+      diaMes: mensal && form.diaMes ? Number(form.diaMes) : null,
       diaSemana: semanal && form.diaSemana ? Number(form.diaSemana) : null,
       statusRetorno: form.statusRetorno,
       pasta: form.pasta,
@@ -200,6 +203,11 @@ function ModalRotina({ orgSlug, status, rotina, proximaOrdem, onClose }: {
                   options={[{ value: '', label: 'Qualquer dia' }, ...DIAS_SEMANA.map((d, i) => ({ value: String(i), label: d }))]} />
               </div>
             </label>
+          ) : !mensal ? (
+            <p className="text-[11px] text-gray-400 sm:pt-5">
+              Todo dia útil: a tarefa volta para o próximo dia útil depois de hoje a cada &ldquo;Feito&rdquo;.
+              Sábado e domingo não contam.
+            </p>
           ) : (
             <label className="block">
               <span className="text-[11px] text-gray-400">Dia do mês</span>

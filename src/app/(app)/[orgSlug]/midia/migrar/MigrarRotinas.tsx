@@ -11,7 +11,7 @@ import {
 } from '@/app/actions/midia-hub'
 
 const FREQ: Record<string, string> = {
-  weekly: 'semanal', biweekly: 'quinzenal', monthly: 'mensal',
+  daily: 'diária', weekly: 'semanal', biweekly: 'quinzenal', monthly: 'mensal',
   bimonthly: 'bimestral', quarterly: 'trimestral', semiannual: 'semestral', annual: 'anual',
 }
 const fmt = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '—')

@@ -3,9 +3,9 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { CheckCircle2, Loader2, RefreshCw, ShieldCheck, Wrench } from 'lucide-react'
+import { CheckCircle2, FolderSearch, Loader2, RefreshCw, ShieldCheck, Wrench } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { applyHealthFix } from '@/app/actions/health'
+import { applyHealthFix, verificarPastasDrive } from '@/app/actions/health'
 import type { HealthCheck, HealthItem } from '@/lib/health/checks'
 
 export function SaudeClient({ orgSlug, checks }: { orgSlug: string; checks: HealthCheck[] }) {
@@ -39,7 +39,61 @@ export function SaudeClient({ orgSlug, checks }: { orgSlug: string; checks: Heal
           {checks.map(c => <CheckCard key={c.id} orgSlug={orgSlug} check={c} />)}
         </div>
       )}
+
+      <PastasDrive orgSlug={orgSlug} />
     </div>
+  )
+}
+
+/**
+ * Conferência das pastas NO Drive — sob demanda, porque é 1 chamada por tarefa
+ * (~3–4 s) e não cabe em toda visita da página. Pega o que os checks baratos
+ * não veem: pasta renomeada por fora, caminho velho, lixeira.
+ */
+function PastasDrive({ orgSlug }: { orgSlug: string }) {
+  const [pending, start] = useTransition()
+  const [checks, setChecks] = useState<HealthCheck[] | null>(null)
+  const [quando, setQuando] = useState<string | null>(null)
+
+  function rodar() {
+    start(async () => {
+      const r = await verificarPastasDrive(orgSlug)
+      if ('error' in r) { toast.error(r.error); return }
+      setChecks(r.checks)
+      setQuando(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))
+    })
+  }
+
+  const pendencias = checks?.reduce((n, c) => n + c.items.length, 0) ?? 0
+
+  return (
+    <section className="mt-8">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div>
+          <h2 className="text-base font-semibold text-gray-900">Pastas × Drive</h2>
+          <p className="text-gray-500 text-sm mt-0.5">
+            Compara cada pasta vinculada com o que está no Drive hoje: nome, caminho, lixeira.
+            {quando && <span className="text-gray-400"> · conferido às {quando}</span>}
+          </p>
+        </div>
+        <button onClick={rodar} disabled={pending}
+          className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[#fff] bg-orange-500 hover:bg-orange-600 transition-colors active:scale-[0.97] disabled:opacity-50">
+          {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderSearch className="w-3.5 h-3.5" />}
+          {pending ? 'Consultando o Drive…' : checks ? 'Conferir de novo' : 'Conferir pastas no Drive'}
+        </button>
+      </div>
+
+      {checks && (pendencias === 0 ? (
+        <div className="text-center py-10 bg-white rounded-xl border border-gray-200">
+          <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+          <p className="text-gray-700 text-sm font-medium">Todas as pastas batem com o Drive.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {checks.map(c => <CheckCard key={c.id} orgSlug={orgSlug} check={c} />)}
+        </div>
+      ))}
+    </section>
   )
 }
 

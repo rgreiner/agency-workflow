@@ -2,7 +2,8 @@ import 'server-only'
 import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
-import { createTaskFolders, moveTaskFolder, inspectTaskFolder, completarSubpastas, folderConfigured, resolvePathPrefix, backendForRef, refIncompativel, renameTaskFolder, taskFolderHasFiles } from '@/lib/task-folders'
+import { createTaskFolders, moveTaskFolder, inspectTaskFolder, completarSubpastas, folderConfigured, resolvePathPrefix, backendForRef, refIncompativel, renameTaskFolder, taskFolderHasFiles, folderInfo } from '@/lib/task-folders'
+import { ultimoSegmento } from '@/lib/task-folder-names'
 import { logSystemError } from '@/lib/system-error'
 
 /**
@@ -39,7 +40,10 @@ function joinLocalPath(prefix: string, drivePath: string): string {
  * dois trabalhos de mesmo nome mas datas diferentes nunca compartilham pasta.
  */
 export function taskFolderName(title: string, isoDate?: string | null): string {
-  const t = (title ?? '').trim()
+  // Barras viram "-" AQUI (não só na criação): é o nome que a provisão cria, que
+  // o renomeio grava e que a conferência compara. Sem isso um título com "/"
+  // ("Evento Clientes/Parceiros") nunca bate com a pasta e o aviso não sai nunca.
+  const t = (title ?? '').trim().replace(/[\\/]/g, '-')
   if (/^\d{6}(\D|$)/.test(t)) return t || 'Tarefa'
   if (!isoDate || !/^\d{4}-\d{2}-\d{2}/.test(isoDate)) return t || 'Tarefa'
   const d = `${isoDate.slice(2, 4)}${isoDate.slice(5, 7)}${isoDate.slice(8, 10)}`
@@ -86,7 +90,18 @@ export async function provisionActivitiesDrive(
   after(async () => {
     for (const it of params.items) {
       try {
-        const r = await createTaskFolders(cfg.folderId, taskFolderName(it.title, it.date), {
+        // Reler o título AGORA, não o da criação: 7 dos 16 renomeios dos últimos
+        // 60 dias vieram na primeira hora — às vezes enquanto esta provisão ainda
+        // corria. A pasta nascia com o nome velho ("Aldeia") e o título já dizia
+        // outra coisa ("Pitoco"). Se a leitura falhar, vale o que veio no item.
+        let titulo = it.title, data = it.date ?? null
+        try {
+          const { data: fresh } = await supabase
+            .from('activities').select('title, start_date, due_date').eq('id', it.activityId).single()
+          const f = fresh as { title: string; start_date: string | null; due_date: string | null } | null
+          if (f?.title) { titulo = f.title; data = f.start_date || f.due_date || data }
+        } catch { /* fica com o do item */ }
+        const r = await createTaskFolders(cfg.folderId, taskFolderName(titulo, data), {
           forceNew: params.forceNew ?? true,
           onCreated: f => gravarVinculoCedo(supabase, params.userId, it.activityId, f),
         })
@@ -247,13 +262,17 @@ export async function moveActivityDrive(
  */
 export async function renameActivityDrive(
   supabase: SupabaseClient<Database>,
-  params: { campaignId: string; userId: string; activityId: string; folderId: string; title: string; date: string | null },
-): Promise<{ ok: boolean; error?: string; nome?: string }> {
+  params: { campaignId: string; userId: string; activityId: string; folderId: string; title: string; date: string | null; force?: boolean },
+): Promise<{ ok: boolean; error?: string; nome?: string; temArquivos?: boolean }> {
   if (!folderConfigured()) return { ok: false, error: 'Integração de pastas não está configurada.' }
   const nome = taskFolderName(params.title, params.date)
   try {
-    if (await taskFolderHasFiles(params.folderId)) {
-      return { ok: false, error: 'A pasta já tem arquivos — renomear quebraria links. Se precisar, ajuste o nome no Drive.' }
+    // Com arquivo dentro, renomear é decisão de quem está olhando (link de imagem
+    // dentro de .ai/.indd é por caminho): sem `force`, devolve o fato e a UI
+    // pede confirmação. Antes recusava seco — e o time renomeava no Explorer e
+    // editava o caminho à mão, que é como o caminho salvo ficava mentindo.
+    if (!params.force && await taskFolderHasFiles(params.folderId)) {
+      return { ok: false, temArquivos: true, error: 'A pasta já tem arquivos.' }
     }
     await renameTaskFolder(params.folderId, nome)
     const cfg = await resolve(supabase, params.campaignId)
@@ -273,4 +292,44 @@ export async function renameActivityDrive(
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Falha ao renomear a pasta' }
   }
+}
+
+/**
+ * Título mudou → a pasta acompanha, em 2º plano, enquanto está VAZIA. Caso
+ * clássico: a tarefa nasce "Anuncio - Aldeia", 14 min depois vira "Pitoco", e a
+ * pasta ficaria "Aldeia" para sempre — o time lia o caminho e achava que o
+ * vínculo estava errado. Com arquivo dentro não mexe: a tarefa mostra o aviso e
+ * a pessoa decide ("Renomear mesmo assim"). Se o nome real já é o esperado mas o
+ * caminho salvo ficou velho (renomearam no Explorer), só regrava o caminho.
+ * Não lança — falha vai pro system_errors.
+ */
+export async function syncFolderNameAfterTitleChange(
+  supabase: SupabaseClient<Database>,
+  params: { userId: string; activityId: string },
+) {
+  if (!folderConfigured()) return
+  after(async () => {
+    try {
+      const { data } = await supabase
+        .from('activities')
+        .select('campaign_id, title, start_date, due_date, drive_folder_id, drive_path')
+        .eq('id', params.activityId).single()
+      const act = data as { campaign_id: string; title: string; start_date: string | null; due_date: string | null; drive_folder_id: string | null; drive_path: string | null } | null
+      const folderId = (act?.drive_folder_id ?? '').trim()
+      if (!act || !folderId || backendForRef(folderId) !== 'drive') return   // S3: caminho é identidade, não renomeia
+      const info = await folderInfo(folderId)
+      if (!info || !info.exists || info.trashed) return   // sumida/lixeira: é a Verificação quem aponta
+      const esperado = taskFolderName(act.title, act.start_date || act.due_date || null)
+      const base = { campaignId: act.campaign_id, userId: params.userId, activityId: params.activityId, folderId }
+      if (info.name === esperado) {
+        if (ultimoSegmento(act.drive_path) !== esperado) await relinkActivityDrive(supabase, base)
+        return
+      }
+      const r = await renameActivityDrive(supabase, { ...base, title: act.title, date: act.start_date || act.due_date || null })
+      if (!r.ok && !r.temArquivos) throw new Error(r.error ?? 'Falha ao renomear a pasta')
+    } catch (e) {
+      console.error('[drive] renomeio automático falhou para', params.activityId, e)
+      await logSystemError(supabase, { userId: params.userId, context: 'drive:rename-auto', error: e, activityId: params.activityId })
+    }
+  })
 }

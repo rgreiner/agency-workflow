@@ -1,4 +1,5 @@
 import 'server-only'
+import { SUBPASTAS_TAREFA } from '@/lib/task-folder-names'
 import {
   S3Client, PutObjectCommand, ListObjectsV2Command, CopyObjectCommand, DeleteObjectsCommand,
   GetObjectCommand,
@@ -18,7 +19,7 @@ import type { TaskFoldersResult, FolderFile, DriveAsset, CreateTaskFoldersOpts }
  * chamada sem as envs R2_* configuradas.
  */
 
-const SUBFOLDERS = ['Final', 'Preview', 'Redação', 'Mockup', 'Links'] as const
+const SUBFOLDERS = SUBPASTAS_TAREFA
 
 let _s3: S3Client | null = null
 function getS3(): S3Client {

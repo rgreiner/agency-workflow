@@ -1,5 +1,6 @@
 import 'server-only'
 import { google, type drive_v3 } from 'googleapis'
+import { SUBPASTAS_TAREFA } from '@/lib/task-folder-names'
 
 /**
  * Cliente de Drive via conta de serviço (env GOOGLE_SERVICE_ACCOUNT_KEY — JSON
@@ -7,7 +8,7 @@ import { google, type drive_v3 } from 'googleapis'
  * falha quando uma função é chamada sem a chave configurada.
  */
 
-const SUBFOLDERS = ['Final', 'Preview', 'Redação', 'Mockup', 'Links'] as const
+const SUBFOLDERS = SUBPASTAS_TAREFA
 
 function parseCreds(raw: string): { client_email: string; private_key: string } {
   const txt = raw.trim()
@@ -463,6 +464,31 @@ export async function inspectTaskFolder(folderId: string): Promise<TaskFoldersRe
   }
   const drivePath = await buildDrivePath(folderId)
   return { taskFolderId: folderId, taskFolderLink: folderLink(folderId), sub, drivePath }
+}
+
+/** O que o Drive sabe HOJE sobre uma pasta: existe?, nome real, lixeira, pai. */
+export interface FolderInfo { exists: boolean; name?: string; trashed?: boolean; parentId?: string }
+
+/**
+ * Lê a pasta pelo ID — 1 chamada. É a fonte da verdade quando o que está salvo
+ * (drive_path, título) pode ter ficado para trás: pasta renomeada à mão no
+ * Explorer, jogada na lixeira ou apagada. Foi o caso de 08/09/2026: a tarefa
+ * dizia "Pitoco", a pasta ainda chamava "Aldeia", e o time achou que o vínculo
+ * estava errado. 404 vira `exists:false` em vez de exceção — "sumiu" é resposta.
+ */
+export async function getFolderInfo(folderId: string): Promise<FolderInfo> {
+  const drive = getDrive()
+  try {
+    const d = (await comRetry(() => drive.files.get({
+      fileId: folderId, fields: 'id, name, parents, trashed', supportsAllDrives: true,
+    }))).data
+    return { exists: true, name: d.name ?? '', trashed: !!d.trashed, parentId: d.parents?.[0] }
+  } catch (e) {
+    const err = e as { status?: number; code?: number | string }
+    const status = typeof err?.status === 'number' ? err.status : Number(err?.code)
+    if (status === 404) return { exists: false }
+    throw e
+  }
 }
 
 // ── Renomear a pasta da tarefa (só vazia) ───────────────────────────────────

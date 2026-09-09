@@ -1,7 +1,9 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
-import { backendForRef } from '@/lib/task-folders'
+import { backendForRef, folderInfo } from '@/lib/task-folders'
+import { taskFolderName } from '@/lib/drive-provision'
+import { ultimoSegmento } from '@/lib/task-folder-names'
 
 /**
  * Verificações de consistência ("o que não ficou correto" que NÃO é exceção).
@@ -18,6 +20,7 @@ import { backendForRef } from '@/lib/task-folders'
 export type HealthFix =
   | { kind: 'provision-drive'; activityId: string }
   | { kind: 'relink-drive'; activityId: string }
+  | { kind: 'rename-drive'; activityId: string }
 
 export interface HealthItem {
   id: string
@@ -309,4 +312,116 @@ export async function runHealthChecks(supabase: SupabaseClient<Database>, orgId:
     checkCronParado(supabase),
     // Fase futura (quando o Financeiro/BTG existir): extrato sem conciliar, fee sem lançamento…
   ])
+}
+
+// ── Pastas × Drive (sob demanda) ────────────────────────────────────────────
+
+/**
+ * Confere, no Drive, cada pasta vinculada às tarefas ativas — 1 chamada por
+ * tarefa, por isso NÃO entra em `runHealthChecks` (que roda a cada visita das
+ * Configurações): roda no clique de "Conferir pastas no Drive".
+ *
+ * Nasceu da varredura de 08/09/2026 (299 tarefas com pasta): o vínculo por ID
+ * estava certo em todas, mas o NOME e o CAMINHO mentiam — tarefa renomeada com
+ * a pasta no nome de nascimento (o time lia "Aldeia" no título "Pitoco" e achava
+ * o vínculo errado), pasta renomeada à mão no Explorer com o caminho salvo
+ * velho (abre nada), caminho colado apontando pra subpasta, pasta na lixeira.
+ * Cada família vira um card com a correção que cabe.
+ */
+export async function runDriveFolderChecks(supabase: SupabaseClient<Database>, orgId: string, orgSlug: string): Promise<HealthCheck[]> {
+  const camps = await campanhasComDrive(supabase, orgId)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any
+  const { data: ws } = await sb.from('workspaces').select('id').eq('org_id', orgId)
+  const wsIds = (ws ?? []).map((w: { id: string }) => w.id)
+  const { data: campRows } = wsIds.length
+    ? await sb.from('campaigns').select('id, name, workspace_id').in('workspace_id', wsIds)
+    : { data: [] }
+  const campanha = new Map<string, { name: string; workspaceId: string }>()
+  for (const c of (campRows ?? []) as { id: string; name: string; workspace_id: string }[]) {
+    campanha.set(c.id, { name: c.name, workspaceId: c.workspace_id })
+  }
+
+  type Row = { id: string; title: string; campaign_id: string; drive_folder_id: string; drive_path: string | null; start_date: string | null; due_date: string | null }
+  const { data } = campanha.size
+    ? await sb
+      .from('activities')
+      .select('id, title, campaign_id, drive_folder_id, drive_path, start_date, due_date')
+      .in('campaign_id', [...campanha.keys()])
+      .eq('archived', false)
+      .not('drive_folder_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(500)
+    : { data: [] }
+  // Só o Drive tem "nome que mudou por fora"; no S3 o caminho é a identidade.
+  const rows = ((data ?? []) as Row[]).filter(a => backendForRef(a.drive_folder_id) === 'drive')
+
+  const caminho: HealthItem[] = [], nome: HealthItem[] = [], sumida: HealthItem[] = [], pai: HealthItem[] = []
+  const href = (a: Row) => {
+    const c = campanha.get(a.campaign_id)
+    return c ? `/${orgSlug}/workspaces/${c.workspaceId}/campaigns/${a.campaign_id}/activities/${a.id}` : undefined
+  }
+  const campNome = (a: Row) => campanha.get(a.campaign_id)?.name ?? ''
+
+  // 4 leituras em paralelo: 70 tarefas ≈ 3–4 s; mais que isso o Drive começa a
+  // devolver "rate limit" e o comRetry só alonga a espera.
+  let i = 0
+  async function worker() {
+    while (i < rows.length) {
+      const a = rows[i++]
+      let info: Awaited<ReturnType<typeof folderInfo>>
+      try { info = await folderInfo(a.drive_folder_id) } catch { continue }   // erro passageiro: não alarma
+      if (!info) continue
+      const esperado = taskFolderName(a.title, a.start_date || a.due_date || null)
+      const seg = ultimoSegmento(a.drive_path)
+      if (!info.exists || info.trashed) {
+        sumida.push({ id: a.id, label: a.title || 'Sem título', href: href(a),
+          sublabel: `${campNome(a)} — ${info.exists ? 'na lixeira do Drive' : 'não encontrada (apagada ou sem acesso)'}` })
+        continue
+      }
+      const real = info.name ?? ''
+      if (seg && seg !== real) {
+        caminho.push({ id: a.id, label: a.title || 'Sem título', href: href(a), fix: { kind: 'relink-drive', activityId: a.id },
+          sublabel: `${campNome(a)} — caminho salvo diz "${seg}", a pasta chama "${real}"` })
+      } else if (real !== esperado) {
+        nome.push({ id: a.id, label: a.title || 'Sem título', href: href(a), fix: { kind: 'rename-drive', activityId: a.id },
+          sublabel: `${campNome(a)} — pasta chama "${real}"` })
+      }
+      const campFolder = camps.get(a.campaign_id)?.folderId
+      if (campFolder && info.parentId && info.parentId !== campFolder) {
+        pai.push({ id: a.id, label: a.title || 'Sem título', href: href(a),
+          sublabel: `${campNome(a)} — a pasta está fora da pasta desta campanha no Drive` })
+      }
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker()])
+
+  return [
+    {
+      id: 'drive-caminho-desatualizado',
+      label: 'Caminho salvo diferente do nome da pasta',
+      description: 'A pasta foi renomeada direto no Drive/Explorer e o Flow ficou com o caminho antigo — o caminho copiado da tarefa abre nada. A correção relê a pasta vinculada e regrava caminho e sublinks (não muda nada no Drive).',
+      fixLabel: 'Atualizar caminho',
+      items: caminho,
+    },
+    {
+      id: 'drive-nome-diverge',
+      label: 'Pasta com nome diferente do título',
+      description: 'A tarefa foi renomeada e a pasta ficou com o nome de nascimento (o link está certo; só o nome engana). A correção renomeia a pasta no Drive para o nome esperado, MESMO com arquivos dentro — links de imagem por caminho dentro de .ai/.indd podem precisar de re-vínculo.',
+      fixLabel: 'Renomear pasta',
+      items: nome,
+    },
+    {
+      id: 'drive-pasta-sumida',
+      label: 'Pasta vinculada na lixeira ou inexistente',
+      description: 'O Flow aponta para uma pasta que está na lixeira do Drive ou não existe mais. Sem correção automática: restaure no Drive, ou abra a tarefa e use Re-vincular para gerar uma pasta nova.',
+      items: sumida,
+    },
+    {
+      id: 'drive-pai-errado',
+      label: 'Pasta fora da pasta da campanha',
+      description: 'A pasta da tarefa foi movida no Drive para fora da pasta da campanha. Sem correção automática: mova a tarefa de projeto no Flow (a pasta vai junto) ou devolva a pasta no Drive.',
+      items: pai,
+    },
+  ]
 }

@@ -40,7 +40,7 @@ export interface ClienteRow {
 }
 
 const FREQ_LABEL: Record<string, string> = {
-  weekly: 'semanal', biweekly: 'quinzenal', monthly: 'mensal',
+  daily: 'diária', weekly: 'semanal', biweekly: 'quinzenal', monthly: 'mensal',
   bimonthly: 'bimestral', quarterly: 'trimestral', semiannual: 'semestral', annual: 'anual',
 }
 const DIA_SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']

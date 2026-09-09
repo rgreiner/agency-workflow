@@ -6,7 +6,8 @@ import { redirect, RedirectType } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { dispatchPushNotificacoes } from '@/lib/push'
-import { provisionActivitiesDrive, moveActivityDrive, regenerateActivityDrive, renameActivityDrive } from '@/lib/drive-provision'
+import { provisionActivitiesDrive, moveActivityDrive, regenerateActivityDrive, renameActivityDrive, relinkActivityDrive, syncFolderNameAfterTitleChange } from '@/lib/drive-provision'
+import { ultimoSegmento, isSubpastaTarefa } from '@/lib/task-folder-names'
 import { scheduleReview, reviewKindForAdvance, ordemStatusDaAtividade } from '@/lib/review-gate'
 import { scheduleRecurrence, isConclusion } from '@/lib/recurrence-gate'
 
@@ -217,6 +218,13 @@ export async function updateActivityField(
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
+  // Caminho colado à mão terminando em subpasta ("…\\Preview"): a pessoa copiou
+  // de dentro da pasta. Aconteceu 4x em prod — o caminho da tarefa passa a abrir
+  // o Preview e os sublinks derivados dele viram "Preview\\Preview".
+  if (field === 'drive_path' && newValue && isSubpastaTarefa(ultimoSegmento(newValue))) {
+    return { error: `Esse é o caminho da subpasta "${ultimoSegmento(newValue)}". Cole o caminho da pasta da tarefa (um nível acima).` }
+  }
+
   const { error } = await supabase.rpc('update_activity_field', {
     p_user_id: user.id,
     p_activity_id: activityId,
@@ -225,6 +233,8 @@ export async function updateActivityField(
   })
 
   if (error) return { error: error.message }
+  // Título novo → a pasta do Drive acompanha (em 2º plano, só enquanto vazia).
+  if (field === 'title') await syncFolderNameAfterTitleChange(supabase, { userId: user.id, activityId })
   revalidatePath(path)
 }
 
@@ -447,8 +457,11 @@ export async function regenerarPastaDrive(orgSlug: string, path: string, activit
   return { url: res.url }
 }
 
-/** Renomeia a pasta do Drive para acompanhar o título — só com a pasta vazia. */
-export async function renomearPastaDrive(orgSlug: string, path: string, activityId: string) {
+/**
+ * Renomeia a pasta do Drive para acompanhar o título. Vazia: renomeia direto.
+ * Com arquivo: devolve `temArquivos` e só renomeia com `force` (a UI confirma).
+ */
+export async function renomearPastaDrive(orgSlug: string, path: string, activityId: string, force = false) {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
@@ -461,11 +474,35 @@ export async function renomearPastaDrive(orgSlug: string, path: string, activity
 
   const res = await renameActivityDrive(supabase, {
     campaignId: act.campaign_id, userId: user.id, activityId,
-    folderId: act.drive_folder_id, title: act.title, date: act.start_date || act.due_date || null,
+    folderId: act.drive_folder_id, title: act.title, date: act.start_date || act.due_date || null, force,
+  })
+  if (!res.ok) return res.temArquivos ? { temArquivos: true as const } : { error: res.error }
+  revalidatePath(path)
+  return { nome: res.nome }
+}
+
+/**
+ * Regrava o caminho local (e os sublinks) relendo a pasta que JÁ está vinculada —
+ * pra quando renomearam a pasta no Explorer e o Flow ficou com o caminho velho.
+ * Não cria nem renomeia nada no Drive.
+ */
+export async function atualizarCaminhoDrive(orgSlug: string, path: string, activityId: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: act } = await (supabase as any)
+    .from('activities').select('campaign_id, drive_folder_id').eq('id', activityId).single()
+  if (!act) return { error: 'Tarefa não encontrada' }
+  if (!act.drive_folder_id) return { error: 'Esta tarefa não tem pasta vinculada.' }
+
+  const res = await relinkActivityDrive(supabase, {
+    campaignId: act.campaign_id, userId: user.id, activityId, folderId: act.drive_folder_id,
   })
   if (!res.ok) return { error: res.error }
   revalidatePath(path)
-  return { nome: res.nome }
+  return { ok: true as const }
 }
 
 /** Edita um comentário (só o autor). */

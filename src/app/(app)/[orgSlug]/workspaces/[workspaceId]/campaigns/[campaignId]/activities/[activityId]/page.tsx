@@ -20,8 +20,10 @@ import { ScrollFeedBottom } from './ScrollFeedBottom'
 import { FeedFilter } from './FeedFilter'
 import { HistoryGroup } from './HistoryGroup'
 import { RegenerateDriveButton } from './RegenerateDriveButton'
-import { RenameDriveButton } from './RenameDriveButton'
+import { DriveFolderNotice, type DriveFolderAviso } from './DriveFolderNotice'
 import { taskFolderName } from '@/lib/drive-provision'
+import { folderInfo } from '@/lib/task-folders'
+import { ultimoSegmento } from '@/lib/task-folder-names'
 import { MuteButton } from './MuteButton'
 import { AssigneeSelector } from './AssigneeSelector'
 import { FieldEditor } from './FieldEditor'
@@ -364,12 +366,6 @@ export default async function ActivityPage({
   const driveWebUrl   = /^https?:\/\//i.test(driveUrlRaw) ? driveUrlRaw : null
   const driveLooksPath = /^[A-Za-z]:[\\/]/.test(driveUrlRaw) || driveUrlRaw.includes('\\')
   const driveWinPath  = (activity.drive_path ?? '').trim() || (driveLooksPath ? driveUrlRaw : '')
-  // Pasta × nome do job (artefato do Hub, passo 4): o nome real da pasta é o último
-  // segmento do caminho salvo. Quando diverge do título, a tarefa oferece renomear.
-  const nomePastaAtual = (driveWinPath ?? '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? ''
-  const nomePastaEsperado = taskFolderName(activity.title, activity.start_date || activity.due_date || null)
-  const pastaDiverge = !!driveWebUrl && !!nomePastaAtual && nomePastaAtual !== nomePastaEsperado
-
   // Backend da pasta pelo formato da ref (igual backendForRef): ID do Drive = 20+
   // chars sem "/" nem espaço; qualquer outra coisa = caminho de bucket (S3). Numa
   // tarefa S3 as subpastas não têm link web — derivamos o caminho de máquina a
@@ -378,6 +374,27 @@ export default async function ActivityPage({
   const isS3Folder = !!folderRef && !(/^[A-Za-z0-9_-]{20,}$/.test(folderRef) && !folderRef.includes('/') && !folderRef.includes(' '))
   // sem barra no fim: drive_path às vezes vem com "\" final e o join duplicava a barra (…Salsa\\Redação).
   const subBaseWin = (driveWinPath || (folderRef ? folderRef.replace(/\//g, '\\') : '')).replace(/[\\/]+$/, '')
+
+  // Pasta × título: o barato compara o último segmento do caminho salvo com o nome
+  // esperado. SÓ quando diverge (raro) ouvimos o Drive — 1 chamada — pra dizer QUAL
+  // é a divergência: pasta ficou no nome antigo (renomear), caminho salvo ficou
+  // velho (atualizar), lixeira, apagada. Antes o aviso culpava sempre a pasta, e
+  // o time "corrigia" à mão o lado errado (08/09/2026, "Aldeia" × "Pitoco").
+  const nomePastaAtual = ultimoSegmento(driveWinPath)
+  const nomePastaEsperado = taskFolderName(activity.title, activity.start_date || activity.due_date || null)
+  let pastaAviso: DriveFolderAviso | null = null
+  if (isOrgMember && driveWebUrl && folderRef && !isS3Folder && nomePastaAtual && nomePastaAtual !== nomePastaEsperado) {
+    try {
+      const info = await folderInfo(folderRef)
+      if (info && !info.exists) pastaAviso = { tipo: 'sumida' }
+      else if (info?.trashed) pastaAviso = { tipo: 'lixeira', real: info.name || nomePastaAtual }
+      else if (info && info.name === nomePastaEsperado) pastaAviso = { tipo: 'caminho', real: info.name }
+      else pastaAviso = { tipo: 'nome', real: info?.name || nomePastaAtual, esperado: nomePastaEsperado }
+    } catch {
+      // Drive fora do ar não pode derrubar a página: vale o que o caminho diz.
+      pastaAviso = { tipo: 'nome', real: nomePastaAtual, esperado: nomePastaEsperado }
+    }
+  }
 
   return (
     <div className="flex flex-col bg-white min-h-0 flex-1 lg:h-full lg:overflow-hidden">
@@ -602,12 +619,13 @@ export default async function ActivityPage({
                     {isOrgMember && (
                       <RegenerateDriveButton orgSlug={orgSlug} path={path} activityId={activityId} hasFolder={!!driveWebUrl} />
                     )}
-                    {isOrgMember && pastaDiverge && (
-                      <RenameDriveButton orgSlug={orgSlug} path={path} activityId={activityId}
-                        atual={nomePastaAtual} esperado={nomePastaEsperado} />
-                    )}
                   </div>
                 </div>
+                {pastaAviso && (
+                  <div className="px-4 py-2.5">
+                    <DriveFolderNotice orgSlug={orgSlug} path={path} activityId={activityId} aviso={pastaAviso} />
+                  </div>
+                )}
 
                 {/* Link fields */}
                 {linkFields.map(({ field, icon, label, sub }) => {

@@ -11,7 +11,7 @@ import * as s3 from '@/lib/s3-folders'
  * do provider: ID do Drive OU caminho no bucket ("IMDM/2026/Institucional").
  */
 
-export type { TaskFoldersResult, CreateTaskFoldersOpts } from '@/lib/google-drive'
+export type { TaskFoldersResult, CreateTaskFoldersOpts, FolderInfo } from '@/lib/google-drive'
 
 export type FolderProvider = 's3' | 'drive'
 
@@ -168,6 +168,16 @@ export async function moveTaskFolder(taskRef: string, newParentRef: string): Pro
   }
   const r = await drive.moveTaskFolder(taskRef, newParentRef)
   return { drivePath: r.drivePath, newRef: null }
+}
+
+/**
+ * Estado real da pasta no storage (nome de hoje, lixeira, existe?). Só o Drive
+ * tem isso — no S3 o caminho É a identidade, não há "nome que mudou por fora";
+ * devolve null pra quem chama pular a conferência.
+ */
+export async function folderInfo(ref: string): Promise<drive.FolderInfo | null> {
+  if (backendForRef(ref) !== 'drive') return null
+  return drive.getFolderInfo(ref)
 }
 
 /** Tem arquivo na pasta da tarefa (ou nas subpastas)? */

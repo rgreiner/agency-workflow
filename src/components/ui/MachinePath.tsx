@@ -15,6 +15,7 @@ import { Check, Copy, AlertTriangle, Pencil, X, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useUserPrefs } from '@/components/providers/UserPrefsProvider'
 import { updateActivityField } from '@/app/actions/activity'
+import { ultimoSegmento, isSubpastaTarefa } from '@/lib/task-folder-names'
 
 function isMac(): boolean {
   if (typeof navigator === 'undefined') return false
@@ -110,6 +111,13 @@ export function MachinePath({ winPath, compact = false, editable = false, activi
 
   function save() {
     if (!activityId || !path) return
+    // Caminho copiado de DENTRO da pasta (…\\Preview): o Flow passaria a abrir a
+    // subpasta e os sublinks derivados virariam "Preview\\Preview". Aconteceu 4x.
+    const seg = ultimoSegmento(draft)
+    if (seg && isSubpastaTarefa(seg)) {
+      toast.error(`Esse é o caminho da subpasta "${seg}". Cole o caminho da pasta da tarefa (um nível acima).`)
+      return
+    }
     startSave(async () => {
       const r = await updateActivityField(path, activityId, 'drive_path', draft.trim() || null)
       if (r?.error) toast.error(r.error)
@@ -120,6 +128,7 @@ export function MachinePath({ winPath, compact = false, editable = false, activi
   // ── Edição ──
   if (editable && editing) {
     return (
+      <div className="w-full min-w-0">
       <div className="flex items-center gap-1.5 w-full min-w-0">
         <input
           autoFocus
@@ -138,6 +147,14 @@ export function MachinePath({ winPath, compact = false, editable = false, activi
         <button type="button" onClick={() => setEditing(false)} title="Cancelar" className="shrink-0 text-gray-400 hover:text-gray-600">
           <X className="w-4 h-4" />
         </button>
+      </div>
+      {/* Editar o texto aqui não mexe no Drive — o time já "corrigiu" pasta por
+          aqui achando que renomeava, e o caminho passou a apontar pra pasta que
+          não existe. Quem quer renomear usa o aviso "Renomear pasta". */}
+      <p className="mt-1 text-[11px] leading-snug text-amber-700">
+        Editar aqui não renomeia a pasta no Drive (para isso, use &ldquo;Renomear pasta&rdquo;).
+        Cole o caminho da pasta da tarefa, não de uma subpasta (Preview, Final…).
+      </p>
       </div>
     )
   }
