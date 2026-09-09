@@ -14,10 +14,16 @@ import { MachinePath } from '@/components/ui/MachinePath'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { lerLinhaComData } from '@/lib/checklist-datas'
+import { DATE_FILTERS, matchesDateFilter } from '@/lib/prazo-filtro'
 import { concluirTarefaMidia, desdobrarEmDatas, marcarItemChecklist, mudarSituacaoEntrega } from '@/app/actions/midia-hub'
 
-/** Onde a linha mora: trabalhos solicitados (cima), peças a entregar (esquerda), rotinas (direita). */
-export type Regiao = 'solicitado' | 'peca' | 'rotina'
+/**
+ * Onde a linha mora. Em cima, os solicitados em duas colunas por etapa:
+ * `implantar` (implantação/validação — a peça chegou, é o mais urgente) e
+ * `trabalho` (Mídia, Social — plano, tabela, o que está sendo feito). Embaixo,
+ * `peca` (entrega ao veículo e post datado) e `rotina`.
+ */
+export type Regiao = 'implantar' | 'trabalho' | 'peca' | 'rotina'
 
 export interface ItemFila {
   chave: string
@@ -107,6 +113,9 @@ const prefEu = criarPref<boolean>('flow:midia:trabalhar:eu:v1', false,
   b => b === '1' || b === 'true')
 const prefLinks = criarPref<LinksVisiveis>('flow:midia:trabalhar:links:v1', LINKS_PADRAO,
   b => ({ ...LINKS_PADRAO, ...(JSON.parse(b) as Partial<LinksVisiveis>) }))
+/** Filtro de prazo — os mesmos presets da Lista (lib/prazo-filtro). */
+const prefPrazo = criarPref<string>('flow:midia:trabalhar:prazo:v1', '',
+  b => { const v = JSON.parse(b); return DATE_FILTERS.some(f => f.value === v) ? v : '' })
 
 // ── Datas ────────────────────────────────────────────────────────────────────
 
@@ -162,17 +171,22 @@ export function Trabalhar({ orgSlug, itens, statusCfg, meuId }: {
   // depois da hidratação.
   const soEu = useSyncExternalStore(prefEu.assinar, prefEu.get, () => false)
   const links = useSyncExternalStore(prefLinks.assinar, prefLinks.get, () => LINKS_PADRAO)
+  const prazoFiltro = useSyncExternalStore(prefPrazo.assinar, prefPrazo.get, () => '')
+  const hoje = hojeBR()
 
   // "Eu" = o que está comigo. Entrega sem tarefa não tem dono: é de quem opera,
-  // então continua aparecendo.
+  // então continua aparecendo. O prazo filtra todas as regiões com a régua da Lista.
   const lista = useMemo(() => itens
     .filter(i => !feitos.has(i.chave))
-    .filter(i => !soEu || i.assigneeIds.includes(meuId) || (i.tipo === 'entrega' && !i.activityId)),
-  [itens, feitos, soEu, meuId])
+    .filter(i => !soEu || i.assigneeIds.includes(meuId) || (i.tipo === 'entrega' && !i.activityId))
+    .filter(i => matchesDateFilter(i.data, prazoFiltro, hoje)),
+  [itens, feitos, soEu, meuId, prazoFiltro, hoje])
+  const filtrando = soEu || !!prazoFiltro
   const atrasados = lista.filter(i => prazo(i.data).dias < 0).length
-  const hoje = lista.filter(i => prazo(i.data).dias === 0).length
+  const hojeCount = lista.filter(i => prazo(i.data).dias === 0).length
 
-  const solicitados = lista.filter(i => i.regiao === 'solicitado')
+  const implantar = lista.filter(i => i.regiao === 'implantar')
+  const trabalho = lista.filter(i => i.regiao === 'trabalho')
   const pecas = lista.filter(i => i.regiao === 'peca')
   const rotinas = lista.filter(i => i.regiao === 'rotina')
 
@@ -181,23 +195,32 @@ export function Trabalhar({ orgSlug, itens, statusCfg, meuId }: {
 
   return (
     <div className="p-6">
-      <Cabecalho orgSlug={orgSlug} atrasados={atrasados} hoje={hoje} total={lista.length}
+      <Cabecalho orgSlug={orgSlug} atrasados={atrasados} hoje={hojeCount} total={lista.length}
         soEu={soEu} onEu={() => prefEu.set(!soEu)}
         links={links} onLinks={prefLinks.set} />
+
+      <FiltroPrazo valor={prazoFiltro} onChange={prefPrazo.set} />
 
       {lista.length === 0 ? (
         <div className="text-center py-20 bg-white border border-gray-200 rounded-2xl mt-6">
           <PartyPopper className="w-8 h-8 text-emerald-600 mx-auto" />
           <p className="text-sm text-gray-600 mt-3">
-            {soEu ? 'Nada com você. Desligue o "Eu" para ver a fila inteira.' : 'Fila limpa. Nada esperando por você.'}
+            {filtrando ? 'Nada com esse filtro. Limpe o prazo ou desligue o "Eu" para ver a fila inteira.'
+              : 'Fila limpa. Nada esperando por você.'}
           </p>
         </div>
       ) : (
         <>
-          <Regiao className="mt-6" titulo="Trabalhos solicitados" contagem={solicitados.length}
-            vazio="Nenhum trabalho solicitado em aberto.">
-            {solicitados.map(i => <Linha key={i.chave} item={i} variante="card" {...comum} />)}
-          </Regiao>
+          <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-6">
+            <Regiao className="lg:col-span-7" titulo="Para implantar" contagem={implantar.length}
+              vazio={filtrando ? 'Nada para implantar neste filtro.' : 'Nada para implantar.'}>
+              {implantar.map(i => <Linha key={i.chave} item={i} variante="linha" {...comum} />)}
+            </Regiao>
+            <Regiao className="lg:col-span-5" titulo="Em trabalho" contagem={trabalho.length}
+              vazio={filtrando ? 'Nada em trabalho neste filtro.' : 'Nada em trabalho.'}>
+              {trabalho.map(i => <Linha key={i.chave} item={i} variante="linha" {...comum} />)}
+            </Regiao>
+          </div>
 
           <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-6">
             <Regiao className="lg:col-span-7" titulo="Peças a entregar" contagem={pecas.length}
@@ -211,6 +234,21 @@ export function Trabalhar({ orgSlug, itens, statusCfg, meuId }: {
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+/** Pílulas de prazo — o mesmo conjunto da Lista, guardado por pessoa no navegador. */
+function FiltroPrazo({ valor, onChange }: { valor: string; onChange: (v: string) => void }) {
+  return (
+    <div className="mt-4 inline-flex flex-wrap bg-gray-100 rounded-xl p-0.5" role="group" aria-label="Filtro de prazo">
+      {DATE_FILTERS.map(f => (
+        <button key={f.value} type="button" onClick={() => onChange(f.value)} aria-pressed={valor === f.value}
+          className={cn('px-3 py-1.5 text-xs font-medium rounded-[10px] transition-colors', FOCO,
+            valor === f.value ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
+          {f.label}
+        </button>
+      ))}
     </div>
   )
 }

@@ -16,9 +16,11 @@ export default async function MidiaTrabalharPage({ params }: { params: Promise<{
   const porId = new Map(fila.tarefas.map(t => [t.id, t]))
   const comEntrega = new Set(fila.entregas.map(e => e.activityId).filter(Boolean) as string[])
 
-  // Três regiões da tela (decisão do Rafael, 04/09): trabalhos solicitados em
-  // cima, peças a entregar à esquerda (entrega ao veículo e post datado), rotinas
-  // à direita.
+  // Regiões da tela (Rafael, 04/09 e 09/09): em cima, os trabalhos solicitados
+  // em duas colunas por etapa — "Para implantar" (implantação e validação: a peça
+  // chegou, é o mais urgente) e "Em trabalho" (Mídia, Social: plano, tabela…);
+  // embaixo, peças a entregar à esquerda e rotinas à direita.
+  const paraImplantar = (status: string) => /implantacao|validacao/.test(status)
   const daEntrega: ItemFila[] = fila.entregas.map(e => {
     const t = e.activityId ? porId.get(e.activityId) ?? null : null
     return {
@@ -62,7 +64,7 @@ export default async function MidiaTrabalharPage({ params }: { params: Promise<{
     const linha: ItemFila = {
       chave: `t:${t.id}`,
       tipo: t.rotina ? 'rotina' : 'pedido',
-      regiao: t.rotina ? 'rotina' : 'solicitado',
+      regiao: t.rotina ? 'rotina' : paraImplantar(t.status) ? 'implantar' : 'trabalho',
       titulo: t.titulo,
       cliente: t.cliente,
       data: t.prazo,
