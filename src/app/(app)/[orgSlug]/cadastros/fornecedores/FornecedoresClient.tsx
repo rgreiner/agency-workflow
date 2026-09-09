@@ -3,7 +3,10 @@
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, X, Check, Loader2, Archive, ArchiveRestore, Pencil, Truck, Search, Tag, AlertCircle } from 'lucide-react'
+import { Plus, X, Check, Loader2, Archive, ArchiveRestore, Pencil, Truck, Search, Tag, AlertCircle, Mail } from 'lucide-react'
+import { CopyButton } from '@/components/ui/CopyButton'
+import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon'
+import { fmtTelefone, linkWhatsApp, fmtCpfCnpj } from '@/lib/telefone'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { createFornecedor, updateFornecedor, setFornecedorArchived } from '@/app/actions/fornecedor'
@@ -20,6 +23,64 @@ export interface Fornecedor {
 
 /** Sem acento e sem caixa: quem busca "grafica" tem que achar "Gráfica". */
 const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim()
+
+/**
+ * Contato direto na listagem (Rafael, 09/09/2026): telefone com link do
+ * WhatsApp e e-mail, sem abrir o cadastro. Mostra o primeiro de cada — o que
+ * tiver tipo "WhatsApp" vem na frente — e "+N" com os demais no tooltip.
+ */
+function ContatoCell({ f }: { f: Fornecedor }) {
+  const tels = (f.telefones ?? []).filter(t => (t.numero ?? '').trim())
+  const zap = tels.find(t => /whats/i.test(t.tipo ?? ''))
+  const tel = zap ?? tels[0]
+  const outrosTel = tels.filter(t => t !== tel)
+  const emails = (f.emails ?? []).filter(e => (e.email ?? '').trim())
+  const email = emails[0]
+  const outrosEmail = emails.slice(1)
+  if (!tel && !email) return <span className="text-sm text-gray-300">—</span>
+
+  const wa = tel ? linkWhatsApp(tel.numero) : null
+  return (
+    <div className="space-y-0.5 min-w-0">
+      {tel && (
+        <div className="flex items-center gap-1.5 min-w-0">
+          {wa ? (
+            <a href={wa} target="_blank" rel="noopener noreferrer" title="Abrir conversa no WhatsApp"
+              className="inline-flex items-center gap-1.5 text-sm text-gray-700 hover:text-green-700 transition-colors">
+              <WhatsAppIcon className="w-4 h-4 text-green-600 shrink-0" />
+              <span className="tabular-nums">{fmtTelefone(tel.numero)}</span>
+            </a>
+          ) : (
+            <span className="text-sm text-gray-700 tabular-nums" title="Sem DDD: não dá pra abrir o WhatsApp">{fmtTelefone(tel.numero)}</span>
+          )}
+          <CopyButton text={fmtTelefone(tel.numero)} label="Copiar telefone" className="opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100" />
+          {outrosTel.length > 0 && (
+            <span className="text-[10px] font-medium text-gray-400 bg-gray-100 rounded px-1 py-0.5"
+              title={outrosTel.map(t => `${fmtTelefone(t.numero)}${t.tipo ? ` (${t.tipo})` : ''}`).join('\n')}>
+              +{outrosTel.length}
+            </span>
+          )}
+        </div>
+      )}
+      {email && (
+        <div className="flex items-center gap-1.5 min-w-0">
+          <a href={`mailto:${email.email.trim()}`} title={email.email.trim()}
+            className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-orange-600 transition-colors min-w-0">
+            <Mail className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+            <span className="truncate max-w-[220px]">{email.email.trim()}</span>
+          </a>
+          <CopyButton text={email.email.trim()} label="Copiar e-mail" className="opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100" />
+          {outrosEmail.length > 0 && (
+            <span className="text-[10px] font-medium text-gray-400 bg-gray-100 rounded px-1 py-0.5"
+              title={outrosEmail.map(e => `${e.email}${e.tipo ? ` (${e.tipo})` : ''}`).join('\n')}>
+              +{outrosEmail.length}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 /**
  * O que falta num cadastro pra ele valer como completo: tipo, CNPJ e algum
@@ -187,18 +248,19 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView, editar
 
       {lista.length > 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
-          <table className="w-full min-w-[560px]">
+          <table className="w-full min-w-[820px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-medium text-gray-400">
                 <th className="text-left px-4 py-3">Fornecedor</th>
                 <th className="text-left px-4 py-3">Tipo</th>
                 <th className="text-left px-4 py-3">CNPJ</th>
+                <th className="text-left px-4 py-3">Contato</th>
                 <th className="w-20" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {lista.map(f => (
-                <tr key={f.id} className="hover:bg-gray-50/50 transition">
+                <tr key={f.id} className="group/row hover:bg-gray-50/50 transition">
                   <td className="px-4 py-3">
                     <p className="text-sm font-medium text-gray-900">{f.name}</p>
                     {(f.tags?.length ?? 0) > 0 && (
@@ -221,7 +283,8 @@ export function FornecedoresClient({ orgSlug, fornecedores, archivedView, editar
                     )}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{f.tipo || '—'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{f.tax_id || '—'}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600 tabular-nums">{f.tax_id ? fmtCpfCnpj(f.tax_id) : '—'}</td>
+                  <td className="px-4 py-3"><ContatoCell f={f} /></td>
                   <td className="px-3 py-3">
                     <div className="flex items-center justify-end gap-1.5">
                       <button onClick={() => setEditing(f)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar"><Pencil className="w-3.5 h-3.5" /></button>
