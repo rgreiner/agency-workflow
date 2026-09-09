@@ -235,11 +235,16 @@ async function postNoModelo(pedido: string, body: string, timeoutMs: number): Pr
   throw primeiroErro ?? new ErroIA(0, 'Gemini: falha desconhecida.')
 }
 
-/** Modelo sugerido pelo próprio 404 ("use models/X"), senão o default da casa. */
+/**
+ * Modelo aposentado → o alias `latest` da casa, NÃO o que o 404 sugere: a
+ * sugestão do Google é uma versão fixa ("use models/gemini-3.6-flash"), e uma
+ * env velha no Coolify (REVIEW_MODEL_GEMINI=gemini-2.5-flash, 09/09/2026) deixava
+ * a revisão presa nela. Só quando o próprio alias morreu é que vale a sugestão.
+ */
 function modeloSubstituto(mensagem: string, pedido: string): string | null {
+  if (pedido !== DEFAULT_MODEL) return DEFAULT_MODEL
   const sugerido = mensagem.match(/use\s+models\/([A-Za-z0-9.\-_]+)/)?.[1]
-  const alvo = sugerido || DEFAULT_MODEL
-  return alvo === pedido ? null : alvo
+  return sugerido && sugerido !== pedido ? sugerido : null
 }
 
 const transitorio = (e: ErroIA) => { e.transitorio = true; return e }

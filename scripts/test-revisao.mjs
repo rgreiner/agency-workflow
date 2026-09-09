@@ -38,7 +38,7 @@ if (!apiKey) {
 }
 
 // Mesma cadeia de env do app (lib/ai/gemini.ts), pra o teste valer pro que roda em produção.
-const model = process.env.REVIEW_MODEL_GEMINI || process.env.REDACAO_REVIEW_MODEL_GEMINI || process.env.GEMINI_MODEL || 'gemini-3.6-flash'
+const model = process.env.REVIEW_MODEL_GEMINI || process.env.REDACAO_REVIEW_MODEL_GEMINI || process.env.GEMINI_MODEL || 'gemini-flash-latest'
 
 const SYSTEM_PROMPT = `Você é um revisor de português (pt-BR) de peças publicitárias.
 
