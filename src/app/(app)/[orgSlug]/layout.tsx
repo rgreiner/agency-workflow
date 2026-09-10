@@ -1,4 +1,6 @@
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
+import { lerSidebarPrefs } from '@/lib/sidebar-prefs'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { AppShell } from '@/components/layout/AppShell'
@@ -25,6 +27,9 @@ export default async function OrgLayout({
 }) {
   const { orgSlug } = await params
   const supabase = await createClient()
+  // Casca (modo/recolhida/grupos/Espaços) já vem certa do servidor — ver lib/sidebar-prefs.
+  const jar = await cookies()
+  const sidebarPrefs = lerSidebarPrefs(n => jar.get(n)?.value)
 
   const user = await getUsuario()
   if (!user) redirect('/login')
@@ -155,6 +160,7 @@ export default async function OrgLayout({
         canListaGlobal={access.listaGlobal}
         onboardingPendente={onboardingPendente}
         midiaTransicao={midiaTransicao}
+        prefs={sidebarPrefs}
       >
         {children}
       </AppShell>

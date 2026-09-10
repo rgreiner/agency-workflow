@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Sidebar } from './Sidebar'
+import { gravarPref, PREF_COOKIES, type SidebarPrefs } from '@/lib/sidebar-prefs'
 
 interface WorkspaceItem {
   id: string
@@ -38,6 +39,8 @@ interface Props {
   onboardingPendente?: number
   /** Pendências das telas transitórias da Mídia — 0 esconde o item. */
   midiaTransicao?: { migrar: number; vincular: number }
+  /** Preferências da casca lidas do cookie no servidor. */
+  prefs: SidebarPrefs
   children: React.ReactNode
 }
 
@@ -47,17 +50,15 @@ interface Props {
  * a própria Sidebar mostra um botão flutuante para reabrir.
  */
 export function AppShell({
-  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, canMidias, canMidiaHub, canProducao, canFinance, canCadastros, canRh, canManage, canListaGlobal, onboardingPendente, midiaTransicao, children,
+  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, canMidias, canMidiaHub, canProducao, canFinance, canCadastros, canRh, canManage, canListaGlobal, onboardingPendente, midiaTransicao, prefs, children,
 }: Props) {
-  const [collapsed, setCollapsedState] = useState(false)
-
-  useEffect(() => {
-    try { setCollapsedState(localStorage.getItem('sidebar-collapsed') === '1') } catch {}
-  }, [])
+  // Recolhida: vem do cookie lido no servidor, então o HTML já chega recolhido.
+  // Antes o localStorage era lido depois do paint e a sidebar "pulava" 240px.
+  const [collapsed, setCollapsedState] = useState(prefs.recolhida ?? false)
 
   function setCollapsed(v: boolean) {
     setCollapsedState(v)
-    try { localStorage.setItem('sidebar-collapsed', v ? '1' : '0') } catch {}
+    gravarPref(PREF_COOKIES.recolhida, v ? '1' : '0')
   }
 
   // h-dvh: no Safari do celular a barra do navegador comia o rodapé do drawer com h-screen.
@@ -83,6 +84,7 @@ export function AppShell({
         canListaGlobal={canListaGlobal}
         onboardingPendente={onboardingPendente}
         midiaTransicao={midiaTransicao}
+        prefs={prefs}
         collapsed={collapsed}
         onCollapse={() => setCollapsed(true)}
         onExpand={() => setCollapsed(false)}

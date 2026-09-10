@@ -34,6 +34,7 @@ import {
 } from 'lucide-react'
 import { UserMenu } from './UserMenu'
 import { ICONE_TOPO, ICONE_TOPO_ATIVO, ICONE_TOPO_IDLE } from './icone-topo'
+import { gravarPref, PREF_COOKIES, type SidebarPrefs } from '@/lib/sidebar-prefs'
 import { InboxNavItem } from './InboxNavItem'
 import { MessagesNavItem } from './MessagesNavItem'
 import { CommandPalette, type PaletteTela } from './CommandPalette'
@@ -83,6 +84,8 @@ interface SidebarProps {
   collapsed: boolean
   onCollapse: () => void
   onExpand?: () => void
+  /** Preferências da casca lidas do cookie no servidor (modo, grupos, Espaços). */
+  prefs: SidebarPrefs
 }
 
 interface NavItem {
@@ -304,7 +307,7 @@ export function Sidebar({
   positionName, canMidias = false, canProducao = false, canFinance = false, canCadastros = false, canRh = false,
   canMidiaHub = false,
   canListaGlobal = false,
-  onboardingPendente = 0, midiaTransicao = { migrar: 0, vincular: 0 }, collapsed, onCollapse, onExpand,
+  onboardingPendente = 0, midiaTransicao = { migrar: 0, vincular: 0 }, collapsed, onCollapse, onExpand, prefs,
 }: SidebarProps) {
   const pathname = usePathname()
   const base = `/${orgSlug}`
@@ -365,26 +368,20 @@ export function Sidebar({
       }
     }
   }
-  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem('sidebar-comercial-groups')
-      const set = raw ? new Set(JSON.parse(raw) as string[]) : new Set<string>()
-      // garante que o grupo da página atual já abre expandido
-      const active = COMERCIAL_GROUPS.find(g => g.items.some(it => pathname.startsWith(`${base}/${it.href}`)))
-      if (active) set.add(active.id)
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setOpenGroups(set)
-    } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // Grupos abertos: do cookie (lido no servidor), então a lista já nasce aberta
+  // no HTML — o localStorage era lido depois do paint e os grupos "pulavam".
+  // O grupo da página atual abre sempre.
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
+    const set = new Set(prefs.grupos)
+    const active = COMERCIAL_GROUPS.find(g => g.items.some(it => pathname.startsWith(`${base}/${it.href}`)))
+    if (active) set.add(active.id)
+    return set
+  })
   function toggleGroup(id: string) {
-    setOpenGroups(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      try { localStorage.setItem('sidebar-comercial-groups', JSON.stringify([...next])) } catch {}
-      return next
-    })
+    const next = new Set(openGroups)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    gravarPref(PREF_COOKIES.grupos, [...next].join('|'))
+    setOpenGroups(next)
   }
 
   // Modo da sidebar: "Trabalho" (visões + espaços) × "Operacional" (mídia/produção/
@@ -402,12 +399,20 @@ export function Sidebar({
 
   const [mode, setMode] = useState<SidebarMode>(() => {
     const m = modeForPath(pathname, base)
-    return m && modoPermitido[m] ? m : 'trabalho'
+    if (m && modoPermitido[m]) return m
+    // Rota neutra (Docs, Caixa, cliente…): o último modo usado, do cookie —
+    // reload no Financeiro não joga mais de volta pro Trabalho.
+    const salvo = prefs.modo as SidebarMode | null
+    return salvo && salvo in modoPermitido && modoPermitido[salvo] ? salvo : 'trabalho'
   })
+  function mudarModo(m: SidebarMode) {
+    setMode(m)
+    gravarPref(PREF_COOKIES.modo, m)
+  }
   useEffect(() => {
     const m = modeForPath(pathname, base)
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (m && m !== mode && modoPermitido[m]) setMode(m)
+    if (m && m !== mode && modoPermitido[m]) mudarModo(m)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname])
 
@@ -474,27 +479,16 @@ export function Sidebar({
   const allExpanded = workspaces.length > 0 && workspaces.every(ws => expanded.has(ws.id))
 
   // Seção "Espaços" recolhida por padrão (o acesso por cliente é usado menos);
-  // lembra a escolha do usuário e abre sozinha ao entrar num cliente.
-  const ESPACOS_KEY = 'flow:sidebar-espacos-open'
-  const [espacosOpen, setEspacosOpen] = useState(false)
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(ESPACOS_KEY)
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (saved === '1' || (saved === null && activeWorkspaceId)) setEspacosOpen(true)
-    } catch { /* localStorage indisponível */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // lembra a escolha (cookie, já no HTML) e abre sozinha ao entrar num cliente.
+  const [espacosOpen, setEspacosOpen] = useState(() => prefs.espacos ?? !!activeWorkspaceId)
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (activeWorkspaceId) setEspacosOpen(true)
   }, [activeWorkspaceId])
   function toggleEspacos() {
-    setEspacosOpen(o => {
-      const next = !o
-      try { localStorage.setItem(ESPACOS_KEY, next ? '1' : '0') } catch { /* ignore */ }
-      return next
-    })
+    const next = !espacosOpen
+    gravarPref(PREF_COOKIES.espacos, next ? '1' : '0')
+    setEspacosOpen(next)
   }
 
   const sidebarContent = (
@@ -540,7 +534,7 @@ export function Sidebar({
                 <button
                   key={m}
                   type="button"
-                  onClick={() => setMode(m)}
+                  onClick={() => mudarModo(m)}
                   aria-pressed={mode === m}
                   aria-label={label}
                   data-tip={label}

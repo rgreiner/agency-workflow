@@ -80,7 +80,7 @@ function PalettePanel({ orgSlug, workspaces, onClose, canManage, canListaGlobal,
   const [activeIdx, setActiveIdx] = useState(0)
   const [includeArchived, setIncludeArchived] = useState(false)
   // Resultados carregam a query que os gerou: itens obsoletos são descartados por derivação
-  const [results, setResults] = useState<{ q: string; items: Item[] }>({ q: '', items: [] })
+  const [results, setResults] = useState<{ q: string; items: Item[]; erro?: boolean }>({ q: '', items: [] })
   const listRef = useRef<HTMLDivElement>(null)
   const base = `/${orgSlug}`
   const q = query.trim()
@@ -91,6 +91,7 @@ function PalettePanel({ orgSlug, workspaces, onClose, canManage, canListaGlobal,
     let cancelled = false
     const timer = setTimeout(async () => {
       let items: Item[] = []
+      let erro = false
       try {
         const [acts, extras] = await Promise.all([
           searchActivities(orgSlug, q, includeArchived),
@@ -116,8 +117,8 @@ function PalettePanel({ orgSlug, workspaces, onClose, canManage, canListaGlobal,
             archived: e.archived,
           })),
         ]
-      } catch { /* falha de rede → trata como sem resultados */ }
-      if (!cancelled) setResults({ q, items })
+      } catch { erro = true }   // sem rede: dizer isso, não "nada encontrado"
+      if (!cancelled) setResults({ q, items, erro })
     }, 250)
     return () => { cancelled = true; clearTimeout(timer) }
   }, [q, orgSlug, base, includeArchived])
@@ -275,7 +276,7 @@ function PalettePanel({ orgSlug, workspaces, onClose, canManage, canListaGlobal,
         <div ref={listRef} className="max-h-[50vh] overflow-y-auto overscroll-contain py-2">
           {filtered.length === 0 ? (
             <p className="px-4 py-8 text-sm text-gray-400 text-center">
-              {searching ? 'Buscando…' : `Nada encontrado para “${query}”`}
+              {searching ? 'Buscando…' : results.erro ? 'Não deu pra buscar agora. Sem conexão? Tente de novo.' : `Nada encontrado para “${query}”`}
             </p>
           ) : (
             groups.map(group => (
