@@ -8,7 +8,12 @@ import { cn } from '@/lib/utils'
 import { getUnreadCount } from '@/app/actions/notifications'
 import { playNotifSound } from '@/lib/notif-sound'
 
-export function InboxNavItem({ orgSlug }: { orgSlug: string }) {
+/**
+ * Item "Caixa de entrada" da sidebar. `compact` = só o ícone com o badge no
+ * canto (linha de atalhos do cabeçalho); sem ele, a linha com rótulo.
+ * O polling de não-lidas é um só nos dois formatos.
+ */
+export function InboxNavItem({ orgSlug, compact = false }: { orgSlug: string; compact?: boolean }) {
   const pathname = usePathname()
   const base = `/${orgSlug}`
   const active = pathname === `${base}/inbox`
@@ -50,6 +55,27 @@ export function InboxNavItem({ orgSlug }: { orgSlug: string }) {
     window.addEventListener('flow:inbox-unread-set', onSet)
     return () => window.removeEventListener('flow:inbox-unread-set', onSet)
   }, [])
+
+  if (compact) {
+    return (
+      <Link
+        href={`${base}/inbox`}
+        title="Caixa de entrada"
+        aria-label={unread > 0 ? `Caixa de entrada (${unread} não lidas)` : 'Caixa de entrada'}
+        className={cn(
+          'relative p-2 rounded-lg transition-colors',
+          active ? 'bg-gray-700 text-orange-400' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
+        )}
+      >
+        <Inbox className="w-4 h-4" />
+        {unread > 0 && (
+          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[#fff] text-[9px] font-semibold tabular-nums flex items-center justify-center ring-2 ring-gray-900">
+            {unread > 99 ? '99+' : unread}
+          </span>
+        )}
+      </Link>
+    )
+  }
 
   return (
     <Link

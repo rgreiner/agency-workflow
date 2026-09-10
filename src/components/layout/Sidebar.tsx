@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -225,13 +225,30 @@ function NavGroup({ base, pathname, group, open, onToggle }: {
   )
 }
 
-// Visões da org (antes ficavam na barra superior). "Atendimento" = o item "Trabalhar".
-const VIEWS = [
-  { id: 'lista', label: 'Lista',      icon: List,       href: 'views/lista' },
-  { id: 'gantt', label: 'Gantt',      icon: GanttChart, href: 'views/gantt' },
-  { id: 'docs',  label: 'Documentos', icon: BookOpen,   href: 'docs' },
-  { id: 'boards',label: 'Quadros',    icon: PenTool,    href: 'boards' },
+/**
+ * Atalhos globais: as telas que todo mundo usa, em qualquer modo. Moram numa
+ * linha de ícones no cabeçalho, ao lado da busca, para continuarem à mão quando
+ * a sidebar está em Mídia/Financeiro/RH (pedido do Rafael, 10/09). "Trabalhar"
+ * (views/atendimento) entra aqui também; a Lista global fica no modo Trabalho,
+ * porque é só de quem coordena.
+ */
+const ATALHOS: { id: string; label: string; icon: LucideIcon; href: string }[] = [
+  { id: 'trabalhar', label: 'Trabalhar',  icon: Briefcase,  href: 'views/atendimento' },
+  { id: 'gantt',     label: 'Gantt',      icon: GanttChart, href: 'views/gantt' },
+  { id: 'docs',      label: 'Documentos', icon: BookOpen,   href: 'docs' },
+  { id: 'boards',    label: 'Quadros',    icon: PenTool,    href: 'boards' },
 ]
+
+// Ícone de topo (linha de atalhos): mesmo desenho do botão "Gestão" ao lado.
+const ICONE_TOPO = 'p-2 rounded-lg transition-colors'
+const ICONE_TOPO_ATIVO = 'bg-gray-700 text-orange-400'
+const ICONE_TOPO_IDLE = 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
+
+// Client-only: SSR não sabe o SO. Snapshot do servidor = false ("Ctrl K"), e o
+// hydrate re-renderiza com o valor certo — a versão antiga lia `navigator` na
+// renderização e, no Mac, ficava presa em "Ctrl K" após o SSR.
+const noopSubscribe = () => () => {}
+const isMacSnapshot = () => navigator.platform.toUpperCase().includes('MAC')
 
 /**
  * Modos da sidebar. "Operacional" era um guarda-chuva que juntava mídia,
@@ -260,9 +277,13 @@ function modeForPath(path: string, base: string): SidebarMode | null {
   if (path.startsWith(`${base}/midia`)) return 'midia'
   if (['producao', 'cadastros', 'relatorios', 'solicitacoes', 'documentos']
       .some(p => path.startsWith(`${base}/${p}`))) return 'comercial'
-  if (['dashboard', 'views', 'docs', 'boards'].some(p => path.startsWith(`${base}/${p}`))) return 'trabalho'
-  // `workspaces` fica NEUTRA de propósito: é "Espaços" no Trabalho e "Clientes"
-  // no Comercial. Amarrar a um modo faria a sidebar pular de contexto no clique.
+  if (['dashboard', 'views/lista'].some(p => path.startsWith(`${base}/${p}`))) return 'trabalho'
+  // NEUTRAS de propósito (null = não trocam o modo):
+  // - `workspaces`: é "Espaços" no Trabalho e "Clientes" no Comercial. Amarrar
+  //   a um modo faria a sidebar pular de contexto no clique.
+  // - As telas da linha de atalhos (Trabalhar, Gantt, Documentos, Quadros) e a
+  //   Gestão: são globais — quem abre Documentos de dentro do Financeiro
+  //   continua no Financeiro, com o ícone aceso no topo.
   return null
 }
 
@@ -357,11 +378,8 @@ export function Sidebar({
   // callback — só aparece em runtime, e em produção já minificado.
   const gruposDoModo = comercialGroups.filter(g => GRUPO_MODO[g.id] === mode)
 
-  // SSR sempre renderiza 'Ctrl K'; suppressHydrationWarning no <kbd> cobre o Mac.
-  const shortcutLabel =
-    typeof navigator !== 'undefined' && navigator.platform.toUpperCase().includes('MAC')
-      ? '⌘K'
-      : 'Ctrl K'
+  const isMac = useSyncExternalStore(noopSubscribe, isMacSnapshot, () => false)
+  const shortcutLabel = isMac ? '⌘K' : 'Ctrl K'
 
   // Atalho global ⌘K / Ctrl+K para a busca.
   useEffect(() => {
@@ -445,8 +463,9 @@ export function Sidebar({
   const sidebarContent = (
     <aside className="sidebar-shell w-60 bg-gray-900 flex flex-col h-full select-none pt-[env(safe-area-inset-top,0px)] md:pt-0">
 
-      {/* ── Org header: logo + switcher de modo (Trabalho × Operacional) ── */}
-      <div className="px-3 pt-4 pb-3 border-b border-gray-800 flex items-center gap-2">
+      {/* ── Org header: logo + switcher de modo, e embaixo a busca + atalhos globais ── */}
+      <div className="px-3 pt-4 pb-2 border-b border-gray-800">
+      <div className="flex items-center gap-2">
         <Link
           href={`${base}/dashboard`}
           title={orgName}
@@ -523,62 +542,62 @@ export function Sidebar({
         </button>
       </div>
 
-      {/* ── Scrollable body ──────────────────────────── */}
-      <div className="flex-1 overflow-y-auto py-3 space-y-1">
-
-        {/* Buscar (⌘K) */}
+      {/* Busca (⌘K) + atalhos globais — uma linha de ícones, igual em todos os
+          modos. Cada um só tem o ícone; o nome fica no tooltip. -mx-1 alinha o
+          desenho dos ícones com os itens do menu abaixo (16px da borda). */}
+      <div className="mt-2 -mx-1 flex items-center justify-between">
         <button
           type="button"
           onClick={() => setPaletteOpen(true)}
-          className="flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-gray-100 hover:bg-gray-800/60 transition w-[calc(100%-1rem)]"
+          title={`Buscar (${shortcutLabel})`}
+          aria-label="Buscar"
+          aria-keyshortcuts="Control+K Meta+K"
+          className={cn(ICONE_TOPO, ICONE_TOPO_IDLE)}
         >
-          <Search className="w-4 h-4 shrink-0" />
-          <span className="flex-1 text-left">Buscar</span>
-          <kbd suppressHydrationWarning className="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded">
-            {shortcutLabel}
-          </kbd>
+          <Search className="w-4 h-4" />
         </button>
+        <InboxNavItem orgSlug={orgSlug} compact />
+        {ATALHOS.map(({ id, label, icon: Icon, href }) => {
+          // "Trabalhar" mostra o cargo da pessoa, como o item antigo fazia.
+          const titulo = id === 'trabalhar' && positionName ? `${label} · ${positionName}` : label
+          return (
+            <Link
+              key={id}
+              href={`${base}/${href}`}
+              title={titulo}
+              aria-label={titulo}
+              className={cn(ICONE_TOPO, pathname.startsWith(`${base}/${href}`) ? ICONE_TOPO_ATIVO : ICONE_TOPO_IDLE)}
+            >
+              <Icon className="w-4 h-4" />
+            </Link>
+          )
+        })}
+      </div>
+      </div>
 
-        {/* Caixa de entrada — antes dos espaços */}
-        <InboxNavItem orgSlug={orgSlug} />
+      {/* ── Scrollable body ──────────────────────────── */}
+      <div className="flex-1 overflow-y-auto py-3 space-y-1">
 
         {/* Mensagens — abre o chat (dock no canto inferior direito) */}
         <MessagesNavItem />
 
-        {/* ── Modo Trabalho: Trabalhar + Visões ── */}
+        {/* ── Modo Trabalho: Lista global (só quem coordena) + Espaços ── */}
         {mode === 'trabalho' && (
           <>
-            {/* Trabalhar — tela de trabalho do cargo da pessoa (mostra o cargo, se houver) */}
-            <Link
-              href={`${base}/views/atendimento`}
-              className={cn(
-                'flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition',
-                pathname.startsWith(`${base}/views/atendimento`)
-                  ? 'bg-gray-800 text-gray-100'
-                  : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
-              )}
-            >
-              <Briefcase className="w-4 h-4 shrink-0" />
-              <span className="flex-1 truncate">{positionName ?? 'Trabalhar'}</span>
-            </Link>
-
-            {/* Visões da org — Gantt, Documentos, Quadros para todos; a Lista
-                (todos os clientes e status) só para quem coordena. */}
-            {VIEWS.filter(v => v.id !== 'lista' || canListaGlobal).map(({ id, label, icon: Icon, href }) => (
+            {canListaGlobal && (
               <Link
-                key={id}
-                href={`${base}/${href}`}
+                href={`${base}/views/lista`}
                 className={cn(
                   'flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition',
-                  pathname.startsWith(`${base}/${href}`)
+                  pathname.startsWith(`${base}/views/lista`)
                     ? 'bg-gray-800 text-gray-100'
                     : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
                 )}
               >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span className="flex-1">{label}</span>
+                <List className="w-4 h-4 shrink-0" />
+                <span className="flex-1">Lista</span>
               </Link>
-            ))}
+            )}
 
             <div className="mx-3 my-2 border-t border-gray-800" />
           </>
