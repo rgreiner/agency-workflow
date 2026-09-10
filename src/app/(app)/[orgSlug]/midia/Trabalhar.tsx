@@ -21,7 +21,8 @@ import { concluirTarefaMidia, desdobrarEmDatas, marcarItemChecklist, mudarSituac
  * Onde a linha mora. Em cima, os solicitados em duas colunas por etapa:
  * `implantar` (implantação/validação — a peça chegou, é o mais urgente) e
  * `trabalho` (Mídia, Social — plano, tabela, o que está sendo feito). Embaixo,
- * `peca` (entrega ao veículo e post datado) e `rotina`.
+ * `peca` (entrega ao veículo) e `rotina`. Post datado segue a região da
+ * tarefa-mãe.
  */
 export type Regiao = 'implantar' | 'trabalho' | 'peca' | 'rotina'
 
@@ -148,10 +149,10 @@ const BTN_OK = BTN + ' bg-emerald-600 text-[#fff] hover:bg-emerald-700'
 const CHIP = 'text-[11px] font-medium px-2 py-0.5 rounded-full'
 
 /**
- * A fila da mídia em três regiões (decisão do Rafael, 04/09): **Trabalhos
- * solicitados** em cima, ocupando a largura — é onde o pedido grande precisa de
- * espaço; **Peças a entregar** à esquerda (entrega ao veículo e post datado);
- * **Rotinas** à direita, em linhas compactas. Dentro de cada região a ordem é a
+ * A fila da mídia em quatro regiões (Rafael, 04/09 a 10/09): em cima, **Para
+ * implantar** e **Em trabalho** — os solicitados, por etapa; embaixo, **Entregas
+ * ao veículo** à esquerda e **Rotinas** à direita, em linhas compactas. Post
+ * datado segue a região da tarefa-mãe. Dentro de cada região a ordem é a
  * data. Todo item mostra os links de trabalho (Redação, Preview, Final, pasta);
  * cada pessoa esconde os que não usa. O painel (Visão geral) continua existindo
  * para o retrato da operação; aqui não entra KPI nem radar.
@@ -223,12 +224,12 @@ export function Trabalhar({ orgSlug, itens, statusCfg, meuId }: {
           </div>
 
           <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-6">
-            <Regiao className="lg:col-span-7" titulo="Peças a entregar" contagem={pecas.length}
-              vazio="Nenhuma peça a entregar.">
+            <Regiao className="lg:col-span-7" titulo="Entregas ao veículo" contagem={pecas.length}
+              vazio={filtrando ? 'Nenhuma entrega neste filtro.' : 'Nenhuma entrega ao veículo pendente.'}>
               {pecas.map(i => <Linha key={i.chave} item={i} variante="linha" {...comum} />)}
             </Regiao>
             <Regiao className="lg:col-span-5" titulo="Rotinas" contagem={rotinas.length}
-              vazio="Nenhuma rotina em aberto.">
+              vazio={filtrando ? 'Nenhuma rotina neste filtro.' : 'Nenhuma rotina em aberto.'}>
               {rotinas.map(i => <Linha key={i.chave} item={i} variante="compacta" {...comum} />)}
             </Regiao>
           </div>

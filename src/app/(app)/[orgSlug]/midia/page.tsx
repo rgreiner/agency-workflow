@@ -16,10 +16,10 @@ export default async function MidiaTrabalharPage({ params }: { params: Promise<{
   const porId = new Map(fila.tarefas.map(t => [t.id, t]))
   const comEntrega = new Set(fila.entregas.map(e => e.activityId).filter(Boolean) as string[])
 
-  // Regiões da tela (Rafael, 04/09 e 09/09): em cima, os trabalhos solicitados
-  // em duas colunas por etapa — "Para implantar" (implantação e validação: a peça
-  // chegou, é o mais urgente) e "Em trabalho" (Mídia, Social: plano, tabela…);
-  // embaixo, peças a entregar à esquerda e rotinas à direita.
+  // Regiões da tela (Rafael, 04/09, 09/09 e 10/09): em cima, os trabalhos
+  // solicitados em duas colunas por etapa — "Para implantar" (implantação e
+  // validação: a peça chegou, é o mais urgente) e "Em trabalho" (Mídia, Social:
+  // plano, tabela…); embaixo, entregas ao veículo à esquerda e rotinas à direita.
   const paraImplantar = (status: string) => /implantacao|validacao/.test(status)
   const daEntrega: ItemFila[] = fila.entregas.map(e => {
     const t = e.activityId ? porId.get(e.activityId) ?? null : null
@@ -95,12 +95,13 @@ export default async function MidiaTrabalharPage({ params }: { params: Promise<{
       item: null,
     }
     // Item datado do checklist é uma demanda própria (o post da data X): vira
-    // linha com a data dele, entre as peças a entregar. A tarefa some enquanto
-    // tiver item datado pendente e volta quando o último sai. Entrega vinculada
-    // segue valendo.
+    // linha com a data dele, na MESMA região da tarefa-mãe — post para agendar
+    // é implantação, não entrega ao veículo (Rafael, 10/09). A tarefa some
+    // enquanto tiver item datado pendente e volta quando o último sai. Entrega
+    // vinculada segue valendo.
     const datados = t.checklist.itens.filter(i => !i.feito && i.data)
     for (const it of datados) {
-      dasTarefas.push({ ...linha, chave: `c:${t.id}:${it.id}`, regiao: 'peca', data: it.data, item: { id: it.id, texto: it.texto } })
+      dasTarefas.push({ ...linha, chave: `c:${t.id}:${it.id}`, data: it.data, item: { id: it.id, texto: it.texto } })
     }
     if (datados.length === 0 && !comEntrega.has(t.id)) dasTarefas.push(linha)
   }
