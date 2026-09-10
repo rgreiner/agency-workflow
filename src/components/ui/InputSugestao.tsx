@@ -112,7 +112,7 @@ export function InputSugestao({
           id={painelId}
           role="listbox"
           style={{ position: 'fixed', top: pos?.top ?? -9999, left: pos?.left ?? -9999, minWidth: pos?.minWidth, visibility: pos ? 'visible' : 'hidden' }}
-          className="pop-in z-[100] max-h-72 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-xl py-1.5"
+          className="pop-in z-[var(--z-popover)] max-h-72 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-xl py-1.5"
         >
           {divergente && (
             <p className="px-3 pt-1 pb-2 text-[11px] text-gray-500 leading-snug border-b border-gray-100 mb-1">

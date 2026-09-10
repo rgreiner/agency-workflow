@@ -22,15 +22,15 @@ export function MessagesNavItem() {
       type="button"
       onClick={() => window.dispatchEvent(new CustomEvent('flow:chat-toggle'))}
       className={cn(
-        'w-full flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition',
+        // no-press: linha de largura total não afunda (7px de tremida), só muda de cor.
+        'no-press flex items-center gap-2.5 mx-2 w-[calc(100%-1rem)] px-2 py-2 rounded-lg text-sm font-medium transition-colors',
         'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
       )}
-      style={{ width: 'calc(100% - 1rem)' }}
     >
       <MessagesSquare className="w-4 h-4 shrink-0" />
       <span className="flex-1 text-left">Mensagens</span>
       {unread > 0 && (
-        <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-[#fff] text-[10px] font-semibold flex items-center justify-center">
+        <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-[#fff] text-[10px] font-semibold tabular-nums flex items-center justify-center">
           {unread > 99 ? '99+' : unread}
         </span>
       )}

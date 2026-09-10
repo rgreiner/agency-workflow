@@ -63,7 +63,18 @@ export function Modal({
     focoAnterior.current = document.activeElement as HTMLElement | null
     cardRef.current?.focus()
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && dismissable) { e.preventDefault(); onClose() }
+      if (e.key === 'Escape' && dismissable) { e.preventDefault(); onClose(); return }
+      // Tab preso dentro do card: sem isso o foco escapava pra sidebar atrás do
+      // backdrop. Popover portalado (Select aberto) fica fora do ciclo — ok.
+      if (e.key !== 'Tab' || !cardRef.current) return
+      const focaveis = Array.from(cardRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )).filter(el => el.offsetParent !== null)
+      if (!focaveis.length) { e.preventDefault(); return }
+      const primeiro = focaveis[0], ultimo = focaveis[focaveis.length - 1]
+      const ativo = document.activeElement
+      if (e.shiftKey && (ativo === primeiro || ativo === cardRef.current)) { e.preventDefault(); ultimo.focus() }
+      else if (!e.shiftKey && ativo === ultimo) { e.preventDefault(); primeiro.focus() }
     }
     document.addEventListener('keydown', onKey)
     return () => {
@@ -88,7 +99,7 @@ export function Modal({
 
   return (
     <div
-      className={cn('modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40', backdropClassName)}
+      className={cn('modal-backdrop fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-4 bg-black/40', backdropClassName)}
       // O par mousedown/mouseup é o que impede o popup ancorado no body de
       // derrubar o modal: se o clique começou dentro do card, soltar fora não fecha.
       onMouseDown={e => { abriuNoBackdrop.current = e.target === e.currentTarget }}

@@ -19,7 +19,7 @@ const SEARCH_THRESHOLD = 7
  * Posiciona um painel flutuante (position:fixed) ancorado no gatilho, com flip
  * vertical quando falta espaço embaixo. Usado pelo Select/MultiSelect p/ o menu
  * escapar de containers com overflow (ex.: tabelas com overflow-x-auto, que
- * cortavam o dropdown). Fecha no scroll/resize p/ não descolar do gatilho.
+ * cortavam o dropdown). Reposiciona no scroll/resize p/ não descolar do gatilho.
  */
 export function useAnchoredPanel(
   open: boolean,
@@ -28,7 +28,7 @@ export function useAnchoredPanel(
   align: 'left' | 'right',
   onClose: () => void,
 ) {
-  const [pos, setPos] = useState<{ top: number; left: number; minWidth: number } | null>(null)
+  const [pos, setPos] = useState<{ top: number; left: number; minWidth: number; openUp: boolean } | null>(null)
   // onClose é recriado a cada render; guardar em ref p/ não re-disparar o efeito
   // de posição (senão setPos com objeto novo + dep instável = loop de render).
   const closeRef = useRef(onClose)
@@ -36,27 +36,33 @@ export function useAnchoredPanel(
 
   useEffect(() => {
     if (!open) return
-    const t = triggerRef.current, p = panelRef.current
-    if (t && p) {
+    // Recalcula no scroll/resize em vez de fechar: a inércia do trackpad
+    // derrubava a escolha no meio. Fecha só se o gatilho sair da tela.
+    const calc = () => {
+      const t = triggerRef.current, p = panelRef.current
+      if (!t || !p) return
       const r = t.getBoundingClientRect()
+      if (r.bottom < 0 || r.top > window.innerHeight) { closeRef.current(); return }
       const ph = p.offsetHeight, pw = p.offsetWidth, gap = 6
       const openUp = r.bottom + gap + ph > window.innerHeight && r.top - gap - ph >= 0
       let left = align === 'right' ? r.right - pw : r.left
       left = Math.max(8, Math.min(left, window.innerWidth - pw - 8))
-      setPos({ top: openUp ? r.top - gap - ph : r.bottom + gap, left, minWidth: r.width })
+      setPos({ top: openUp ? r.top - gap - ph : r.bottom + gap, left, minWidth: r.width, openUp })
     }
-    const close = () => closeRef.current()
-    // scroll dentro do próprio painel (lista com overflow) NÃO fecha — só o scroll
-    // de um container de fundo, que descolaria o painel do gatilho.
+    calc()
+    let raf = 0
+    // scroll dentro do próprio painel (lista com overflow) não mexe na posição.
     const onScroll = (e: Event) => {
       if (panelRef.current?.contains(e.target as Node)) return
-      closeRef.current()
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(calc)
     }
     window.addEventListener('scroll', onScroll, true)  // capture: pega scroll de qualquer container
-    window.addEventListener('resize', close)
+    window.addEventListener('resize', onScroll)
     return () => {
+      cancelAnimationFrame(raf)
       window.removeEventListener('scroll', onScroll, true)
-      window.removeEventListener('resize', close)
+      window.removeEventListener('resize', onScroll)
       setPos(null)  // limpa ao fechar (no cleanup, sem cascata de render)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -161,7 +167,7 @@ export function Select({
         )}
       >
         <span className={cn('truncate', !selected && 'text-gray-400')}>{selected?.label ?? placeholder}</span>
-        <ChevronDown className={cn('w-4 h-4 text-gray-400 transition-transform duration-200 shrink-0', open && 'rotate-180')} />
+        <ChevronDown className={cn('w-4 h-4 text-gray-400 transition-transform duration-120 ease-(--ease-out) shrink-0', open && 'rotate-180')} />
       </button>
 
       {open && typeof document !== 'undefined' && createPortal(
@@ -169,7 +175,7 @@ export function Select({
           ref={listRef}
           role="listbox"
           style={{ position: 'fixed', top: pos?.top ?? -9999, left: pos?.left ?? -9999, minWidth: pos?.minWidth, visibility: pos ? 'visible' : 'hidden' }}
-          className="pop-in z-[100] max-h-72 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-xl py-1.5"
+          className={cn(pos?.openUp ? 'pop-up' : 'pop-in', 'z-[var(--z-popover)] max-h-72 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-xl py-1.5')}
         >
           {searchable && (
             <div className="sticky top-0 z-10 bg-white px-1.5 pt-0.5 pb-1.5 mb-1 border-b border-gray-100">
@@ -287,7 +293,7 @@ export function MultiSelect({
         )}
       >
         <span className="truncate">{label}</span>
-        <ChevronDown className={cn('w-4 h-4 text-gray-400 transition-transform duration-200 shrink-0', open && 'rotate-180')} />
+        <ChevronDown className={cn('w-4 h-4 text-gray-400 transition-transform duration-120 ease-(--ease-out) shrink-0', open && 'rotate-180')} />
       </button>
 
       {open && typeof document !== 'undefined' && createPortal(
@@ -295,7 +301,7 @@ export function MultiSelect({
           ref={panelRef}
           role="listbox"
           style={{ position: 'fixed', top: pos?.top ?? -9999, left: pos?.left ?? -9999, minWidth: pos?.minWidth, visibility: pos ? 'visible' : 'hidden' }}
-          className="pop-in z-[100] max-h-72 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-xl py-1.5"
+          className={cn(pos?.openUp ? 'pop-up' : 'pop-in', 'z-[var(--z-popover)] max-h-72 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-xl py-1.5')}
         >
           {searchable && (
             <div className="sticky top-0 z-10 bg-white px-1.5 pt-0.5 pb-1.5 mb-1 border-b border-gray-100">

@@ -60,8 +60,9 @@ export function AppShell({
     try { localStorage.setItem('sidebar-collapsed', v ? '1' : '0') } catch {}
   }
 
+  // h-dvh: no Safari do celular a barra do navegador comia o rodapé do drawer com h-screen.
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <div className="flex h-dvh overflow-hidden bg-gray-50">
       <Sidebar
         orgSlug={orgSlug}
         orgName={orgName}

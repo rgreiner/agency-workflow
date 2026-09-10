@@ -108,7 +108,7 @@ export function Combobox({
           ref={panelRef}
           role="listbox"
           style={{ position: 'fixed', top: pos?.top ?? -9999, left: pos?.left ?? -9999, minWidth: pos?.minWidth, visibility: pos ? 'visible' : 'hidden' }}
-          className="pop-in z-[100] max-h-72 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-xl py-1.5"
+          className="pop-in z-[var(--z-popover)] max-h-72 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-xl py-1.5"
         >
           {showHint && !canCreate ? (
             <p className="px-3 py-2 text-xs text-gray-400">Digite {minChars} letras para buscar…</p>

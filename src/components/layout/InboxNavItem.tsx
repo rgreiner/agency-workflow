@@ -7,6 +7,7 @@ import { Inbox } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getUnreadCount } from '@/app/actions/notifications'
 import { playNotifSound } from '@/lib/notif-sound'
+import { ICONE_TOPO, ICONE_TOPO_ATIVO, ICONE_TOPO_IDLE } from './icone-topo'
 
 /**
  * Item "Caixa de entrada" da sidebar. `compact` = só o ícone com o badge no
@@ -60,16 +61,16 @@ export function InboxNavItem({ orgSlug, compact = false }: { orgSlug: string; co
     return (
       <Link
         href={`${base}/inbox`}
-        title="Caixa de entrada"
         aria-label={unread > 0 ? `Caixa de entrada (${unread} não lidas)` : 'Caixa de entrada'}
-        className={cn(
-          'relative p-2 rounded-lg transition-colors',
-          active ? 'bg-gray-700 text-orange-400' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
-        )}
+        aria-current={active ? 'page' : undefined}
+        data-tip={unread > 0 ? `Caixa de entrada · ${unread}` : 'Caixa de entrada'}
+        className={cn(ICONE_TOPO, active ? ICONE_TOPO_ATIVO : ICONE_TOPO_IDLE)}
       >
         <Inbox className="w-4 h-4" />
         {unread > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[#fff] text-[9px] font-semibold tabular-nums flex items-center justify-center ring-2 ring-gray-900">
+          // A CHEGADA anima (badge-in, monta com o primeiro não-lido); a troca do
+          // número, não. 10px é o mínimo legível em ClearType.
+          <span className="badge-in absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[#fff] text-[10px] font-semibold tabular-nums flex items-center justify-center ring-2 ring-gray-900">
             {unread > 99 ? '99+' : unread}
           </span>
         )}
@@ -81,7 +82,7 @@ export function InboxNavItem({ orgSlug, compact = false }: { orgSlug: string; co
     <Link
       href={`${base}/inbox`}
       className={cn(
-        'flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition',
+        'flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition-colors',
         active ? 'bg-gray-800 text-gray-100' : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
       )}
     >

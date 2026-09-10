@@ -9,6 +9,14 @@
   /* Curvas custom (mais "punch" que as nativas) — Emil/Ionic */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* Escala de empilhamento. Popover SEMPRE acima de qualquer diálogo: um Select
+     dentro de um ConfirmDialog (z 110) ficava embaixo do backdrop e o mousedown
+     numa opção fechava o diálogo. */
+  --z-modal: 50;
+  --z-palette: 100;
+  --z-confirm: 110;
+  --z-popover: 120;
   /* Accent da marca. O layout da org sobrescreve com a cor escolhida em
      Aparência; fora dela (login, portal) vale este padrão. */
   /* Laranja da identidade do Flow (brand/README.md); a org pode trocar em Aparência. */
@@ -87,17 +95,20 @@
   color: #fff !important;
 }
 
-/* A sidebar permanece escura no tema escuro. Paleta QUENTE própria (charcoal),
-   pra casar com a base "B" do dark em vez do navy frio anterior. */
-.dark .sidebar-shell {
+/* A sidebar é SEMPRE escura, nos dois temas. Antes a paleta quente só valia no
+   .dark e, no tema claro, ela caía no gray-900 azulado do Tailwind (navy frio).
+   Charcoal quente próprio. Contraste medido sobre #1c1a17: gray-400 5,7:1
+   (texto dos itens), gray-500 4,7:1 (texto secundário e sub-itens), gray-600
+   3,1:1 (só ícone e decoração, nunca texto). */
+.sidebar-shell {
   --color-white:    #ffffff;
   --color-gray-50:  #faf8f4;
   --color-gray-100: #f2efe9;
   --color-gray-200: #e3ded5;
   --color-gray-300: #cbc6bd;
   --color-gray-400: #9a9388;
-  --color-gray-500: #6b655b;
-  --color-gray-600: #4a443c;
+  --color-gray-500: #8b8477;
+  --color-gray-600: #6e675c;
   --color-gray-700: #332e28;
   --color-gray-800: #272320;
   --color-gray-900: #1c1a17;
@@ -108,8 +119,21 @@
   /* Feedback de toque: qualquer botão "afunda" levemente ao pressionar.
      Não definimos transition global (evita sobrescrever as do Tailwind);
      botões que já têm `transition` animam suave, os demais dão o snap. */
-  button:not(:disabled):active {
+  button:not(:disabled):not(.no-press):not(.press):active {
     transform: scale(0.97);
+  }
+  /* .no-press: linhas de largura total (item de menu, cabeçalho de grupo) —
+     224px × 3% = 7px de tremida, não é feedback. */
+
+  /* .press: botões-ícone e CTAs, inclusive <a>. Pressionar entra a 0ms e
+     solta em 100ms — a resposta é imediata, o retorno é suave. */
+  .press { transition: transform 100ms var(--ease-out), color 150ms, background-color 150ms; }
+  .press:active { transform: scale(0.96); transition-duration: 0ms, 150ms, 150ms; }
+
+  /* Badge de não-lidas: a CHEGADA anima (é evento); a troca do número, não. */
+  .badge-in { animation: badgeIn 0.2s var(--ease-out); }
+  @keyframes badgeIn {
+    from { opacity: 0; transform: scale(0.5); }
   }
 
   /* Entrada de dropdowns/popovers: escala a partir do topo (do gatilho). */
@@ -131,13 +155,13 @@
   }
 
   /* Stagger de entrada (grupos da Lista) — sobe em cascata, uma vez no mount. */
-  .stagger-in > * { opacity: 0; animation: staggerUp 0.32s var(--ease-out) forwards; }
-  .stagger-in > *:nth-child(1) { animation-delay: 20ms; }
-  .stagger-in > *:nth-child(2) { animation-delay: 60ms; }
-  .stagger-in > *:nth-child(3) { animation-delay: 100ms; }
-  .stagger-in > *:nth-child(4) { animation-delay: 140ms; }
-  .stagger-in > *:nth-child(5) { animation-delay: 180ms; }
-  .stagger-in > *:nth-child(n+6) { animation-delay: 210ms; }   /* cap — não atrasa demais listas longas */
+  /* 200ms + cascata curta (cap em 90ms): o todo fecha em 290ms, dentro do
+     orçamento de 300ms de uma tela aberta dezenas de vezes por dia. */
+  .stagger-in > * { opacity: 0; animation: staggerUp 0.2s var(--ease-out) forwards; }
+  .stagger-in > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger-in > *:nth-child(2) { animation-delay: 30ms; }
+  .stagger-in > *:nth-child(3) { animation-delay: 60ms; }
+  .stagger-in > *:nth-child(n+4) { animation-delay: 90ms; }
   @keyframes staggerUp {
     from { opacity: 0; transform: translateY(8px); }
     to   { opacity: 1; transform: none; }
@@ -210,7 +234,7 @@ button:focus-visible,
 [role='button']:focus-visible {
   outline: 2px solid var(--accent, #ff6a00);
   outline-offset: 2px;
-  border-radius: 6px;
+  /* Sem border-radius fixo: o outline acompanha o raio do próprio elemento. */
 }
 
 /* ── Animações compartilhadas ───────────────────────────────────────────── */
@@ -252,6 +276,54 @@ button:focus-visible,
   border-radius: 3px;
 }
 .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+/* Na sidebar (sempre escura) o polegar é escuro também. */
+.sidebar-shell .scrollbar-thin { scrollbar-color: var(--color-gray-700) transparent; }
+.sidebar-shell .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--color-gray-700); }
+
+/* ── Tooltip próprio (.tip + data-tip) ──────────────────────────────────────
+   Para ícones sem rótulo (cabeçalho e rodapé da sidebar). O `title` nativo
+   demora ~1s no Windows e não existe no toque nem no teclado. Só com mouse
+   fino: no toque, rótulo flutuante não ajuda. O 1º espera 300ms; com
+   .tips-quentes no ancestral (mouse já está na sidebar), os seguintes abrem na
+   hora. Some a 0ms. ::before de propósito — o ::after é o sublinhado de ativo. */
+@media (hover: hover) and (pointer: fine) {
+  .tip { position: relative; }
+  .tip::before {
+    content: attr(data-tip);
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 6px);
+    transform: translate(-50%, 2px);
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: #f7f3ec;   /* invertido em relação à sidebar: lê nos dois temas */
+    color: #1c1a17;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: 0;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    z-index: 60;
+    transition: opacity 100ms var(--ease-out), transform 100ms var(--ease-out);
+    transition-delay: 0ms;
+  }
+  .tip[data-tip-side='left']::before  { left: 0; transform: translate(0, 2px); }
+  .tip[data-tip-side='right']::before { left: auto; right: 0; transform: translate(0, 2px); }
+  .tip[data-tip-pos='top']::before    { top: auto; bottom: calc(100% + 6px); transform: translate(-50%, -2px); }
+  .tip[data-tip-pos='top'][data-tip-side='right']::before { transform: translate(0, -2px); }
+
+  .tip:hover::before,
+  .tip:focus-visible::before {
+    opacity: 1;
+    transform: translate(-50%, 0);
+    transition-delay: 300ms;
+  }
+  .tip[data-tip-side='left']:hover::before,   .tip[data-tip-side='left']:focus-visible::before,
+  .tip[data-tip-side='right']:hover::before,  .tip[data-tip-side='right']:focus-visible::before { transform: translate(0, 0); }
+  .tips-quentes .tip:hover::before { transition-delay: 0ms; }
+}
 
 /* ── TipTap document editor ─────────────────────────────────────────────── */
 /* Cores via var(--color-gray-*) (remapeiam no .dark) — legível em ambos os temas. */

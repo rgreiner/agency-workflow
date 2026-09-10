@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useSyncExternalStore } from 'react'
+import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -9,7 +9,6 @@ import {
   ChevronsDown,
   ChevronsUp,
   Settings,
-  LogOut,
   Plus,
   AlignLeft,
   Menu,
@@ -36,8 +35,8 @@ import {
   Building2,
   type LucideIcon,
 } from 'lucide-react'
-import { logout } from '@/app/actions/auth'
-import { ThemeToggle } from './ThemeToggle'
+import { UserMenu } from './UserMenu'
+import { ICONE_TOPO, ICONE_TOPO_ATIVO, ICONE_TOPO_IDLE } from './icone-topo'
 import { InboxNavItem } from './InboxNavItem'
 import { MessagesNavItem } from './MessagesNavItem'
 import { CommandPalette } from './CommandPalette'
@@ -177,24 +176,31 @@ function NavGroup({ base, pathname, group, open, onToggle }: {
 }) {
   const Icon = group.icon
   const anyActive = group.items.some(it => pathname.startsWith(`${base}/${it.href}`))
+  const cabecalho = cn(
+    // no-press: linha de largura total não afunda ao clicar, só muda de cor.
+    'no-press flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition-colors w-[calc(100%-1rem)]',
+    anyActive ? 'text-gray-100' : 'text-gray-400',
+  )
+  const conteudo = (
+    <>
+      <Icon className="w-4 h-4 shrink-0" />
+      <span className="flex-1 text-left truncate">{group.label}</span>
+      {onToggle && (
+        <ChevronRight className={cn('w-3.5 h-3.5 text-gray-600 shrink-0 transition-transform duration-120 ease-(--ease-out)', open && 'rotate-90')} />
+      )}
+    </>
+  )
   return (
     <div>
-      <button
-        type="button"
-        onClick={onToggle}
-        disabled={!onToggle}
-        className={cn(
-          'flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition w-[calc(100%-1rem)]',
-          anyActive ? 'text-gray-100' : 'text-gray-400',
-          onToggle && 'hover:text-gray-100 hover:bg-gray-800/60'
-        )}
-      >
-        <Icon className="w-4 h-4 shrink-0" />
-        <span className="flex-1 text-left truncate">{group.label}</span>
-        {onToggle && (
-          <ChevronRight className={cn('w-3.5 h-3.5 text-gray-600 shrink-0 transition-transform duration-150', open && 'rotate-90')} />
-        )}
-      </button>
+      {onToggle ? (
+        <button type="button" onClick={onToggle} aria-expanded={open} className={cn(cabecalho, 'hover:text-gray-100 hover:bg-gray-800/60')}>
+          {conteudo}
+        </button>
+      ) : (
+        // Grupo fixo (modo de um grupo só) é um título, não um botão desativado:
+        // leitor de tela anunciava "esmaecido".
+        <div role="heading" aria-level={2} className={cabecalho}>{conteudo}</div>
+      )}
       {open && (
         <div className="ml-7 mr-2 mt-px space-y-px">
           {group.items.map(it => {
@@ -203,7 +209,7 @@ function NavGroup({ base, pathname, group, open, onToggle }: {
             return (
               <div key={it.href}>
                 {it.heading && (
-                  <div className="px-2.5 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600 select-none">
+                  <div className="px-2.5 pt-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 select-none">
                     {it.heading}
                   </div>
                 )}
@@ -239,10 +245,9 @@ const ATALHOS: { id: string; label: string; icon: LucideIcon; href: string }[] =
   { id: 'boards',    label: 'Quadros',    icon: PenTool,    href: 'boards' },
 ]
 
-// Ícone de topo (linha de atalhos): mesmo desenho do botão "Gestão" ao lado.
-const ICONE_TOPO = 'p-2 rounded-lg transition-colors'
-const ICONE_TOPO_ATIVO = 'bg-gray-700 text-orange-400'
-const ICONE_TOPO_IDLE = 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
+// Gestão (só o proprietário) entra na mesma linha dos atalhos: é uma view, como
+// o Gantt. Antes era um ícone solto na linha do logo, que não cabia.
+const GESTAO = { id: 'gestao', label: 'Gestão', icon: Gauge, href: 'views/gestao' }
 
 // Client-only: SSR não sabe o SO. Snapshot do servidor = false ("Ctrl K"), e o
 // hydrate re-renderiza com o valor certo — a versão antiga lia `navigator` na
@@ -310,6 +315,21 @@ export function Sidebar({
   const [mobileOpen, setMobileOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
 
+  // Tooltips dos ícones (.tip): o primeiro espera 300ms; depois de 300ms com o
+  // mouse dentro da sidebar, os seguintes abrem na hora (a régua do Emil) — e
+  // 500ms depois de sair, volta a esperar.
+  const [tipsQuentes, setTipsQuentes] = useState(false)
+  const tipsTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  function aquecerTips() {
+    if (tipsTimer.current) clearTimeout(tipsTimer.current)
+    tipsTimer.current = setTimeout(() => setTipsQuentes(true), 300)
+  }
+  function esfriarTips() {
+    if (tipsTimer.current) clearTimeout(tipsTimer.current)
+    tipsTimer.current = setTimeout(() => setTipsQuentes(false), 500)
+  }
+  const corpoRef = useRef<HTMLDivElement>(null)
+
   // Grupos do Operacional: cada seção aparece conforme cargo × toggles (ver
   // computeAccess). Mídias/Produção dependem do cargo; Financeiro do can_finance;
   // Cadastros de can_vendas OU can_finance.
@@ -360,6 +380,7 @@ export function Sidebar({
   }
   // Só mostra a aba de quem pode entrar nela: quem não tem RH nunca vê a aba RH.
   const abas = MODE_TABS.filter(a => modoPermitido[a.m])
+  const linha2 = canManage ? [...ATALHOS, GESTAO] : ATALHOS
 
   const [mode, setMode] = useState<SidebarMode>(() => {
     const m = modeForPath(pathname, base)
@@ -377,6 +398,10 @@ export function Sidebar({
   // initialization". O TypeScript não acusa porque o uso está dentro de um
   // callback — só aparece em runtime, e em produção já minificado.
   const gruposDoModo = comercialGroups.filter(g => GRUPO_MODO[g.id] === mode)
+
+  // Trocar de modo troca a lista inteira (sem animação: é frequente). O que não
+  // pode é herdar a rolagem do modo anterior e cair com a lista fora da tela.
+  useEffect(() => { corpoRef.current?.scrollTo({ top: 0 }) }, [mode])
 
   const isMac = useSyncExternalStore(noopSubscribe, isMacSnapshot, () => false)
   const shortcutLabel = isMac ? '⌘K' : 'Ctrl K'
@@ -454,151 +479,123 @@ export function Sidebar({
     })
   }
 
-  async function signOut() {
-    await logout()
-  }
-
-  const displayName = userName || userEmail
-
   const sidebarContent = (
-    <aside className="sidebar-shell w-60 bg-gray-900 flex flex-col h-full select-none pt-[env(safe-area-inset-top,0px)] md:pt-0">
+    <aside
+      className={cn(
+        'sidebar-shell w-60 bg-gray-900 flex flex-col h-full select-none pt-[env(safe-area-inset-top,0px)] md:pt-0',
+        tipsQuentes && 'tips-quentes'
+      )}
+      onMouseEnter={aquecerTips}
+      onMouseLeave={esfriarTips}
+    >
 
-      {/* ── Org header: logo + switcher de modo, e embaixo a busca + atalhos globais ── */}
+      {/* ── Cabeçalho: logo + modos; embaixo, busca + atalhos globais ──────────
+          Duas linhas de ícones sem rótulo: o nome mora no tooltip próprio (.tip)
+          e no aria-label. Dois "acesos" com significados diferentes: o chip
+          preenchido é o MODO ligado; o sublinhado no accent é a PÁGINA atual.
+          Recolher/fechar saiu daqui pro rodapé: com 5 modos + Gestão + recolher
+          a linha 1 somava 256px em 216px úteis e o botão vazava pra fora. */}
       <div className="px-3 pt-4 pb-2 border-b border-gray-800">
-      <div className="flex items-center gap-2">
-        <Link
-          href={`${base}/dashboard`}
-          title={orgName}
-          aria-label={orgName}
-          className="shrink-0 rounded-lg p-1 hover:bg-gray-800 transition"
-        >
-          {logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt={orgName} className="w-7 h-7 rounded-md object-contain bg-white" />
-          ) : (
-            <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ backgroundColor: accentColor }}>
-              <span className="text-white text-[11px] font-bold">{orgName.charAt(0).toUpperCase()}</span>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`${base}/dashboard`}
+            aria-label={orgName}
+            data-tip={orgName}
+            data-tip-side="left"
+            className="tip press relative shrink-0 rounded-lg p-1 hover:bg-gray-800"
+          >
+            {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoUrl} alt={orgName} className="w-7 h-7 rounded-md object-contain bg-white" />
+            ) : (
+              <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ backgroundColor: accentColor }}>
+                <span className="text-white text-[11px] font-bold">{orgName.charAt(0).toUpperCase()}</span>
+              </div>
+            )}
+          </Link>
+
+          {/* Modo — só com permissão a mais de um. Chips de 28px: com 5 modos a
+              pílula tem 152px e cabe ao lado do logo. */}
+          {canOperacional && abas.length > 1 && (
+            <div className="flex items-center gap-0.5 bg-gray-800/60 rounded-lg p-0.5">
+              {abas.map(({ m, Icon, label }) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMode(m)}
+                  aria-pressed={mode === m}
+                  aria-label={label}
+                  data-tip={label}
+                  className={cn(
+                    'tip press relative p-1.5 rounded-md',
+                    mode === m ? 'bg-gray-700 text-orange-400' : 'text-gray-500 hover:text-gray-200'
+                  )}
+                >
+                  <Icon className="w-4 h-4" />
+                </button>
+              ))}
             </div>
           )}
-        </Link>
+        </div>
 
-        {/* Modo: Trabalho × Operacional (ícones) — só com permissão ao Operacional */}
-        {canOperacional && abas.length > 1 && (
-          <div className="flex items-center gap-0.5 bg-gray-800/60 rounded-lg p-0.5">
-            {abas.map(({ m, Icon, label }) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMode(m)}
-                aria-pressed={mode === m}
-                aria-label={label}
-                title={label}
-                className={cn(
-                  'rounded-md transition-colors',
-                  abas.length > 3 ? 'p-1' : 'p-1.5',
-                  mode === m ? 'bg-gray-700 text-orange-400' : 'text-gray-500 hover:text-gray-200'
-                )}
+        {/* Busca (⌘K) + atalhos globais (+ Gestão): iguais em todos os modos.
+            -mx-0.5 alinha o desenho dos ícones aos itens do menu (16px da borda). */}
+        <div className="mt-2 -mx-0.5 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setPaletteOpen(true)}
+            aria-label="Buscar"
+            aria-keyshortcuts="Control+K Meta+K"
+            data-tip={`Buscar (${shortcutLabel})`}
+            data-tip-side="left"
+            className={cn(ICONE_TOPO, ICONE_TOPO_IDLE)}
+          >
+            <Search className="w-4 h-4" />
+          </button>
+          <InboxNavItem orgSlug={orgSlug} compact />
+          {linha2.map(({ id, label, icon: Icon, href }, i) => {
+            // "Trabalhar" mostra o cargo da pessoa, como o item antigo fazia.
+            const titulo = id === 'trabalhar' && positionName ? `${label} · ${positionName}` : label
+            const ativo = pathname.startsWith(`${base}/${href}`)
+            return (
+              <Link
+                key={id}
+                href={`${base}/${href}`}
+                aria-label={titulo}
+                aria-current={ativo ? 'page' : undefined}
+                data-tip={titulo}
+                // Os dois últimos alinham o tooltip à direita pra não vazar da sidebar.
+                data-tip-side={i >= linha2.length - 2 ? 'right' : undefined}
+                className={cn(ICONE_TOPO, ativo ? ICONE_TOPO_ATIVO : ICONE_TOPO_IDLE)}
               >
                 <Icon className="w-4 h-4" />
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Gestão — visão do todo (só o proprietário); ícone de topo, fora dos modos */}
-        {canManage && (
-          <Link
-            href={`${base}/views/gestao`}
-            title="Gestão"
-            aria-label="Gestão"
-            className={cn(
-              'shrink-0 p-1.5 rounded-lg transition-colors',
-              pathname.startsWith(`${base}/views/gestao`)
-                ? 'bg-gray-700 text-orange-400'
-                : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
-            )}
-          >
-            <Gauge className="w-4 h-4" />
-          </Link>
-        )}
-
-        <div className="flex-1" />
-
-        {/* Ocultar — desktop only */}
-        <button
-          onClick={onCollapse}
-          className="hidden md:block p-1.5 text-gray-600 hover:text-gray-300 transition shrink-0"
-          title="Ocultar menu"
-        >
-          <PanelLeftClose className="w-4 h-4" />
-        </button>
-        {/* Close — mobile only */}
-        <button
-          onClick={() => setMobileOpen(false)}
-          aria-label="Fechar menu"
-          className="md:hidden p-1.5 text-gray-600 hover:text-gray-300 transition shrink-0"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Busca (⌘K) + atalhos globais — uma linha de ícones, igual em todos os
-          modos. Cada um só tem o ícone; o nome fica no tooltip. -mx-1 alinha o
-          desenho dos ícones com os itens do menu abaixo (16px da borda). */}
-      <div className="mt-2 -mx-1 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => setPaletteOpen(true)}
-          title={`Buscar (${shortcutLabel})`}
-          aria-label="Buscar"
-          aria-keyshortcuts="Control+K Meta+K"
-          className={cn(ICONE_TOPO, ICONE_TOPO_IDLE)}
-        >
-          <Search className="w-4 h-4" />
-        </button>
-        <InboxNavItem orgSlug={orgSlug} compact />
-        {ATALHOS.map(({ id, label, icon: Icon, href }) => {
-          // "Trabalhar" mostra o cargo da pessoa, como o item antigo fazia.
-          const titulo = id === 'trabalhar' && positionName ? `${label} · ${positionName}` : label
-          return (
-            <Link
-              key={id}
-              href={`${base}/${href}`}
-              title={titulo}
-              aria-label={titulo}
-              className={cn(ICONE_TOPO, pathname.startsWith(`${base}/${href}`) ? ICONE_TOPO_ATIVO : ICONE_TOPO_IDLE)}
-            >
-              <Icon className="w-4 h-4" />
-            </Link>
-          )
-        })}
-      </div>
+              </Link>
+            )
+          })}
+        </div>
       </div>
 
       {/* ── Scrollable body ──────────────────────────── */}
-      <div className="flex-1 overflow-y-auto py-3 space-y-1">
+      <div ref={corpoRef} className="flex-1 overflow-y-auto scrollbar-thin [scrollbar-gutter:stable] py-3 space-y-1">
 
         {/* Mensagens — abre o chat (dock no canto inferior direito) */}
         <MessagesNavItem />
 
         {/* ── Modo Trabalho: Lista global (só quem coordena) + Espaços ── */}
-        {mode === 'trabalho' && (
+        {mode === 'trabalho' && canListaGlobal && (
           <>
-            {canListaGlobal && (
-              <Link
-                href={`${base}/views/lista`}
-                className={cn(
-                  'flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition',
-                  pathname.startsWith(`${base}/views/lista`)
-                    ? 'bg-gray-800 text-gray-100'
-                    : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
-                )}
-              >
-                <List className="w-4 h-4 shrink-0" />
-                <span className="flex-1">Lista</span>
-              </Link>
-            )}
-
+            <Link
+              href={`${base}/views/lista`}
+              className={cn(
+                'flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition-colors',
+                pathname.startsWith(`${base}/views/lista`)
+                  ? 'bg-gray-800 text-gray-100'
+                  : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
+              )}
+            >
+              <List className="w-4 h-4 shrink-0" />
+              <span className="flex-1">Lista</span>
+            </Link>
             <div className="mx-3 my-2 border-t border-gray-800" />
           </>
         )}
@@ -625,7 +622,7 @@ export function Sidebar({
         {mode === 'trabalho' && (
         <div>
           <div className="flex items-center justify-between px-4 mb-1.5">
-            <button onClick={toggleEspacos} aria-expanded={espacosOpen} className="flex items-center gap-1 group/esp">
+            <button onClick={toggleEspacos} aria-expanded={espacosOpen} className="no-press flex items-center gap-1 group/esp">
               <ChevronRight className={cn('w-3 h-3 text-gray-600 transition-transform duration-150', espacosOpen && 'rotate-90')} />
               <span className="text-[11px] font-semibold text-gray-500 group-hover/esp:text-gray-400 uppercase tracking-[0.08em] transition-colors">
                 Espaços
@@ -636,15 +633,15 @@ export function Sidebar({
             </button>
             <div className="flex items-center gap-1">
               {espacosOpen && (allExpanded ? (
-                <button onClick={collapseAll} className="text-gray-600 hover:text-gray-300 transition" title="Fechar todos">
+                <button onClick={collapseAll} className="text-gray-600 hover:text-gray-300 transition-colors" title="Fechar todos">
                   <ChevronsUp className="w-3.5 h-3.5" />
                 </button>
               ) : (
-                <button onClick={expandAll} className="text-gray-600 hover:text-gray-300 transition" title="Expandir todos">
+                <button onClick={expandAll} className="text-gray-600 hover:text-gray-300 transition-colors" title="Expandir todos">
                   <ChevronsDown className="w-3.5 h-3.5" />
                 </button>
               ))}
-              <Link href={`${base}/workspaces/new`} className="text-gray-600 hover:text-gray-300 transition" title="Novo cliente">
+              <Link href={`${base}/workspaces/new`} className="text-gray-600 hover:text-gray-300 transition-colors" title="Novo cliente">
                 <Plus className="w-3.5 h-3.5" />
               </Link>
             </div>
@@ -682,7 +679,7 @@ export function Sidebar({
                     </Link>
                     <Link
                       href={`${base}/workspaces/${ws.id}/campaigns/new`}
-                      className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-600 hover:text-gray-300 transition"
+                      className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 p-1 rounded text-gray-600 hover:text-gray-300 transition-opacity duration-120"
                       title="Nova campanha"
                     >
                       <Plus className="w-3 h-3" />
@@ -713,7 +710,7 @@ export function Sidebar({
                       {ws.campaigns.length === 0 && (
                         <Link
                           href={`${base}/workspaces/${ws.id}/campaigns/new`}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-gray-600 hover:text-gray-400 transition rounded-lg"
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-gray-500 hover:text-gray-300 transition-colors rounded-lg"
                         >
                           <Plus className="w-3 h-3" />
                           Nova campanha
@@ -728,7 +725,7 @@ export function Sidebar({
             {workspaces.length === 0 && (
               <Link
                 href={`${base}/workspaces/new`}
-                className="flex items-center gap-1.5 mx-4 px-2 py-1.5 text-sm text-gray-600 hover:text-gray-400 transition rounded-lg"
+                className="flex items-center gap-1.5 mx-4 px-2 py-1.5 text-sm text-gray-500 hover:text-gray-300 transition-colors rounded-lg"
               >
                 <Plus className="w-3 h-3" />
                 Novo cliente
@@ -748,7 +745,7 @@ export function Sidebar({
           <Link
             href={`${base}/onboarding`}
             className={cn(
-              'flex items-center gap-2.5 px-5 py-2.5 text-sm transition-colors',
+              'flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors',
               pathname.startsWith(`${base}/onboarding`) ? 'text-white' : 'text-gray-500 hover:text-gray-200'
             )}
           >
@@ -763,7 +760,7 @@ export function Sidebar({
         <Link
           href={`${base}/ponto`}
           className={cn(
-            'flex items-center gap-2.5 px-5 py-2.5 text-sm transition-colors',
+            'flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors',
             pathname.startsWith(`${base}/ponto`) ? 'text-white' : 'text-gray-500 hover:text-gray-200'
           )}
         >
@@ -774,7 +771,7 @@ export function Sidebar({
         <Link
           href={`${base}/avaliacao`}
           className={cn(
-            'flex items-center gap-2.5 px-5 py-2.5 text-sm transition-colors',
+            'flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors',
             pathname.startsWith(`${base}/avaliacao`) ? 'text-white' : 'text-gray-500 hover:text-gray-200'
           )}
         >
@@ -786,7 +783,7 @@ export function Sidebar({
           <Link
             href={`${base}/settings/membros`}
             className={cn(
-              'flex items-center gap-2.5 px-5 py-2.5 text-sm transition-colors',
+              'flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors',
               pathname.startsWith(`${base}/settings`) ? 'text-white' : 'text-gray-500 hover:text-gray-200'
             )}
           >
@@ -795,24 +792,29 @@ export function Sidebar({
           </Link>
         )}
 
-        <div className="flex items-center gap-2.5 px-4 py-3 border-t border-gray-800">
-          <Link
-            href={`${base}/perfil`}
-            className="flex items-center gap-2.5 flex-1 min-w-0 group"
+        {/* Usuário: avatar + nome abrem o menu (perfil, tema, sair). Ao lado, o
+            único botão de esconder o menu: recolher no desktop, fechar no
+            celular (embaixo, onde o polegar alcança). */}
+        <div className="flex items-center gap-1 px-3 py-2.5 border-t border-gray-800">
+          <UserMenu base={base} nome={userName} email={userEmail} avatarUrl={userAvatar} />
+          <button
+            type="button"
+            onClick={onCollapse}
+            aria-label="Ocultar menu"
+            data-tip="Ocultar menu"
+            data-tip-pos="top"
+            data-tip-side="right"
+            className={cn('hidden md:flex shrink-0', ICONE_TOPO, ICONE_TOPO_IDLE)}
           >
-            {userAvatar ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={userAvatar} alt="" className="w-6 h-6 rounded-full shrink-0 object-cover" />
-            ) : (
-              <div className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center shrink-0">
-                <span className="text-gray-300 text-[10px]">{displayName.charAt(0).toUpperCase()}</span>
-              </div>
-            )}
-            <span className="text-gray-400 text-sm truncate group-hover:text-gray-200 transition-colors">{displayName}</span>
-          </Link>
-          <ThemeToggle />
-          <button onClick={signOut} className="text-gray-600 hover:text-gray-300 transition-colors shrink-0" title="Sair">
-            <LogOut className="w-3.5 h-3.5" />
+            <PanelLeftClose className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Fechar menu"
+            className={cn('md:hidden shrink-0', ICONE_TOPO, ICONE_TOPO_IDLE)}
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -827,7 +829,7 @@ export function Sidebar({
         className={cn(
           'fixed top-[max(0.75rem,env(safe-area-inset-top,0px))] left-3 z-50 md:hidden',
           'bg-gray-900 text-gray-300 rounded-lg p-2 shadow-lg',
-          'transition-opacity duration-200',
+          'transition-opacity duration-200 ease-(--ease-out)',
           mobileOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'
         )}
         aria-label="Abrir menu"
@@ -839,7 +841,7 @@ export function Sidebar({
       {collapsed && onExpand && (
         <button
           onClick={onExpand}
-          className="hidden md:flex fixed top-3 left-3 z-50 bg-gray-900 text-gray-300 rounded-lg p-2 shadow-lg hover:text-white transition"
+          className="hidden md:flex fixed top-3 left-3 z-50 bg-gray-900 text-gray-300 rounded-lg p-2 shadow-lg hover:text-white transition-[opacity,color] duration-150 ease-(--ease-out) starting:opacity-0"
           title="Mostrar menu"
           aria-label="Mostrar menu"
         >
@@ -847,20 +849,27 @@ export function Sidebar({
         </button>
       )}
 
-      {/* Backdrop — mobile only */}
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
+      {/* Backdrop — mobile only. Sempre montado: some em fade junto com o painel,
+          em vez de sumir a 0ms enquanto o painel ainda desliza (parecia lag). */}
+      <div
+        aria-hidden
+        className={cn(
+          'fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-200 ease-(--ease-out)',
+          mobileOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        )}
+        onClick={() => setMobileOpen(false)}
+      />
 
       {/* Sidebar wrapper — drawer on mobile, static on desktop */}
       <div className={cn(
         'fixed inset-y-0 left-0 z-50 md:static md:z-auto',
         'shrink-0 h-full flex',
-        'transition-transform duration-300 ease-in-out md:transition-none',
-        mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+        // Abre em 240ms (ease-out forte) e fecha mais rápido, em 180ms (ease-in):
+        // a saída nunca é mais longa que a entrada.
+        'transition-transform md:transition-none',
+        mobileOpen
+          ? 'translate-x-0 duration-240 ease-(--ease-out)'
+          : '-translate-x-full md:translate-x-0 duration-180 ease-in',
         collapsed && 'md:w-0 md:overflow-hidden'
       )}>
         {sidebarContent}

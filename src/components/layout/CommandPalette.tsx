@@ -203,7 +203,7 @@ function PalettePanel({ orgSlug, workspaces, onClose, canManage }: Omit<Props, '
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center pt-[14vh] px-4"
+      className="fixed inset-0 z-[var(--z-palette)] flex items-start justify-center pt-[14vh] px-4"
       role="dialog"
       aria-modal="true"
       aria-label="Busca rápida"

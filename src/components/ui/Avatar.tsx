@@ -1,3 +1,6 @@
+'use client'
+
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 
 interface AvatarProps {
@@ -7,10 +10,12 @@ interface AvatarProps {
   className?: string
 }
 
+// Cores das iniciais: sem roxo/índigo/violeta (regra da casa — o accent é
+// laranja e nada disputa com ele). Hash do nome escolhe uma cor estável.
 const COLORS = [
-  'bg-orange-500', 'bg-purple-500', 'bg-pink-500', 'bg-rose-500',
   'bg-orange-500', 'bg-amber-500', 'bg-emerald-500', 'bg-teal-500',
-  'bg-cyan-500', 'bg-blue-500', 'bg-violet-500', 'bg-fuchsia-500',
+  'bg-cyan-500', 'bg-sky-500', 'bg-rose-500', 'bg-pink-500',
+  'bg-lime-600', 'bg-red-500',
 ]
 
 function colorFromName(name: string) {
@@ -20,21 +25,25 @@ function colorFromName(name: string) {
 }
 
 export function Avatar({ name, avatarUrl, size = 'sm', className }: AvatarProps) {
+  // Foto que não carrega (link antigo, volume fora) cai nas iniciais em vez do
+  // ícone de imagem quebrada do navegador.
+  const [quebrada, setQuebrada] = useState(false)
   const initials = name ? name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() : '?'
   const color = name ? colorFromName(name) : 'bg-gray-400'
   const sizeClass = size === 'sm' ? 'w-6 h-6 text-xs' : 'w-8 h-8 text-sm'
 
-  if (avatarUrl) {
+  if (avatarUrl && !quebrada) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={avatarUrl} alt={name ?? ''} title={name ?? ''}
+      <img src={avatarUrl} alt={name ?? ''} title={name ?? ''} decoding="async"
+        onError={() => setQuebrada(true)}
         className={cn('rounded-full ring-2 ring-white object-cover', sizeClass, className)} />
     )
   }
 
   return (
     <div title={name ?? ''}
-      className={cn('rounded-full ring-2 ring-white flex items-center justify-center text-white font-semibold shrink-0', color, sizeClass, className)}>
+      className={cn('rounded-full ring-2 ring-white flex items-center justify-center text-[#fff] font-semibold shrink-0', color, sizeClass, className)}>
       {initials}
     </div>
   )
