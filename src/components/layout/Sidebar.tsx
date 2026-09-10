@@ -39,7 +39,7 @@ import { UserMenu } from './UserMenu'
 import { ICONE_TOPO, ICONE_TOPO_ATIVO, ICONE_TOPO_IDLE } from './icone-topo'
 import { InboxNavItem } from './InboxNavItem'
 import { MessagesNavItem } from './MessagesNavItem'
-import { CommandPalette } from './CommandPalette'
+import { CommandPalette, type PaletteTela } from './CommandPalette'
 
 interface Campaign {
   id: string
@@ -347,6 +347,27 @@ export function Sidebar({
       return out
     }) }
   })
+  // Telas dos módulos para o ⌘K, já filtradas por permissão: "Lançamentos" ou
+  // "Espelho" viram duas teclas em vez de pílula → grupo → item. O bloco do RH
+  // (Pessoas/Ponto/Folha) vira palavra-chave: "ponto" acha o Espelho.
+  const GRUPO_PALETTE: Record<string, string> = { midia_hub: 'Mídia' }
+  const telasPalette: PaletteTela[] = []
+  {
+    const vistos = new Set<string>()
+    for (const g of comercialGroups) {
+      let bloco: string | undefined
+      for (const it of g.items) {
+        if (it.heading) bloco = it.heading
+        if (vistos.has(it.href)) continue   // "Relatório de autorização" está em 2 grupos
+        vistos.add(it.href)
+        const grupo = GRUPO_PALETTE[g.id] ?? g.label
+        telasPalette.push({
+          label: it.label, href: it.href, grupo, icon: g.icon,
+          keywords: [g.label, grupo, bloco].filter(Boolean).join(' '),
+        })
+      }
+    }
+  }
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   useEffect(() => {
     try {
@@ -882,6 +903,9 @@ export function Sidebar({
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         canManage={canManage}
+        canListaGlobal={canListaGlobal}
+        positionName={positionName}
+        telas={telasPalette}
       />
     </>
   )

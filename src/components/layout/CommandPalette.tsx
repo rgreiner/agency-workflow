@@ -4,10 +4,10 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import {
-  Search, List, GanttChart, Users, BookOpen, PenTool,
+  Search, List, GanttChart, BookOpen, PenTool, Briefcase, Gauge, Home,
   Folder, AlignLeft, Plus, Settings, User, Palette,
   CornerDownLeft, CheckSquare, Loader2, Archive,
-  Inbox, Wallet, Megaphone, ClipboardList,
+  Inbox, Megaphone, ClipboardList,
 } from 'lucide-react'
 import { searchActivities, searchExtras, type ExtraSearchResult } from '@/app/actions/search'
 
@@ -17,13 +17,32 @@ interface Workspace {
   campaigns: { id: string; name: string }[]
 }
 
+/**
+ * Tela de um módulo (RH, Financeiro, Mídia…) que a Sidebar já filtrou por
+ * permissão. `keywords` não aparece: só serve pra busca ("ponto" acha
+ * Espelho; "financeiro" acha Lançamentos).
+ */
+export interface PaletteTela {
+  label: string
+  href: string
+  grupo: string
+  keywords?: string
+  icon: React.ComponentType<{ className?: string }>
+}
+
 interface Props {
   orgSlug: string
   workspaces: Workspace[]
   open: boolean
   onClose: () => void
-  /** Proprietário: só ele vê os atalhos de Configurações (membros/cargos/aparência). */
+  /** Proprietário: só ele vê os atalhos de Configurações (membros/cargos/aparência) e a Gestão. */
   canManage?: boolean
+  /** Vê a Lista global (a página redireciona quem não pode). */
+  canListaGlobal?: boolean
+  /** Cargo da pessoa — dica ao lado de "Trabalhar", igual ao tooltip da sidebar. */
+  positionName?: string | null
+  /** Telas dos módulos (só aparecem quando há busca digitada). */
+  telas?: PaletteTela[]
 }
 
 interface Item {
@@ -34,6 +53,8 @@ interface Item {
   href: string
   icon: React.ComponentType<{ className?: string }>
   archived?: boolean
+  /** Termos extras de busca, não exibidos (grupo/bloco da tela). */
+  keywords?: string
 }
 
 // Normaliza para busca sem acentos: "redação" encontra "redacao"
@@ -53,7 +74,7 @@ export function CommandPalette({ open, ...rest }: Props) {
   return <PalettePanel {...rest} />
 }
 
-function PalettePanel({ orgSlug, workspaces, onClose, canManage }: Omit<Props, 'open'>) {
+function PalettePanel({ orgSlug, workspaces, onClose, canManage, canListaGlobal, positionName, telas = [] }: Omit<Props, 'open'>) {
   const router = useRouter()
   const [query, setQuery] = useState('')
   const [activeIdx, setActiveIdx] = useState(0)
@@ -106,15 +127,20 @@ function PalettePanel({ orgSlug, workspaces, onClose, canManage }: Omit<Props, '
 
   const allItems = useMemo<Item[]>(() => {
     const items: Item[] = [
-      // Views
-      { id: 'v-inbox',  label: 'Caixa de entrada',       group: 'Ir para', href: `${base}/inbox`,             icon: Inbox },
-      { id: 'v-lista',  label: 'Lista de atividades',    group: 'Ir para', href: `${base}/views/lista`,       icon: List },
-      { id: 'v-gantt',  label: 'Gantt',                  group: 'Ir para', href: `${base}/views/gantt`,       icon: GanttChart },
-      { id: 'v-atend',  label: 'Painel de atendimento',  group: 'Ir para', href: `${base}/views/atendimento`, icon: Users },
-      { id: 'v-docs',   label: 'Documentos',             group: 'Ir para', href: `${base}/docs`,              icon: BookOpen },
-      { id: 'v-boards', label: 'Quadros visuais',        group: 'Ir para', href: `${base}/boards`,            icon: PenTool },
-      { id: 'v-fin',    label: 'Financeiro',             group: 'Ir para', href: `${base}/financeiro/painel`, icon: Wallet },
-      { id: 'v-dash',   label: 'Dashboard',              group: 'Ir para', href: `${base}/dashboard`,         icon: List },
+      // Telas globais — mesmos nomes da sidebar (uma tela, um nome). O
+      // Financeiro saiu daqui: entra por `telas`, junto dos outros módulos.
+      { id: 'v-inbox',  label: 'Caixa de entrada', group: 'Ir para', href: `${base}/inbox`,             icon: Inbox },
+      { id: 'v-atend',  label: 'Trabalhar',        group: 'Ir para', href: `${base}/views/atendimento`, icon: Briefcase, hint: positionName ?? undefined, keywords: 'atendimento pauta' },
+      ...(canListaGlobal ? [
+        { id: 'v-lista', label: 'Lista',           group: 'Ir para', href: `${base}/views/lista`,       icon: List, keywords: 'atividades' },
+      ] : []),
+      { id: 'v-gantt',  label: 'Gantt',            group: 'Ir para', href: `${base}/views/gantt`,       icon: GanttChart },
+      { id: 'v-docs',   label: 'Documentos',       group: 'Ir para', href: `${base}/docs`,              icon: BookOpen },
+      { id: 'v-boards', label: 'Quadros',          group: 'Ir para', href: `${base}/boards`,            icon: PenTool, keywords: 'visuais' },
+      ...(canManage ? [
+        { id: 'v-gestao', label: 'Gestão',         group: 'Ir para', href: `${base}/views/gestao`,      icon: Gauge },
+      ] : []),
+      { id: 'v-dash',   label: 'Início',           group: 'Ir para', href: `${base}/dashboard`,         icon: Home, keywords: 'dashboard' },
       // Clientes
       ...workspaces.map(ws => ({
         id: `ws-${ws.id}`,
@@ -146,16 +172,28 @@ function PalettePanel({ orgSlug, workspaces, onClose, canManage }: Omit<Props, '
       { id: 's-perfil',    label: 'Meu perfil',         group: 'Configurações', href: `${base}/perfil`,             icon: User },
     ]
     return items
-  }, [base, workspaces, canManage])
+  }, [base, workspaces, canManage, canListaGlobal, positionName])
+
+  // Telas dos módulos: só com busca digitada. Com a busca vazia o palette é
+  // pra folhear (clientes, campanhas); com texto, é pra pular.
+  const telaItems = useMemo<Item[]>(() => telas.map(t => ({
+    id: `t-${t.href}`, label: t.label, group: t.grupo, href: `${base}/${t.href}`, icon: t.icon, keywords: t.keywords,
+  })), [base, telas])
 
   const filtered = useMemo(() => {
     if (!query.trim()) return allItems
     const q = norm(query)
-    const statics = allItems.filter(item =>
-      norm(item.label).includes(q) || (item.hint && norm(item.hint).includes(q))
-    )
-    return [...statics, ...dynamicItems]
-  }, [query, allItems, dynamicItems])
+    const bate = (item: Item) =>
+      norm(item.label).includes(q) ||
+      (!!item.hint && norm(item.hint).includes(q)) ||
+      (!!item.keywords && norm(item.keywords).includes(q))
+    const statics = allItems.filter(bate)
+    // Ordem: telas globais, telas dos módulos, depois clientes/campanhas/
+    // criar/configurações, e por fim o que veio do servidor.
+    const irPara = statics.filter(i => i.group === 'Ir para')
+    const resto = statics.filter(i => i.group !== 'Ir para')
+    return [...irPara, ...telaItems.filter(bate), ...resto, ...dynamicItems]
+  }, [query, allItems, telaItems, dynamicItems])
 
   // Agrupa mantendo ordem
   const groups = useMemo(() => {
@@ -224,7 +262,7 @@ function PalettePanel({ orgSlug, workspaces, onClose, canManage }: Omit<Props, '
             autoFocus
             value={query}
             onChange={e => { setQuery(e.target.value); setActiveIdx(0) }}
-            placeholder="Buscar atividade, cliente, doc, mídia, produção…"
+            placeholder="Buscar tela, atividade, cliente, doc, mídia, produção…"
             className="flex-1 py-3.5 text-sm text-gray-900 placeholder-gray-400 bg-transparent focus:outline-none"
           />
           {searching && <Loader2 className="w-3.5 h-3.5 text-gray-300 animate-spin shrink-0" />}
