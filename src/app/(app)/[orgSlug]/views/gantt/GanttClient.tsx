@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { Avatar, AvatarGroup } from '@/components/ui/Avatar'
 import { MultiSelect, Select } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
-import { ChevronLeft, ChevronRight, Bookmark, X, CheckSquare, GripVertical, Calendar, CalendarOff } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Bookmark, X, CheckSquare, GripVertical, Calendar, CalendarOff } from 'lucide-react'
 import { PRIORITY_CONFIG } from '@/types'
 import { setViewPrefs } from '@/app/actions/prefs'
 import { updateActivityDates } from '@/app/actions/activity'
@@ -46,6 +46,13 @@ function addDays(d: Date, n: number) {
 }
 function isToday(d: Date) { return d.toDateString() === new Date().toDateString() }
 function isWeekend(d: Date) { return d.getDay() === 0 || d.getDay() === 6 }
+function fmtDia(d: Date) { return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) }
+
+// Começo padrão da régua: uma semana atrás, à MEIA-NOITE. O viewStart carregava a
+// hora em que a página abriu, e a posição da barra é round((data − viewStart) / dia):
+// de manhã a fração arredondava pra cima e batia; à tarde arredondava pra baixo e
+// TODA barra caía um dia à esquerda (tarefa 08→10 pintada em 7, 8 e 9).
+function inicioPadrao() { const d = new Date(); d.setHours(0, 0, 0, 0); return addDays(d, -7) }
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -92,9 +99,7 @@ export function GanttClient({ activities, semPrazo = [], campMap, profiles, work
   const statusConfig = useStatusConfig()
 
   // ── View state ────────────────────────────────────────────────────────
-  const [viewStart, setViewStart] = useState<Date>(() => {
-    const d = new Date(); d.setDate(d.getDate() - 7); return d
-  })
+  const [viewStart, setViewStart] = useState<Date>(inicioPadrao)
 
   // ── Filters (multi-seleção) ───────────────────────────────────────────
   const [filterWorkspaces, setFilterWorkspaces] = useState<string[]>(initialWorkspace ? [initialWorkspace] : [])
@@ -282,6 +287,57 @@ export function GanttClient({ activities, semPrazo = [], campMap, profiles, work
     }
   }
 
+  // ── Fora da janela ────────────────────────────────────────────────────
+  // Barra inteira antes ou depois dos dias na tela deixava a linha VAZIA: a
+  // tarefa contava no total, mas ninguém a via — atrasada há duas semanas sumia
+  // justamente da tela de prazo. Vira um marcador colado na borda que leva até
+  // a barra, e o cabeçalho diz quantas há de cada lado.
+
+  /** Início efetivo da barra em ms (min(início, prazo), como em barGeometry). NaN sem prazo. */
+  function inicioMs(a: Activity) {
+    if (!a.due_date) return NaN
+    const endMs = fromYMD(a.due_date).getTime()
+    return Math.min(a.start_date ? fromYMD(a.start_date).getTime() : endMs, endMs)
+  }
+  function foraDaJanela(a: Activity): 'antes' | 'depois' | null {
+    if (!a.due_date) return null
+    const vs = viewStart.getTime()
+    if (fromYMD(a.due_date).getTime() + DAY_MS <= vs) return 'antes'
+    if (inicioMs(a) >= vs + DAYS * DAY_MS) return 'depois'
+    return null
+  }
+  /** Rola a régua até a barra da tarefa, com dois dias de folga à esquerda. */
+  function irAte(a: Activity) {
+    const ms = inicioMs(a)
+    if (!Number.isNaN(ms)) setViewStart(addDays(new Date(ms), -2))
+  }
+
+  /** Marcador colado na borda para barra que está toda fora da janela. */
+  function renderMarcador(a: Activity, lado: 'antes' | 'depois', clrs: { bg: string; border: string; text: string }) {
+    if (!a.due_date) return null
+    const label = fmtDia(lado === 'antes' ? fromYMD(a.due_date) : new Date(inicioMs(a)))
+    return (
+      <button
+        type="button"
+        onClick={() => irAte(a)}
+        title={lado === 'antes'
+          ? `Prazo em ${label}, antes da janela — clique para rolar até a barra`
+          : `Começa em ${label}, depois da janela — clique para rolar até a barra`}
+        className={cn(
+          'absolute top-1.5 bottom-1.5 z-10 inline-flex items-center gap-1 px-2 rounded-lg border border-dashed',
+          'text-[11px] font-medium max-w-[260px] transition-colors hover:brightness-95 active:scale-[0.97]',
+          lado === 'antes' ? 'left-1' : 'right-1'
+        )}
+        style={{ backgroundColor: clrs.bg, borderColor: clrs.border, color: clrs.text }}
+      >
+        {lado === 'antes' && <ChevronsLeft className="w-3.5 h-3.5 shrink-0" />}
+        <span className="tabular-nums shrink-0">{label}</span>
+        <span className="truncate opacity-80">{a.title}</span>
+        {lado === 'depois' && <ChevronsRight className="w-3.5 h-3.5 shrink-0" />}
+      </button>
+    )
+  }
+
   // ── Bar pointer handlers ──────────────────────────────────────────────
 
   function startBarDrag(e: React.PointerEvent, type: DragState['type'], a: Activity) {
@@ -414,6 +470,11 @@ export function GanttClient({ activities, semPrazo = [], campMap, profiles, work
   // A bandeja obedece aos mesmos filtros da régua: filtrar por cliente e ver
   // pendência de outro cliente na bandeja seria mentira do mesmo tipo.
   const semPrazoFiltradas = semPrazo.filter(passaNosFiltros)
+  // Fora da janela (ver foraDaJanela): a mais próxima da tela primeiro, pra pular direto nela.
+  const antes  = filtered.filter(a => foraDaJanela(a) === 'antes')
+    .sort((x, y) => (y.due_date ?? '').localeCompare(x.due_date ?? ''))
+  const depois = filtered.filter(a => foraDaJanela(a) === 'depois')
+    .sort((x, y) => inicioMs(x) - inicioMs(y))
 
   const groupMap: Record<string, { profile: Profile; activities: Activity[] }> = {}
   const unassigned: Activity[] = []
@@ -449,15 +510,17 @@ export function GanttClient({ activities, semPrazo = [], campMap, profiles, work
   // ── Render bar ────────────────────────────────────────────────────────
 
   function renderBar(a: Activity) {
-    const { start, end } = effectiveDates(a)
-    const geo  = barGeometry(start, end)
-    if (!geo) return null
-
     // Cores seguem Configurações → Aparência (fill = bg claro, borda/texto = text)
     const cfg = statusConfig.find(s => s.value === a.status)
     const clrs = cfg
       ? { bg: cfg.bg, border: cfg.text, text: cfg.text }
       : { bg: '#f3f4f6', border: '#9ca3af', text: '#374151' }
+    const { start, end } = effectiveDates(a)
+    const geo  = barGeometry(start, end)
+    if (!geo) {
+      const lado = foraDaJanela(a)
+      return lado ? renderMarcador(a, lado, clrs) : null
+    }
     const asns   = (a.activity_assignees as { profiles: Profile }[])?.map(x => x.profiles).filter(Boolean) ?? []
     const active = drag?.activityId === a.id
 
@@ -683,10 +746,26 @@ export function GanttClient({ activities, semPrazo = [], campMap, profiles, work
           <h1 className="text-lg font-semibold text-gray-900">
             Gantt por {groupBy === 'campanha' ? 'campanha' : 'responsável'}
           </h1>
-          <p className="text-gray-500 text-sm">
-            {filtered.length} atividade{filtered.length !== 1 ? 's' : ''}
+          <p className="text-gray-500 text-sm flex items-center gap-1.5 flex-wrap">
+            <span>{filtered.length} atividade{filtered.length !== 1 ? 's' : ''}</span>
             {semPrazoFiltradas.length > 0 && (
-              <span className="text-amber-700"> · {semPrazoFiltradas.length} sem prazo</span>
+              <span className="text-amber-700">· {semPrazoFiltradas.length} sem prazo</span>
+            )}
+            {/* Barras inteiras fora dos dias na tela: sem isto o total dizia 99, a
+                régua mostrava 70 e o resto parecia sumido. O clique rola até lá. */}
+            {antes.length > 0 && (
+              <button type="button" onClick={() => irAte(antes[0])}
+                title="Prazo antes do primeiro dia da tela — clique para rolar até a mais próxima"
+                className="inline-flex items-center gap-0.5 text-red-600 hover:underline">
+                · <ChevronsLeft className="w-3.5 h-3.5" /> {antes.length} antes de {fmtDia(days[0])}
+              </button>
+            )}
+            {depois.length > 0 && (
+              <button type="button" onClick={() => irAte(depois[0])}
+                title="Começa depois do último dia da tela — clique para rolar até a primeira"
+                className="inline-flex items-center gap-0.5 hover:underline">
+                · {depois.length} depois de {fmtDia(days[DAYS - 1])} <ChevronsRight className="w-3.5 h-3.5" />
+              </button>
             )}
           </p>
         </div>
@@ -703,7 +782,7 @@ export function GanttClient({ activities, semPrazo = [], campMap, profiles, work
           />
           <Select size="sm" className="w-36" value={zoom} onChange={changeZoom} options={ZOOM_OPTIONS} />
           <button
-            onClick={() => { const d = new Date(); d.setDate(d.getDate() - 7); setViewStart(d) }}
+            onClick={() => setViewStart(inicioPadrao())}
             className="px-3 py-1.5 text-sm bg-gray-100 border border-transparent rounded-xl hover:bg-gray-50 transition font-medium text-gray-700">
             Hoje
           </button>
