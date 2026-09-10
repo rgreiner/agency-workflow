@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { createPortal } from 'react-dom'
-import { ChevronsUpDown, LogOut, Moon, Sun, User } from 'lucide-react'
+import { ChevronsUpDown, ClipboardCheck, Clock, LogOut, Moon, Settings, Sun, User, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/Avatar'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -21,19 +22,33 @@ const temaEscuro = () => document.documentElement.classList.contains('dark')
 
 const ITEM =
   'no-press w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-left text-gray-300 hover:text-gray-100 hover:bg-gray-700/70 transition-colors'
+const ITEM_ATIVO = 'text-gray-100 bg-gray-700/50'
+
+// Páginas pessoais (e a Configurações do proprietário). Antes eram três linhas
+// fixas no rodapé; aqui ficam a um clique do avatar, como o Perfil.
+const PAGINAS: { label: string; href: string; icon: LucideIcon; owner?: boolean }[] = [
+  { label: 'Meu perfil',    href: 'perfil',           icon: User },
+  { label: 'Meu ponto',     href: 'ponto',            icon: Clock },
+  { label: 'Avaliação',     href: 'avaliacao',        icon: ClipboardCheck },
+  { label: 'Configurações', href: 'settings/membros', icon: Settings, owner: true },
+]
 
 /**
- * Rodapé da sidebar: avatar + nome abrem um menu com Meu perfil, Tema e Sair.
- * "Sair" era um ícone de 14px colado no toggle de tema — a única ação
- * irreversível da casca no menor alvo da tela. Aqui ela fica a um clique de
- * distância, confirma, e mostra o estado pendente enquanto o redirect corre.
+ * Rodapé da sidebar: avatar + nome abrem o menu da pessoa — Perfil, Ponto,
+ * Avaliação, Configurações (proprietário), Tema e Sair. "Sair" era um ícone
+ * de 14px colado no toggle de tema — a única ação irreversível da casca no
+ * menor alvo da tela. Aqui ela confirma e mostra o estado pendente enquanto
+ * o redirect corre.
  */
-export function UserMenu({ base, nome, email, avatarUrl }: {
+export function UserMenu({ base, nome, email, avatarUrl, canManage = false }: {
   base: string
   nome?: string | null
   email: string
   avatarUrl?: string | null
+  /** Proprietário: vê Configurações. */
+  canManage?: boolean
 }) {
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [confirmaSair, setConfirmaSair] = useState(false)
   const [saindo, startSaindo] = useTransition()
@@ -42,6 +57,7 @@ export function UserMenu({ base, nome, email, avatarUrl }: {
   const menuRef = useRef<HTMLDivElement>(null)
   const dark = useSyncExternalStore(assinarTema, temaEscuro, () => false)
   const display = nome || email
+  const numaPaginaDoMenu = PAGINAS.some(p => pathname.startsWith(`${base}/${p.href.split('/')[0]}`))
 
   function alternarTema() {
     const next = !dark
@@ -91,7 +107,9 @@ export function UserMenu({ base, nome, email, avatarUrl }: {
         aria-label={`Menu de ${display}`}
         className={cn(
           'no-press flex items-center gap-2.5 w-full min-w-0 px-1 py-1 rounded-lg text-left transition-colors',
-          open ? 'bg-gray-800 text-gray-100' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/60'
+          open ? 'bg-gray-800 text-gray-100'
+            : numaPaginaDoMenu ? 'text-gray-100 hover:bg-gray-800/60'
+            : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/60'
         )}
       >
         <Avatar name={display} avatarUrl={avatarUrl} className="ring-0 shrink-0" />
@@ -110,10 +128,24 @@ export function UserMenu({ base, nome, email, avatarUrl }: {
             <p className="text-sm font-medium text-gray-100 truncate">{display}</p>
             {nome && <p className="text-[11px] text-gray-400 truncate">{email}</p>}
           </div>
-          <Link role="menuitem" href={`${base}/perfil`} onClick={() => setOpen(false)} className={ITEM}>
-            <User className="w-4 h-4 shrink-0" />
-            Meu perfil
-          </Link>
+          {PAGINAS.filter(p => !p.owner || canManage).map(({ label, href, icon: Icon }) => {
+            // Configurações acende em qualquer /settings/*, não só em membros.
+            const ativo = pathname.startsWith(`${base}/${href.split('/')[0]}`)
+            return (
+              <Link
+                key={href}
+                role="menuitem"
+                href={`${base}/${href}`}
+                aria-current={ativo ? 'page' : undefined}
+                onClick={() => setOpen(false)}
+                className={cn(ITEM, ativo && ITEM_ATIVO)}
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                {label}
+              </Link>
+            )
+          })}
+          <div className="my-1 border-t border-gray-700" />
           <button role="menuitem" type="button" onClick={alternarTema} className={ITEM}>
             {dark ? <Sun className="w-4 h-4 shrink-0" /> : <Moon className="w-4 h-4 shrink-0" />}
             {dark ? 'Tema claro' : 'Tema escuro'}

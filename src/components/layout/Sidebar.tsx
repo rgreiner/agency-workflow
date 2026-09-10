@@ -8,7 +8,6 @@ import {
   ChevronRight,
   ChevronsDown,
   ChevronsUp,
-  Settings,
   Plus,
   AlignLeft,
   Menu,
@@ -25,8 +24,6 @@ import {
   Megaphone,
   Radio,
   ClipboardList,
-  Clock,
-  ClipboardCheck,
   Compass,
   UserCog,
   Wallet,
@@ -777,47 +774,11 @@ export function Sidebar({
             </span>
           </Link>
         )}
-        {/* Meu ponto: pessoal, todos batem o próprio ponto. */}
-        <Link
-          href={`${base}/ponto`}
-          className={cn(
-            'flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors',
-            pathname.startsWith(`${base}/ponto`) ? 'text-white' : 'text-gray-500 hover:text-gray-200'
-          )}
-        >
-          <Clock className="w-4 h-4 shrink-0" />
-          Meu ponto
-        </Link>
-        {/* Avaliação: pessoal também — todo mundo responde a própria. */}
-        <Link
-          href={`${base}/avaliacao`}
-          className={cn(
-            'flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors',
-            pathname.startsWith(`${base}/avaliacao`) ? 'text-white' : 'text-gray-500 hover:text-gray-200'
-          )}
-        >
-          <ClipboardCheck className="w-4 h-4 shrink-0" />
-          Avaliação
-        </Link>
-        {/* Configurações: só o PROPRIETÁRIO (canManage = isOwner). */}
-        {canManage && (
-          <Link
-            href={`${base}/settings/membros`}
-            className={cn(
-              'flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors',
-              pathname.startsWith(`${base}/settings`) ? 'text-white' : 'text-gray-500 hover:text-gray-200'
-            )}
-          >
-            <Settings className="w-4 h-4 shrink-0" />
-            Configurações
-          </Link>
-        )}
-
-        {/* Usuário: avatar + nome abrem o menu (perfil, tema, sair). Ao lado, o
-            único botão de esconder o menu: recolher no desktop, fechar no
-            celular (embaixo, onde o polegar alcança). */}
+        {/* Usuário: avatar + nome abrem o menu (perfil, ponto, avaliação,
+            configurações, tema, sair). Ao lado, o único botão de esconder o
+            menu: recolher no desktop, fechar no celular (onde o polegar alcança). */}
         <div className="flex items-center gap-1 px-3 py-2.5 border-t border-gray-800">
-          <UserMenu base={base} nome={userName} email={userEmail} avatarUrl={userAvatar} />
+          <UserMenu base={base} nome={userName} email={userEmail} avatarUrl={userAvatar} canManage={canManage} />
           <button
             type="button"
             onClick={onCollapse}
