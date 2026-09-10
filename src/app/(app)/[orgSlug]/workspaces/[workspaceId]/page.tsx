@@ -8,6 +8,7 @@ import { PortalAccessButton, type PortalUserRow } from './PortalAccessButton'
 import { UnarchiveButton } from '@/components/ui/UnarchiveButton'
 import { AvatarGroup } from '@/components/ui/Avatar'
 import { ImportSpecsButton } from './campaigns/[campaignId]/ImportSpecsButton'
+import { AvisoArquivado } from './AvisoArquivado'
 
 export default async function WorkspacePage({
   params,
@@ -58,6 +59,7 @@ export default async function WorkspacePage({
         equipePorWorkspace={data.equipePorWorkspace}
         view={archivedView ? 'arquivadas' : 'ativas'}
         title={workspace.name}
+        aviso={workspace.archived ? <AvisoArquivado tipo="cliente" nome={workspace.name} /> : undefined}
         routeBase={`workspaces/${workspaceId}`}
         breadcrumb={<Link href={`/${orgSlug}/workspaces`} className="hover:text-gray-600 transition">Clientes</Link>}
         titleActions={

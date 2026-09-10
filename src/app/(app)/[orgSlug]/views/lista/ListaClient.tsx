@@ -96,11 +96,13 @@ interface Props {
   newActivityCampaign?: { workspaceId: string; campaignId: string }
   /** Equipe do cliente por workspace (mig. 280): ponto de partida do responsável no "+ Tarefa". */
   equipePorWorkspace?: Record<string, string[]>
+  /** Aviso entre o cabeçalho e os filtros (ex.: cliente arquivado — as tarefas daqui não circulam). */
+  aviso?: ReactNode
 }
 
 // ── Component ─────────────────────────────────────────────────────────────
 
-export function ListaClient({ orgSlug, activities, campMap, members, initialWorkspace, initialPersons, initialStatuses, initialDate, initialRespEtapa, dbPrefs, view, title = 'Lista de atividades', routeBase = 'views/lista', breadcrumb, titleActions, secondaryActions, newActivityCampaign, equipePorWorkspace }: Props) {
+export function ListaClient({ orgSlug, activities, campMap, members, initialWorkspace, initialPersons, initialStatuses, initialDate, initialRespEtapa, dbPrefs, view, title = 'Lista de atividades', routeBase = 'views/lista', breadcrumb, titleActions, secondaryActions, newActivityCampaign, equipePorWorkspace, aviso }: Props) {
   const listPath = `/${orgSlug}/${routeBase}`
   const statusConfig = useStatusConfig()
   const isArchivedView = view === 'arquivadas'
@@ -530,6 +532,8 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
 
         </div>
       </div>
+
+      {aviso}
 
       {/* ── Filtros: Cliente · Pessoas · Status + presets salvos ── */}
       <div className="flex items-center gap-2 mb-5 flex-wrap">

@@ -6,6 +6,7 @@ import { ListaClient } from '../../../../views/lista/ListaClient'
 import { CampaignEditButton } from './CampaignEditButton'
 import { ImportSpecsButton } from './ImportSpecsButton'
 import { DriveSyncButton } from './DriveSyncButton'
+import { AvisoArquivado } from '../../AvisoArquivado'
 
 export default async function CampaignPage({
   params,
@@ -22,7 +23,7 @@ export default async function CampaignPage({
 
   const { data: campaign } = await supabase
     .from('campaigns')
-    .select('*, workspaces(name)')
+    .select('*, workspaces(name, archived)')
     .eq('id', campaignId)
     .single()
   if (!campaign) return null
@@ -30,7 +31,13 @@ export default async function CampaignPage({
   const data = await loadActivityList(orgSlug, { scopeCampaignId: campaignId, archived: archivedView })
   if (!data) return null
 
-  const wsName = (campaign.workspaces as { name: string })?.name
+  const ws = campaign.workspaces as unknown as { name: string; archived: boolean } | null
+  const wsName = ws?.name
+  // Cliente arquivado esconde tudo que está dentro, mesmo campanha ativa — avisar
+  // aqui, que é onde a tarefa nasce.
+  const aviso = ws?.archived
+    ? <AvisoArquivado tipo="cliente" nome={ws.name} />
+    : campaign.archived ? <AvisoArquivado tipo="campanha" nome={campaign.name} /> : undefined
 
   return (
     <ListaClient
@@ -41,6 +48,7 @@ export default async function CampaignPage({
         equipePorWorkspace={data.equipePorWorkspace}
       view={archivedView ? 'arquivadas' : 'ativas'}
       title={campaign.name}
+      aviso={aviso}
       routeBase={`workspaces/${workspaceId}/campaigns/${campaignId}`}
       newActivityCampaign={{ workspaceId, campaignId }}
       secondaryActions={

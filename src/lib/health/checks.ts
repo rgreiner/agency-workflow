@@ -302,9 +302,62 @@ async function checkCronParado(supabase: SupabaseClient<Database>): Promise<Heal
   }
 }
 
+/**
+ * Tarefas abertas dentro de cliente ou campanha ARQUIVADA. Lista, Gantt,
+ * Atendimento, sidebar e busca só olham cliente e campanha ativos — a tarefa
+ * segue existindo, com responsáveis, e ninguém a vê (10/09/2026: campanha criada
+ * dentro de um cliente arquivado em agosto; tarefa com 3 responsáveis invisível
+ * em toda tela de trabalho).
+ */
+async function checkAbertasEmArquivado(supabase: SupabaseClient<Database>, orgId: string, orgSlug: string): Promise<HealthCheck> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any
+  type Row = {
+    id: string; title: string; due_date: string | null
+    campaigns: { id: string; name: string; workspace_id: string; archived: boolean; workspaces: { name: string; archived: boolean } }
+  }
+  // `!inner` faz o filtro do embed valer para a tarefa (sem ele o PostgREST só
+  // esvazia o embed e devolve a tarefa do mesmo jeito).
+  const base = () => sb.from('activities')
+    .select('id, title, due_date, campaigns!inner(id, name, workspace_id, archived, workspaces!inner(name, archived, org_id))')
+    .eq('archived', false)
+    .neq('status', CONCLUIDO)
+    .eq('campaigns.workspaces.org_id', orgId)
+    .order('due_date', { ascending: true, nullsFirst: false })
+    .limit(200)
+  const [{ data: emCliente }, { data: emCampanha }] = await Promise.all([
+    base().eq('campaigns.workspaces.archived', true),
+    base().eq('campaigns.archived', true),
+  ])
+
+  const vistos = new Set<string>()
+  const items: HealthItem[] = []
+  for (const t of [...((emCliente ?? []) as Row[]), ...((emCampanha ?? []) as Row[])]) {
+    if (vistos.has(t.id)) continue
+    vistos.add(t.id)
+    const c = t.campaigns
+    const motivo = c.workspaces.archived ? 'cliente arquivado' : 'campanha arquivada'
+    const prazo = t.due_date ? ` · prazo ${t.due_date.slice(8, 10)}/${t.due_date.slice(5, 7)}` : ''
+    items.push({
+      id: t.id,
+      label: t.title || 'Sem título',
+      sublabel: `${c.workspaces.name} › ${c.name} · ${motivo}${prazo}`,
+      href: `/${orgSlug}/workspaces/${c.workspace_id}/campaigns/${c.id}/activities/${t.id}`,
+    })
+  }
+
+  return {
+    id: 'abertas-em-arquivado',
+    label: 'Tarefas abertas em cliente ou campanha arquivada',
+    description: 'Tarefa ativa dentro de cliente ou campanha arquivada não aparece na Lista, no Gantt, no Atendimento nem na busca — só na página da campanha. Ou o cliente/campanha volta (Desarquivar, no menu ao lado do título), ou a tarefa é concluída, arquivada ou movida.',
+    items,
+  }
+}
+
 /** Roda todas as verificações e devolve os checks (mesmo os zerados, p/ dar o “tudo certo”). */
 export async function runHealthChecks(supabase: SupabaseClient<Database>, orgId: string, orgSlug: string): Promise<HealthCheck[]> {
   return Promise.all([
+    checkAbertasEmArquivado(supabase, orgId, orgSlug),
     checkCampanhasSemDrive(supabase, orgId, orgSlug),
     checkAtividadesSemDrive(supabase, orgId),
     checkVinculoErrado(supabase, orgId),
