@@ -139,9 +139,9 @@ export function InboxClient({ orgSlug, initial }: { orgSlug: string; initial: No
   }
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 mb-5">
+    <div className="p-4 md:p-6">
+      {/* Header — no celular os controles quebram pra linha de baixo. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 md:mb-5">
         <div>
           <h1 className="text-lg font-semibold text-gray-900">Caixa de entrada</h1>
           <p className="text-gray-500 text-sm mt-0.5">
@@ -161,9 +161,9 @@ export function InboxClient({ orgSlug, initial }: { orgSlug: string; initial: No
             </button>
           </div>
           {unread > 0 && (
-            <button onClick={markAll}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
-              <CheckCheck className="w-4 h-4" /> Marcar tudo como lida
+            <button onClick={markAll} aria-label="Marcar tudo como lida"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
+              <CheckCheck className="w-4 h-4" /> <span className="hidden sm:inline">Marcar tudo como lida</span>
             </button>
           )}
         </div>

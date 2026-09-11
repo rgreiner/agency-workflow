@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { Clock, Loader2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { pontoEstado, baterPonto, baterEntradaRetro } from '@/app/actions/rh-ponto'
@@ -87,6 +87,7 @@ function snoozed(tipo: string, dia: string): boolean {
  */
 export function PontoPrompt({ orgSlug }: { orgSlug: string }) {
   const router = useRouter()
+  const pathname = usePathname()
   const [estado, setEstado] = useState<Estado | null>(null)
   const [oculto, setOculto] = useState(false)
   const [extra, setExtra] = useState<{ nascida: ExtraNascida; colaboradorId: string } | null>(null)
@@ -121,7 +122,10 @@ export function PontoPrompt({ orgSlug }: { orgSlug: string }) {
   ) : null
 
   const prompt = estado ? decidir(estado) : null
-  if (!estado || !prompt || oculto || snoozed(prompt.tipo, estado.dia)) return modalExtra
+  // Na própria tela do ponto o lembrete só duplicaria o botão grande (e, no
+  // celular, cobriria a lista dos últimos dias).
+  const naTelaDoPonto = pathname === `/${orgSlug}/ponto`
+  if (!estado || !prompt || oculto || naTelaDoPonto || snoozed(prompt.tipo, estado.dia)) return modalExtra
 
   function depois() {
     try { localStorage.setItem(snoozeKey(prompt!.tipo, estado!.dia), String(Date.now() + SNOOZE_MIN * 60_000)) } catch {}

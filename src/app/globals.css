@@ -136,6 +136,13 @@
     from { opacity: 0; transform: scale(0.5); }
   }
 
+  /* Marcação que acabou de ser batida: assenta em 220ms. É O momento da tela
+     do ponto — o resto dela não anima. */
+  .chip-in { animation: chipIn 0.22s var(--ease-out); }
+  @keyframes chipIn {
+    from { opacity: 0; transform: scale(0.92); }
+  }
+
   /* Entrada de dropdowns/popovers: escala a partir do topo (do gatilho). */
   .pop-in {
     animation: popIn 0.16s var(--ease-out);
@@ -226,6 +233,17 @@ input,
 textarea,
 select {
   color: var(--color-gray-900); /* acompanha o tema (claro: escuro / escuro: claro) */
+}
+
+/* O iPhone dá zoom na página ao focar um campo com fonte menor que 16px — e
+   não desfaz ao sair. No toque, campo de texto vai a 16px; com mouse, fica o
+   tamanho do design. Fora de @layer de propósito: vence o text-sm do Tailwind. */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+  textarea,
+  select {
+    font-size: 16px;
+  }
 }
 
 input::placeholder,

@@ -1,9 +1,12 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Clock, LogIn, Coffee, Undo2, Loader2, FileText, Check, FileSignature, Paperclip, X } from 'lucide-react'
+import { Clock, LogIn, Coffee, Undo2, Loader2, FileText, Check, FileSignature, Paperclip, X, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
 import { MarcacoesEditor, validarMarcacoes } from '@/components/ponto/MarcacoesEditor'
 import { ExtraContextoModal, extraNascida, type ExtraNascida } from '@/components/ponto/ExtraContextoModal'
@@ -29,28 +32,37 @@ export interface PontoDia {
 
 const hm = (t: string | null) => t ? t.slice(0, 5) : '—'
 const saldoStr = (m: number) => { const s = m < 0 ? '-' : '+'; const a = Math.abs(m); return `${s}${Math.floor(a / 60)}h${String(a % 60).padStart(2, '0')}` }
-const dataBR = (d: string) => { const [y, m, dd] = d.split('-'); return `${dd}/${m}` }
+const duracao = (m: number) => `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`
+const DOW = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+/** "Qui 11/09": com o dia da semana, "segunda passada" se acha de relance. */
+const dataBR = (d: string) => {
+  const [y, m, dd] = d.split('-').map(Number)
+  return `${DOW[new Date(y, m - 1, dd).getDay()]} ${d.slice(8, 10)}/${d.slice(5, 7)}`
+}
 
 export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }: {
   orgSlug: string; colaboradorId: string; nome: string; hoje: string; diaHoje: PontoDia | null; recentes: PontoDia[]
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
-  // Veio da home pelo aviso "falta marcação"? Já abre a justificativa no dia.
+  // Justificativa: null = fechada; '' = aberta em hoje; 'AAAA-MM-DD' = aberta
+  // naquele dia (veio da home pelo aviso "falta marcação", ou do selo na lista).
   const params = useSearchParams()
-  const diaPedido = params.get('justificar')
-  const [just, setJust] = useState(!!diaPedido)
+  const [justificar, setJustificar] = useState<string | null>(params.get('justificar'))
   const [extra, setExtra] = useState<ExtraNascida | null>(null)
+  // Índice da marcação que acabou de ser batida: só ela entra animada.
+  const [recemBatida, setRecemBatida] = useState<number | null>(null)
   const d = diaHoje
 
   // N marcações livres: ímpar = está trabalhando (próxima é saída/pausa),
   // par = está fora (próxima é entrada/retorno).
   const horas = d?.marcacoes ?? []
   const dentro = horas.length % 2 === 1
+  const ultima = horas.length ? hm(horas[horas.length - 1]) : null
   const proxima = horas.length === 0
-    ? { label: 'Entrada', icon: LogIn }
-    : dentro ? { label: 'Saída (pausa ou fim do dia)', icon: Coffee }
-             : { label: 'Retorno', icon: Undo2 }
+    ? { label: 'Bater entrada', dica: null, icon: LogIn }
+    : dentro ? { label: 'Bater saída', dica: 'pausa ou fim do dia', icon: Coffee }
+             : { label: 'Bater retorno', dica: null, icon: Undo2 }
 
   /** Pede a localização, mas nunca trava a batida: se a pessoa negar, o
    *  navegador não suportar ou o GPS demorar, bate assim mesmo — o servidor
@@ -68,10 +80,15 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
   }
 
   function bater() {
+    const indice = horas.length
     start(async () => {
       const geo = await coordenada()
       const r = await baterPonto(orgSlug, colaboradorId, geo)
       if (r?.error) { toast.error(r.error); return }
+      // Confirmação no aparelho (Android; o iPhone ignora): quem bate o ponto
+      // saindo pela porta nem sempre olha a tela.
+      navigator.vibrate?.(15)
+      setRecemBatida(indice)
       const res = r.resultado
       if (res?.fora) {
         toast.warning('Ponto registrado fora da agência — o RH vai revisar.', {
@@ -88,40 +105,61 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
     })
   }
 
+  // Ações do ponto que não são bater: no desktop moram no cabeçalho; no celular
+  // descem pra baixo do botão — primeiro o que se faz todo dia.
+  const acoes = (
+    <>
+      <button type="button" onClick={() => setJustificar('')}
+        className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 sm:py-2 text-sm font-medium sm:font-normal rounded-xl bg-gray-100 sm:bg-transparent text-gray-700 sm:text-gray-600 hover:bg-gray-100 transition-colors">
+        <FileText className="w-4 h-4" /> Justificar
+      </button>
+      <Link href={`/${orgSlug}/ponto/espelho`}
+        className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 sm:py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
+        <FileSignature className="w-4 h-4" /> Meu espelho
+      </Link>
+    </>
+  )
+
   return (
-    <div className="p-6 max-w-2xl">
-      <div className="flex items-center justify-between mb-5">
-        <div>
+    <div className="p-4 sm:p-6 max-w-2xl">
+      <div className="flex items-start justify-between gap-3 mb-4 sm:mb-5">
+        <div className="min-w-0">
           <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2"><Clock className="w-5 h-5 text-orange-600" /> Meu ponto</h1>
           <p className="text-gray-500 text-sm mt-0.5">{nome} · jornada 8h30–12h · 13h30–18h (mín. 1h de intervalo)</p>
         </div>
-        <button onClick={() => setJust(true)} className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition">
-          <FileText className="w-4 h-4" /> Justificar
-        </button>
-        <a href={`/${orgSlug}/ponto/espelho`}
-          className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
-          <FileSignature className="w-4 h-4" /> Meu espelho
-        </a>
+        <div className="hidden sm:flex items-center gap-2 shrink-0">{acoes}</div>
       </div>
 
       {/* Marcações de hoje */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-6">
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-6">
         {horas.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-4 mb-2">Nenhuma marcação hoje.</p>
+          <p className="text-sm text-gray-400 text-center py-3 mb-3">Nenhuma marcação hoje.</p>
         ) : (
-          <div className="flex flex-wrap gap-2 mb-5">
-            {horas.map((h, i) => (
-              <div key={i} className="rounded-xl border border-orange-200 bg-orange-50/50 px-3 py-2 text-center min-w-[5rem]">
-                <div className="text-[11px] text-gray-400">{i === 0 ? 'Entrada' : i % 2 === 1 ? 'Saída' : 'Retorno'}</div>
-                <div className="text-base font-semibold tabular-nums text-gray-900">{hm(h)}</div>
-              </div>
-            ))}
-          </div>
+          <>
+            <div className="flex flex-wrap gap-2">
+              {horas.map((h, i) => (
+                <div key={i} className={cn('rounded-xl border border-orange-200 bg-orange-50/50 px-3 py-2 text-center min-w-[5rem]', i === recemBatida && 'chip-in')}>
+                  <div className="text-[11px] text-gray-400">{i === 0 ? 'Entrada' : i % 2 === 1 ? 'Saída' : 'Retorno'}</div>
+                  <div className="text-base font-semibold tabular-nums text-gray-900">{hm(h)}</div>
+                </div>
+              ))}
+            </div>
+            {/* O estado em palavras: é o que se confere antes de bater. */}
+            <p className="text-sm text-gray-600 mt-3 mb-4">
+              {dentro ? 'Trabalhando desde ' : 'Fora desde '}
+              <b className="font-semibold text-gray-900 tabular-nums">{ultima}</b>
+            </p>
+          </>
         )}
 
-        <button onClick={bater} disabled={pending}
-          className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 text-[#fff] font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
-          {pending ? <Loader2 className="w-5 h-5 animate-spin" /> : <proxima.icon className="w-5 h-5" />} Bater {proxima.label.toLowerCase()}
+        <button type="button" onClick={bater} disabled={pending}
+          className="w-full inline-flex items-center justify-center gap-2.5 px-4 h-14 sm:h-12 bg-orange-600 text-[#fff] rounded-xl hover:bg-orange-700 disabled:opacity-60 transition-colors">
+          {pending ? <Loader2 className="w-5 h-5 animate-spin" /> : <proxima.icon className="w-5 h-5" />}
+          <span className="flex flex-col items-start text-left leading-tight">
+            {/* Até 6s de GPS: o rótulo diz que está indo, não parece travado. */}
+            <span className="text-base font-semibold">{pending ? 'Registrando…' : proxima.label}</span>
+            {proxima.dica && !pending && <span className="text-[11px] text-[#fff]/80">{proxima.dica}</span>}
+          </span>
         </button>
         <p className="text-[11px] text-gray-400 text-center mt-2">
           Pode pausar quantas vezes precisar. Só o almoço (o maior intervalo do dia) precisa ter no mínimo 1h.
@@ -134,7 +172,7 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
                 acontecendo e "-4h30" no meio do dia lia como dívida. O saldo
                 do dia aparece amanhã, na lista de baixo (mig. 230). */}
             <p className="text-xs text-gray-500">
-              Trabalhado hoje: <b className="tabular-nums">{Math.floor(d.minutos / 60)}h{String(d.minutos % 60).padStart(2, '0')}</b>
+              Trabalhado hoje: <b className="tabular-nums">{duracao(d.minutos)}</b>
               {(d.esperado_min ?? 0) > 0 && <> de {Math.floor((d.esperado_min ?? 0) / 60)}h</>}
               {d.extra_status === 'pendente' && ' · extra aguardando o gestor'}
             </p>
@@ -146,51 +184,57 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
             )}
             {d.intervalo_ok === false && (
               <p className="text-[11px] text-amber-700 mt-1 inline-flex items-center gap-1">
-                <Check className="w-3 h-3" /> Almoço de {Math.floor((d.intervalo_maior_min ?? 0) / 60)}h{String((d.intervalo_maior_min ?? 0) % 60).padStart(2, '0')} — abaixo de 1h, o RH vai revisar.
+                <Check className="w-3 h-3" /> Almoço de {duracao(d.intervalo_maior_min ?? 0)} — abaixo de 1h, o RH vai revisar.
               </p>
             )}
           </div>
         )}
       </div>
 
-      {/* Últimos dias */}
+      <div className="sm:hidden grid grid-cols-2 gap-2 mt-3">{acoes}</div>
+
+      {/* Últimos dias — no celular cada dia vira duas linhas (dia + saldo em
+          cima, marcações + horas embaixo); em tela larga, uma linha só. */}
       {recentes.length > 0 && (
         <div className="mt-5 rounded-2xl border border-gray-200 bg-white overflow-hidden">
           <div className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100">Últimos dias</div>
-          <table className="w-full text-sm">
-            <tbody>
-              {recentes.map(r => (
-                <tr key={r.data} className="border-b border-gray-50 last:border-0">
-                  <td className="px-4 py-2 text-gray-500 tabular-nums">{dataBR(r.data)}</td>
-                  <td className="px-2 py-2 text-gray-600 tabular-nums">
-                    {hm(r.entrada)}–{hm(r.intervalo_ini)} · {hm(r.intervalo_fim)}–{hm(r.saida)}
-                    {/* Ímpar em dia passado = faltou bater: o dia não fecha par
-                        e fica com zero hora até o RH ajustar (mig. 275). */}
-                    {(r.marcacoes?.length ?? 0) % 2 === 1 && (
-                      <span title="Falta uma marcação — este dia está contando zero hora"
-                        className="ml-1.5 text-[10px] font-medium text-amber-700 bg-amber-50 rounded px-1.5 py-0.5">
-                        falta marcação
-                      </span>
-                    )}
-                    {r.ajuste_em && (
-                      <span title={`Ajustado pelo RH. Marcação original: ${[r.ajuste_de?.entrada, r.ajuste_de?.saida].filter(Boolean).map(t => hm(t as string)).join(' – ') || '—'}`}
-                        className="ml-1.5 text-[10px] text-amber-600">ajustado</span>
-                    )}
-                  </td>
-                  <td className="px-2 py-2 text-right text-gray-500 tabular-nums">{Math.floor(r.minutos / 60)}h{String(r.minutos % 60).padStart(2, '0')}</td>
-                  <td className={`px-4 py-2 text-right tabular-nums font-medium ${r.saldo_min < 0 ? 'text-red-600' : r.saldo_min > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>{saldoStr(r.saldo_min)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ul>
+            {recentes.map(r => (
+              <li key={r.data}
+                className="grid grid-cols-[1fr_auto] sm:grid-cols-[5.5rem_1fr_3.5rem_4rem] items-center gap-x-3 gap-y-0.5 px-4 py-2.5 sm:py-2 text-sm border-b border-gray-50 last:border-0">
+                <span className="text-gray-500 tabular-nums">{dataBR(r.data)}</span>
+                <span className={cn('text-right tabular-nums font-medium sm:order-4', r.saldo_min < 0 ? 'text-red-600' : r.saldo_min > 0 ? 'text-emerald-600' : 'text-gray-400')}>
+                  {saldoStr(r.saldo_min)}
+                </span>
+                <span className="min-w-0 text-gray-600 tabular-nums sm:order-2">
+                  {hm(r.entrada)}–{hm(r.intervalo_ini)} · {hm(r.intervalo_fim)}–{hm(r.saida)}
+                  {/* Ímpar em dia passado = faltou bater: o dia não fecha par e
+                      fica com zero hora até o RH ajustar (mig. 275). O selo abre
+                      a justificativa já no dia — no toque não existe tooltip. */}
+                  {(r.marcacoes?.length ?? 0) % 2 === 1 && (
+                    <button type="button" onClick={() => setJustificar(r.data)}
+                      aria-label={`Falta uma marcação em ${dataBR(r.data)} — o dia está contando zero hora. Pedir ajuste.`}
+                      className="ml-1.5 inline-flex items-center gap-0.5 align-middle text-[10px] font-medium text-amber-800 bg-amber-100 hover:bg-amber-200 rounded px-1.5 py-1 sm:py-0.5 transition-colors">
+                      falta marcação <ChevronRight className="w-3 h-3" />
+                    </button>
+                  )}
+                  {r.ajuste_em && (
+                    <span title={`Ajustado pelo RH. Marcação original: ${[r.ajuste_de?.entrada, r.ajuste_de?.saida].filter(Boolean).map(t => hm(t as string)).join(' – ') || '—'}`}
+                      className="ml-1.5 text-[10px] text-amber-600">ajustado</span>
+                  )}
+                </span>
+                <span className="text-right text-gray-500 tabular-nums sm:order-3">{duracao(r.minutos)}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
       {extra && <ExtraContextoModal orgSlug={orgSlug} colaboradorId={colaboradorId}
         extra={extra} onClose={() => setExtra(null)} />}
-      {just && <JustificarModal orgSlug={orgSlug} colaboradorId={colaboradorId} diaInicial={diaPedido}
+      {justificar !== null && <JustificarModal orgSlug={orgSlug} colaboradorId={colaboradorId} diaInicial={justificar || null}
         dias={Object.fromEntries([...(d ? [d] : []), ...recentes].map(r => [r.data, (r.marcacoes ?? []).map(h => h.slice(0, 5))]))}
-        onClose={() => setJust(false)} />}
+        onClose={() => setJustificar(null)} />}
     </div>
   )
 }
@@ -280,9 +324,10 @@ function JustificarModal({ orgSlug, colaboradorId, dias, onClose, diaInicial }: 
   const horaCls = 'w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500'
   const subCls = 'block text-[11px] text-gray-500 mb-1'
 
+  // Formulário longo: clique fora não fecha (Esc e Cancelar fecham). O Modal dá
+  // o foco preso, a volta do foco ao fechar e a altura certa no celular (dvh).
   return (
-    <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="modal-card w-full max-w-md max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-xl border border-gray-200">
+    <Modal open onClose={onClose} label="Justificar ocorrência" dismissable={!saving} dismissOnBackdrop={false}>
         <div className="px-6 py-4 border-b border-gray-100"><h2 className="text-base font-semibold text-gray-900">Justificar ocorrência</h2>
           <p className="text-xs text-gray-500 mt-0.5">Vai para o RH decidir (aprovar, abonar ou dar falta).</p></div>
         <div className="px-6 py-5 space-y-3">
@@ -382,13 +427,13 @@ function JustificarModal({ orgSlug, colaboradorId, dias, onClose, diaInicial }: 
             </p>
           </div>
         </div>
-        <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-100">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">Cancelar</button>
+        {/* Rodapé grudado: no celular o "Enviar" fica à mão sem rolar o formulário inteiro. */}
+        <div className="sticky bottom-0 z-10 bg-white rounded-b-2xl flex justify-end gap-2 px-6 py-4 border-t border-gray-100">
+          <button onClick={onClose} disabled={saving} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 disabled:opacity-50">Cancelar</button>
           <button onClick={enviar} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />} Enviar
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

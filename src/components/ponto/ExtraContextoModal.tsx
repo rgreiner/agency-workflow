@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { Clock, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { salvarContextoExtra } from '@/app/actions/rh-ponto'
+import { Modal } from '@/components/ui/Modal'
 
 /** Resultado da batida que fechou o dia com extra pendente e ainda sem contexto. */
 export interface ExtraNascida { saldoMin: number }
@@ -31,6 +32,10 @@ export function ExtraContextoModal({ orgSlug, colaboradorId, extra, onClose }: {
 }) {
   const [motivo, setMotivo] = useState('')
   const [saving, start] = useTransition()
+  const motivoRef = useRef<HTMLTextAreaElement>(null)
+  // Foco no campo (no lugar do autoFocus): este efeito roda depois do efeito do
+  // Modal (filho), que foca o card — então o campo vence.
+  useEffect(() => { motivoRef.current?.focus() }, [])
 
   const saldo = `+${Math.floor(extra.saldoMin / 60)}h${String(extra.saldoMin % 60).padStart(2, '0')}`
 
@@ -47,8 +52,8 @@ export function ExtraContextoModal({ orgSlug, colaboradorId, extra, onClose }: {
   }
 
   return (
-    <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="modal-card w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-200">
+    // Clique fora não fecha (jogaria fora o motivo digitado); Esc e "Agora não" fecham.
+    <Modal open onClose={onClose} label="Hora extra registrada" dismissable={!saving} dismissOnBackdrop={false}>
         <div className="px-6 py-4 border-b border-gray-100">
           <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
             <Clock className="w-4.5 h-4.5 text-orange-600" /> Hora extra registrada
@@ -60,7 +65,7 @@ export function ExtraContextoModal({ orgSlug, colaboradorId, extra, onClose }: {
         </div>
         <div className="px-6 py-5">
           <label className="block text-sm text-gray-600 mb-1.5">Motivo</label>
-          <textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={3} autoFocus
+          <textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={3} ref={motivoRef}
             className="w-full px-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
             placeholder="Ex.: finalização da campanha do cliente X e ajustes de última hora no site do Y" />
         </div>
@@ -72,7 +77,6 @@ export function ExtraContextoModal({ orgSlug, colaboradorId, extra, onClose }: {
             {saving && <Loader2 className="w-4 h-4 animate-spin" />} Salvar
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

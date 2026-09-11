@@ -21,7 +21,7 @@ export function MarcacoesEditor({ horas, onChange, disabled }: {
             <input type="time" value={h} disabled={disabled} onChange={e => set(i, e.target.value)}
               className="w-24 px-2 py-1.5 text-sm bg-white border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50" />
             <button type="button" onClick={() => del(i)} disabled={disabled}
-              className="p-1 text-gray-400 hover:text-red-500 transition disabled:opacity-50" title="Remover marcação">
+              className="p-2 -m-1 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50" aria-label="Remover marcação" title="Remover marcação">
               <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>

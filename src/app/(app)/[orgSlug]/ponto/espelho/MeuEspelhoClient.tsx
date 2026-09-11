@@ -34,7 +34,7 @@ export function MeuEspelhoClient({ orgSlug, colaboradorId, compInicial }: {
   useEffect(() => { carregar() }, [carregar]) // eslint-disable-line react-hooks/set-state-in-effect
 
   return (
-    <div className="p-6 max-w-4xl">
+    <div className="p-4 sm:p-6 max-w-4xl">
       <Link href={`/${orgSlug}/ponto`} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition mb-4">
         <ArrowLeft className="w-4 h-4" /> Meu ponto
       </Link>
@@ -96,8 +96,9 @@ export function MeuEspelhoClient({ orgSlug, colaboradorId, compInicial }: {
       {loading ? (
         <div className="text-center py-16 text-gray-400 text-sm">Carregando…</div>
       ) : !esp ? null : (
-        <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
-          <table className="w-full text-sm">
+        // Rola de lado dentro do card no celular — antes a página inteira ia junto.
+        <div className="rounded-2xl border border-gray-200 bg-white overflow-x-auto">
+          <table className="w-full min-w-[40rem] text-sm">
             <thead><tr className="border-b border-gray-100 text-xs text-gray-400">
               <th className="text-left px-4 py-3 font-medium">Dia</th>
               <th className="text-left px-3 py-3 font-medium">Marcações</th>

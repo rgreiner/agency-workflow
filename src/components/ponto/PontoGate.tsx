@@ -47,7 +47,7 @@ export function PontoGate({ orgSlug }: { orgSlug: string }) {
   // "almoço <1h", que é onde o RH revisa.
   if (estado?.estado === 'intervalo' && !rotaLivre) {
     return (
-      <div className="fixed bottom-4 right-4 z-[60] max-w-xs rounded-2xl bg-white border border-amber-200 shadow-lg p-4">
+      <div className="fixed bottom-[calc(var(--barra-inferior,0px)+1rem)] left-4 right-4 md:left-auto md:max-w-xs z-[60] rounded-2xl bg-white border border-amber-200 shadow-lg p-4">
         <p className="text-sm font-medium text-gray-900 flex items-center gap-2">
           <Coffee className="w-4 h-4 text-amber-600" /> Você está no intervalo
         </p>

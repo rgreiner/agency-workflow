@@ -57,13 +57,27 @@ export function Modal({
   const abriuNoBackdrop = useRef(false)
   const focoAnterior = useRef<HTMLElement | null>(null)
 
-  // Esc + foco (entra no card, volta pro gatilho ao fechar)
+  // onClose/dismissable chegam novos a cada render (um `onClose={() => …}`
+  // inline). Com eles na lista de dependências, qualquer render do pai refazia
+  // o efeito: o foco voltava ao gatilho e pulava pro card no meio da digitação.
+  // Os efeitos leem as props pelo ref e só rodam quando o modal abre/fecha.
+  const onCloseRef = useRef(onClose)
+  const dismissableRef = useRef(dismissable)
+  useEffect(() => { onCloseRef.current = onClose; dismissableRef.current = dismissable })
+
+  // Foco: entra no card ao abrir e volta pro gatilho ao fechar.
   useEffect(() => {
     if (!open) return
     focoAnterior.current = document.activeElement as HTMLElement | null
     cardRef.current?.focus()
+    return () => { focoAnterior.current?.focus?.() }
+  }, [open])
+
+  // Esc + Tab preso dentro do card.
+  useEffect(() => {
+    if (!open) return
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && dismissable) { e.preventDefault(); onClose(); return }
+      if (e.key === 'Escape' && dismissableRef.current) { e.preventDefault(); onCloseRef.current(); return }
       // Tab preso dentro do card: sem isso o foco escapava pra sidebar atrás do
       // backdrop. Popover portalado (Select aberto) fica fora do ciclo — ok.
       if (e.key !== 'Tab' || !cardRef.current) return
@@ -77,11 +91,8 @@ export function Modal({
       else if (!e.shiftKey && ativo === ultimo) { e.preventDefault(); primeiro.focus() }
     }
     document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      focoAnterior.current?.focus?.()
-    }
-  }, [open, dismissable, onClose])
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open])
 
   // Trava a rolagem do fundo. Compensa a largura da barra pra página não "pular".
   useEffect(() => {
@@ -117,7 +128,7 @@ export function Modal({
         tabIndex={-1}
         className={cn(
           'modal-card w-full bg-white rounded-2xl shadow-xl border border-gray-200 outline-none',
-          'max-h-[calc(100vh-2rem)] overflow-y-auto',
+          'max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain',
           LARGURAS[size], className,
         )}
       >
