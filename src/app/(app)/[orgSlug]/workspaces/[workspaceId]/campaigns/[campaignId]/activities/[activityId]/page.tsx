@@ -533,6 +533,24 @@ export default async function ActivityPage({
               }
             />
 
+            {/* Celular/tablet: os links de trabalho como chips grandes logo abaixo
+                do título. A lista de links mais abaixo é de EDIÇÃO, com alvo pequeno. */}
+            {linkFields.some(f => !!activity[f.field as keyof typeof activity]) && (
+              <div className="lg:hidden flex flex-wrap gap-2 mt-4">
+                {linkFields.map(({ field, icon, label }) => {
+                  const url = activity[field as keyof typeof activity] as string | null
+                  if (!url) return null
+                  return (
+                    <a key={field} href={url} target="_blank" rel="noopener noreferrer"
+                      className="press inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-gray-100 text-sm font-medium text-gray-800">
+                      {icon}
+                      {label}
+                    </a>
+                  )
+                })}
+              </div>
+            )}
+
             {/* Atualiza a tarefa sozinha (revisão em 2º plano, mudanças de outros);
                 mais rápido enquanto uma revisão está rodando. */}
             <AutoRefresh fast={activity.review_status === 'reviewing'} />

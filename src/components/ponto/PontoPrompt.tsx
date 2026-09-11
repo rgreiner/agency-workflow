@@ -151,7 +151,7 @@ export function PontoPrompt({ orgSlug }: { orgSlug: string }) {
 
   return (<>
     {modalExtra}
-    <div className="fixed bottom-4 left-4 md:left-auto md:right-4 md:bottom-24 z-40 max-w-sm w-[calc(100%-2rem)] md:w-80 rounded-2xl border border-orange-200 bg-white shadow-xl shadow-orange-500/10 p-4 animate-[paletteIn_0.2s_ease-out]">
+    <div className="fixed bottom-[calc(var(--barra-inferior,0px)+1rem)] left-4 md:left-auto md:right-4 md:bottom-24 z-40 max-w-sm w-[calc(100%-2rem)] md:w-80 rounded-2xl border border-orange-200 bg-white shadow-xl shadow-orange-500/10 p-4 animate-[paletteIn_0.2s_ease-out]">
       <div className="flex items-start gap-3">
         <div className="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
           <Clock className="w-4.5 h-4.5 text-orange-600" />

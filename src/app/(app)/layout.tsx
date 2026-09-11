@@ -10,7 +10,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <>
       {children}
-      <Toaster position="bottom-right" richColors closeButton />
+      <Toaster position="bottom-right" richColors closeButton mobileOffset={{ bottom: 'calc(var(--barra-inferior, 0px) + 16px)' }} />
     </>
   )
 }

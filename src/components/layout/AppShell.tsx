@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { Sidebar } from './Sidebar'
+import { cn } from '@/lib/utils'
 import { gravarPref, PREF_COOKIES, type SidebarPrefs } from '@/lib/sidebar-prefs'
 
 interface WorkspaceItem {
@@ -55,6 +57,8 @@ export function AppShell({
   // Recolhida: vem do cookie lido no servidor, então o HTML já chega recolhido.
   // Antes o localStorage era lido depois do paint e a sidebar "pulava" 240px.
   const [collapsed, setCollapsedState] = useState(prefs.recolhida ?? false)
+  // O detalhe da tarefa tem a própria barra no rodapé (e o próprio espaçador).
+  const detalheDeTarefa = usePathname().includes('/activities/')
 
   function setCollapsed(v: boolean) {
     setCollapsedState(v)
@@ -91,8 +95,9 @@ export function AppShell({
       />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <main className="flex-1 overflow-y-auto min-w-0">
-          {/* Mobile: 3rem pro hambúrguer + safe-area (PWA iOS, conteúdo sob o notch). */}
-          <div className="pt-[calc(env(safe-area-inset-top,0px)+3rem)] md:pt-0 h-full">
+          {/* Celular: safe-area no topo (PWA iOS, conteúdo sob o notch) e espaço
+              pra barra inferior embaixo — o hambúrguer e a faixa de 48px saíram. */}
+          <div className={cn('pt-[env(safe-area-inset-top,0px)] md:pt-0 h-full', !detalheDeTarefa && 'max-md:pb-[var(--barra-inferior,0px)]')}>
             {children}
           </div>
         </main>

@@ -204,7 +204,7 @@ export function ChatDock({ orgId, orgSlug, meId, members }: { orgId: string; org
 
   // Messenger sempre no canto inferior direito (acima da modal de tarefa, z-60 > z-50).
   return (
-    <div className="fixed bottom-0 right-0 z-[60] flex items-end gap-3 p-3 pointer-events-none">
+    <div className="fixed bottom-[var(--barra-inferior,0px)] right-0 z-[60] flex items-end gap-3 p-3 pointer-events-none">
       {/* Janelas de conversa */}
       {windows.map(peer => {
         const m = memberById[peer]

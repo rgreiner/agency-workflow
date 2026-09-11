@@ -10,7 +10,6 @@ import {
   ChevronsUp,
   Plus,
   AlignLeft,
-  Menu,
   X,
   PanelLeftClose,
   PanelLeft,
@@ -33,6 +32,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { UserMenu } from './UserMenu'
+import { MobileTabBar } from './MobileTabBar'
 import { ICONE_TOPO, ICONE_TOPO_ATIVO, ICONE_TOPO_IDLE } from './icone-topo'
 import { gravarPref, PREF_COOKIES, type SidebarPrefs } from '@/lib/sidebar-prefs'
 import { InboxNavItem } from './InboxNavItem'
@@ -799,19 +799,8 @@ export function Sidebar({
 
   return (
     <>
-      {/* Hamburger — fixed, visible on mobile only when sidebar is closed */}
-      <button
-        onClick={() => setMobileOpen(true)}
-        className={cn(
-          'fixed top-[max(0.75rem,env(safe-area-inset-top,0px))] left-3 z-50 md:hidden',
-          'bg-gray-900 text-gray-300 rounded-lg p-2 shadow-lg',
-          'transition-opacity duration-200 ease-(--ease-out)',
-          mobileOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'
-        )}
-        aria-label="Abrir menu"
-      >
-        <Menu className="w-5 h-5" />
-      </button>
+      {/* Celular: barra inferior no lugar do hambúrguer (Menu abre o drawer). */}
+      <MobileTabBar orgSlug={orgSlug} onMenu={() => setMobileOpen(true)} onSearch={() => setPaletteOpen(true)} />
 
       {/* Expandir — desktop, quando a sidebar está recolhida (substitui o botão do topo) */}
       {collapsed && onExpand && (

@@ -174,6 +174,12 @@
   @keyframes modalIn {
     from { opacity: 0; transform: scale(0.96) translateY(6px); }
   }
+  /* Folha inferior (BottomSheet): sobe do rodapé. Depois de .modal-card de
+     propósito — mesma especificidade, a última vence. */
+  .sheet-card { animation: sheetIn 0.24s var(--ease-out); }
+  @keyframes sheetIn {
+    from { opacity: 0; transform: translateY(24px); }
+  }
 }
 
 /* ── Sombras "soft / premium" (design "C") ──────────────────────────────────
@@ -191,6 +197,14 @@
 }
 .dark .modal-card {
   box-shadow: 0 10px 30px -6px rgb(0 0 0 / 0.5), 0 30px 72px -16px rgb(0 0 0 / 0.62);
+}
+
+/* ── Celular: barra inferior de navegação (MobileTabBar) ─────────────────────
+   Altura da barra + safe-area. Quem flutua no rodapé (bolha do chat, lembrete
+   de ponto, toasts) sobe isso no celular. No detalhe da tarefa a barra some,
+   mas a MobileStatusBar ocupa o mesmo lugar — a conta vale igual. */
+@media (max-width: 47.99rem) {
+  :root { --barra-inferior: calc(3.5rem + env(safe-area-inset-bottom, 0px)); }
 }
 
 html,

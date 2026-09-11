@@ -7,7 +7,7 @@ import { DATE_FILTERS, matchesDateFilter } from '@/lib/prazo-filtro'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority } from '@/types'
 import { ChecklistChip } from '@/components/ui/ChecklistChip'
 import { AutoRefresh } from '@/components/ui/AutoRefresh'
-import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search, Flag, SignalLow, SignalMedium, SignalHigh, Copy, Archive, ArchiveRestore, X, Calendar, UserPlus, Minus, Circle, User, Bookmark, Loader2 } from 'lucide-react'
+import { AlertCircle, ExternalLink, ChevronDown, Columns3, Check, GripVertical, Plus, Search, Flag, SignalLow, SignalMedium, SignalHigh, Copy, Archive, ArchiveRestore, X, Calendar, UserPlus, Minus, Circle, User, Bookmark, Loader2, SlidersHorizontal, FileText, CheckSquare, Layers } from 'lucide-react'
 
 // Complexidade → ícone (1/2/3 barras)
 const COMPLEXITY_ICON = { simple: SignalLow, medium: SignalMedium, complex: SignalHigh } as const
@@ -15,6 +15,7 @@ import { AvatarGroup } from '@/components/ui/Avatar'
 import { DateRangeEditor } from '@/components/ui/DateRangeEditor'
 import { MachinePath } from '@/components/ui/MachinePath'
 import { MultiSelect, Select } from '@/components/ui/Select'
+import { BottomSheet } from '@/components/ui/BottomSheet'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { updateActivityStatus, updateActivityField, setActivityArchived, bulkUpdateStatus, bulkUpdateField, bulkToggleAssignee, bulkSetArchived, createActivityInline } from '@/app/actions/activity'
 import { createClient } from '@/lib/supabase/client'
@@ -61,7 +62,7 @@ interface LastComment { content: string; at: string; author: string | null }
 interface Activity {
   id: string; title: string; status: string; priority: string
   due_date: string | null; start_date?: string | null; complexity?: string | null
-  redacao_url: string | null; preview_url: string | null; drive_path: string | null; lastComment: LastComment | null
+  redacao_url: string | null; preview_url: string | null; finalizacao_url: string | null; drive_path: string | null; lastComment: LastComment | null
   campaign_id: string; assignees: Assignee[]; assignedIds: string[]
   checklist?: { done: number; total: number }
 }
@@ -142,6 +143,8 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
   // a Gestão aponta o Atendimento e a atividade está atribuída ao designer.
   const [respEtapa, setRespEtapa] = useState(!!initialRespEtapa)
   const [onlyMine, setOnlyMine] = useState(false)
+  // Celular: os filtros moram numa folha inferior (os cinco seletores quebravam em várias linhas).
+  const [filtrosOpen, setFiltrosOpen] = useState(false)
   const me = useUsuario()?.id ?? null
   const pickerRef = useRef<HTMLDivElement>(null)
 
@@ -373,6 +376,7 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
     .filter(a => filterPriorities.length === 0 || filterPriorities.includes(a.priority))
     .filter(a => matchesDateFilter(a.due_date, filterDate, todayYMD))
   const hasFilter = filterWorkspaces.length + filterPersons.length + filterStatuses.length + filterPriorities.length > 0 || !!filterDate
+  const nFiltros = [filterWorkspaces.length, filterPersons.length, filterStatuses.length, filterPriorities.length].filter(n => n > 0).length + (filterDate ? 1 : 0)
 
   // Colunas na ordem escolhida pelo usuário (com fallback p/ defs novas)
   const orderedCols = [...order, ...COL_DEFS.map(c => c.key).filter(k => !order.includes(k))]
@@ -470,14 +474,14 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 md:p-6">
       {/* A Lista fica aberta o dia inteiro; sem isto ela só mudava quando quem
           estava olhando agia — o trabalho dos outros não aparecia. Pausa sozinho
           com a aba em segundo plano. */}
       <AutoRefresh intervalMs={30000} />
 
-      {/* Page header */}
-      <div className="flex items-center justify-between gap-3 mb-5">
+      {/* Page header — no celular as ações quebram pra linha de baixo. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 md:mb-5">
         <div className="min-w-0">
           {breadcrumb && <div className="mb-1 text-xs text-gray-400">{breadcrumb}</div>}
           <div className="flex items-center gap-1.5 min-w-0">
@@ -535,8 +539,87 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
 
       {aviso}
 
-      {/* ── Filtros: Cliente · Pessoas · Status + presets salvos ── */}
-      <div className="flex items-center gap-2 mb-5 flex-wrap">
+      {/* ── Celular: botão "Filtros" (com o nº de filtros ativos) + folha inferior ── */}
+      <div className="md:hidden flex items-center gap-2 mb-4">
+        <button
+          type="button"
+          onClick={() => setFiltrosOpen(true)}
+          className={cn(
+            'inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition-colors',
+            nFiltros > 0 ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-white border-gray-200 text-gray-700'
+          )}
+        >
+          <SlidersHorizontal className="w-4 h-4" />
+          Filtros
+          {nFiltros > 0 && (
+            <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-orange-600 text-[#fff] text-[10px] font-semibold tabular-nums flex items-center justify-center">
+              {nFiltros}
+            </span>
+          )}
+        </button>
+        {hasFilter && (
+          <button
+            type="button"
+            onClick={() => { setFilterWorkspaces([]); setFilterPersons([]); setFilterStatuses([]); setFilterPriorities([]); setFilterDate(''); setRespEtapa(false) }}
+            className="text-xs text-gray-500 px-2 py-2"
+          >
+            Limpar
+          </button>
+        )}
+      </div>
+      <BottomSheet open={filtrosOpen} onClose={() => setFiltrosOpen(false)} label="Filtros">
+        <div className="px-4 pt-2 pb-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold text-gray-900">Filtros</h2>
+            {hasFilter && (
+              <button
+                type="button"
+                onClick={() => { setFilterWorkspaces([]); setFilterPersons([]); setFilterStatuses([]); setFilterPriorities([]); setFilterDate(''); setRespEtapa(false) }}
+                className="text-xs text-gray-500 px-2 py-1"
+              >
+                Limpar filtros
+              </button>
+            )}
+          </div>
+          {workspaceOptions.length > 1 && (
+            <MultiSelect values={filterWorkspaces} onChange={setFilterWorkspaces} className="w-full" allLabel="Todos os clientes"
+              options={workspaceOptions.map(w => ({ value: w.id, label: w.name }))} />
+          )}
+          <MultiSelect values={filterPersons} onChange={setFilterPersons} className="w-full" allLabel="Todas as pessoas"
+            options={[{ value: SEM_RESP, label: 'Sem responsável' }, ...members.map(m => ({ value: m.userId, label: m.fullName ?? m.email }))]} />
+          <MultiSelect values={filterStatuses} onChange={setFilterStatuses} className="w-full" allLabel="Todos os status"
+            options={statusConfig.map(s => ({ value: s.value, label: s.label }))} />
+          <MultiSelect values={filterPriorities} onChange={setFilterPriorities} className="w-full" allLabel="Toda prioridade"
+            options={PRIORITY_OPTIONS} />
+          <Select value={filterDate} onChange={setFilterDate} className="w-full" options={DATE_FILTERS} />
+          {saved.length > 0 && (
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Filtros salvos</p>
+              <div className="flex flex-wrap gap-1.5">
+                {saved.map(f => (
+                  <button key={f.id} type="button" onClick={() => applySavedFilter(f)}
+                    className={cn(
+                      'press rounded-full border px-3 py-1.5 text-xs transition-colors max-w-full truncate',
+                      isSavedActive(f) ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-gray-200 text-gray-600'
+                    )}>
+                    {f.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setFiltrosOpen(false)}
+            className="press w-full h-11 rounded-xl bg-orange-600 text-[#fff] text-sm font-semibold"
+          >
+            Ver {totalCount} atividade{totalCount !== 1 ? 's' : ''}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* ── Filtros (desktop): Cliente · Pessoas · Status + presets salvos ── */}
+      <div className="hidden md:flex items-center gap-2 mb-5 flex-wrap">
         {workspaceOptions.length > 1 && (
           <MultiSelect
             values={filterWorkspaces}
@@ -881,7 +964,8 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                         <div key={activity.id} className="hover:bg-gray-50/60 transition group">
 
                           {/* ── Mobile layout ─────────────────────────── */}
-                          <div className="md:hidden flex items-center gap-3 px-4 py-2.5">
+                          <div className="md:hidden px-4 py-2.5">
+                          <div className="flex items-center gap-3">
                             <SelectBox checked={isSel} onChange={() => toggleSelect(activity.id)} />
                             <StatusDot
                               current={activity.status}
@@ -909,6 +993,24 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
                                 )}
                               </div>
                             </Link>
+                          </div>
+                          {/* Links de trabalho direto da lista, sem entrar na tarefa
+                              (fora do <Link>: <a> dentro de <a> não existe). */}
+                          {(activity.redacao_url || activity.preview_url || activity.finalizacao_url) && (
+                            <div className="flex items-center gap-1.5 mt-1.5 pl-[3.5rem]">
+                              {([
+                                ['Redação', activity.redacao_url, FileText],
+                                ['Preview', activity.preview_url, CheckSquare],
+                                ['Final',   activity.finalizacao_url, Layers],
+                              ] as const).map(([rotulo, url, Icone]) => url ? (
+                                <a key={rotulo} href={url} target="_blank" rel="noopener noreferrer"
+                                  className="press inline-flex items-center gap-1 px-2 py-1.5 rounded-md bg-gray-100 text-[11px] font-medium text-gray-600">
+                                  <Icone className="w-3 h-3" />
+                                  {rotulo}
+                                </a>
+                              ) : null)}
+                            </div>
+                          )}
                           </div>
 
                           {/* ── Desktop layout — arrastável entre status ── */}

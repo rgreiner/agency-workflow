@@ -19,6 +19,7 @@ export interface ListActivity {
   complexity: string | null
   redacao_url: string | null
   preview_url: string | null
+  finalizacao_url: string | null
   drive_path: string | null
   lastComment: LastComment | null
   campaign_id: string
@@ -102,7 +103,7 @@ export async function loadActivityList(
   // checklist é coluna nova (não tipada nos types gerados) → query via cast.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let q = (supabase as any).from('activities')
-    .select('id, title, status, priority, complexity, due_date, start_date, redacao_url, preview_url, drive_path, campaign_id, archived, checklist')
+    .select('id, title, status, priority, complexity, due_date, start_date, redacao_url, preview_url, finalizacao_url, drive_path, campaign_id, archived, checklist')
     .in('campaign_id', campIds)
     .eq('archived', archivedView)
   if (!archivedView && !opts.includeConcluido) q = q.neq('status', 'concluido')
@@ -114,7 +115,7 @@ export async function loadActivityList(
   type ActRow = {
     id: string; title: string; status: string; priority: string; complexity: string | null
     due_date: string | null; start_date: string | null; redacao_url: string | null
-    preview_url: string | null; drive_path: string | null; campaign_id: string; checklist: unknown
+    preview_url: string | null; finalizacao_url: string | null; drive_path: string | null; campaign_id: string; checklist: unknown
   }
   const rows = (rawActivities ?? []) as ActRow[]
   const actIds = rows.map(a => a.id)
@@ -200,6 +201,7 @@ export async function loadActivityList(
     complexity: a.complexity,
     redacao_url: a.redacao_url,
     preview_url: a.preview_url,
+    finalizacao_url: a.finalizacao_url,
     drive_path: a.drive_path,
     lastComment: lastCommentMap[a.id] ?? null,
     campaign_id: a.campaign_id,
