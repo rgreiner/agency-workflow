@@ -196,3 +196,28 @@ export async function renameTaskFolder(taskRef: string, newName: string): Promis
   }
   return drive.renameTaskFolder(taskRef, newName)
 }
+
+/** Subpasta padrão da tarefa (Links, Preview…), criando as que faltarem. */
+export async function subfolderOfTask(taskRef: string, name: string): Promise<{ id: string; link: string } | null> {
+  await completarSubpastas(taskRef)
+  const info = await inspectTaskFolder(taskRef)
+  return info.sub[name] ?? null
+}
+
+/** Arquivos de uma subpasta da tarefa (ex.: as referências em Links/). */
+export async function listSubfolderFiles(taskRef: string, name: string): Promise<drive.FolderFile[]> {
+  const sub = await subfolderOfTask(taskRef, name)
+  if (!sub?.id) return []
+  return backendForRef(sub.id) === 's3' ? s3.listFolderFilesS3(sub.id) : drive.listFolderFiles(sub.id)
+}
+
+/** Sobe um arquivo para uma subpasta da tarefa. */
+export async function uploadToSubfolder(
+  taskRef: string, name: string, fileName: string, mime: string, data: Buffer,
+): Promise<{ id: string; link: string }> {
+  const sub = await subfolderOfTask(taskRef, name)
+  if (!sub?.id) throw new Error(`A pasta ${name} não existe nesta tarefa.`)
+  return backendForRef(sub.id) === 's3'
+    ? s3.uploadFileS3(sub.id, fileName, mime, data)
+    : drive.uploadFile(sub.id, fileName, mime, data)
+}

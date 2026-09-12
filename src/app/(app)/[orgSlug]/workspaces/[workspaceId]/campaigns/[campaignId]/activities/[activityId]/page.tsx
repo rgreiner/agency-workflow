@@ -21,6 +21,7 @@ import { FeedFilter } from './FeedFilter'
 import { HistoryGroup } from './HistoryGroup'
 import { RegenerateDriveButton } from './RegenerateDriveButton'
 import { DriveFolderNotice, type DriveFolderAviso } from './DriveFolderNotice'
+import { Referencias } from './Referencias'
 import { taskFolderName } from '@/lib/drive-provision'
 import { folderInfo } from '@/lib/task-folders'
 import { ultimoSegmento } from '@/lib/task-folder-names'
@@ -644,6 +645,9 @@ export default async function ActivityPage({
                     <DriveFolderNotice orgSlug={orgSlug} path={path} activityId={activityId} aviso={pastaAviso} />
                   </div>
                 )}
+
+                {/* Referências — arquivos-guia para a criação, na subpasta Links/ da pasta da tarefa */}
+                <Referencias activityId={activityId} hasFolder={!!driveWebUrl} canEdit={isOrgMember} />
 
                 {/* Link fields */}
                 {linkFields.map(({ field, icon, label, sub }) => {

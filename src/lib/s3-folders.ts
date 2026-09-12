@@ -305,3 +305,12 @@ export async function moveTaskFolderS3(taskPath: string, newCampaignPath: string
   await deleteKeys(oldKeys)
   return { drivePath: toWinPath(destPath), newPath: destPath }
 }
+
+/** Sobe um arquivo para dentro de uma pasta (chave = pasta/nome). Sem link web no S3. */
+export async function uploadFileS3(folderPath: string, name: string, mime: string, data: Buffer): Promise<{ id: string; link: string }> {
+  const key = `${folderPath}/${name}`
+  await getS3().send(new PutObjectCommand({
+    Bucket: bucket(), Key: key, Body: data, ContentType: mime || 'application/octet-stream',
+  }))
+  return { id: key, link: '' }
+}

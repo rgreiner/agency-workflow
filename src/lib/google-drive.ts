@@ -1,4 +1,5 @@
 import 'server-only'
+import { Readable } from 'node:stream'
 import { google, type drive_v3 } from 'googleapis'
 import { SUBPASTAS_TAREFA } from '@/lib/task-folder-names'
 
@@ -369,7 +370,7 @@ export async function readReviewAssets(link: string): Promise<{ assets: DriveAss
 
 /** Lista as subpastas (1 nível) de uma pasta. Pagina tudo. */
 /** Um arquivo dentro de uma pasta de tarefa (usado pelo portal do cliente). */
-export interface FolderFile { ref: string; name: string; mime: string; size: number }
+export interface FolderFile { ref: string; name: string; mime: string; size: number; link?: string }
 
 /** Lista os ARQUIVOS (não pastas) de uma pasta do Drive. */
 export async function listFolderFiles(folderId: string): Promise<FolderFile[]> {
@@ -379,7 +380,7 @@ export async function listFolderFiles(folderId: string): Promise<FolderFile[]> {
   do {
     const r: drive_v3.Schema$FileList = (await drive.files.list({
       q: `'${folderId}' in parents and trashed = false and mimeType != '${FOLDER_MIME}'`,
-      fields: 'nextPageToken, files(id, name, mimeType, size)',
+      fields: 'nextPageToken, files(id, name, mimeType, size, webViewLink)',
       pageSize: 200, orderBy: 'name',
       supportsAllDrives: true, includeItemsFromAllDrives: true, pageToken,
     })).data
@@ -390,6 +391,7 @@ export async function listFolderFiles(folderId: string): Promise<FolderFile[]> {
         name: f.name ?? 'arquivo',
         mime: f.mimeType ?? 'application/octet-stream',
         size: Number(f.size ?? 0),
+        link: f.webViewLink ?? undefined,
       })
     }
     pageToken = r.nextPageToken ?? undefined
@@ -520,4 +522,19 @@ export async function renameTaskFolder(folderId: string, newName: string): Promi
     fileId: folderId, requestBody: { name: newName }, fields: 'id, name', supportsAllDrives: true,
   }))
   return { drivePath: await buildDrivePath(folderId) }
+}
+
+// ── Upload de arquivo (referências em Links/) ───────────────────────────────
+
+/** Sobe um arquivo para dentro de uma pasta. O `Readable` nasce dentro do retry: cada tentativa relê o buffer. */
+export async function uploadFile(parentId: string, name: string, mime: string, data: Buffer): Promise<{ id: string; link: string }> {
+  const drive = getDrive()
+  const res = await comRetry(() => drive.files.create({
+    requestBody: { name, parents: [parentId] },
+    media: { mimeType: mime || 'application/octet-stream', body: Readable.from(data) },
+    fields: 'id, webViewLink',
+    supportsAllDrives: true,
+  }))
+  const id = res.data.id!
+  return { id, link: res.data.webViewLink ?? `https://drive.google.com/file/d/${id}/view` }
 }

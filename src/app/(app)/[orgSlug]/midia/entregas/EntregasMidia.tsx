@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { Select, MultiSelect } from '@/components/ui/Select'
 import { Combobox } from '@/components/ui/Combobox'
 import { FORMATOS } from '@/lib/atividade-titulo'
+import { enviarReferencia, fmtBytes, MAX_REFERENCIA_BYTES } from '@/lib/referencias-client'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import {
   salvarEntrega, mudarSituacaoEntrega, excluirEntrega, tarefasDoCliente,
@@ -308,6 +309,10 @@ function ModalEntrega({ orgSlug, clientes, veiculos, membros, equipes, entrega, 
     campaignId: entrega?.campaignId ?? '',
     observacao: entrega?.observacao ?? '',
   })
+  // Referências para a criação: sobem para a pasta Links DEPOIS que a tarefa e a
+  // pasta nascem (a pasta é criada em 2º plano; o envio espera por ela).
+  const [anexos, setAnexos] = useState<File[]>([])
+  const [enviandoAnexo, setEnviandoAnexo] = useState<string | null>(null)
   const [tarefas, setTarefas] = useState<{ id: string; titulo: string; prazo: string | null; campanha: string; campaignId: string }[]>([])
   const [campanhas, setCampanhas] = useState<{ id: string; nome: string }[]>([])
   const [carregandoTarefas, setCarregandoTarefas] = useState(false)
@@ -402,6 +407,17 @@ function ModalEntrega({ orgSlug, clientes, veiculos, membros, equipes, entrega, 
         lembrarCampanha(form.workspaceId, form.campaignId)
         if (r.briefingErro) toast.warning(`Entrega salva, mas o briefing não abriu: ${r.briefingErro}`)
         else toast.success('Entrega salva e briefing aberto para o atendimento.')
+        if (r.briefingId && anexos.length) {
+          let ok = 0
+          for (const [i, f] of anexos.entries()) {
+            setEnviandoAnexo(`${i + 1}/${anexos.length} · ${f.name}`)
+            try { await enviarReferencia(r.briefingId, f, { esperarPasta: true }); ok++ }
+            catch (e) { toast.error(`${f.name}: ${e instanceof Error ? e.message : 'falha no envio'}`) }
+          }
+          setEnviandoAnexo(null)
+          if (ok === anexos.length) toast.success(`${ok} ${ok === 1 ? 'referência' : 'referências'} na pasta Links da tarefa.`)
+          else toast.warning('Nem tudo subiu — anexe o que faltou pela própria tarefa, na linha Referências.')
+        }
       } else {
         toast.success(entrega ? 'Entrega atualizada.' : 'Entrega criada.')
       }
@@ -543,6 +559,31 @@ function ModalEntrega({ orgSlug, clientes, veiculos, membros, equipes, entrega, 
                   allLabel="Sem responsável — cai na fila do atendimento" />
               </div>
             </div>
+            <div className="block">
+              <span className="text-[11px] text-orange-800">
+                Referências para a criação <span className="text-orange-800/60">· vão para a pasta Links da tarefa · até 25 MB cada</span>
+              </span>
+              <div className="mt-1 flex items-center gap-2 flex-wrap">
+                {anexos.map((f, i) => (
+                  <span key={`${f.name}-${i}`} className="inline-flex items-center gap-1 max-w-[16rem] px-2 py-0.5 rounded-lg bg-white/70 text-[11px] font-medium text-gray-700">
+                    <span className="truncate">{f.name}</span>
+                    <span className="text-gray-400 shrink-0">{fmtBytes(f.size)}</span>
+                    <button type="button" aria-label={`Remover ${f.name}`} onClick={() => setAnexos(a => a.filter((_, j) => j !== i))}
+                      className="text-gray-400 hover:text-red-500 transition-colors"><Trash2 className="w-3 h-3" /></button>
+                  </span>
+                ))}
+                <label className="inline-flex items-center gap-1 text-[11px] font-medium text-orange-800 hover:text-orange-900 cursor-pointer">
+                  <Plus className="w-3 h-3" /> Adicionar arquivos
+                  <input type="file" multiple className="sr-only" onChange={e => {
+                    const novos = Array.from(e.target.files ?? [])
+                    const grandes = novos.filter(f => f.size > MAX_REFERENCIA_BYTES)
+                    if (grandes.length) toast.error(`${grandes.map(f => f.name).join(', ')}: acima de 25 MB — vai direto no Drive.`)
+                    setAnexos(a => [...a, ...novos.filter(f => f.size <= MAX_REFERENCIA_BYTES)])
+                    e.target.value = ''
+                  }} />
+                </label>
+              </div>
+            </div>
             <label className="block">
               <span className="text-[11px] text-orange-800">Pedido para a criação · vira o briefing da tarefa</span>
               <textarea value={form.pedido} onChange={e => setForm(f => ({ ...f, pedido: e.target.value }))} rows={4}
@@ -579,7 +620,8 @@ function ModalEntrega({ orgSlug, clientes, veiculos, membros, equipes, entrega, 
             </button>
             <button onClick={salvar} disabled={pending}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-orange-600 text-[#fff] hover:bg-orange-700 transition-colors disabled:opacity-60">
-              {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Salvar
+              {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              {enviandoAnexo ? `Enviando ${enviandoAnexo}` : 'Salvar'}
             </button>
           </div>
         </div>
