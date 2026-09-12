@@ -8,7 +8,7 @@ import {
   RotateCcw, Trash2, Truck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Select } from '@/components/ui/Select'
+import { Select, MultiSelect } from '@/components/ui/Select'
 import { Combobox } from '@/components/ui/Combobox'
 import { FORMATOS } from '@/lib/atividade-titulo'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
@@ -46,6 +46,8 @@ interface StatusCfg { valor: string; label: string; bg: string; txt: string }
 
 /** Veículo do cadastro, com o contato já em uma linha (e-mail · telefone). */
 export interface VeiculoOpt { id: string; nome: string; contato: string | null }
+/** Membro ativo da org — opção de responsável na tarefa aberta pela entrega. */
+export interface MembroOpt { id: string; nome: string }
 
 /** Sentinela: entrega antiga cujo veículo é só texto, fora do cadastro. */
 const VEICULO_TEXTO = '__texto__'
@@ -92,11 +94,14 @@ const ROTULO_FILTRO: Record<Filtro, string> = {
   pendentes: 'pendentes', liberadas: 'enviadas', todas: 'todas',
 }
 
-export function EntregasMidia({ orgSlug, entregas, clientes, veiculos, statusCfg }: {
+export function EntregasMidia({ orgSlug, entregas, clientes, veiculos, membros, equipes, statusCfg }: {
   orgSlug: string
   entregas: EntregaRow[]
   clientes: { id: string; nome: string }[]
   veiculos: VeiculoOpt[]
+  membros: MembroOpt[]
+  /** Equipe do cliente (mig. 280), por workspace — ponto de partida dos responsáveis. */
+  equipes: Record<string, string[]>
   statusCfg: StatusCfg[]
 }) {
   const [filtro, setFiltro] = useState<Filtro>('pendentes')
@@ -160,7 +165,7 @@ export function EntregasMidia({ orgSlug, entregas, clientes, veiculos, statusCfg
       )}
 
       {editando && (
-        <ModalEntrega orgSlug={orgSlug} clientes={clientes} veiculos={veiculos}
+        <ModalEntrega orgSlug={orgSlug} clientes={clientes} veiculos={veiculos} membros={membros} equipes={equipes}
           entrega={editando === 'nova' ? null : editando}
           onClose={() => setEditando(null)} />
       )}
@@ -273,10 +278,12 @@ function Atalho({ url, label }: { url: string; label: string }) {
   )
 }
 
-function ModalEntrega({ orgSlug, clientes, veiculos, entrega, onClose }: {
+function ModalEntrega({ orgSlug, clientes, veiculos, membros, equipes, entrega, onClose }: {
   orgSlug: string
   clientes: { id: string; nome: string }[]
   veiculos: VeiculoOpt[]
+  membros: MembroOpt[]
+  equipes: Record<string, string[]>
   entrega: EntregaRow | null
   onClose: () => void
 }) {
@@ -293,6 +300,9 @@ function ModalEntrega({ orgSlug, clientes, veiculos, entrega, onClose }: {
     formatoCustom: entrega?.formato && !formatoConhecido(entrega.formato) ? entrega.formato : '',
     especificacao: entrega?.especificacao ?? '',
     pedido: entrega?.pedido ?? '',
+    // Responsáveis da tarefa que a entrega abre: a equipe do cliente vem
+    // preenchida ao escolher o cliente, e a mídia ajusta antes de salvar.
+    responsaveis: [] as string[],
     prazoEnvio: entrega?.prazoEnvio?.slice(0, 10) ?? '',
     activityId: entrega?.tarefa?.id ?? '',
     campaignId: entrega?.campaignId ?? '',
@@ -303,7 +313,7 @@ function ModalEntrega({ orgSlug, clientes, veiculos, entrega, onClose }: {
   const [carregandoTarefas, setCarregandoTarefas] = useState(false)
 
   async function trocarCliente(id: string) {
-    setForm(f => ({ ...f, workspaceId: id, activityId: '', campaignId: '' }))
+    setForm(f => ({ ...f, workspaceId: id, activityId: '', campaignId: '', responsaveis: equipes[id] ?? [] }))
     setTarefas([])
     setCampanhas([])
     if (!id) return
@@ -385,6 +395,7 @@ function ModalEntrega({ orgSlug, clientes, veiculos, entrega, onClose }: {
         campaignId: tarefa?.campaignId ?? form.campaignId ?? null,
         observacao: form.observacao,
         briefingEmCampanha: abrindoBriefing ? form.campaignId : null,
+        responsaveis: abrindoBriefing ? form.responsaveis : null,
       })
       if ('error' in r) { toast.error(r.error); return }
       if (abrindoBriefing) {
@@ -493,8 +504,10 @@ function ModalEntrega({ orgSlug, clientes, veiculos, entrega, onClose }: {
               onChange={v => setForm(f => ({
                 ...f,
                 activityId: v,
-                // Ao escolher "precisa de criação", já sugere o último projeto usado.
+                // Ao escolher "precisa de criação", já sugere o último projeto usado
+                // e a equipe do cliente, se ninguém foi escolhido ainda.
                 campaignId: v === NOVA_TAREFA ? sugerirCampanha() : f.campaignId,
+                responsaveis: v === NOVA_TAREFA && f.responsaveis.length === 0 ? (equipes[f.workspaceId] ?? []) : f.responsaveis,
               }))}
               options={[
                 { value: NOVA_TAREFA, label: 'Precisa de criação — abrir briefing' },
@@ -520,6 +533,16 @@ function ModalEntrega({ orgSlug, clientes, veiculos, entrega, onClose }: {
                   placeholder={campanhas.length ? 'Escolha o projeto' : 'Este cliente não tem projeto ativo'} />
               </div>
             </label>
+            <div className="block">
+              <span className="text-[11px] text-orange-800">
+                Responsáveis <span className="text-orange-800/60">· a equipe do cliente vem preenchida; ajuste se precisar</span>
+              </span>
+              <div className="mt-0.5">
+                <MultiSelect values={form.responsaveis} onChange={v => setForm(f => ({ ...f, responsaveis: v }))}
+                  options={membros.map(m => ({ value: m.id, label: m.nome }))}
+                  allLabel="Sem responsável — cai na fila do atendimento" />
+              </div>
+            </div>
             <label className="block">
               <span className="text-[11px] text-orange-800">Pedido para a criação · vira o briefing da tarefa</span>
               <textarea value={form.pedido} onChange={e => setForm(f => ({ ...f, pedido: e.target.value }))} rows={4}
@@ -527,9 +550,9 @@ function ModalEntrega({ orgSlug, clientes, veiculos, entrega, onClose }: {
                 className={cn(campo, 'resize-y')} />
             </label>
             <p className="text-[11px] text-orange-800/80">
-              A tarefa nasce em <b>Briefing</b>, <b>sem responsável</b> — cai na fila &ldquo;Sem responsável&rdquo;
-              do atendimento — com prazo {form.prazoEnvio ? fmt(form.prazoEnvio) : 'igual ao do envio'}, a pasta
-              do Drive já criada com o mesmo nome e o briefing com o pedido e a especificação acima.
+              A tarefa nasce em <b>Briefing</b>{form.responsaveis.length ? ' com os responsáveis acima' : <>, <b>sem responsável</b> — cai na fila &ldquo;Sem responsável&rdquo; do atendimento</>},
+              com prazo {form.prazoEnvio ? fmt(form.prazoEnvio) : 'igual ao do envio'}, a pasta do Drive já criada com
+              o mesmo nome e o briefing com o pedido e a especificação acima.
             </p>
             <p className="text-[11px] text-orange-800/70">
               Nome da tarefa: <span className="font-mono text-orange-900">{nomeTarefa}</span>

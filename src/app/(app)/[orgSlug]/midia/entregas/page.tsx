@@ -2,7 +2,8 @@ import { assertMidiaAccess, statusDaMidia } from '@/lib/midia-hub'
 import { unwrap } from '@/lib/supabase/unwrap'
 import { porNome } from '@/lib/utils'
 import { contatoDoVeiculo } from '@/lib/veiculo-contato'
-import { EntregasMidia, type EntregaRow, type VeiculoOpt } from './EntregasMidia'
+import { membrosAtivos } from '@/lib/membros'
+import { EntregasMidia, type EntregaRow, type VeiculoOpt, type MembroOpt } from './EntregasMidia'
 
 export const metadata = { title: 'Mídia — Entregas' }
 
@@ -28,16 +29,25 @@ export default async function EntregasPage({ params }: { params: Promise<{ orgSl
   const sb = supabase as any
 
   const statusMidia = await statusDaMidia(sb, orgId)
-  const [resEntregas, resWs, resStatus, resVeic] = await Promise.all([
+  const [resEntregas, resWs, resStatus, resVeic, resMem] = await Promise.all([
     sb.from('midia_entrega_view').select('*').eq('org_id', orgId).order('prazo_envio', { ascending: true, nullsFirst: false }),
-    sb.from('workspaces').select('id, name, archived').eq('org_id', orgId),
+    // `equipe` (mig. 280) é o ponto de partida dos responsáveis da tarefa aberta pela entrega.
+    sb.from('workspaces').select('id, name, archived, equipe').eq('org_id', orgId),
     sb.from('org_status').select('valor, label, bg, txt, papel').eq('org_id', orgId),
     // O mesmo cadastro que o comercial usa em PI/MX (mig. 278): a entrega escolhe daqui.
     sb.from('veiculos').select('id, name, emails, telefones').eq('org_id', orgId).eq('archived', false),
+    membrosAtivos(sb, orgId, 'user_id, profiles!user_id(full_name, email)'),
   ])
 
   const rows = unwrap<ViewRow>(resEntregas, 'entregas')
-  const workspaces = unwrap<{ id: string; name: string; archived: boolean }>(resWs, 'clientes').filter(w => !w.archived)
+  const workspaces = unwrap<{ id: string; name: string; archived: boolean; equipe: string[] | null }>(resWs, 'clientes').filter(w => !w.archived)
+  const membros: MembroOpt[] = unwrap<{ user_id: string; profiles: { full_name: string | null; email: string | null } | null }>(resMem, 'membros')
+    .map(m => ({ id: m.user_id, nome: m.profiles?.full_name || m.profiles?.email || '—' }))
+    .sort(porNome(m => m.nome))
+  const ativos = new Set(membros.map(m => m.id))
+  // Só membro ativo entra na sugestão: quem saiu não é opção de responsável.
+  const equipes: Record<string, string[]> = Object.fromEntries(
+    workspaces.map(w => [w.id, (w.equipe ?? []).filter(id => ativos.has(id))]))
   const statusCfg = unwrap<{ valor: string; label: string; bg: string; txt: string; papel: string | null }>(resStatus, 'status')
   const veiculos: VeiculoOpt[] = unwrap<{ id: string; name: string; emails: unknown; telefones: unknown }>(resVeic, 'veículos')
     .sort(porNome(v => v.name))
@@ -88,6 +98,8 @@ export default async function EntregasPage({ params }: { params: Promise<{ orgSl
       entregas={entregas}
       clientes={[...workspaces].sort(porNome(w => w.name)).map(w => ({ id: w.id, nome: w.name }))}
       veiculos={veiculos}
+      membros={membros}
+      equipes={equipes}
       statusCfg={statusCfg}
     />
   )

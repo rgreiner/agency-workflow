@@ -90,6 +90,8 @@ export interface EntregaInput {
   especificacao?: string | null
   /** O que a criação precisa fazer: vira o briefing da tarefa aberta pela entrega. */
   pedido?: string | null
+  /** Responsáveis da tarefa aberta pela entrega (equipe do cliente confirmada pela mídia). */
+  responsaveis?: string[] | null
   prazoEnvio?: string | null
   activityId?: string | null
   campaignId?: string | null
@@ -196,8 +198,12 @@ async function abrirBriefing(
   supabase: any, userId: string, orgSlug: string,
   entregaId: string, campaignId: string, e: EntregaInput,
 ): Promise<{ activityId?: string; erro?: string }> {
-  // Sem p_assignees de propósito (mig. 253): a mídia não decide quem produz.
+  // Responsáveis: a equipe do cliente (mig. 280) vem sugerida no modal e a mídia
+  // confirma — antes nascia sem dono de propósito (01/09) e as 10 primeiras
+  // tarefas receberam responsável à mão depois. Vazio segue caindo na fila
+  // "Sem responsável" (régua da mig. 253).
   const titulo = tituloDaTarefa(e)
+  const assignees = (e.responsaveis ?? []).filter(Boolean)
   // O briefing nasce com o PEDIDO da mídia e a especificação (08/09): antes
   // nascia vazio e o pedido acabava no título — e no nome da pasta. Contato e
   // forma de envio continuam de fora (assunto da mídia, não da criação).
@@ -212,6 +218,7 @@ async function abrirBriefing(
     p_due_date: e.prazoEnvio || null,
     p_estimated_hours: null,
     p_start_date: null,
+    p_assignees: assignees.length ? assignees : null,
   })
   if (error || !activityId) return { erro: error?.message ?? 'A tarefa não foi criada.' }
 
