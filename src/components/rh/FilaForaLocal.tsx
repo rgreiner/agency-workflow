@@ -15,7 +15,13 @@ export interface MarcacaoFora {
   motivo: string | null; status: string
 }
 
+export interface RedeGrupo {
+  ip: string; primeira: string; ultima: string
+  marcacoes: number; pessoas: number; cadastrado: boolean
+}
+
 const dataBR = (d: string) => { const [, m, dd] = d.split('-'); return `${dd}/${m}` }
+const faixa = (de: string, ate: string) => (de === ate ? dataBR(de) : `${dataBR(de)} a ${dataBR(ate)}`)
 
 /** "25/08" ou "25/08 a 27/08" — o período que aquele IP apareceu. */
 function periodo(lista: MarcacaoFora[]) {
@@ -24,10 +30,12 @@ function periodo(lista: MarcacaoFora[]) {
   return de === ate ? de : `${de} a ${ate}`
 }
 
-export function FilaForaLocal({ orgSlug, itens, locais = [] }: {
+export function FilaForaLocal({ orgSlug, itens, locais = [], redesGrupo = [] }: {
   orgSlug: string; itens: MarcacaoFora[]
   /** Locais cadastrados — para cadastrar de uma vez o IP que trocou. */
   locais?: LocalRh[]
+  /** Redes reconhecidas pela própria equipe (3+ pessoas no mesmo IP, mig. 284). */
+  redesGrupo?: RedeGrupo[]
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -92,7 +100,52 @@ export function FilaForaLocal({ orgSlug, itens, locais = [] }: {
     })
   }
 
-  return (
+  const escolherLocal = ativos.length > 1 && (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-gray-500">Cadastrar em</span>
+      <Select value={destino?.id ?? ''} onChange={setDestinoId} size="sm" className="w-44"
+        options={ativos.map(l => ({ value: l.id, label: l.nome }))} />
+    </div>
+  )
+
+  return (<>
+    {/* O IP público da agência troca sozinho. Em vez de depender de alguém
+        cadastrar o número novo, a própria equipe prova qual é a rede. */}
+    {redesGrupo.length > 0 && (
+      <section className="mb-8">
+        <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
+          <Wifi className="w-4 h-4" /> Redes reconhecidas pela equipe <span className="text-gray-400">{redesGrupo.length}</span>
+        </h2>
+        <p className="text-xs text-gray-400 mb-3">
+          Três pessoas ou mais batendo do mesmo IP no mesmo dia contam como escritório, mesmo sem cadastro.
+          É o que segura o dia em que o provedor troca o IP. Se alguma dessas redes <b>não</b> for a agência
+          (um time inteiro num cliente, por exemplo), é aqui que dá pra ver.
+        </p>
+        <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-50">
+          {redesGrupo.map(r => (
+            <div key={r.ip} className="flex flex-wrap items-center gap-2 px-4 py-3">
+              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-900 tabular-nums">
+                <Wifi className="w-3.5 h-3.5 text-gray-400" /> {r.ip}
+              </span>
+              <span className="text-xs text-gray-500">
+                {r.marcacoes} marcaç{r.marcacoes === 1 ? 'ão' : 'ões'} · {r.pessoas} pessoas · {faixa(r.primeira, r.ultima)}
+              </span>
+              <div className="flex-1" />
+              {r.cadastrado ? (
+                <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 rounded-lg px-2 py-1">no cadastro</span>
+              ) : destino && (
+                <button onClick={() => cadastrarIp(r.ip)} disabled={pending}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors">
+                  {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
+                  Fixar em {destino.nome}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+    )}
+
     <section className="mb-8">
       <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
         <MapPinOff className="w-4 h-4" /> Batidas fora dos locais <span className="text-gray-400">{itens.length}</span>
@@ -109,16 +162,10 @@ export function FilaForaLocal({ orgSlug, itens, locais = [] }: {
           {gruposIp.length > 0 && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 mb-3">
               <p className="text-xs text-amber-900">
-                <b>Várias pessoas bateram do mesmo IP.</b> Quase sempre é o IP público do escritório que
-                mudou: a rede deixa de ser reconhecida e todo mundo cai aqui até o IP novo ser cadastrado.
+                <b>Duas pessoas bateram do mesmo IP.</b> Costuma ser o IP público do escritório que mudou.
+                A partir de três pessoas o Flow reconhece sozinho; com duas, a chamada é sua.
               </p>
-              {ativos.length > 1 && (
-                <div className="mt-3 flex items-center gap-2">
-                  <span className="text-xs text-amber-900">Cadastrar em</span>
-                  <Select value={destino?.id ?? ''} onChange={setDestinoId} size="sm" className="w-44"
-                    options={ativos.map(l => ({ value: l.id, label: l.nome }))} />
-                </div>
-              )}
+              {escolherLocal && <div className="mt-3">{escolherLocal}</div>}
               <div className="mt-3 space-y-2">
                 {gruposIp.map(g => (
                   <div key={g.ip} className="flex flex-wrap items-center gap-2">
@@ -184,5 +231,5 @@ export function FilaForaLocal({ orgSlug, itens, locais = [] }: {
         </>
       )}
     </section>
-  )
+  </>)
 }

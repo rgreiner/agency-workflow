@@ -1,6 +1,6 @@
 import { assertRhAccess } from '@/lib/rh'
 import { unwrap, unwrapOne } from '@/lib/supabase/unwrap'
-import { marcacoesFora } from '@/app/actions/rh-ponto'
+import { marcacoesFora, redesDoGrupo } from '@/app/actions/rh-ponto'
 import { meuIp, type LocalRh } from '@/app/actions/rh-local'
 import { PontoGestaoClient, type ExtraPend, type JustPend, type JornadaResumo, type JustDoDia } from './PontoGestaoClient'
 import type { JornadaVals } from '../JornadaEditor'
@@ -95,12 +95,13 @@ export default async function PontoGestaoPage({ params }: { params: Promise<{ or
     .from('rh_local').select('id, nome, ips, lat, lon, raio_m, ativo')
     .eq('org_id', orgId).order('nome'), 'locais')
 
-  const [fora, ipAtual] = await Promise.all([
+  const [fora, ipAtual, redesGrupo] = await Promise.all([
     marcacoesFora(orgSlug),
     meuIp(),
+    redesDoGrupo(orgSlug),
   ])
 
   return <PontoGestaoClient
     pontoObrigatorio={!!cfg?.ponto_obrigatorio} orgSlug={orgSlug} extras={extras} justificativas={justs}
-    jornadaPadrao={jornadaPadrao} locais={locais} fora={fora} ipAtual={ipAtual} />
+    jornadaPadrao={jornadaPadrao} locais={locais} fora={fora} ipAtual={ipAtual} redesGrupo={redesGrupo} />
 }

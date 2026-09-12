@@ -8,7 +8,7 @@ import { decidirExtra, decidirJustificativa, setPontoObrigatorio } from '@/app/a
 import { MarcacoesEditor, validarMarcacoes } from '@/components/ponto/MarcacoesEditor'
 import { DicaPresenca } from '@/components/rh/DicaPresenca'
 import { LocaisPonto } from '@/components/rh/LocaisPonto'
-import { FilaForaLocal, type MarcacaoFora } from '@/components/rh/FilaForaLocal'
+import { FilaForaLocal, type MarcacaoFora, type RedeGrupo } from '@/components/rh/FilaForaLocal'
 import type { LocalRh } from '@/app/actions/rh-local'
 import { JornadaEditor, type JornadaVals } from '../JornadaEditor'
 import { ImportarPontomais } from './ImportarPontomais'
@@ -105,13 +105,15 @@ function diaProposto(j: JustPend): string[] {
 }
 
 export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadrao, pontoObrigatorio = false,
-  locais = [], fora = [], ipAtual = null }: {
+  locais = [], fora = [], ipAtual = null, redesGrupo = [] }: {
   orgSlug: string; extras: ExtraPend[]; justificativas: JustPend[]
   jornadaPadrao: Partial<JornadaVals> | null
   /** Trava do Flow sem ponto batido (migration 199). */
   pontoObrigatorio?: boolean
   /** Locais autorizados e batidas fora deles (migration 227). */
   locais?: LocalRh[]; fora?: MarcacaoFora[]; ipAtual?: string | null
+  /** Redes que a equipe reconheceu sozinha (mig. 284). */
+  redesGrupo?: RedeGrupo[]
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -209,7 +211,7 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
 
       {/* Locais de trabalho + fila de batidas fora (mig. 227) */}
       <LocaisPonto orgSlug={orgSlug} locais={locais} ipAtual={ipAtual} />
-      <FilaForaLocal orgSlug={orgSlug} itens={fora} locais={locais} />
+      <FilaForaLocal orgSlug={orgSlug} itens={fora} locais={locais} redesGrupo={redesGrupo} />
 
       {/* Jornada padrão da empresa */}
       <section className="mb-8">

@@ -81,6 +81,22 @@ export async function marcacoesFora(orgSlug: string, status = 'pendente') {
   }[]
 }
 
+/**
+ * Redes que a EQUIPE reconheceu (mig. 284): 3+ pessoas no mesmo IP no mesmo
+ * dia contam como escritório, mesmo sem cadastro — é o que segura o dia em que
+ * o provedor troca o IP público. `cadastrado` diz se aquele IP já está num local.
+ */
+export async function redesDoGrupo(orgSlug: string, dias = 30) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (c.supabase as any).rpc('rh_redes_do_grupo', { p_org: c.orgId, p_dias: dias })
+  return (data ?? []) as {
+    ip: string; primeira: string; ultima: string
+    marcacoes: number; pessoas: number; cadastrado: boolean
+  }[]
+}
+
 /** Decide uma marcação fora. É AUDITORIA: a hora já contou desde a batida —
  *  corrigir o dia continua sendo o editor do espelho (rh_editar_ponto). */
 export async function decidirMarcacaoFora(orgSlug: string, marcacaoId: string, status: string) {
