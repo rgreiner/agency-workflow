@@ -14,6 +14,7 @@ import { downscaleImage } from '@/lib/image-resize'
 import { baterPonto, criarJustificativa } from '@/app/actions/rh-ponto'
 import { DicaPresenca } from '@/components/rh/DicaPresenca'
 import { anunciarPonto } from '@/components/ponto/ponto-sync'
+import { coordenadaDaBatida } from '@/components/ponto/coordenada'
 
 export interface PontoDia {
   data: string; entrada: string | null; intervalo_ini: string | null; intervalo_fim: string | null
@@ -64,25 +65,10 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
     : dentro ? { label: 'Bater saída', dica: 'pausa ou fim do dia', icon: Coffee }
              : { label: 'Bater retorno', dica: null, icon: Undo2 }
 
-  /** Pede a localização, mas nunca trava a batida: se a pessoa negar, o
-   *  navegador não suportar ou o GPS demorar, bate assim mesmo — o servidor
-   *  ainda tem o IP para reconhecer a rede da agência. Bloquear aqui deixaria
-   *  quem negou a permissão sem conseguir registrar o próprio trabalho. */
-  function coordenada(): Promise<{ lat: number | null; lon: number | null }> {
-    return new Promise(resolve => {
-      if (!navigator.geolocation) return resolve({ lat: null, lon: null })
-      navigator.geolocation.getCurrentPosition(
-        p => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }),
-        () => resolve({ lat: null, lon: null }),
-        { enableHighAccuracy: true, timeout: 6000, maximumAge: 60_000 },
-      )
-    })
-  }
-
   function bater() {
     const indice = horas.length
     start(async () => {
-      const geo = await coordenada()
+      const geo = await coordenadaDaBatida()
       const r = await baterPonto(orgSlug, colaboradorId, geo)
       if (r?.error) { toast.error(r.error); return }
       // Confirmação no aparelho (Android; o iPhone ignora): quem bate o ponto

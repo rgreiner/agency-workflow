@@ -6,6 +6,7 @@ import { Clock, Loader2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { pontoEstado, baterPonto, baterEntradaRetro } from '@/app/actions/rh-ponto'
 import { PONTO_EVENT, anunciarPonto } from '@/components/ponto/ponto-sync'
+import { coordenadaDaBatida } from '@/components/ponto/coordenada'
 import { ExtraContextoModal, extraNascida, type ExtraNascida } from '@/components/ponto/ExtraContextoModal'
 
 type Estado = NonNullable<Awaited<ReturnType<typeof pontoEstado>>>
@@ -135,9 +136,11 @@ export function PontoPrompt({ orgSlug }: { orgSlug: string }) {
   function bater(retro: boolean) {
     const colaboradorId = estado!.colaborador_id
     start(async () => {
+      // A retroativa NÃO manda coordenada de propósito: ela registra uma hora
+      // passada, e onde a pessoa está agora não diz onde ela estava lá atrás.
       const r = retro
         ? await baterEntradaRetro(orgSlug)
-        : await baterPonto(orgSlug, colaboradorId)
+        : await baterPonto(orgSlug, colaboradorId, await coordenadaDaBatida())
       if (r && 'error' in r && r.error) { toast.error(r.error); return }
       const hora = retro && r && 'hora' in r ? (r as { hora?: string }).hora : null
       toast.success(hora ? `Entrada registrada às ${hora}.` : 'Ponto registrado.')

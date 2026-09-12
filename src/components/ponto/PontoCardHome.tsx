@@ -7,6 +7,7 @@ import { Clock, LogIn, Coffee, Undo2, Loader2, ChevronRight, AlertTriangle } fro
 import { toast } from 'sonner'
 import { baterPonto } from '@/app/actions/rh-ponto'
 import { anunciarPonto } from '@/components/ponto/ponto-sync'
+import { coordenadaDaBatida } from '@/components/ponto/coordenada'
 import { ExtraContextoModal, extraNascida, type ExtraNascida } from '@/components/ponto/ExtraContextoModal'
 
 const hm = (t: string) => t.slice(0, 5)
@@ -35,9 +36,19 @@ export function PontoCardHome({ orgSlug, colaboradorId, marcacoes, diasIncomplet
 
   function bater() {
     start(async () => {
-      const r = await baterPonto(orgSlug, colaboradorId)
+      // Mesma coordenada da tela do ponto: sem ela, quem bate daqui só é
+      // reconhecido pelo IP — e o IP do escritório muda de tempos em tempos.
+      const geo = await coordenadaDaBatida()
+      const r = await baterPonto(orgSlug, colaboradorId, geo)
       if (r?.error) { toast.error(r.error); return }
-      toast.success('Ponto registrado!')
+      navigator.vibrate?.(15)
+      if (r.resultado?.fora) {
+        toast.warning('Ponto registrado fora da agência — o RH vai revisar.', {
+          description: 'Suas horas contam normalmente.', duration: 7000,
+        })
+      } else {
+        toast.success(r.resultado?.local ? `Ponto registrado — ${r.resultado.local}` : 'Ponto registrado!')
+      }
       // Fechou o dia com extra pendente e sem contexto → pergunta na hora.
       const ex = extraNascida(r.resultado)
       if (ex) setExtra(ex)

@@ -209,7 +209,7 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
 
       {/* Locais de trabalho + fila de batidas fora (mig. 227) */}
       <LocaisPonto orgSlug={orgSlug} locais={locais} ipAtual={ipAtual} />
-      <FilaForaLocal orgSlug={orgSlug} itens={fora} />
+      <FilaForaLocal orgSlug={orgSlug} itens={fora} locais={locais} />
 
       {/* Jornada padrão da empresa */}
       <section className="mb-8">

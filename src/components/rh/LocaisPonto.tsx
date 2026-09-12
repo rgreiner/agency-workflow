@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { MapPin, Plus, Loader2, Check, X, Trash2, Crosshair, Wifi } from 'lucide-react'
 import { toast } from 'sonner'
 import { salvarLocal, excluirLocal, type LocalRh } from '@/app/actions/rh-local'
+import { Modal } from '@/components/ui/Modal'
 
 export function LocaisPonto({ orgSlug, locais, ipAtual }: {
   orgSlug: string; locais: LocalRh[]; ipAtual: string | null
@@ -88,7 +89,6 @@ function LocalModal({ orgSlug, local, ipAtual, onClose, onOk }: {
   const [raio, setRaio] = useState(local?.raio_m ?? 150)
   const [ativo, setAtivo] = useState(local?.ativo ?? true)
   const [saving, start] = useTransition()
-  const [down, setDown] = useState(false)
 
   function usarDaqui() {
     if (!navigator.geolocation) { toast.error('Seu navegador não informa localização.'); return }
@@ -115,10 +115,7 @@ function LocalModal({ orgSlug, local, ipAtual, onClose, onOk }: {
   const inputCls = 'w-full px-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500'
 
   return (
-    <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-      onMouseDown={() => setDown(true)}
-      onClick={e => { if (down && e.target === e.currentTarget) onClose(); setDown(false) }}>
-      <div className="modal-card w-full max-w-md max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-xl border border-gray-200" onMouseDown={e => e.stopPropagation()}>
+    <Modal open onClose={onClose} label={local ? 'Editar local' : 'Novo local'} dismissable={!saving} dismissOnBackdrop={false}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h2 className="text-base font-semibold text-gray-900">{local ? 'Editar local' : 'Novo local'}</h2>
           <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-700"><X className="w-4 h-4" /></button>
@@ -176,7 +173,6 @@ function LocalModal({ orgSlug, local, ipAtual, onClose, onOk }: {
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Salvar
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

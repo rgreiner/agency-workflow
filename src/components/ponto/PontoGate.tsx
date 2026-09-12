@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Clock, Loader2, Coffee } from 'lucide-react'
 import { baterPonto, pontoGate } from '@/app/actions/rh-ponto'
 import { anunciarPonto } from '@/components/ponto/ponto-sync'
+import { coordenadaDaBatida } from '@/components/ponto/coordenada'
 
 /**
  * Trava do ponto (migration 199) — só existe quando a organização liga o
@@ -73,7 +74,7 @@ export function PontoGate({ orgSlug }: { orgSlug: string }) {
 
   function bater() {
     start(async () => {
-      const r = await baterPonto(orgSlug, estado!.colaborador_id!)
+      const r = await baterPonto(orgSlug, estado!.colaborador_id!, await coordenadaDaBatida())
       if (r?.error) { toast.error(r.error); return }
       toast.success('Ponto registrado. Bom trabalho.')
       carregar()
