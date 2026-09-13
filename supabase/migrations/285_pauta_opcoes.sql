@@ -29,6 +29,11 @@
 -- perde: `org_pauta_uso()` mostra na tela o que está sendo digitado fora do
 -- cadastro, para promover com um clique.
 --
+-- Régua de grant deste projeto: revogar de public, anon E authenticated (o banco
+-- tem default privileges para os dois últimos) e devolver o grant só a quem o app
+-- chama. Conferir depois de aplicar com has_function_privilege — nunca confiar no
+-- que a migration diz que fez.
+--
 -- Idempotente.
 
 create table if not exists org_pauta_opcao (
@@ -120,13 +125,20 @@ language sql stable security definer set search_path to 'public' as $$
      and btrim(x.seg) <> ''
      and length(btrim(x.seg)) <= 60;
 $$;
--- SEM grant para authenticated, de propósito: esta função é SECURITY DEFINER e
--- devolve os títulos de TODAS as orgs, sem filtro. Exposta no PostgREST, qualquer
--- usuário logado leria a pauta de qualquer organização — foi assim que a 181
--- vazou o livro-caixa. Quem a chama é org_pauta_uso(), que também é SECURITY
--- DEFINER (roda como dono, então não depende deste grant) e filtra por org_id
--- com is_org_member() antes de devolver qualquer linha.
-revoke execute on function pauta_segmentos() from public;
+-- Helper INTERNO: SECURITY DEFINER, devolve os títulos de TODAS as orgs, sem
+-- filtro e sem guarda de permissão (a guarda está em quem chama). Não pode
+-- existir para o PostgREST.
+--
+-- Revogar dos TRÊS papéis, não só de public: este banco tem ALTER DEFAULT
+-- PRIVILEGES dando execute a `anon` e `authenticated` em toda função nova do
+-- schema public (a 167 e a 183 já registraram isso). `revoke from public` tira
+-- só o grant de PUBLIC e deixa os dois papéis com acesso — medido em produção,
+-- esta função ficou chamável por ANON via POST /rest/v1/rpc/pauta_segmentos.
+--
+-- Quem a chama é org_pauta_uso(), também SECURITY DEFINER: roda como dono, então
+-- não depende de grant nenhum, e filtra por org_id com is_org_member() antes de
+-- devolver linha.
+revoke execute on function pauta_segmentos() from public, anon, authenticated;
 
 -- Alimenta a tela do admin com as duas metades da mesma pergunta:
 --   • opção do cadastro e quanto ela é usada (usos = 0 → candidata a sair);
@@ -172,7 +184,7 @@ language sql stable security definer set search_path to 'public' as $$
    where is_org_member(p_org)
    order by t.no_cadastro desc, t.usos desc, t.campo nulls last, t.ordem, t.valor;
 $$;
-revoke execute on function org_pauta_uso(uuid) from public;
+revoke execute on function org_pauta_uso(uuid) from public, anon, authenticated;
 grant  execute on function org_pauta_uso(uuid) to authenticated;
 
 -- ── CRUD (owner/admin; auth.uid(), nunca usuário por parâmetro) ──────────────
@@ -183,7 +195,7 @@ returns boolean language sql stable security definer set search_path to 'public'
      where org_id = p_org and user_id = auth.uid() and role in ('owner','admin')
   );
 $$;
-revoke execute on function org_pauta_pode(uuid) from public;
+revoke execute on function org_pauta_pode(uuid) from public, anon, authenticated;
 grant  execute on function org_pauta_pode(uuid) to authenticated;
 
 -- Cria (p_id null) ou renomeia. Renomear não toca em título já gravado.
@@ -220,7 +232,7 @@ begin
   if not found then raise exception 'Opção não encontrada'; end if;
   return p_id;
 end $$;
-revoke execute on function org_pauta_salvar(uuid, uuid, text, text) from public;
+revoke execute on function org_pauta_salvar(uuid, uuid, text, text) from public, anon, authenticated;
 grant  execute on function org_pauta_salvar(uuid, uuid, text, text) to authenticated;
 
 -- Excluir é seguro: nenhuma tarefa aponta para a opção, o texto já está no título.
@@ -231,7 +243,7 @@ begin
   delete from org_pauta_opcao where id = p_id and org_id = p_org;
   if not found then raise exception 'Opção não encontrada'; end if;
 end $$;
-revoke execute on function org_pauta_excluir(uuid, uuid) from public;
+revoke execute on function org_pauta_excluir(uuid, uuid) from public, anon, authenticated;
 grant  execute on function org_pauta_excluir(uuid, uuid) to authenticated;
 
 create or replace function org_pauta_reordenar(p_org uuid, p_campo text, p_ids uuid[])
@@ -242,7 +254,7 @@ begin
     from unnest(p_ids) with ordinality as i(id, pos)
    where o.id = i.id and o.org_id = p_org and o.campo = p_campo;
 end $$;
-revoke execute on function org_pauta_reordenar(uuid, text, uuid[]) from public;
+revoke execute on function org_pauta_reordenar(uuid, text, uuid[]) from public, anon, authenticated;
 grant  execute on function org_pauta_reordenar(uuid, text, uuid[]) to authenticated;
 
 notify pgrst, 'reload schema';
