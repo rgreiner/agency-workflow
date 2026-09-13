@@ -71,6 +71,7 @@ export default async function SettingsLayout({
             { href: `/${orgSlug}/settings/cargos`,    label: 'Cargos',           badge: 0 },
             { href: `/${orgSlug}/settings/onboarding`,label: 'Onboarding',       badge: 0 },
             { href: `/${orgSlug}/settings/aparencia`, label: 'Aparência',        badge: 0 },
+            { href: `/${orgSlug}/settings/pauta`,     label: 'Pauta',            badge: 0 },
             { href: `/${orgSlug}/settings/documentos`,label: 'Documentos',       badge: 0 },
             { href: `/${orgSlug}/settings/revisao`,   label: 'Revisão IA',       badge: 0 },
             { href: `/${orgSlug}/settings/saude`,     label: 'Verificações',     badge: verificacoesPendentes },

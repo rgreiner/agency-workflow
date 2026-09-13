@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { membrosAtivos } from '@/lib/membros'
 import { porNome } from '@/lib/utils'
-import { decomporTitulo } from '@/lib/atividade-titulo'
+import { decomporTitulo, pautaListasDe } from '@/lib/atividade-titulo'
 import { NewActivityForm, type MembroSelecionavel, type NovaAtividadeInicial } from './NewActivityForm'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -12,7 +12,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * exige escolher o responsável na criação (tarefa não nasce sem dono, e não é
  * mais o criador por padrão). O form em si fica em NewActivityForm (client).
  *
- * `?from=<id>` = duplicar: herda veículo/formato/título, briefing, prioridade,
+ * `?from=<id>` = duplicar: herda veículo/formato/objetivo/título, briefing, prioridade,
  * complexidade, horas e responsáveis da tarefa de origem; data e período são de
  * hoje. A leitura passa pela RLS — quem não enxerga a origem cria em branco.
  */
@@ -50,16 +50,23 @@ export default async function NewActivityPage({ params, searchParams, modal = fa
 
   let inicial: NovaAtividadeInicial | null = null
   if (from && UUID_RE.test(from)) {
-    const [{ data: origem }, { data: resp }] = await Promise.all([
+    // O cadastro da pauta (mig. 285) só é lido ao DUPLICAR: é ele que desempata
+    // um título de 2 segmentos (veículo ou formato?) e reconhece o objetivo.
+    // Criar em branco não precisa dele — o form já recebe as listas pelo provider.
+    const [{ data: origem }, { data: resp }, { data: pautaRows }] = await Promise.all([
       supabase.from('activities')
         .select('title, description, priority, complexity, estimated_hours')
         .eq('id', from).maybeSingle(),
       supabase.from('activity_assignees').select('user_id').eq('activity_id', from),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ws ? (supabase as any).from('org_pauta_opcao').select('campo, valor')
+             .eq('org_id', ws.org_id).order('ordem')
+         : Promise.resolve({ data: null }),
     ])
     if (origem) {
       inicial = {
         fromTitle: origem.title,
-        ...decomporTitulo(origem.title),
+        ...decomporTitulo(origem.title, pautaListasDe(pautaRows as { campo: string; valor: string }[] | null)),
         description: origem.description,
         priority: origem.priority,
         complexity: origem.complexity,

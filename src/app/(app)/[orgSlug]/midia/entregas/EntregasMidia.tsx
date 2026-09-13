@@ -10,7 +10,8 @@ import {
 import { cn } from '@/lib/utils'
 import { Select, MultiSelect } from '@/components/ui/Select'
 import { Combobox } from '@/components/ui/Combobox'
-import { FORMATOS } from '@/lib/atividade-titulo'
+import { conhecido } from '@/lib/atividade-titulo'
+import { useOrgSettings } from '@/components/providers/OrgSettingsProvider'
 import { enviarReferencia, fmtBytes, MAX_REFERENCIA_BYTES } from '@/lib/referencias-client'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import {
@@ -53,8 +54,6 @@ export interface MembroOpt { id: string; nome: string }
 /** Sentinela: entrega antiga cujo veículo é só texto, fora do cadastro. */
 const VEICULO_TEXTO = '__texto__'
 
-const FORMATO_OPTIONS = FORMATOS.map(f => ({ value: f, label: f }))
-const formatoConhecido = (v: string) => !!v && v !== 'Outro' && (FORMATOS as readonly string[]).includes(v)
 /** Acima disso o nome está virando pedido — e o pedido tem campo próprio. */
 const NOME_LONGO = 45
 
@@ -289,6 +288,13 @@ function ModalEntrega({ orgSlug, clientes, veiculos, membros, equipes, entrega, 
   onClose: () => void
 }) {
   const [pending, start] = useTransition()
+  // Formato é vocabulário COMPARTILHADO com a pauta: a mídia e a criação precisam
+  // chamar a mesma peça pelo mesmo nome. Por isso lê o cadastro da org (mig. 285)
+  // em vez de uma lista própria. useMemo pelo mesmo motivo do form de atividade.
+  const { pauta } = useOrgSettings()
+  const FORMATO_OPTIONS = useMemo(() => pauta.formato.map(f => ({ value: f, label: f })), [pauta.formato])
+  const formatoConhecido = (v: string) => conhecido(pauta.formato, v)
+
   const [form, setForm] = useState({
     workspaceId: entrega?.workspaceId ?? '',
     titulo: entrega?.titulo ?? '',

@@ -169,6 +169,7 @@ function PalettePanel({ orgSlug, workspaces, onClose, canManage, canListaGlobal,
         { id: 's-membros',   label: 'Membros da equipe',  group: 'Configurações', href: `${base}/settings/membros`,   icon: Settings },
         { id: 's-cargos',    label: 'Cargos',             group: 'Configurações', href: `${base}/settings/cargos`,    icon: Settings },
         { id: 's-aparencia', label: 'Aparência',          group: 'Configurações', href: `${base}/settings/aparencia`, icon: Palette },
+        { id: 's-pauta',     label: 'Pauta',              group: 'Configurações', href: `${base}/settings/pauta`, icon: Palette },
       ] : []),
       { id: 's-perfil',    label: 'Meu perfil',         group: 'Configurações', href: `${base}/perfil`,             icon: User },
     ]

@@ -6,6 +6,7 @@ import { getUsuario } from '@/lib/auth/server'
 import { AppShell } from '@/components/layout/AppShell'
 import { pendenciasDeTransicao } from '@/lib/midia-hub'
 import { OrgSettingsProvider } from '@/components/providers/OrgSettingsProvider'
+import { pautaListasDe } from '@/lib/atividade-titulo'
 import { UserPrefsProvider } from '@/components/providers/UserPrefsProvider'
 import { UsuarioProvider } from '@/components/providers/UsuarioProvider'
 import { ChatDock } from '@/components/chat/ChatDock'
@@ -116,12 +117,24 @@ export default async function OrgLayout({
     .eq('org_id', org.id)
     .order('ordem') as { data: import('@/types').OrgStatusRow[] | null }
 
+  // Sugestões que compõem o título da pauta (migration 285). Consulta pequena e
+  // no mesmo lugar do cadastro de status: o form de nova atividade e o modal de
+  // entrega da mídia leem daqui, sem prop drilling.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: pautaRows } = await (supabase as any)
+    .from('org_pauta_opcao')
+    .select('campo, valor')
+    .eq('org_id', org.id)
+    .order('campo')
+    .order('ordem') as { data: { campo: string; valor: string }[] | null }
+
   const orgSettings = {
     orgId:           org.id,
     logoUrl:         rawSettings?.logo_url ?? null,
     accentColor:     rawSettings?.accent_color ?? '#ff6a00',
     statusOverrides: (rawSettings?.status_overrides as unknown[] ?? []) as import('@/types').StatusOverride[],
     statuses:        statusRows ?? [],
+    pauta:           pautaListasDe(pautaRows),
   }
 
   const accent = orgSettings.accentColor

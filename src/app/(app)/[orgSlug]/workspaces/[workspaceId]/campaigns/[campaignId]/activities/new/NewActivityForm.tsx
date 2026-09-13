@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { EditorContent } from '@tiptap/react'
 import { createActivity } from '@/app/actions/activity'
@@ -11,7 +11,8 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { Select } from '@/components/ui/Select'
-import { VEICULOS, FORMATOS, composedTitle, hojeISO, somarDias, prefixoDaData } from '@/lib/atividade-titulo'
+import { composedTitle, conhecido, hojeISO, somarDias, prefixoDaData } from '@/lib/atividade-titulo'
+import { useOrgSettings } from '@/components/providers/OrgSettingsProvider'
 import { MembrosPicker, type MembroSelecionavel } from '@/components/MembrosPicker'
 
 export type { MembroSelecionavel }
@@ -19,9 +20,6 @@ import {
   useBriefingEditor, useBriefingVazio, BriefingToolbar, FaltandoIA,
   toHTML, isEmptyHtml, briefingToEditorHTML, faltandoToChecklistHTML,
 } from '@/components/briefing/BriefingRich'
-
-const VEICULO_OPTIONS = VEICULOS.map(v => ({ value: v, label: v }))
-const FORMATO_OPTIONS = FORMATOS.map(f => ({ value: f, label: f }))
 
 // Prazo padrão da casa: 7 dias a partir da entrada na pauta (Rafael, 02/09/2026).
 const PRAZO_PADRAO_DIAS = 7
@@ -38,6 +36,7 @@ export interface NovaAtividadeInicial {
   fromTitle: string
   veiculo: string
   formato: string
+  objetivo: string
   titulo: string
   description: string | null
   priority: string
@@ -100,14 +99,24 @@ export function NewActivityForm({ members, currentUserId, inicial, equipeIds, mo
   // Perguntas devolvidas pela IA quando o rascunho não dá pra estruturar.
   const [faltandoIA, setFaltandoIA] = useState<string[]>([])
 
-  // Lista conhece o valor → seleciona; senão "Outro" + texto livre (título antigo duplicado).
-  const conhecido = (lista: readonly string[], v: string) => !!v && v !== 'Outro' && lista.includes(v)
+  // Veículo, formato e objetivo vêm do cadastro da org (mig. 285, Configurações →
+  // Pauta). useMemo é obrigatório: sem ele cada render devolve array novo e o
+  // Select entra em loop — mesmo React #301 de 30/07/2026 que derrubou os status.
+  const { pauta } = useOrgSettings()
+  const VEICULO_OPTIONS  = useMemo(() => pauta.veiculo.map(v  => ({ value: v,  label: v  })), [pauta.veiculo])
+  const FORMATO_OPTIONS  = useMemo(() => pauta.formato.map(f  => ({ value: f,  label: f  })), [pauta.formato])
+  const OBJETIVO_OPTIONS = useMemo(() => pauta.objetivo.map(o => ({ value: o, label: o })), [pauta.objetivo])
+
+  // Cadastro conhece o valor → seleciona; senão "Outro" + texto livre. É o caso de
+  // duplicar tarefa antiga cujo valor saiu da lista (a 285 tirou Instagram, TV...).
   const hoje = hojeISO()
   const [date, setDate] = useState(prefixoDaData(hoje))
-  const [veiculo, setVeiculo] = useState(() => !inicial?.veiculo ? '' : conhecido(VEICULOS, inicial.veiculo) ? inicial.veiculo : 'Outro')
-  const [veiculoCustom, setVeiculoCustom] = useState(() => inicial?.veiculo && !conhecido(VEICULOS, inicial.veiculo) ? inicial.veiculo : '')
-  const [formato, setFormato] = useState(() => !inicial?.formato ? '' : conhecido(FORMATOS, inicial.formato) ? inicial.formato : 'Outro')
-  const [formatoCustom, setFormatoCustom] = useState(() => inicial?.formato && !conhecido(FORMATOS, inicial.formato) ? inicial.formato : '')
+  const [veiculo, setVeiculo] = useState(() => !inicial?.veiculo ? '' : conhecido(pauta.veiculo, inicial.veiculo) ? inicial.veiculo : 'Outro')
+  const [veiculoCustom, setVeiculoCustom] = useState(() => inicial?.veiculo && !conhecido(pauta.veiculo, inicial.veiculo) ? inicial.veiculo : '')
+  const [formato, setFormato] = useState(() => !inicial?.formato ? '' : conhecido(pauta.formato, inicial.formato) ? inicial.formato : 'Outro')
+  const [formatoCustom, setFormatoCustom] = useState(() => inicial?.formato && !conhecido(pauta.formato, inicial.formato) ? inicial.formato : '')
+  const [objetivo, setObjetivo] = useState(() => !inicial?.objetivo ? '' : conhecido(pauta.objetivo, inicial.objetivo) ? inicial.objetivo : 'Outro')
+  const [objetivoCustom, setObjetivoCustom] = useState(() => inicial?.objetivo && !conhecido(pauta.objetivo, inicial.objetivo) ? inicial.objetivo : '')
   const [titulo, setTitulo] = useState(inicial?.titulo ?? '')
 
   // Tarefa não nasce sem dono e quem cria NÃO vira dono por padrão (mig. 253). O
@@ -139,9 +148,12 @@ export function NewActivityForm({ members, currentUserId, inicial, equipeIds, mo
     setForm((prev) => ({ ...prev, [field]: value }))
   }
 
-  const veiculoFinal = veiculo === 'Outro' ? veiculoCustom : veiculo
-  const formatoFinal = formato === 'Outro' ? formatoCustom : formato
-  const fullTitle = composedTitle(date, veiculoFinal, formatoFinal, titulo)
+  const veiculoFinal  = veiculo  === 'Outro' ? veiculoCustom  : veiculo
+  const formatoFinal  = formato  === 'Outro' ? formatoCustom  : formato
+  const objetivoFinal = objetivo === 'Outro' ? objetivoCustom : objetivo
+  const fullTitle = composedTitle({
+    date, veiculo: veiculoFinal, formato: formatoFinal, objetivo: objetivoFinal, titulo,
+  })
 
   const driveId = parseDriveId(form.drive_folder_url)
   const driveUrl = driveId ? driveOpenUrl(driveId) : null
@@ -248,8 +260,9 @@ export function NewActivityForm({ members, currentUserId, inicial, equipeIds, mo
           {/* Coluna principal: o que é a atividade */}
           <div className="min-w-0 min-h-0 flex flex-col gap-4">
 
-            {/* Data · Veículo · Formato */}
-            <div className="grid gap-3 sm:grid-cols-[7rem_minmax(0,1fr)_minmax(0,1fr)]">
+            {/* Data · Veículo · Formato · Objetivo — os três últimos são opcionais:
+                34% das tarefas são rotina administrativa e não têm peça nenhuma. */}
+            <div className="grid gap-3 sm:grid-cols-[7rem_repeat(3,minmax(0,1fr))]">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Data <span className="text-gray-400 font-normal text-xs">(AAMMDD)</span>
@@ -259,12 +272,22 @@ export function NewActivityForm({ members, currentUserId, inicial, equipeIds, mo
                   className={cn(inputCls, 'font-mono')} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Veículo</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Veículo <span className="text-gray-400 font-normal text-xs">(opcional)</span>
+                </label>
                 <Select value={veiculo} onChange={setVeiculo} options={VEICULO_OPTIONS} placeholder="Selecionar" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Formato</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Formato <span className="text-gray-400 font-normal text-xs">(opcional)</span>
+                </label>
                 <Select value={formato} onChange={setFormato} options={FORMATO_OPTIONS} placeholder="Selecionar" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Objetivo <span className="text-gray-400 font-normal text-xs">(opcional)</span>
+                </label>
+                <Select value={objetivo} onChange={setObjetivo} options={OBJETIVO_OPTIONS} placeholder="Selecionar" />
               </div>
             </div>
 
@@ -275,6 +298,10 @@ export function NewActivityForm({ members, currentUserId, inicial, equipeIds, mo
             {formato === 'Outro' && (
               <input type="text" value={formatoCustom} onChange={(e) => setFormatoCustom(e.target.value)}
                 placeholder="Qual formato?" autoFocus={!inicial} className={inputCls} />
+            )}
+            {objetivo === 'Outro' && (
+              <input type="text" value={objetivoCustom} onChange={(e) => setObjetivoCustom(e.target.value)}
+                placeholder="Qual objetivo?" autoFocus={!inicial} className={inputCls} />
             )}
 
             {/* Título da demanda */}
