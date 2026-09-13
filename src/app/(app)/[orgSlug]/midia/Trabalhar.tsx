@@ -15,6 +15,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { lerLinhaComData } from '@/lib/checklist-datas'
 import { DATE_FILTERS, matchesDateFilter } from '@/lib/prazo-filtro'
+import { criarPrefLocal } from '@/lib/pref-local'
 import { concluirTarefaMidia, desdobrarEmDatas, marcarItemChecklist, mudarSituacaoEntrega } from '@/app/actions/midia-hub'
 
 /**
@@ -75,8 +76,7 @@ const FREQ: Record<string, string> = {
 /** Quantos dias antes o planejador de posts aceita agendar (Meta: 28) — só para o chip. */
 const JANELA_AGENDAMENTO = 28
 
-// ── Preferências locais (por navegador), lidas sem setState em effect ────────
-// Versionar a chave quando o default mudar.
+// ── Preferências locais (por navegador) — ver lib/pref-local ────────────────
 
 type ChaveLink = 'redacao' | 'preview' | 'final' | 'pasta'
 type LinksVisiveis = Record<ChaveLink, boolean>
@@ -88,34 +88,12 @@ const LINKS: { chave: ChaveLink; label: string }[] = [
 ]
 const LINKS_PADRAO: LinksVisiveis = { redacao: true, preview: true, final: true, pasta: true }
 
-function criarPref<T>(chave: string, padrao: T, ler: (bruto: string) => T) {
-  const ouvintes = new Set<() => void>()
-  // useSyncExternalStore exige snapshot estável enquanto nada mudou: o cache
-  // devolve o mesmo objeto para o mesmo texto gravado.
-  let cache: { bruto: string | null; valor: T } | null = null
-  const get = (): T => {
-    let bruto: string | null = null
-    try { bruto = localStorage.getItem(chave) } catch { /* sem storage */ }
-    if (cache && cache.bruto === bruto) return cache.valor
-    let valor = padrao
-    if (bruto != null) { try { valor = ler(bruto) } catch { valor = padrao } }
-    cache = { bruto, valor }
-    return valor
-  }
-  const set = (valor: T) => {
-    try { localStorage.setItem(chave, JSON.stringify(valor)) } catch { /* sem storage */ }
-    ouvintes.forEach(f => f())
-  }
-  const assinar = (cb: () => void) => { ouvintes.add(cb); return () => { ouvintes.delete(cb) } }
-  return { get, set, assinar, padrao }
-}
-
-const prefEu = criarPref<boolean>('flow:midia:trabalhar:eu:v1', false,
+const prefEu = criarPrefLocal<boolean>('flow:midia:trabalhar:eu:v1', false,
   b => b === '1' || b === 'true')
-const prefLinks = criarPref<LinksVisiveis>('flow:midia:trabalhar:links:v1', LINKS_PADRAO,
+const prefLinks = criarPrefLocal<LinksVisiveis>('flow:midia:trabalhar:links:v1', LINKS_PADRAO,
   b => ({ ...LINKS_PADRAO, ...(JSON.parse(b) as Partial<LinksVisiveis>) }))
 /** Filtro de prazo — os mesmos presets da Lista (lib/prazo-filtro). */
-const prefPrazo = criarPref<string>('flow:midia:trabalhar:prazo:v1', '',
+const prefPrazo = criarPrefLocal<string>('flow:midia:trabalhar:prazo:v1', '',
   b => { const v = JSON.parse(b); return DATE_FILTERS.some(f => f.value === v) ? v : '' })
 
 // ── Datas ────────────────────────────────────────────────────────────────────

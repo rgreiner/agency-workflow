@@ -22,6 +22,8 @@ export interface PautaUsoRow {
   usos: number
   ultimo: string | null
   no_cadastro: boolean
+  /** Sugestão que o admin mandou ignorar (mig. 287): sai da fila de decisão, sem apagar nada. */
+  ignorado: boolean
 }
 
 /** Cria (id null) ou renomeia. Renomear não reescreve título já gravado. */
@@ -63,6 +65,34 @@ export async function reordenarOpcoesPauta(
   const { error } = await (supabase as any).rpc('org_pauta_reordenar', {
     p_org: orgId, p_campo: campo, p_ids: ids,
   })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}`, 'layout')
+  return { ok: true }
+}
+
+/**
+ * Ignora uma sugestão: o valor sai da fila de decisão da tela. Existe porque nem
+ * toda sugestão vira cadastro — parte é uso ERRADO do campo, e a correção é
+ * orientar a pessoa, não cadastrar o valor. Reversível.
+ */
+export async function ignorarSugestaoPauta(orgSlug: string, orgId: string, valor: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('org_pauta_ignorar', { p_org: orgId, p_valor: valor })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}`, 'layout')
+  return { ok: true }
+}
+
+/** Traz de volta para a fila de decisão. */
+export async function reverIgnoradaPauta(orgSlug: string, orgId: string, valor: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('org_pauta_designorar', { p_org: orgId, p_valor: valor })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}`, 'layout')
   return { ok: true }

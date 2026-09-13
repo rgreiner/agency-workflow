@@ -1,14 +1,16 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useMemo, useState, useSyncExternalStore, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { ChevronUp, ChevronDown, Trash2, Plus, Loader2, Lightbulb } from 'lucide-react'
+import { ChevronUp, ChevronDown, ChevronRight, Trash2, Plus, Loader2, Lightbulb, EyeOff, Undo2 } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import {
   salvarOpcaoPauta, excluirOpcaoPauta, reordenarOpcoesPauta,
+  ignorarSugestaoPauta, reverIgnoradaPauta,
   type CampoPauta, type PautaUsoRow,
 } from '@/app/actions/org-pauta'
+import { criarPrefLocal } from '@/lib/pref-local'
 import type { OrgPautaOpcaoRow } from '@/lib/atividade-titulo'
 
 const CAMPOS: { campo: CampoPauta; titulo: string; nota: string; exemplo: string }[] = [
@@ -19,6 +21,13 @@ const CAMPOS: { campo: CampoPauta; titulo: string; nota: string; exemplo: string
   { campo: 'objetivo', titulo: 'Objetivo', exemplo: 'Conversão, Captação, Remarketing',
     nota: 'Para que a peça existe. Antes vinha disfarçado de formato.' },
 ]
+
+/**
+ * Quais listas ficam abertas. Nascem FECHADAS: a tela é de manutenção pontual —
+ * abre-se a lista que se vai mexer, não as três. Preferência por pessoa.
+ */
+const prefAbertas = criarPrefLocal<string[]>('flow:pauta:abertas:v1', [],
+  b => { const v = JSON.parse(b); return Array.isArray(v) ? v.filter(x => typeof x === 'string') : [] })
 
 const inputCls = 'w-full px-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 ' +
   'placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition'
@@ -42,7 +51,13 @@ export function PautaClient({ orgSlug, orgId, opcoes, uso }: {
     return m
   }, [uso])
 
-  const sugestoes = useMemo(() => uso.filter(u => u.no_cadastro), [uso])
+  const abertas = useSyncExternalStore(prefAbertas.assinar, prefAbertas.get, () => [] as string[])
+  const alternar = (campo: string) =>
+    prefAbertas.set(abertas.includes(campo) ? abertas.filter(c => c !== campo) : [...abertas, campo])
+  const [verIgnoradas, setVerIgnoradas] = useState(false)
+
+  const sugestoes = useMemo(() => uso.filter(u => u.no_cadastro && !u.ignorado), [uso])
+  const ignoradas = useMemo(() => uso.filter(u => u.no_cadastro && u.ignorado), [uso])
   const porCampo = useMemo(() => {
     const m: Record<string, OrgPautaOpcaoRow[]> = { veiculo: [], formato: [], objetivo: [] }
     for (const o of opcoes) m[o.campo]?.push(o)
@@ -52,6 +67,14 @@ export function PautaClient({ orgSlug, orgId, opcoes, uso }: {
   function feito(r: { error?: string } | undefined, msg: string) {
     if (r?.error) { toast.error(r.error); return false }
     toast.success(msg); router.refresh(); return true
+  }
+
+  function ignorar(valor: string) {
+    start(async () => { feito(await ignorarSugestaoPauta(orgSlug, orgId, valor), `"${valor}" não aparece mais`) })
+  }
+
+  function rever(valor: string) {
+    start(async () => { feito(await reverIgnoradaPauta(orgSlug, orgId, valor), `"${valor}" voltou para a lista`) })
   }
 
   function criar(campo: CampoPauta) {
@@ -105,22 +128,23 @@ export function PautaClient({ orgSlug, orgId, opcoes, uso }: {
         </p>
       </div>
 
-      {sugestoes.length > 0 && (
+      {(sugestoes.length > 0 || ignoradas.length > 0) && (
         <section className="border border-amber-200 bg-amber-50/60 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-1">
             <Lightbulb className="w-4 h-4 text-amber-600" />
             <h3 className="text-sm font-semibold text-gray-900">A equipe está digitando isto</h3>
           </div>
           <p className="text-xs text-gray-600 mb-3">
-            Valores que apareceram 2+ vezes nos títulos e não estão no cadastro. Escolha o campo
-            para promover — ou ignore, se for nome de cliente ou assunto da demanda.
+            Valores que apareceram 2+ vezes nos títulos e não estão no cadastro. Promova para um campo —
+            ou ignore, se for nome de cliente, assunto da demanda ou uso errado que você vai orientar.
+            Ignorar não apaga nada e dá para desfazer aqui embaixo.
           </p>
           <div className="space-y-2">
             {sugestoes.map(sg => (
               <div key={sg.valor} className="flex items-center gap-2 flex-wrap bg-white rounded-lg px-3 py-2 border border-amber-100">
                 <span className="text-sm font-medium text-gray-900">{sg.valor}</span>
                 <span className="text-[11px] text-gray-500">{sg.usos}×</span>
-                <span className="ml-auto flex gap-1">
+                <span className="ml-auto flex items-center gap-1">
                   {CAMPOS.map(c => (
                     <button key={c.campo} type="button" disabled={pending}
                       onClick={() => promover(sg.valor, c.campo)}
@@ -128,19 +152,64 @@ export function PautaClient({ orgSlug, orgId, opcoes, uso }: {
                       → {c.titulo}
                     </button>
                   ))}
+                  <button type="button" disabled={pending} onClick={() => ignorar(sg.valor)}
+                    title="Ignorar: sai da lista e não volta a pedir decisão"
+                    className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition disabled:opacity-50"
+                    aria-label={`Ignorar ${sg.valor}`}>
+                    <EyeOff className="w-3.5 h-3.5" />
+                  </button>
                 </span>
               </div>
             ))}
+            {sugestoes.length === 0 && (
+              <p className="text-xs text-gray-500">Nada novo para decidir.</p>
+            )}
           </div>
+
+          {ignoradas.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-amber-200/70">
+              <button type="button" onClick={() => setVerIgnoradas(v => !v)}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-gray-800 transition">
+                <ChevronRight className={'w-3.5 h-3.5 transition-transform ' + (verIgnoradas ? 'rotate-90' : '')} />
+                {ignoradas.length} ignorada{ignoradas.length > 1 ? 's' : ''}
+              </button>
+              {verIgnoradas && (
+                <div className="mt-2 space-y-1">
+                  {ignoradas.map(ig => (
+                    <div key={ig.valor} className="flex items-center gap-2 text-xs text-gray-500 px-3 py-1.5 bg-white/60 rounded-lg">
+                      <span className="line-through">{ig.valor}</span>
+                      <span className="text-[11px] text-gray-400">{ig.usos}×</span>
+                      <button type="button" disabled={pending} onClick={() => rever(ig.valor)}
+                        className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-orange-700 transition disabled:opacity-50">
+                        <Undo2 className="w-3 h-3" /> Trazer de volta
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </section>
       )}
 
       {CAMPOS.map(({ campo, titulo, nota, exemplo }) => {
         const lista = porCampo[campo] ?? []
+        const aberta = abertas.includes(campo)
         return (
           <section key={campo}>
-            <h3 className="text-sm font-semibold text-gray-900 mb-1">{titulo}</h3>
-            <p className="text-xs text-gray-500 mb-3">{nota}</p>
+            <button type="button" onClick={() => alternar(campo)} aria-expanded={aberta}
+              className="w-full flex items-center gap-2 text-left group">
+              <ChevronRight className={'w-4 h-4 text-gray-400 transition-transform shrink-0 ' + (aberta ? 'rotate-90' : '')} />
+              <h3 className="text-sm font-semibold text-gray-900 group-hover:text-orange-700 transition-colors">{titulo}</h3>
+              <span className="text-xs text-gray-400 tabular-nums">
+                {lista.length === 0 ? 'vazio' : `${lista.length} ${lista.length === 1 ? 'opção' : 'opções'}`}
+              </span>
+            </button>
+            {!aberta && <p className="text-xs text-gray-500 mt-1 ml-6">{nota}</p>}
+
+            {aberta && (
+            <>
+            <p className="text-xs text-gray-500 mt-1 mb-3 ml-6">{nota}</p>
 
             <div className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
               {lista.length === 0 && (
@@ -198,6 +267,8 @@ export function PautaClient({ orgSlug, orgId, opcoes, uso }: {
                 </button>
               </div>
             </div>
+            </>
+            )}
           </section>
         )
       })}
