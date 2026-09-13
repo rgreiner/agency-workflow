@@ -136,7 +136,24 @@ async function checkAtividadesSemDrive(supabase: SupabaseClient<Database>, orgId
 
   if (camps.size > 0) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data } = await (supabase as any)
+    const sb = supabase as any
+
+    // Rotina de mídia NÃO tem pasta própria na estrutura Clientes: o material dela
+    // mora na pasta do MÊS, dentro do drive "Mídia" (migration 242), e o link vai
+    // em `drive_folder_url`. Sem esta exclusão as 9 rotinas ativas apareciam como
+    // "sem pasta" — e o botão "Gerar pasta" criaria pasta na estrutura errada,
+    // que é pior que o falso positivo. A régua de "é rotina" é a mesma da fila da
+    // mídia (lib/midia-fila.ts): vínculo ativo no catálogo OU campanha de operação.
+    const [{ data: vinc }, { data: oper }] = await Promise.all([
+      sb.from('midia_cliente_rotina').select('activity_id').eq('org_id', orgId).eq('ativo', true),
+      sb.from('midia_cliente').select('campaign_id').eq('org_id', orgId).eq('ativo', true),
+    ])
+    const rotinaIds = new Set(((vinc ?? []) as { activity_id: string | null }[])
+      .map(v => v.activity_id).filter(Boolean) as string[])
+    const campanhasMidia = new Set(((oper ?? []) as { campaign_id: string | null }[])
+      .map(o => o.campaign_id).filter(Boolean) as string[])
+
+    const { data } = await sb
       .from('activities')
       .select('id, title, campaign_id, status')
       .in('campaign_id', [...camps.keys()])
@@ -147,6 +164,7 @@ async function checkAtividadesSemDrive(supabase: SupabaseClient<Database>, orgId
       .limit(200)
 
     for (const a of (data ?? []) as { id: string; title: string; campaign_id: string; status: string }[]) {
+      if (rotinaIds.has(a.id) || campanhasMidia.has(a.campaign_id)) continue
       items.push({
         id: a.id,
         label: a.title || 'Sem título',
@@ -159,7 +177,7 @@ async function checkAtividadesSemDrive(supabase: SupabaseClient<Database>, orgId
   return {
     id: 'atividades-sem-drive',
     label: 'Tarefas sem pasta de Drive',
-    description: 'Tarefas ativas de campanhas com Drive vinculado que ficaram sem pasta própria (provisão que falhou).',
+    description: 'Tarefas ativas de campanhas com Drive vinculado que ficaram sem pasta própria (provisão que falhou). Rotina de mídia fica de fora: a pasta dela é a do mês, no drive Mídia — ver a verificação abaixo.',
     fixLabel: 'Gerar pasta',
     items,
   }
@@ -355,11 +373,60 @@ async function checkAbertasEmArquivado(supabase: SupabaseClient<Database>, orgId
 }
 
 /** Roda todas as verificações e devolve os checks (mesmo os zerados, p/ dar o “tudo certo”). */
+/**
+ * Cliente com mídia ativa cuja pasta no drive **Mídia** nunca foi vinculada
+ * (`midia_cliente.drive_folder_id`). É o que trava o botão "abrir a pasta do mês"
+ * das rotinas: sem a pasta do cliente, ele responde "vincule primeiro a pasta do
+ * cliente no drive Mídia" e a pessoa não tem onde largar boleto, relatório e plano.
+ *
+ * Só entra cliente que já tem ROTINA ATIVA: cliente ativado sem rotina ainda não
+ * produz arquivo, e acusá-lo seria cobrar um passo que ninguém precisa dar.
+ *
+ * Sem correção automática de propósito — a pasta certa é uma escolha (o drive tem
+ * quatro grafias do mesmo lugar, ver lib/midia-drive.ts). O item leva para
+ * "Clientes e rotinas", onde se vincula.
+ */
+async function checkMidiaClienteSemPasta(supabase: SupabaseClient<Database>, orgId: string, orgSlug: string): Promise<HealthCheck> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any
+  const items: HealthItem[] = []
+
+  const { data } = await sb
+    .from('midia_cliente')
+    .select('id, ano, drive_folder_id, workspaces(name), midia_cliente_rotina(id, ativo)')
+    .eq('org_id', orgId).eq('ativo', true)
+
+  type Row = {
+    id: string; ano: number | null; drive_folder_id: string | null
+    workspaces: { name: string } | null
+    midia_cliente_rotina: { id: string; ativo: boolean }[] | null
+  }
+  for (const c of (data ?? []) as Row[]) {
+    if ((c.drive_folder_id ?? '').trim()) continue
+    const rotinas = (c.midia_cliente_rotina ?? []).filter(r => r.ativo).length
+    if (rotinas === 0) continue
+    items.push({
+      id: c.id,
+      label: c.workspaces?.name ?? 'Cliente',
+      sublabel: `${rotinas} rotina(s) ativa(s)${c.ano ? ` · ${c.ano}` : ''} — sem pasta no drive Mídia`,
+      href: `/${orgSlug}/midia/clientes`,
+    })
+  }
+
+  return {
+    id: 'midia-cliente-sem-pasta',
+    label: 'Clientes de mídia sem pasta no drive',
+    description: 'Cliente com rotina ativa cuja pasta no drive Mídia nunca foi vinculada. Enquanto isso, o botão "pasta do mês" das rotinas não abre e não há onde largar boleto, relatório e plano. Abra Clientes e rotinas e vincule a pasta.',
+    items,
+  }
+}
+
 export async function runHealthChecks(supabase: SupabaseClient<Database>, orgId: string, orgSlug: string): Promise<HealthCheck[]> {
   return Promise.all([
     checkAbertasEmArquivado(supabase, orgId, orgSlug),
     checkCampanhasSemDrive(supabase, orgId, orgSlug),
     checkAtividadesSemDrive(supabase, orgId),
+    checkMidiaClienteSemPasta(supabase, orgId, orgSlug),
     checkVinculoErrado(supabase, orgId),
     checkCamposSemLink(supabase, orgId),
     checkCronParado(supabase),
