@@ -120,8 +120,13 @@ language sql stable security definer set search_path to 'public' as $$
      and btrim(x.seg) <> ''
      and length(btrim(x.seg)) <= 60;
 $$;
+-- SEM grant para authenticated, de propósito: esta função é SECURITY DEFINER e
+-- devolve os títulos de TODAS as orgs, sem filtro. Exposta no PostgREST, qualquer
+-- usuário logado leria a pauta de qualquer organização — foi assim que a 181
+-- vazou o livro-caixa. Quem a chama é org_pauta_uso(), que também é SECURITY
+-- DEFINER (roda como dono, então não depende deste grant) e filtra por org_id
+-- com is_org_member() antes de devolver qualquer linha.
 revoke execute on function pauta_segmentos() from public;
-grant  execute on function pauta_segmentos() to authenticated;
 
 -- Alimenta a tela do admin com as duas metades da mesma pergunta:
 --   • opção do cadastro e quanto ela é usada (usos = 0 → candidata a sair);
