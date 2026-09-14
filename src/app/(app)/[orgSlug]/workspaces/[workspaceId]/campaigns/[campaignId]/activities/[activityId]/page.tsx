@@ -10,6 +10,7 @@ import { DriveProvisioningNotice } from './DriveProvisioningNotice'
 import { EntregaMidiaAviso } from './EntregaMidiaAviso'
 import { StatusChanger } from './StatusChanger'
 import { MobileStatusBar } from './MobileStatusBar'
+import { AbasMobile } from './AbasMobile'
 import { ReviewBanner } from './ReviewBanner'
 import { PortalFeedback, type PortalFeedbackItem } from './PortalFeedback'
 import { AutoRefresh } from '@/components/ui/AutoRefresh'
@@ -341,6 +342,9 @@ export default async function ActivityPage({
   }
 
 
+  // Badges das abas do celular: comentário de um lado, auditoria do outro.
+  const qtdComentarios = feed.filter(i => i.kind === 'comment').length
+
   // extra_links é coluna nova (não tipada nos types gerados) → acesso por cast.
   const extraLinksRaw = (activity as { extra_links?: unknown }).extra_links
   const extraLinks = Array.isArray(extraLinksRaw) ? (extraLinksRaw as { label: string; url: string }[]) : []
@@ -397,11 +401,35 @@ export default async function ActivityPage({
     }
   }
 
+  // Feedback do portal + briefings vinculados. No lg+ moram no alto da coluna da
+  // direita; no celular abrem a aba "Tarefa" — é contexto do job, não do feed
+  // (escondidos na coluna do feed, sumiam pra quem só olha os campos).
+  const contexto = (
+    <>
+      {/* Feedback do cliente (portal) — aprovação / ajustes / resposta */}
+      <PortalFeedback orgSlug={orgSlug} items={portalFeedback} />
+
+      {/* Briefings vinculados — atalho pro contexto do cliente/campanha */}
+      {(briefingCliente || briefingCampanha) && (
+        <div className="shrink-0 border-b border-gray-200 bg-white p-2 space-y-1.5">
+          {briefingCliente && (
+            <BriefingLink href={`/${orgSlug}/docs/${briefingCliente.id}`} label="Ver documento do cliente" title={briefingCliente.title} />
+          )}
+          {briefingCampanha && (
+            <BriefingLink href={`/${orgSlug}/docs/${briefingCampanha.id}`} label="Ver documento da campanha" title={briefingCampanha.title} />
+          )}
+        </div>
+      )}
+    </>
+  )
+
   return (
-    <div className="flex flex-col bg-white min-h-0 flex-1 lg:h-full lg:overflow-hidden">
+    <div className="flex flex-col bg-white h-full overflow-hidden">
 
       {/* ── Top bar ─────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1.5 px-4 md:px-6 py-3 border-b border-gray-200 shrink-0 bg-white z-10">
+      <div className={cn('flex items-center gap-1.5 px-4 md:px-6 py-3 border-b border-gray-200 shrink-0 bg-white z-10',
+        // Na modal o X flutua no canto — espaço pra ele não cair sobre as ações.
+        modal && 'pr-12 sm:pr-6')}>
         <Link href={`/${orgSlug}/views/lista`} className="hidden sm:block text-xs text-gray-500 hover:text-gray-600 transition">
           Clientes
         </Link>
@@ -409,27 +437,31 @@ export default async function ActivityPage({
         <Link href={`/${orgSlug}/workspaces/${workspaceId}`} className="text-xs text-gray-500 hover:text-gray-600 transition">
           {ws?.name ?? 'Cliente'}
         </Link>
+        <span className="hidden sm:contents">
+          <span className="text-gray-300 text-xs">/</span>
+          {isOrgMember ? (
+            <MoveTaskProject
+              orgSlug={orgSlug}
+              activityId={activityId}
+              currentWorkspaceId={workspaceId}
+              currentCampaignId={campaignId}
+              currentCampaignName={campaign?.name ?? 'Projeto'}
+              projects={moveProjects}
+            />
+          ) : (
+            <Link href={`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}`} className="text-xs text-gray-500 hover:text-gray-600 transition">
+              {campaign?.name}
+            </Link>
+          )}
+        </span>
         <span className="text-gray-300 text-xs">/</span>
-        {isOrgMember ? (
-          <MoveTaskProject
-            orgSlug={orgSlug}
-            activityId={activityId}
-            currentWorkspaceId={workspaceId}
-            currentCampaignId={campaignId}
-            currentCampaignName={campaign?.name ?? 'Projeto'}
-            projects={moveProjects}
-          />
-        ) : (
-          <Link href={`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}`} className="text-xs text-gray-500 hover:text-gray-600 transition">
-            {campaign?.name}
-          </Link>
-        )}
-        <span className="text-gray-300 text-xs">/</span>
-        <span className="text-xs text-gray-600 truncate max-w-xs">{activity.title}</span>
+        {/* No celular o título come o espaço que sobra; no sm+ volta a ser trilha. */}
+        <span className="flex-1 min-w-0 truncate text-xs text-gray-600 sm:flex-none sm:max-w-xs">{activity.title}</span>
         <div className="ml-auto flex items-center gap-3 text-xs text-gray-500 shrink-0">
           {overdue && (
-            <span className="flex items-center gap-1 text-red-500 font-medium">
-              <AlertTriangle className="w-3.5 h-3.5" /> Atrasada
+            <span title="Atrasada" className="flex items-center gap-1 text-red-500 font-medium">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden sm:inline">Atrasada</span>
             </span>
           )}
           {isOrgMember && <MuteButton orgSlug={orgSlug} path={path} activityId={activityId} muted={muted} />}
@@ -458,12 +490,14 @@ export default async function ActivityPage({
         </div>
       </div>
 
-      {/* ── Body — stacks on mobile, side-by-side on lg+ ────────── */}
-      <div className="flex flex-1 flex-col lg:flex-row lg:overflow-hidden min-h-0">
-
-        {/* ── Main content ─────────────────────────────────────── */}
-        <div className="flex-1 min-h-0 lg:overflow-y-auto">
-          <div className="px-4 md:px-8 py-6 max-w-3xl">
+      {/* ── Body — abas no celular, duas colunas no lg+ ─────────── */}
+      <AbasMobile
+        comentarios={qtdComentarios}
+        historico={feed.length - qtdComentarios}
+        tarefa={
+          <>
+            <div className="lg:hidden">{contexto}</div>
+            <div className="px-4 md:px-8 pt-6 pb-[var(--barra-tarefa,1.5rem)] lg:pb-6 max-w-3xl">
 
             {/* Título + meta (status/datas/prioridade/responsáveis) + briefing */}
             <ActivityHeader
@@ -713,63 +747,48 @@ export default async function ActivityPage({
               dueDate={activity.due_date ?? null} startDate={activity.start_date ?? null} />
 
             <ExtraLinks path={path} activityId={activityId} canEdit={isOrgMember} links={extraLinks} />
-          </div>
-        </div>
-
-        {/* ── Activity feed — full-width below content on mobile ── */}
-        <div className="w-full lg:w-[360px] border-t lg:border-t-0 lg:border-l border-gray-200 flex flex-col shrink-0 min-h-0 bg-gray-50/40">
-
-          {/* Feedback do cliente (portal) — aprovação / ajustes / resposta */}
-          <PortalFeedback orgSlug={orgSlug} items={portalFeedback} />
-
-          {/* Briefings vinculados — atalho pro contexto do cliente/campanha */}
-          {(briefingCliente || briefingCampanha) && (
-            <div className="shrink-0 border-b border-gray-200 bg-white p-2 space-y-1.5">
-              {briefingCliente && (
-                <BriefingLink href={`/${orgSlug}/docs/${briefingCliente.id}`} label="Ver documento do cliente" title={briefingCliente.title} />
-              )}
-              {briefingCampanha && (
-                <BriefingLink href={`/${orgSlug}/docs/${briefingCampanha.id}`} label="Ver documento da campanha" title={briefingCampanha.title} />
-              )}
             </div>
-          )}
+          </>
+        }
+        atividade={
+          <>
+            <div className="hidden lg:contents">{contexto}</div>
 
-          {/* Header */}
-          <div className="px-5 py-3.5 border-b border-gray-200 bg-white shrink-0 flex items-center justify-between gap-3">
-            <div className="flex items-baseline gap-2 min-w-0">
-              <h2 className="text-sm font-semibold text-gray-800">Atividade</h2>
-              <span className="text-xs text-gray-500 shrink-0">{feed.length} registro{feed.length !== 1 ? 's' : ''}</span>
+            {/* Header — no celular quem nomeia a seção (e filtra) é a aba */}
+            <div className="hidden lg:flex px-5 py-3.5 border-b border-gray-200 bg-white shrink-0 items-center justify-between gap-3">
+              <div className="flex items-baseline gap-2 min-w-0">
+                <h2 className="text-sm font-semibold text-gray-800">Atividade</h2>
+                <span className="text-xs text-gray-500 shrink-0">{feed.length} registro{feed.length !== 1 ? 's' : ''}</span>
+              </div>
+              <FeedFilter />
             </div>
-            <FeedFilter />
-          </div>
 
-          {/* Feed */}
-          <div id="activity-feed" data-feed-filter="tudo" className="flex-1 min-h-0 overflow-y-auto scrollbar-thin p-4 space-y-3">
-            {feed.length === 0 && (
-              <p className="text-xs text-gray-500 text-center py-8">Nenhuma atividade ainda.</p>
-            )}
+            {/* Feed */}
+            <div id="activity-feed" data-feed-filter="tudo" className="flex-1 min-h-0 overflow-y-auto scrollbar-thin p-4 space-y-3">
+              {feed.length === 0 && (
+                <p className="text-xs text-gray-500 text-center py-8">Nenhuma atividade ainda.</p>
+              )}
 
-            {feedRuns.map(run =>
-              run.length > 1
-                ? <HistoryGroup key={run[0].id} count={run.length}>{run.map(renderItem)}</HistoryGroup>
-                : renderItem(run[0])
-            )}
-            <ScrollFeedBottom feedId="activity-feed" count={feed.length} />
-          </div>
+              {feedRuns.map(run =>
+                run.length > 1
+                  ? <HistoryGroup key={run[0].id} count={run.length}>{run.map(renderItem)}</HistoryGroup>
+                  : renderItem(run[0])
+              )}
+              <ScrollFeedBottom feedId="activity-feed" count={feed.length} />
+            </div>
 
-          {/* Comment box — ancorada na base da coluna */}
-          <div className="border-t border-gray-200 p-4 bg-white shrink-0">
-            <CommentBox
-              activityId={activityId}
-              members={membersAtivos.map(m => ({ id: m.userId, name: m.fullName ?? m.email }))}
-              assignedIds={assignedIds}
-            />
-          </div>
-        </div>
-
-        {/* Respiro pro conteúdo não ficar atrás da barra fixa do celular */}
-        <div className="h-16 lg:hidden shrink-0" aria-hidden />
-      </div>
+            {/* Comment box — ancorada na base da coluna; no celular fica logo
+                acima da barra fixa de status, sem ficar atrás dela. */}
+            <div className="border-t border-gray-200 p-4 pb-[var(--barra-tarefa,1rem)] lg:pb-4 bg-white shrink-0">
+              <CommentBox
+                activityId={activityId}
+                members={membersAtivos.map(m => ({ id: m.userId, name: m.fullName ?? m.email }))}
+                assignedIds={assignedIds}
+              />
+            </div>
+          </>
+        }
+      />
 
       {/* Avançar/voltar com o dedão — só no celular */}
       <MobileStatusBar

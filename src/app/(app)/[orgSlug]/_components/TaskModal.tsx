@@ -39,7 +39,7 @@ export function TaskModal({ children, fill = false }: { children: React.ReactNod
       onClick={e => { if (downOnBackdrop.current && e.target === e.currentTarget) router.back() }}
     >
       <div
-        className={`modal-card relative w-full bg-white shadow-xl flex flex-col overflow-hidden sm:max-w-5xl sm:max-h-[92vh] sm:rounded-2xl${fill ? ' sm:h-[92vh]' : ''}`}
+        className={`modal-card relative w-full bg-white shadow-xl flex flex-col overflow-hidden pt-[env(safe-area-inset-top,0px)] sm:pt-0 sm:max-w-5xl sm:max-h-[92vh] sm:rounded-2xl${fill ? ' sm:h-[92vh]' : ''}`}
         onMouseDown={e => e.stopPropagation()}
       >
         <button
@@ -47,7 +47,7 @@ export function TaskModal({ children, fill = false }: { children: React.ReactNod
           onClick={() => router.back()}
           title="Fechar"
           aria-label="Fechar"
-          className="absolute top-3 right-3 z-10 p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors bg-white/80 backdrop-blur"
+          className="press absolute top-[calc(env(safe-area-inset-top,0px)+0.75rem)] right-3 z-10 p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 bg-white/80 backdrop-blur sm:top-3"
         >
           <X className="w-4 h-4" />
         </button>

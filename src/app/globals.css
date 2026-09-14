@@ -214,6 +214,13 @@
   :root { --barra-inferior: calc(3.5rem + env(safe-area-inset-bottom, 0px)); }
 }
 
+/* ── Detalhe da tarefa: barra fixa de status (MobileStatusBar) ───────────────
+   Vale até o lg, que é onde a barra existe (lg:hidden). O painel da aba reserva
+   esta altura no rodapé pra caixa de comentário não ficar atrás dela. */
+@media (max-width: 63.99rem) {
+  :root { --barra-tarefa: calc(4.25rem + env(safe-area-inset-bottom, 0px)); }
+}
+
 html,
 body {
   /* Impede o gesto "voltar página" do trackpad ao rolar na horizontal

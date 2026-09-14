@@ -36,7 +36,7 @@ export function MuteButton({ orgSlug, path, activityId, muted: initial }: {
       className={`inline-flex items-center gap-1.5 text-xs transition disabled:opacity-50 ${muted ? 'text-orange-600 hover:text-orange-700' : 'text-gray-400 hover:text-gray-600'}`}
     >
       {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : muted ? <BellOff className="w-3.5 h-3.5" /> : <Bell className="w-3.5 h-3.5" />}
-      {muted ? 'Silenciada' : 'Silenciar'}
+      <span className="hidden sm:inline">{muted ? 'Silenciada' : 'Silenciar'}</span>
     </button>
   )
 }
