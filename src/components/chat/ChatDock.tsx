@@ -409,7 +409,11 @@ function MessageText({ text, mine }: { text: string; mine: boolean }) {
 
 function MessageList({ msgs, meId }: { msgs: Msg[]; meId: string }) {
   const endRef = useRef<HTMLDivElement>(null)
-  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [msgs.length])
+  // Rolar pelo ÚLTIMO id, não pelo tamanho: a conversa vem numa janela das 300
+  // últimas (mig. 298), então numa conversa longa o tamanho não muda mais e a
+  // mensagem nova chegaria fora da vista.
+  const lastId = msgs[msgs.length - 1]?.id
+  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [lastId])
   return (
     <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1.5 bg-gray-50/50">
       {msgs.length === 0 && <p className="text-xs text-gray-400 text-center py-6">Diga olá 👋</p>}
