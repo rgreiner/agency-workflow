@@ -84,9 +84,13 @@ export function PromocaoModal({ orgSlug, colaborador, jornadaAtual, onClose }: {
     const e: string[] = []
     if (vincMudou && vinculo === 'clt') {
       e.push(`A admissão CLT passa a ser ${data.slice(8, 10)}/${data.slice(5, 7)} — o tempo de casa continua contando da entrada.`)
-      e.push('O custo/hora passa a somar 22% de provisão (13º, férias, aviso).')
+      // A provisão de 22% é ligada pela CATEGORIA da folha (101…), não pelo
+      // vínculo da ficha: só entra quando a folha chegar como CLT.
+      e.push('O custo/hora soma 22% de provisão (13º, férias, aviso) a partir da folha em que ela vier como CLT.')
       e.push('Começa o contrato de experiência: 45 + 45 dias.')
-      e.push('No Financeiro, a previsão sai de “Remuneração de Estagiários” para “Remuneração Funcionários”.')
+      // O Flow não mexe na previsão do financeiro (mig. 268) — dizer que "sai
+      // de uma categoria e entra na outra" prometeria automação que não existe.
+      e.push('No Financeiro, os lançamentos previstos continuam em “Remuneração de Estagiários” — troque para “Remuneração Funcionários” você mesmo; a Conferência de folha vai apontar a diferença.')
       e.push('As férias CLT passam a contar a partir desta data.')
     }
     if (jornadaMudou) {
