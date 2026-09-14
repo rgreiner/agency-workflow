@@ -162,7 +162,16 @@ export interface EspelhoDia {
 }
 export interface Espelho {
   colaborador: { id: string; nome: string; cargo: string | null; cpf: string | null }
-  jornada: { carga_min: number; entrada: string; saida: string; intervalo_min: number; dias_semana: number[]; tolerancia_min?: number }
+  jornada: {
+    carga_min: number; entrada: string; saida: string; intervalo_min: number
+    dias_semana: number[]; tolerancia_min?: number
+    /** A jornada mudou dentro deste ciclo (mig. 296) — o cabeçalho mostra a
+     *  do fim, e as vigências dizem de onde cada trecho veio. */
+    mudou_no_periodo?: boolean
+    /** Carga que valia no primeiro dia do ciclo. */
+    carga_ini?: number
+    vigencias?: { de: string; carga_min: number; entrada: string; saida: string }[]
+  }
   ini: string; fim: string; competencia: string
   /** `ate` = último dia contado. O dia em curso fica de fora: a jornada ainda
    *  está acontecendo (mig. 230). */

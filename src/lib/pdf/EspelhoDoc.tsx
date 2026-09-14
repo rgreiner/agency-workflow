@@ -14,7 +14,12 @@ export interface EspelhoPdfDia {
 }
 export interface EspelhoPdfDados {
   colaborador: { nome: string; cargo: string | null; cpf: string | null }
-  jornada: { carga_min: number; entrada: string; saida: string }
+  jornada: {
+    carga_min: number; entrada: string; saida: string
+    /** Mudança de jornada dentro do período (mig. 296) — efetivação, por ex. */
+    mudou_no_periodo?: boolean; carga_ini?: number
+    vigencias?: { de: string; carga_min: number }[]
+  }
   ini: string; fim: string; competencia: string
   resumo: { hn_min: number; faltas_min: number; extra_min: number; saldo_min: number }
   dias: EspelhoPdfDia[]
@@ -24,6 +29,8 @@ export interface EspelhoPdfDados {
 const DOW = ['', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 const hm = (m: number) => `${m < 0 ? '-' : ''}${Math.floor(Math.abs(m) / 60)}:${String(Math.abs(m) % 60).padStart(2, '0')}`
 const dBR = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`
+/** Véspera: a jornada antiga valeu ATÉ o dia anterior ao início da nova. */
+const vespera = (d: string) => new Date(Date.parse(`${d}T00:00:00Z`) - 86400000).toISOString().slice(0, 10)
 const dtBR = (s2: string) => new Date(s2).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 const col = { dia: 62, marc: 168, trab: 46, saldo: 46 }
@@ -59,6 +66,15 @@ export function EspelhoPagina({ d, agencia, logoUrl }: { d: EspelhoPdfDados; age
           Período {dBR(d.ini)} a {dBR(d.fim)} · competência {d.competencia.split('-').reverse().join('/')} ·
           jornada {d.jornada.entrada?.slice(0, 5)}–{d.jornada.saida?.slice(0, 5)} ({hm(d.jornada.carga_min)}/dia)
         </Text>
+        {/* Sem esta linha o documento assinado diria uma jornada só para um mês
+            em que valeram duas. */}
+        {d.jornada.mudou_no_periodo && d.jornada.vigencias?.length ? (
+          <Text style={{ fontSize: 8, color: CINZA, marginTop: 2 }}>
+            Jornada alterada no período: {hm(d.jornada.carga_ini ?? 0)}/dia até {dBR(vespera(d.jornada.vigencias[0].de))}
+            {d.jornada.vigencias.map(v => `, ${hm(v.carga_min)}/dia de ${dBR(v.de)} em diante`).join('')}.
+            Cada dia é calculado pela jornada que valia nele.
+          </Text>
+        ) : null}
       </View>
 
       {/* Resumo */}

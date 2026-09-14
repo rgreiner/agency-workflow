@@ -17,6 +17,9 @@ export interface ColaboradorRow {
   tipo_vinculo: string | null
   status: string
   data_admissao: string | null
+  /** Entrada na casa (mig. 290): quem virou CLT tem admissão nova, mas o tempo
+   *  de casa continua contando do estágio. Vazio = igual à admissão. */
+  data_entrada_casa?: string | null
   data_demissao: string | null
   arquivado: boolean
   /** Aviso prévio em curso (migs. 262/263) — vira o chip "em aviso". */
@@ -50,17 +53,21 @@ function tempoDeCasa(admISO: string, refISO: string): string {
   if (m === 0) return `${y} ${y === 1 ? 'ano' : 'anos'}`
   return `${y}a ${m}m`
 }
-/** Rótulo da coluna: experiência (1º/2º período), tempo de casa efetivado, ou duração se desligado. */
+/** Rótulo da coluna: experiência (1º/2º período), tempo de casa efetivado, ou duração se desligado.
+ *  Duas réguas diferentes de propósito: a EXPERIÊNCIA conta do contrato atual
+ *  (a admissão CLT), o TEMPO DE CASA conta de quando a pessoa entrou. Para quem
+ *  foi efetivada, são datas distintas. */
 function periodo(c: ColaboradorRow, hoje: string): { txt: string; sub?: string; exp?: boolean } | null {
   if (!c.data_admissao) return null
-  if (c.status === 'desligado') return { txt: `durou ${tempoDeCasa(c.data_admissao, c.data_demissao || hoje)}` }
+  const naCasa = c.data_entrada_casa ?? c.data_admissao
+  if (c.status === 'desligado') return { txt: `durou ${tempoDeCasa(naCasa, c.data_demissao || hoje)}` }
   const days = diffDays(c.data_admissao, hoje)
   const temExperiencia = c.tipo_vinculo !== 'estagio' && c.tipo_vinculo !== 'pj' && c.tipo_vinculo !== 'socio'
   if (temExperiencia && days >= 0 && days <= 90) {
     if (days <= 45) return { exp: true, txt: 'Experiência 1º', sub: `${days}/45 d · vence ${dd(addDays(c.data_admissao, 45))}` }
     return { exp: true, txt: 'Experiência 2º', sub: `${days}/90 d · efetiva ${dd(addDays(c.data_admissao, 90))}` }
   }
-  return { txt: tempoDeCasa(c.data_admissao, hoje), sub: `aniversário ${dd(c.data_admissao)}` }
+  return { txt: tempoDeCasa(naCasa, hoje), sub: `aniversário ${dd(naCasa)}` }
 }
 const inputCls = 'w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 
@@ -164,7 +171,14 @@ export function PessoasClient({ orgSlug, colaboradores, hoje }: { orgSlug: strin
                     </td>
                     <td className="px-4 py-3 text-gray-600">{c.cargo || '—'}</td>
                     <td className="px-4 py-3 text-gray-500">{c.tipo_vinculo ? (VINCULO[c.tipo_vinculo] ?? c.tipo_vinculo) : '—'}</td>
-                    <td className="px-4 py-3 text-gray-500 tabular-nums">{fmt(c.data_admissao)}</td>
+                    <td className="px-4 py-3 text-gray-500 tabular-nums">
+                      {fmt(c.data_admissao)}
+                      {/* Efetivada: a admissão é a do contrato de hoje, mas ela
+                          já estava aqui antes — a coluna diria menos sem isso. */}
+                      {c.data_entrada_casa && c.data_admissao && c.data_entrada_casa < c.data_admissao && (
+                        <div className="text-[11px] text-gray-400">na casa desde {fmt(c.data_entrada_casa)}</div>
+                      )}
+                    </td>
                     <td className="px-4 py-3">{(() => {
                       const p = periodo(c, hoje)
                       if (!p) return <span className="text-gray-300">—</span>

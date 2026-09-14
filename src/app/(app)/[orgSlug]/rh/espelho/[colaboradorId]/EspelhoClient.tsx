@@ -10,6 +10,8 @@ import { AssinaturaPanel } from '../AssinaturaPanel'
 
 const hm = (m: number) => `${m < 0 ? '-' : ''}${Math.floor(Math.abs(m) / 60)}:${String(Math.abs(m) % 60).padStart(2, '0')}`
 const dataBR = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
+/** Véspera: a jornada antiga valeu ATÉ o dia anterior ao início da nova. */
+const vespera = (d: string) => dataBR(new Date(Date.parse(`${d}T00:00:00Z`) - 86400000).toISOString().slice(0, 10))
 const DOW = ['', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 const dtBR = (s: string) => new Date(s).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 const STATUS_JUST: Record<string, string> = { aprovado: 'aprovada', rejeitado: 'rejeitada', abonado: 'abonada', falta: 'virou falta', pendente: 'pendente' }
@@ -53,6 +55,19 @@ export function EspelhoClient({ orgSlug, colaboradorId, compInicial }: { orgSlug
           </a>
         </div>
       </div>
+
+      {/* Ciclo em que a pessoa mudou de jornada (efetivação, por exemplo): cada
+          dia já foi calculado pela que valia nele, mas quem assina precisa ler
+          isso no documento, não deduzir do total. */}
+      {esp?.jornada.mudou_no_periodo && (
+        <div className="rounded-xl bg-sky-50 ring-1 ring-sky-200 px-4 py-3 mb-5 text-[12.5px] text-sky-900">
+          <b>A jornada mudou no meio deste ciclo.</b> Cada dia vale a que estava valendo nele:
+          {' '}{hm(esp.jornada.carga_ini ?? 0)}/dia até {vespera(esp.jornada.vigencias![0].de)}
+          {esp.jornada.vigencias!.map(v => (
+            <span key={v.de}>, {hm(v.carga_min)}/dia de {dataBR(v.de)} em diante</span>
+          ))}.
+        </div>
+      )}
 
       {esp && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">

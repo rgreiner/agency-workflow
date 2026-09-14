@@ -1,5 +1,5 @@
 import { assertRhAccess } from '@/lib/rh'
-import { unwrap, unwrapOne } from '@/lib/supabase/unwrap'
+import { unwrap } from '@/lib/supabase/unwrap'
 import { marcacoesFora, redesDoGrupo } from '@/app/actions/rh-ponto'
 import { meuIp, type LocalRh } from '@/app/actions/rh-local'
 import { PontoGestaoClient, type ExtraPend, type JustPend, type JornadaResumo, type JustDoDia } from './PontoGestaoClient'
@@ -23,13 +23,19 @@ export default async function PontoGestaoPage({ params }: { params: Promise<{ or
   // Contexto da aprovação: jornada prevista de cada pessoa (personalizada, senão a
   // padrão da org) e justificativas que cobrem os dias pendentes — o aprovador
   // decide vendo previsto × batido × motivo, sem sair da tela.
+  // A jornada tem vigência (mig. 288): a que interessa é a que valia NO DIA da
+  // extra pendente. Pegar a linha mais recente mostraria 8h numa extra de quando
+  // a pessoa ainda fazia 6h — e o aprovador decide por esse número.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const jornadas = unwrap<JornadaResumo & { colaborador_id: string | null }>(await (supabase as any)
+  const jornadas = unwrap<JornadaResumo & { colaborador_id: string | null; vigencia_ini: string }>(await (supabase as any)
     .from('rh_jornada')
-    .select('colaborador_id, entrada, intervalo_ini, intervalo_fim, saida')
-    .eq('org_id', orgId), 'jornadas')
-  const jornadaDe = (cid: string): JornadaResumo | null =>
-    jornadas.find(j => j.colaborador_id === cid) ?? jornadas.find(j => j.colaborador_id === null) ?? null
+    .select('colaborador_id, vigencia_ini, entrada, intervalo_ini, intervalo_fim, saida')
+    .eq('org_id', orgId)
+    .order('vigencia_ini', { ascending: false }), 'jornadas')
+  const jornadaDe = (cid: string, data: string): JornadaResumo | null =>
+    jornadas.find(j => j.colaborador_id === cid && j.vigencia_ini <= data)
+    ?? jornadas.find(j => j.colaborador_id === null && j.vigencia_ini <= data)
+    ?? null
 
   let justsDosDias: (JustDoDia & { colaborador_id: string; data_ini: string; data_fim: string })[] = []
   if (extrasRaw.length) {
@@ -45,7 +51,7 @@ export default async function PontoGestaoPage({ params }: { params: Promise<{ or
   const extras: ExtraPend[] = extrasRaw.map(({ rh_marcacao, ...e }) => ({
     ...e,
     batidas: (rh_marcacao ?? []).slice().sort((a, b) => a.seq - b.seq).map(m => m.hora.slice(0, 5)),
-    jornada: jornadaDe(e.colaborador_id),
+    jornada: jornadaDe(e.colaborador_id, e.data),
     justs: justsDosDias.filter(x => x.colaborador_id === e.colaborador_id && x.data_ini <= e.data && x.data_fim >= e.data),
     esperado_min: e.minutos - e.saldo_min,
   }))
@@ -79,11 +85,16 @@ export default async function PontoGestaoPage({ params }: { params: Promise<{ or
   }))
 
   // Jornada padrão da org (colaborador_id null) — pode não existir se a org é nova.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const jornadaPadrao = unwrapOne<Partial<JornadaVals>>(await (supabase as any)
-    .from('rh_jornada')
-    .select('entrada, intervalo_ini, intervalo_fim, saida, flex_min, tolerancia_min, dias_semana')
-    .eq('org_id', orgId).is('colaborador_id', null).maybeSingle(), 'jornada padrão')
+  // Com vigência, a de hoje é a última que já começou.
+  const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+  const jornadaPadrao = unwrap<Partial<JornadaVals> & { vigencia_ini: string }>(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from('rh_jornada')
+      .select('vigencia_ini, entrada, intervalo_ini, intervalo_fim, saida, flex_min, tolerancia_min, dias_semana')
+      .eq('org_id', orgId).is('colaborador_id', null)
+      .order('vigencia_ini', { ascending: false }), 'jornada padrão')
+    .find(j => j.vigencia_ini <= hoje) ?? null
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: cfg } = await (supabase as any)

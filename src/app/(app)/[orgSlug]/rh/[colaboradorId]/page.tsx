@@ -14,7 +14,7 @@ export default async function ColaboradorPage({ params }: { params: Promise<{ or
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const colab = unwrapOne<Colaborador>(await (supabase as any)
     .from('rh_colaborador')
-    .select('id, nome, cpf, email, telefone, cargo, tipo_vinculo, data_admissao, data_demissao, status, gestor_id, salario_atual, beneficios_mensal, custo_projetado_mensal, custo_overhead, aviso_previo_ini, aviso_previo_fim, aviso_previo_modo, observacao, arquivado, membro_user_id, bate_ponto, entra_fechamento')
+    .select('id, nome, cpf, email, telefone, cargo, tipo_vinculo, data_admissao, data_entrada_casa, data_demissao, status, gestor_id, salario_atual, beneficios_mensal, custo_projetado_mensal, custo_overhead, aviso_previo_ini, aviso_previo_fim, aviso_previo_modo, observacao, arquivado, membro_user_id, bate_ponto, entra_fechamento')
     .eq('id', colaboradorId).eq('org_id', orgId).maybeSingle(), 'colaborador')
   if (!colab) notFound()
 
@@ -40,19 +40,27 @@ export default async function ColaboradorPage({ params }: { params: Promise<{ or
     .eq('org_id', orgId).eq('arquivado', false).neq('id', colaboradorId)
     .order('nome', { ascending: true }), 'gestores')
 
-  // Jornada: override da pessoa (se houver) + padrão da org (fallback exibido quando herda).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const jornadaOverride = unwrapOne<Partial<JornadaVals>>(await (supabase as any)
-    .from('rh_jornada')
-    .select('entrada, intervalo_ini, intervalo_fim, saida, flex_min, tolerancia_min, dias_semana')
-    .eq('colaborador_id', colaboradorId).maybeSingle(), 'jornada pessoa')
+  // Jornada: desde a mig. 288 a pessoa pode ter VÁRIAS — uma por vigência. A
+  // tela edita a que vale hoje; as anteriores ficam à vista porque são elas que
+  // sustentam o cálculo do passado (maybeSingle aqui quebraria com histórico).
+  const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+  const jornadasPessoa = unwrap<Partial<JornadaVals> & { vigencia_ini: string; carga_min: number | null }>(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from('rh_jornada')
+      .select('vigencia_ini, carga_min, entrada, intervalo_ini, intervalo_fim, saida, flex_min, tolerancia_min, dias_semana')
+      .eq('colaborador_id', colaboradorId)
+      .order('vigencia_ini', { ascending: false }), 'jornadas pessoa')
+  const jornadaOverride = jornadasPessoa.find(j => j.vigencia_ini <= hoje) ?? null
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const jornadaPadrao = unwrapOne<Partial<JornadaVals>>(await (supabase as any)
+  const jornadasOrg = unwrap<Partial<JornadaVals> & { vigencia_ini: string }>(await (supabase as any)
     .from('rh_jornada')
-    .select('entrada, intervalo_ini, intervalo_fim, saida, flex_min, tolerancia_min, dias_semana')
-    .eq('org_id', orgId).is('colaborador_id', null).maybeSingle(), 'jornada padrão')
+    .select('vigencia_ini, entrada, intervalo_ini, intervalo_fim, saida, flex_min, tolerancia_min, dias_semana')
+    .eq('org_id', orgId).is('colaborador_id', null)
+    .order('vigencia_ini', { ascending: false }), 'jornada padrão')
+  const jornadaPadrao = jornadasOrg.find(j => j.vigencia_ini <= hoje) ?? null
 
   return <ColaboradorClient orgSlug={orgSlug} colab={colab} gestores={gestores} membros={membros}
-    jornadaOverride={jornadaOverride} jornadaPadrao={jornadaPadrao} />
+    jornadaOverride={jornadaOverride} jornadaPadrao={jornadaPadrao} jornadasPessoa={jornadasPessoa} />
 }

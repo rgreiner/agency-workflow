@@ -18,6 +18,10 @@ export interface EventoTL {
   titulo: string | null; descricao: string | null
   salario_de: number | null; salario_para: number | null; percentual: number | null
   cargo_de: string | null; cargo_para: string | null
+  /** Marco de mudança de vínculo (mig. 290): o ANTES fica aqui. */
+  vinculo_de: string | null; vinculo_para: string | null
+  /** Carga diária em minutos, antes e depois. */
+  jornada_de: number | null; jornada_para: number | null
   lote_id: string | null; doc_id: string | null
   /** Registrado depois da vigência = ajuste de histórico (caso da convenção). */
   retroativo: boolean; registrado_em: string; por: string | null

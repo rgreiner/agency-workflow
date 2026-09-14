@@ -4,7 +4,7 @@ import { useState, useEffect, useTransition, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   History, Plus, Loader2, Check, X, TrendingUp, Award, MessageSquare,
-  AlertTriangle, Plane, Briefcase, Trash2, CornerDownRight,
+  AlertTriangle, Plane, Briefcase, Trash2, CornerDownRight, BadgeCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Select } from '@/components/ui/Select'
@@ -14,6 +14,9 @@ const TIPOS = [
   { value: 'reajuste',    label: 'Reajuste salarial', icon: TrendingUp,    cor: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
   { value: 'promocao',    label: 'Promoção',          icon: Award,         cor: 'text-orange-700 bg-orange-50 border-orange-200' },
   { value: 'cargo',       label: 'Mudança de cargo',  icon: Briefcase,     cor: 'text-sky-700 bg-sky-50 border-sky-200' },
+  // Nasce só pelo assistente de promoção (mig. 290) — por isso fica fora do
+  // seletor do "Registrar" manual, que não sabe trocar jornada nem ficha.
+  { value: 'vinculo',     label: 'Mudança de vínculo', icon: BadgeCheck,   cor: 'text-orange-700 bg-orange-50 border-orange-200' },
   { value: 'feedback',    label: 'Feedback',          icon: MessageSquare, cor: 'text-gray-600 bg-gray-100 border-gray-200' },
   { value: 'advertencia', label: 'Advertência',       icon: AlertTriangle, cor: 'text-red-700 bg-red-50 border-red-200' },
   { value: 'afastamento', label: 'Afastamento',       icon: Plane,         cor: 'text-amber-700 bg-amber-50 border-amber-200' },
@@ -24,6 +27,11 @@ const porTipo = (t: string) => TIPOS.find(x => x.value === t) ?? TIPOS[TIPOS.len
 const brl = (v: number | null) => v == null ? '—'
   : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const dataBR = (d: string) => d.split('-').reverse().join('/')
+const VINC_LABEL: Record<string, string> = {
+  clt: 'CLT', socio: 'Sócio(a)', pj: 'PJ', estagio: 'Estágio', outro: 'Outro',
+}
+const vinc = (v: string) => VINC_LABEL[v] ?? v
+const hm = (min: number) => `${Math.floor(min / 60)}h${min % 60 ? String(min % 60).padStart(2, '0') : ''}`
 const mesAno = (d: string) => { const [a, m] = d.split('-'); return `${m}/${a}` }
 
 export function Timeline({ orgSlug, colaboradorId, salarioAtual, cargoAtual }: {
@@ -87,6 +95,25 @@ export function Timeline({ orgSlug, colaboradorId, salarioAtual, cargoAtual }: {
                       </span>
                     )}
                   </div>
+
+                  {/* O marco de vínculo existe para responder "o que ela era
+                      antes" — mostrar só o depois o tornaria inútil. */}
+                  {(e.vinculo_para || e.jornada_para != null) && (
+                    <div className="text-[12px] mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      {e.vinculo_para && (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-orange-50 border border-orange-200 px-1.5 py-0.5 text-orange-800">
+                          {e.vinculo_de && <span className="text-orange-500/80">{vinc(e.vinculo_de)} →</span>}
+                          <b>{vinc(e.vinculo_para)}</b>
+                        </span>
+                      )}
+                      {e.jornada_para != null && (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 border border-gray-200 px-1.5 py-0.5 text-gray-700 tabular-nums">
+                          {e.jornada_de != null && <span className="text-gray-400">{hm(e.jornada_de)} →</span>}
+                          <b>{hm(e.jornada_para)}</b>/dia
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   {(e.salario_para != null || e.cargo_para) && (
                     <div className="text-[12px] text-gray-600 mt-1 flex flex-wrap items-center gap-x-2">
@@ -183,7 +210,8 @@ function NovoEvento({ orgSlug, colaboradorId, salarioAtual, cargoAtual, onClose,
         <div className="px-6 py-5 space-y-3.5">
           <div>
             <label className="block text-sm text-gray-600 mb-1.5">O que aconteceu</label>
-            <Select value={tipo} onChange={setTipo} options={TIPOS.map(t => ({ value: t.value, label: t.label }))} />
+            <Select value={tipo} onChange={setTipo}
+              options={TIPOS.filter(t => t.value !== 'vinculo').map(t => ({ value: t.value, label: t.label }))} />
           </div>
 
           <div>

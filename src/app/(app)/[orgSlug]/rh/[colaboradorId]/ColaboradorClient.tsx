@@ -2,20 +2,24 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Loader2, Check, Archive, ArchiveRestore, CalendarClock, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Loader2, Check, Archive, ArchiveRestore, CalendarClock, AlertTriangle, Award } from 'lucide-react'
 import { toast } from 'sonner'
 import { Select } from '@/components/ui/Select'
 import { Switch } from '@/components/ui/Switch'
 import { formatBRL, parseMoney } from '@/lib/midia'
 import { maskCPF, maskPhone } from '@/lib/masks'
 import { salvarColaborador, setColaboradorArquivado, carregarImpactoDesligamento, setBatePonto, setEntraFechamento, setCustoOverhead } from '@/app/actions/rh'
-import { JornadaEditor, type JornadaVals } from '../JornadaEditor'
+import { JornadaEditor, type JornadaVals, type JornadaVig } from '../JornadaEditor'
+import { PromocaoModal } from '@/components/rh/PromocaoModal'
 import { Timeline } from '@/components/rh/Timeline'
 import { LancamentosFuturos } from '@/components/rh/LancamentosFuturos'
 
 export interface Colaborador {
   id: string; nome: string; cpf: string | null; email: string | null; telefone: string | null
   cargo: string | null; tipo_vinculo: string | null; data_admissao: string | null; data_demissao: string | null
+  /** Entrada na casa (mig. 290): pode ser anterior à admissão CLT — o caso de
+   *  quem era estagiária e foi efetivada. É daqui que sai o tempo de casa. */
+  data_entrada_casa?: string | null
   /** false = sócio/cargo de confiança: sem jornada controlada (migration 209). */
   bate_ponto?: boolean | null
   /** false = nunca entra no fechamento da contabilidade (migration 256). */
@@ -39,15 +43,17 @@ const STATUS = [{ value: 'ativo', label: 'Ativo' }, { value: 'afastado', label: 
 const inputCls = 'w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 const labelCls = 'block text-sm font-medium text-gray-700 mb-1.5'
 
-export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOverride, jornadaPadrao }: {
+export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOverride, jornadaPadrao, jornadasPessoa = [] }: {
   orgSlug: string; colab: Colaborador; gestores: GestorRef[]; membros: MembroRef[]
   jornadaOverride: Partial<JornadaVals> | null; jornadaPadrao: Partial<JornadaVals> | null
+  jornadasPessoa?: JornadaVig[]
 }) {
   const router = useRouter()
   const [f, setF] = useState({
     nome: colab.nome ?? '', cpf: colab.cpf ? maskCPF(colab.cpf) : '', email: colab.email ?? '', telefone: colab.telefone ? maskPhone(colab.telefone) : '',
     cargo: colab.cargo ?? '', tipo_vinculo: colab.tipo_vinculo ?? '', status: colab.status ?? 'ativo',
     data_admissao: colab.data_admissao ?? '', data_demissao: colab.data_demissao ?? '',
+    data_entrada_casa: colab.data_entrada_casa ?? '',
     gestor_id: colab.gestor_id ?? '', salario_atual: colab.salario_atual != null ? formatBRL(Number(colab.salario_atual)).replace('R$', '').trim() : '',
     beneficios_mensal: colab.beneficios_mensal != null && Number(colab.beneficios_mensal) > 0 ? formatBRL(Number(colab.beneficios_mensal)).replace('R$', '').trim() : '',
     custo_projetado_mensal: colab.custo_projetado_mensal != null && Number(colab.custo_projetado_mensal) > 0 ? formatBRL(Number(colab.custo_projetado_mensal)).replace('R$', '').trim() : '',
@@ -58,6 +64,18 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
   // Desligar aqui corta o acesso e solta as atividades (gatilho da migration 179).
   // A ficha avisa o tamanho disso ANTES de salvar — ninguém deve descobrir depois.
   const [impacto, setImpacto] = useState<{ tem_acesso: boolean; ativas: number } | null>(null)
+  const [promovendo, setPromovendo] = useState(false)
+
+  // Jornada que vale hoje (própria ou o padrão da empresa) — é o "de" que o
+  // assistente de promoção mostra e a base dos horários que ele sugere.
+  const jHoje = jornadaOverride ?? jornadaPadrao
+  const minutos = (t?: string | null) => { const [h, m] = (t ?? '').split(':').map(Number); return (h || 0) * 60 + (m || 0) }
+  const jornadaAtual = jHoje ? {
+    carga_min: (jornadaOverride as JornadaVig | null)?.carga_min
+      ?? Math.max(0, (minutos(jHoje.intervalo_ini) - minutos(jHoje.entrada)) + (minutos(jHoje.saida) - minutos(jHoje.intervalo_fim))),
+    entrada: jHoje.entrada ?? '08:30', intervalo_ini: jHoje.intervalo_ini ?? '12:00',
+    intervalo_fim: jHoje.intervalo_fim ?? '13:30', saida: jHoje.saida ?? '18:00',
+  } : null
   const set = (k: keyof typeof f, v: string) => {
     setF(p => ({ ...p, [k]: v }))
     if (k === 'status') {
@@ -125,6 +143,7 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
         aviso_previo_ini: f.aviso_previo_modo ? (f.aviso_previo_ini || null) : null,
         aviso_previo_fim: f.aviso_previo_modo ? (f.aviso_previo_fim || null) : null,
         salario_atual: f.salario_atual ? String(parseMoney(f.salario_atual)) : null,
+        data_entrada_casa: f.data_entrada_casa || null,
         beneficios_mensal: f.beneficios_mensal ? String(parseMoney(f.beneficios_mensal)) : '0',
         custo_projetado_mensal: f.custo_projetado_mensal ? String(parseMoney(f.custo_projetado_mensal)) : null,
         gestor_id: f.gestor_id || null,
@@ -153,10 +172,21 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
           <h1 className="text-xl font-semibold text-gray-900">{f.nome || 'Colaborador'}</h1>
           <p className="text-gray-500 text-sm mt-0.5">{f.cargo || 'Sem cargo'}</p>
         </div>
-        <button onClick={() => arquivar(!colab.arquivado)} disabled={pending}
-          className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-gray-500 hover:text-gray-800 rounded-xl hover:bg-gray-100 transition disabled:opacity-50">
-          {colab.arquivado ? <><ArchiveRestore className="w-4 h-4" /> Restaurar</> : <><Archive className="w-4 h-4" /> Arquivar</>}
-        </button>
+        <div className="flex items-center gap-1.5">
+          {/* Vínculo, salário, cargo e jornada moram em campos separados — mudar
+              um e esquecer os outros foi o que deixou uma CLT com jornada de
+              estagiária. Aqui os quatro andam juntos e viram marco (mig. 290). */}
+          {!colab.arquivado && (
+            <button onClick={() => setPromovendo(true)} disabled={pending}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 rounded-xl transition-colors active:scale-[0.97] disabled:opacity-50">
+              <Award className="w-4 h-4" /> Promoção / vínculo
+            </button>
+          )}
+          <button onClick={() => arquivar(!colab.arquivado)} disabled={pending}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-gray-500 hover:text-gray-800 rounded-xl hover:bg-gray-100 transition disabled:opacity-50">
+            {colab.arquivado ? <><ArchiveRestore className="w-4 h-4" /> Restaurar</> : <><Archive className="w-4 h-4" /> Arquivar</>}
+          </button>
+        </div>
       </div>
 
       {/* Ficha */}
@@ -234,7 +264,25 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
           </div>
           <div><label className={labelCls}>E-mail</label><input value={f.email} onChange={e => set('email', e.target.value)} className={inputCls} /></div>
           <div><label className={labelCls}>Telefone</label><input value={f.telefone} onChange={e => set('telefone', maskPhone(e.target.value))} className={inputCls} placeholder="(00) 00000-0000" inputMode="tel" /></div>
-          <div><label className={labelCls}>Admissão</label><input type="date" value={f.data_admissao} onChange={e => set('data_admissao', e.target.value)} className={inputCls} /></div>
+          <div>
+            <label className={labelCls}>Admissão</label>
+            <input type="date" value={f.data_admissao} onChange={e => set('data_admissao', e.target.value)} className={inputCls} />
+            {/* Efetivação cria duas datas: o contrato de hoje (férias e
+                experiência saem daqui) e a entrada na casa (tempo de casa). */}
+            {f.data_entrada_casa && f.data_entrada_casa < f.data_admissao && (
+              <p className="text-[11px] text-gray-400 mt-1">
+                Contrato atual. Na casa desde {f.data_entrada_casa.split('-').reverse().join('/')} —
+                férias e experiência contam da admissão; tempo de casa, da entrada.
+              </p>
+            )}
+          </div>
+          <div>
+            <label className={labelCls}>Entrada na casa <span className="font-normal text-gray-400">(se antes do contrato)</span></label>
+            <input type="date" value={f.data_entrada_casa} onChange={e => set('data_entrada_casa', e.target.value)} className={inputCls} />
+            <p className="text-[11px] text-gray-400 mt-1">
+              Quem era estagiária e virou CLT entrou antes do contrato atual. Vazio = mesma data da admissão.
+            </p>
+          </div>
           <div><label className={labelCls}>Situação</label><Select value={f.status} onChange={v => set('status', v)} options={STATUS} /></div>
           {f.status === 'desligado' && <div><label className={labelCls}>Demissão</label><input type="date" value={f.data_demissao} onChange={e => set('data_demissao', e.target.value)} className={inputCls} /></div>}
           {/* Aviso prévio trabalhado (art. 488): reduz a CARGA esperada — nada
@@ -336,8 +384,19 @@ export function ColaboradorClient({ orgSlug, colab, gestores, membros, jornadaOv
       <div className="rounded-2xl border border-gray-200 bg-white p-6 mt-4">
         <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-3"><CalendarClock className="w-4 h-4" /> Jornada</h2>
         <JornadaEditor orgSlug={orgSlug} colaboradorId={colab.id}
-          inicial={jornadaOverride ?? jornadaPadrao} temOverride={!!jornadaOverride} padrao={jornadaPadrao} />
+          inicial={jornadaOverride ?? jornadaPadrao} temOverride={!!jornadaOverride} padrao={jornadaPadrao}
+          historico={jornadasPessoa} />
       </div>
+
+      {promovendo && (
+        <PromocaoModal orgSlug={orgSlug} onClose={() => setPromovendo(false)}
+          colaborador={{
+            id: colab.id, nome: colab.nome, tipo_vinculo: colab.tipo_vinculo,
+            salario_atual: colab.salario_atual != null ? Number(colab.salario_atual) : null,
+            cargo: colab.cargo,
+          }}
+          jornadaAtual={jornadaAtual} />
+      )}
     </div>
   )
 }

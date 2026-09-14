@@ -15,6 +15,8 @@ export interface ColaboradorInput {
   cargo?: string | null
   tipo_vinculo?: string | null
   data_admissao?: string | null
+  /** Entrada na casa (mig. 290/294): anterior à admissão para quem foi efetivada. */
+  data_entrada_casa?: string | null
   data_demissao?: string | null
   status?: string | null
   gestor_id?: string | null
@@ -139,6 +141,43 @@ export async function reativarColaborador(orgSlug: string, id: string, admissao?
   return { ok: true }
 }
 
+export interface PromocaoInput {
+  /** O que a pessoa ERA. Só se informa quando a ficha já foi mexida na mão —
+   *  senão o marco sairia "clt → clt" e perderia o histórico (mig. 295). */
+  vinculo_de?: string | null
+  salario_de?: string | null
+  /** Vazio = não muda. O que vier preenchido é aplicado a partir da data. */
+  tipo_vinculo?: string | null
+  salario?: string | null
+  cargo?: string | null
+  /** Carga diária em minutos (360 = 6h, 480 = 8h). */
+  carga_min?: number | null
+  entrada?: string | null; intervalo_ini?: string | null
+  intervalo_fim?: string | null; saida?: string | null
+  data_efeito: string
+  titulo?: string | null
+  descricao?: string | null
+  /** Trocar de vínculo reinicia a admissão (férias/experiência saem dela). */
+  reiniciar_admissao?: boolean
+}
+
+/** Promoção / mudança de vínculo num ato só (mig. 290): registra o marco com o
+ *  ANTES preservado e aplica a partir da data — a jornada nova nasce como
+ *  vigência, sem reescrever a carga do passado. */
+export async function promoverColaborador(orgSlug: string, id: string, dados: PromocaoInput) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (c.supabase as any).rpc('rh_promover_colaborador', {
+    p_colaborador: id, p_dados: dados,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/rh`)
+  revalidatePath(`/${orgSlug}/rh/${id}`)
+  revalidatePath(`/${orgSlug}/rh/horas`)
+  return { ok: true, ...(data as { evento_id: string; data_efeito: string }) }
+}
+
 export async function setColaboradorArquivado(orgSlug: string, id: string, arquivado: boolean) {
   const c = await ctx(orgSlug)
   if ('error' in c) return { error: c.error }
@@ -151,6 +190,8 @@ export async function setColaboradorArquivado(orgSlug: string, id: string, arqui
 export interface JornadaInput {
   entrada?: string; intervalo_ini?: string; intervalo_fim?: string; saida?: string
   flex_min?: number; tolerancia_min?: number; dias_semana?: number[]
+  /** Vigência que está sendo escrita (mig. 292). Vazio = a que vale hoje. */
+  vigencia_ini?: string
 }
 
 /** Salva a jornada: padrão da org (colaboradorId null) ou override por pessoa. */
@@ -172,10 +213,12 @@ export async function resetarJornada(orgSlug: string, colaboradorId: string) {
   const c = await ctx(orgSlug)
   if ('error' in c) return { error: c.error }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (c.supabase as any).rpc('rh_reset_jornada', { p_colaborador_id: colaboradorId })
+  const { data, error } = await (c.supabase as any).rpc('rh_reset_jornada', { p_colaborador_id: colaboradorId })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/rh/${colaboradorId}`)
-  return { ok: true }
+  // Só a vigência atual sai; se havia uma anterior, é ela que volta a valer —
+  // quem clicou precisa saber disso, senão acha que voltou ao padrão da empresa.
+  return { ok: true, ...(data as { removida: string | null; volta_para: string | null }) }
 }
 
 /** Lista os documentos de um colaborador (sob demanda, p/ a modal na listagem). RLS filtra por rh_can. */
