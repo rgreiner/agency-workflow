@@ -265,12 +265,22 @@ const isMacSnapshot = () => navigator.platform.toUpperCase().includes('MAC')
 type SidebarMode = 'trabalho' | 'comercial' | 'midia' | 'rh' | 'financeiro'
 
 /** A que modo cada grupo do menu pertence. */
-const GRUPO_MODO: Record<string, SidebarMode> = {
+// Um grupo pode aparecer em MAIS DE UM modo (array). É o caso de Cadastros:
+// veículo é cadastro do comercial e ferramenta do dia a dia da mídia (a entrega
+// escolhe o veículo dali, mig. 278) — obrigar a trocar de modo para cadastrar um
+// veículo novo no meio de uma entrega é atrito sem ganho.
+const GRUPO_MODO: Record<string, SidebarMode | SidebarMode[]> = {
   // Mídia é um contexto só: a operação (Hub) e a liberação de PI/MX moram
   // juntas, porque é a mesma pessoa fazendo as duas coisas.
   midia_hub: 'midia', midias: 'midia',
-  producao: 'comercial', cadastros: 'comercial',
+  producao: 'comercial',
+  cadastros: ['comercial', 'midia'],
   rh: 'rh', financeiro: 'financeiro',
+}
+
+const grupoNoModo = (id: string, m: SidebarMode) => {
+  const v = GRUPO_MODO[id]
+  return Array.isArray(v) ? v.includes(m) : v === m
 }
 
 // Em que modo cada rota se encaixa (null = neutra, não troca o modo).
@@ -280,10 +290,12 @@ function modeForPath(path: string, base: string): SidebarMode | null {
   // `/midia` (Hub) antes de `/midias` (comercial) seria ambíguo pelo prefixo —
   // os dois caem no mesmo modo, então a ordem aqui não muda o resultado.
   if (path.startsWith(`${base}/midia`)) return 'midia'
-  if (['producao', 'cadastros', 'relatorios', 'solicitacoes', 'documentos']
+  if (['producao', 'relatorios', 'solicitacoes', 'documentos']
       .some(p => path.startsWith(`${base}/${p}`))) return 'comercial'
   if (['dashboard', 'views/lista'].some(p => path.startsWith(`${base}/${p}`))) return 'trabalho'
   // NEUTRAS de propósito (null = não trocam o modo):
+  // - `cadastros`: o grupo vive em dois modos (Comercial e Mídia). Amarrar a rota
+  //   ao Comercial faria a sidebar pular de contexto quando a mídia abre Veículos.
   // - `workspaces`: é "Espaços" no Trabalho e "Clientes" no Comercial. Amarrar
   //   a um modo faria a sidebar pular de contexto no clique.
   // - As telas da linha de atalhos (Trabalhar, Gantt, Documentos, Quadros) e a
@@ -420,7 +432,7 @@ export function Sidebar({
   // `mode` acima da declaração derruba a tela inteira com "Cannot access before
   // initialization". O TypeScript não acusa porque o uso está dentro de um
   // callback — só aparece em runtime, e em produção já minificado.
-  const gruposDoModo = comercialGroups.filter(g => GRUPO_MODO[g.id] === mode)
+  const gruposDoModo = comercialGroups.filter(g => grupoNoModo(g.id, mode))
 
   // Trocar de modo troca a lista inteira (sem animação: é frequente). O que não
   // pode é herdar a rolagem do modo anterior e cair com a lista fora da tela.

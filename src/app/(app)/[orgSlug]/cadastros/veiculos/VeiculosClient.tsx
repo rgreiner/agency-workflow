@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, X, Check, Loader2, Archive, ArchiveRestore, Pencil, Tv, FileText, ExternalLink, MapPinned } from 'lucide-react'
+import { Plus, X, Check, Loader2, Archive, ArchiveRestore, Pencil, Tv, FileText, ExternalLink, MapPinned, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { createVeiculo, updateVeiculo, setVeiculoArchived } from '@/app/actions/veiculo'
@@ -36,6 +36,24 @@ const TYPE_OPTIONS = [
 ]
 const TYPE_LABEL: Record<string, string> = Object.fromEntries(TYPE_OPTIONS.map(o => [o.value, o.label]))
 
+/** Sem acento e sem caixa: quem busca "gazeta" tem que achar "Gazeta". */
+const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim()
+
+/**
+ * O que falta num veículo para ele servir ao dia a dia: tipo (organiza a lista),
+ * CNPJ (a PI precisa) e algum contato (sem e-mail nem telefone não dá para enviar
+ * a peça — é o que o passo 3 do Hub de Mídia vai usar).
+ */
+function lacunas(v: Veiculo): string[] {
+  const out: string[] = []
+  if (!(v.type ?? '').trim()) out.push('tipo')
+  if (!(v.tax_id ?? '').trim()) out.push('CNPJ')
+  const temContato = (v.emails ?? []).some(e => (e.email ?? '').trim())
+    || (v.telefones ?? []).some(t => (t.numero ?? '').trim())
+  if (!temContato) out.push('contato')
+  return out
+}
+
 const inputCls =
   'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
@@ -47,6 +65,49 @@ export function VeiculosClient({ orgSlug, veiculos, archivedView }: {
   const [editing, setEditing] = useState<Veiculo | null>(null)
   const [creating, setCreating] = useState(false)
   const [importando, setImportando] = useState<Veiculo | null>(null)
+  const [busca, setBusca] = useState('')
+  const [tiposAtivos, setTiposAtivos] = useState<string[]>([])
+  // Filtros de LACUNA: o cadastro só melhora se der para ver o que falta nele.
+  const [semCnpj, setSemCnpj] = useState(false)
+  const [semContato, setSemContato] = useState(false)
+
+  // Tipos que existem, por frequência — o mais usado vira o primeiro chip.
+  const tiposDaOrg = useMemo(() => {
+    const cont = new Map<string, number>()
+    for (const v of veiculos) cont.set(v.type ?? '', (cont.get(v.type ?? '') ?? 0) + 1)
+    return [...cont.entries()].sort((a, b) => b[1] - a[1])
+  }, [veiculos])
+
+  const faltando = useMemo(() => ({
+    cnpj: veiculos.filter(v => !(v.tax_id ?? '').trim()).length,
+    contato: veiculos.filter(v => lacunas(v).includes('contato')).length,
+  }), [veiculos])
+
+  /**
+   * Busca em tudo que identifica o veículo — nome, tipo, CNPJ, observação, e-mail,
+   * telefone e cidade. São 164 cadastros: procurar pelo telefone que apareceu no
+   * WhatsApp é mais frequente do que lembrar a grafia exata do nome. Filtro em
+   * memória porque a página já carrega a lista inteira.
+   */
+  const lista = useMemo(() => {
+    const q = norm(busca)
+    return veiculos.filter(v => {
+      if (semCnpj && (v.tax_id ?? '').trim()) return false
+      if (semContato && !lacunas(v).includes('contato')) return false
+      // Vários tipos = união: "impressa OU externa" é o recorte que se faz na prática.
+      if (tiposAtivos.length && !tiposAtivos.includes(v.type ?? '')) return false
+      if (!q) return true
+      const campos = [
+        v.name, v.type ? TYPE_LABEL[v.type] ?? v.type : '', v.tax_id, v.notes,
+        ...(v.emails ?? []).map(e => e.email),
+        ...(v.telefones ?? []).map(t => t.numero),
+        ...(v.enderecos ?? []).map(e => `${e.cidade ?? ''} ${e.uf ?? ''}`),
+      ]
+      return campos.some(c => c && norm(String(c)).includes(q))
+    })
+  }, [veiculos, busca, tiposAtivos, semCnpj, semContato])
+
+  const filtrando = !!busca || tiposAtivos.length > 0 || semCnpj || semContato
   const [isPending, startTransition] = useTransition()
 
   function archive(v: Veiculo) {
@@ -83,7 +144,67 @@ export function VeiculosClient({ orgSlug, veiculos, archivedView }: {
         </div>
       </div>
 
-      {veiculos.length > 0 ? (
+      {veiculos.length > 0 && (
+        <div className="mb-3 space-y-2">
+          <div className="relative">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              placeholder="Buscar por nome, tipo, CNPJ, e-mail, telefone, cidade ou observação"
+              className="w-full pl-9 pr-9 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+            {busca && (
+              <button onClick={() => setBusca('')} aria-label="Limpar busca"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          {tiposDaOrg.length > 1 && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Tv className="w-3.5 h-3.5 text-gray-300 shrink-0" />
+              {tiposDaOrg.map(([t, n]) => {
+                const ativo = tiposAtivos.includes(t)
+                return (
+                  <button key={t || 'sem-tipo'}
+                    onClick={() => setTiposAtivos(a => ativo ? a.filter(x => x !== t) : [...a, t])}
+                    className={cn('inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors active:scale-[0.97]',
+                      ativo ? 'bg-gray-900 text-[#fff] border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300')}>
+                    {t ? TYPE_LABEL[t] ?? t : 'sem tipo'}
+                    <span className={cn('text-[10px] font-semibold', ativo ? 'text-white/70' : 'text-gray-400')}>{n}</span>
+                  </button>
+                )
+              })}
+              {tiposAtivos.length > 0 && (
+                <button onClick={() => setTiposAtivos([])} className="text-xs text-gray-400 hover:text-gray-600 transition-colors ml-1">limpar</button>
+              )}
+            </div>
+          )}
+
+          {/* O que falta preencher. Separado dos tipos: não é "que veículo é",
+              é "este cadastro está pela metade". */}
+          {(faltando.cnpj > 0 || faltando.contato > 0) && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="w-3.5 shrink-0" />
+              <span className="text-[11px] text-gray-400 mr-1">falta preencher:</span>
+              {faltando.contato > 0 && (
+                <ChipLacuna label="sem contato" n={faltando.contato} ativo={semContato} onClick={() => setSemContato(v => !v)} />
+              )}
+              {faltando.cnpj > 0 && (
+                <ChipLacuna label="sem CNPJ" n={faltando.cnpj} ativo={semCnpj} onClick={() => setSemCnpj(v => !v)} />
+              )}
+            </div>
+          )}
+
+          {filtrando && (
+            <p className="text-xs text-gray-400">{lista.length} de {veiculos.length} veículo(s)</p>
+          )}
+        </div>
+      )}
+
+      {lista.length > 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
           <table className="w-full min-w-[560px]">
             <thead>
@@ -97,7 +218,7 @@ export function VeiculosClient({ orgSlug, veiculos, archivedView }: {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {veiculos.map(v => (
+              {lista.map(v => (
                 <tr key={v.id} className="hover:bg-gray-50/50 transition">
                   <td className="px-4 py-3">
                     <p className="text-sm font-medium text-gray-900">{v.name}</p>
@@ -143,10 +264,12 @@ export function VeiculosClient({ orgSlug, veiculos, archivedView }: {
         <div className="text-center py-24 bg-white rounded-xl border border-gray-200">
           <Tv className="w-10 h-10 text-gray-300 mx-auto mb-3" />
           <h3 className="text-gray-900 font-medium">
-            {archivedView ? 'Nenhum veículo arquivado' : 'Nenhum veículo ainda'}
+            {filtrando ? 'Nenhum veículo com esse filtro'
+              : archivedView ? 'Nenhum veículo arquivado' : 'Nenhum veículo ainda'}
           </h3>
           <p className="text-gray-500 text-sm mt-1">
-            {archivedView ? 'Veículos arquivados aparecem aqui.' : 'Cadastre o primeiro veículo.'}
+            {filtrando ? 'Limpe a busca ou os filtros para ver a lista inteira.'
+              : archivedView ? 'Veículos arquivados aparecem aqui.' : 'Cadastre o primeiro veículo.'}
           </p>
         </div>
       )}
@@ -282,5 +405,17 @@ function VeiculoModal({ orgSlug, veiculo, onClose }: {
         </form>
       </div>
     </div>
+  )
+}
+
+/** Chip de lacuna — mesmo desenho da tela de Fornecedores. */
+function ChipLacuna({ label, n, ativo, onClick }: { label: string; n: number; ativo: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick}
+      className={cn('inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors active:scale-[0.97]',
+        ativo ? 'bg-amber-500 text-[#fff] border-amber-500' : 'bg-white text-gray-600 border-gray-200 hover:border-amber-300')}>
+      {label}
+      <span className={cn('text-[10px] font-semibold', ativo ? 'text-white/70' : 'text-gray-400')}>{n}</span>
+    </button>
   )
 }
