@@ -11,6 +11,7 @@ import { EntregaMidiaAviso } from './EntregaMidiaAviso'
 import { StatusChanger } from './StatusChanger'
 import { MobileStatusBar } from './MobileStatusBar'
 import { AbasMobile } from './AbasMobile'
+import { AvisoTarefaArquivada } from './AvisoTarefaArquivada'
 import { ReviewBanner } from './ReviewBanner'
 import { PortalFeedback, type PortalFeedbackItem } from './PortalFeedback'
 import { AutoRefresh } from '@/components/ui/AutoRefresh'
@@ -489,6 +490,15 @@ export default async function ActivityPage({
           )}
         </div>
       </div>
+
+      {activity.archived && (
+        <AvisoTarefaArquivada
+          path={path}
+          activityId={activityId}
+          arquivadaEm={activity.archived_at ? formatDate(activity.archived_at) : null}
+          podeDesarquivar={isOrgMember}
+        />
+      )}
 
       {/* ── Body — abas no celular, duas colunas no lg+ ─────────── */}
       <AbasMobile
