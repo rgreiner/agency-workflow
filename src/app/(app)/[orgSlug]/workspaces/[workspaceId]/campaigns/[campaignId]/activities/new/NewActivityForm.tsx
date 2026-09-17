@@ -11,7 +11,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { Select } from '@/components/ui/Select'
-import { composedTitle, conhecido, hojeISO, somarDias, prefixoDaData } from '@/lib/atividade-titulo'
+import { composedTitle, conhecido, hojeISO, somarDias, prefixoDaData, opcoesComOutro } from '@/lib/atividade-titulo'
 import { useOrgSettings } from '@/components/providers/OrgSettingsProvider'
 import { MembrosPicker, type MembroSelecionavel } from '@/components/MembrosPicker'
 
@@ -103,9 +103,10 @@ export function NewActivityForm({ members, currentUserId, inicial, equipeIds, mo
   // Pauta). useMemo é obrigatório: sem ele cada render devolve array novo e o
   // Select entra em loop — mesmo React #301 de 30/07/2026 que derrubou os status.
   const { pauta } = useOrgSettings()
-  const VEICULO_OPTIONS  = useMemo(() => pauta.veiculo.map(v  => ({ value: v,  label: v  })), [pauta.veiculo])
-  const FORMATO_OPTIONS  = useMemo(() => pauta.formato.map(f  => ({ value: f,  label: f  })), [pauta.formato])
-  const OBJETIVO_OPTIONS = useMemo(() => pauta.objetivo.map(o => ({ value: o, label: o })), [pauta.objetivo])
+  // opcoesComOutro: a saída "Outro — digitar" no fim de cada lista (o cadastro não a guarda).
+  const VEICULO_OPTIONS  = useMemo(() => opcoesComOutro(pauta.veiculo),  [pauta.veiculo])
+  const FORMATO_OPTIONS  = useMemo(() => opcoesComOutro(pauta.formato),  [pauta.formato])
+  const OBJETIVO_OPTIONS = useMemo(() => opcoesComOutro(pauta.objetivo), [pauta.objetivo])
 
   // Cadastro conhece o valor → seleciona; senão "Outro" + texto livre. É o caso de
   // duplicar tarefa antiga cujo valor saiu da lista (a 285 tirou Instagram, TV...).

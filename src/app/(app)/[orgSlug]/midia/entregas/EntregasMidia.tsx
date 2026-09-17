@@ -292,8 +292,6 @@ function ModalEntrega({ orgSlug, clientes, veiculos, membros, equipes, entrega, 
   // chamar a mesma peça pelo mesmo nome. Por isso lê o cadastro da org (mig. 285)
   // em vez de uma lista própria. useMemo pelo mesmo motivo do form de atividade.
   const { pauta } = useOrgSettings()
-  const FORMATO_OPTIONS = useMemo(() => pauta.formato.map(f => ({ value: f, label: f })), [pauta.formato])
-  const formatoConhecido = (v: string) => conhecido(pauta.formato, v)
 
   const [form, setForm] = useState({
     workspaceId: entrega?.workspaceId ?? '',
@@ -302,9 +300,9 @@ function ModalEntrega({ orgSlug, clientes, veiculos, membros, equipes, entrega, 
     // Entrega antiga só com texto entra como opção própria — trocar pelo cadastro é
     // um clique, mas ninguém é obrigado a recadastrar o que já estava salvo.
     veiculoId: entrega?.veiculoId ?? (entrega?.veiculo ? VEICULO_TEXTO : ''),
-    // Formato do catálogo; o que não está na lista (entrega antiga) vira "Outro" + texto.
-    formato: !entrega?.formato ? '' : formatoConhecido(entrega.formato) ? entrega.formato : 'Outro',
-    formatoCustom: entrega?.formato && !formatoConhecido(entrega.formato) ? entrega.formato : '',
+    // O texto do formato, direto: do cadastro ou digitado. Sem o par "Outro" + campo
+    // extra — o Combobox aceita escrever um formato novo no próprio campo.
+    formato: entrega?.formato ?? '',
     especificacao: entrega?.especificacao ?? '',
     pedido: entrega?.pedido ?? '',
     // Responsáveis da tarefa que a entrega abre: a equipe do cliente vem
@@ -352,7 +350,16 @@ function ModalEntrega({ orgSlug, clientes, veiculos, membros, equipes, entrega, 
     }))
   }
 
-  const formatoFinal = form.formato === 'Outro' ? form.formatoCustom : form.formato
+  const formatoFinal = form.formato.trim()
+
+  // O cadastro + o formato atual quando ele não está lá (entrega antiga ou digitado
+  // agora) — sem isso o Combobox não teria como exibir o valor escolhido.
+  const opcoesFormato = useMemo(() => {
+    const base = pauta.formato.map(f => ({ value: f, label: f }))
+    return formatoFinal && !conhecido(pauta.formato, formatoFinal)
+      ? [...base, { value: formatoFinal, label: formatoFinal }]
+      : base
+  }, [pauta.formato, formatoFinal])
   const nomeLongo = form.titulo.trim().length > NOME_LONGO
 
   // Espelha tituloDaTarefa() do servidor: DATA - VEÍCULO - FORMATO - JOB, sem
@@ -498,13 +505,15 @@ function ModalEntrega({ orgSlug, clientes, veiculos, membros, equipes, entrega, 
           <div className="block">
             <span className="text-[11px] text-gray-400">Formato</span>
             <div className="mt-0.5">
-              <Select value={form.formato} onChange={v => setForm(f => ({ ...f, formato: v }))}
-                options={FORMATO_OPTIONS} placeholder="Stories, Post, Carrossel…" />
+              {/* Digitar um formato que não existe oferece "Usar «texto»". Não grava no
+                  cadastro (só owner/admin cadastra, em Configurações → Pauta): o formato
+                  vai para o título da tarefa, e a partir de 2 usos aparece lá como
+                  sugestão para promover. */}
+              <Combobox value={formatoFinal} onChange={v => setForm(f => ({ ...f, formato: v }))}
+                options={opcoesFormato} minChars={1}
+                onCreate={texto => setForm(f => ({ ...f, formato: texto }))} createLabel="Usar"
+                placeholder="Stories, Post, Página simples…" />
             </div>
-            {form.formato === 'Outro' && (
-              <input value={form.formatoCustom} onChange={e => setForm(f => ({ ...f, formatoCustom: e.target.value }))}
-                placeholder="Qual formato?" className={campo} />
-            )}
           </div>
         </div>
 

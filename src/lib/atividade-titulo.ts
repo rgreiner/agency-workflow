@@ -41,6 +41,23 @@ const mesma = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLo
 export const conhecido = (lista: readonly string[], v: string) =>
   !!v && lista.some(x => mesma(x, v))
 
+/**
+ * Opções de um Select da pauta COM a saída "Outro" no fim.
+ *
+ * O cadastro recusa "Outro" de propósito (`org_pauta_salvar`, mig. 285: é a saída
+ * de emergência do formulário, não uma opção). Mas os formulários só abrem o campo
+ * de digitar quando o valor é "Outro" — e a lista passou a vir SÓ do cadastro, então
+ * a saída ficou inalcançável: ninguém conseguia usar um veículo/formato/objetivo
+ * fora da lista (regressão de 13/09, achada em 17/09).
+ *
+ * Fica aqui, e NÃO em `pautaListasDe`, porque as listas também servem para
+ * decompor título (`decomporTitulo`): "Outro" nelas viraria formato reconhecido.
+ */
+export const opcoesComOutro = (lista: readonly string[]) => [
+  ...lista.map(v => ({ value: v, label: v })),
+  { value: 'Outro', label: 'Outro — digitar' },
+]
+
 const ymd = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
