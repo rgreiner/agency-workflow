@@ -177,13 +177,17 @@ export function NewActivityForm({ members, currentUserId, inicial, equipeIds, mo
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) { motivo = typeof data.error === 'string' ? data.error : ''; throw new Error('api') }
+      // Os dois vêm juntos: organiza o que foi dito E aponta o que falta. Antes era
+      // um OU outro, e um rascunho incompleto voltava sem organização nenhuma.
+      const perguntas: string[] = Array.isArray(data.faltando) ? data.faltando : []
       if (data.briefing) {
         editor.commands.setContent(briefingToEditorHTML(data.briefing))
-        toast.success('Briefing otimizado.', {
-          action: { label: 'Desfazer', onClick: () => editor.commands.setContent(anterior) },
+        setFaltandoIA(perguntas)
+        toast.success(perguntas.length ? 'Briefing organizado — veja o que ainda falta informar.' : 'Briefing otimizado.', {
+          action: { label: 'Desfazer', onClick: () => { editor.commands.setContent(anterior); setFaltandoIA([]) } },
         })
-      } else if (data.faltando?.length) {
-        setFaltandoIA(data.faltando)
+      } else if (perguntas.length) {
+        setFaltandoIA(perguntas)
       } else {
         toast.error('A IA não retornou um briefing. Tente de novo.')
       }

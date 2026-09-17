@@ -180,10 +180,13 @@ export async function geminiJson<T>(opts: GeminiJsonOpts): Promise<{ model: stri
  * levou 45 s num "ok" que o 3.8-flash fez em 2 s. Modelo lotado não é motivo pra
  * tela falhar: outro da mesma família responde igual pro que o Flow pede (JSON
  * estruturado). O Lite vem primeiro por ser um pool de capacidade diferente; o
- * 3.6 fixo é o último recurso. GEMINI_FALLBACK_MODELS (vírgula) troca a cadeia;
- * vazia desliga.
+ * Flash de versão FIXA é o último recurso — existe pra sobreviver a um alias com
+ * problema, então tem de ser a versão concreta mais nova disponível, não a que
+ * estava nova quando a cadeia foi escrita. 17/09/2026: era 3.6 (duas versões
+ * atrás) e passou a 3.8, conferido na lista da API com a chave de produção.
+ * GEMINI_FALLBACK_MODELS (vírgula) troca a cadeia; vazia desliga.
  */
-const FALLBACK_MODELS = ['gemini-flash-lite-latest', 'gemini-3.6-flash']
+const FALLBACK_MODELS = ['gemini-flash-lite-latest', 'gemini-3.8-flash']
 
 function modelosFallback(pedido: string): string[] {
   const env = process.env.GEMINI_FALLBACK_MODELS

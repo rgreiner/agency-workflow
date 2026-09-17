@@ -174,7 +174,7 @@ export function FaltandoIA({ perguntas, onInserir, className }: {
   return (
     <div className={cn('rounded-xl border border-amber-200 bg-amber-50 px-4 py-3', className)}>
       <p className="text-xs font-medium text-amber-800 mb-1.5">
-        Para estruturar o briefing, responda no texto acima:
+        O briefing já foi organizado. Falta informar — responda no texto acima:
       </p>
       <ul className="space-y-1">
         {perguntas.map((q, i) => (

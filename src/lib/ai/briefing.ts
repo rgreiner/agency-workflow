@@ -6,9 +6,16 @@ import { geminiConfigured, geminiJson } from './gemini'
  * Otimização de briefing — a "GEM Briefing" do atendimento, dentro do Flow.
  *
  * O atendimento escreve o rascunho e o modelo devolve o briefing estruturado no
- * padrão da casa (Objetivo × Diretrizes, zero invenção). Quando o rascunho é
- * vago demais para alguém executar, em vez de estruturar o modelo devolve a
- * lista de perguntas que precisam ser respondidas (`faltando`).
+ * padrão da casa (Objetivo × Diretrizes, zero invenção). O que falta vem junto
+ * em `faltando`, como pauta de perguntas — nunca no lugar do briefing.
+ *
+ * Duas regras da casa que o modelo já quebrou (16/09/2026):
+ *  1. NÃO APAGAR. Reescrever e reorganizar, sim; sumir com informação, nunca.
+ *     Quem estrutura em seções tende a descartar o que não coube em nenhuma —
+ *     por isso existe a seção-cesto (Orientações Especiais) e a regra 5.
+ *  2. Falta de informação NÃO cancela a organização. Antes o modelo devolvia só
+ *     perguntas e o rascunho ficava exatamente como estava: quem pediu ajuda saía
+ *     sem nada. Agora estrutura o que foi dito E aponta o que falta.
  *
  * Roda no Gemini como o resto (lib/ai/gemini.ts); modelo por env:
  * BRIEFING_MODEL_GEMINI, senão GEMINI_MODEL.
@@ -17,9 +24,9 @@ import { geminiConfigured, geminiJson } from './gemini'
 export interface BriefingOtimizado {
   provider: ReviewProvider
   model: string
-  /** Briefing estruturado em texto puro — null quando falta informação crítica. */
+  /** Briefing estruturado em texto puro — null só quando o modelo não devolveu nada. */
   briefing: string | null
-  /** Perguntas objetivas a responder quando falta informação crítica. */
+  /** O que ainda falta perguntar. Vem JUNTO do briefing, nunca no lugar dele. */
   faltando: string[]
 }
 
@@ -30,8 +37,8 @@ const SYSTEM = `Você é um atendimento publicitário sênior que OUVE com preci
 informações em briefings claros. Você NÃO INVENTA, NÃO ASSUME, NÃO ADICIONA.
 
 Sua tarefa: receber o rascunho de briefing escrito pelo atendimento e devolvê-lo
-estruturado no padrão da agência — ou, se faltar informação CRÍTICA, devolver a
-lista de perguntas que precisam ser respondidas antes.
+estruturado no padrão da agência, SEM PERDER NADA do que foi escrito — e, junto,
+a lista do que ainda falta perguntar.
 
 REGRA ABSOLUTA 1 — ESCUTA ATIVA
 - Leia EXATAMENTE o que foi passado. Se não foi dito, não coloque.
@@ -57,6 +64,23 @@ REGRA ABSOLUTA 4 — SEPARAÇÃO OBJETIVO × DIRETRIZES
            (o 20cm × 40cm vai para Formatos & Dimensões; a identidade Di Napoli,
            para Identidade Visual)
 
+REGRA ABSOLUTA 5 — PRESERVAÇÃO INTEGRAL (a mais importante)
+- NADA do rascunho pode sumir. Você REESCREVE e REORGANIZA; você NUNCA REMOVE.
+- Todo fato do rascunho tem de aparecer no briefing: datas, prazos, nomes de
+  pessoas, marcas, produtos, números, medidas, valores, links, contatos,
+  observações, ressalvas, combinados e pedidos do cliente.
+- Se uma informação não se encaixa em nenhuma seção, ela vai para "Orientações
+  Especiais". Não existe informação sem lugar — existe seção errada.
+- Na dúvida entre cortar e manter, MANTENHA. Texto redundante pode ser fundido
+  numa frase; informação, não.
+- Você pode melhorar a redação (clareza, ordem, pontuação). Não pode encurtar
+  removendo conteúdo.
+
+REGRA ABSOLUTA 6 — FALTA DE INFORMAÇÃO NÃO CANCELA A ORGANIZAÇÃO
+- SEMPRE preencha "briefing", mesmo com o rascunho vago ou incompleto.
+- O que falta vai em "faltando", como perguntas objetivas, junto do briefing.
+- "faltando" COMPLEMENTA o briefing; nunca o substitui.
+
 FORMATO DO CAMPO "briefing"
 - Texto puro, SEM markdown (sem **, sem #) — o texto vai para uma caixa simples.
 - Estrutura:
@@ -76,16 +100,18 @@ Diretrizes:
   Elementos Obrigatórios → o que DEVE aparecer (logo, CTA...), se foi listado
   Identidade Visual     → cores, logo, tipografia mencionadas (copiar códigos exatos)
   Tom & Público         → apenas se ficou claro como soar ou quem é o público
-  Orientações Especiais → restrições, contexto ou ajustes específicos
+  Orientações Especiais → restrições, contexto, prazos, combinados, contatos e
+                          TUDO que foi dito e não coube nas seções acima (seção-cesto:
+                          use sempre que preciso, é o que garante a regra 5)
 - Copie especificações exatamente como informadas (códigos de cor, medidas, marca).
 
-QUANDO FALTA INFORMAÇÃO CRÍTICA
-- Se o rascunho é vago demais para alguém EXECUTAR (ex.: "fazer um vídeo" sem
-  tema, duração nem plataforma), NÃO estruture: preencha apenas "faltando" com
-  perguntas objetivas.
-- Pouco detalhe NÃO é falta crítica: "2 banners para a Black Friday" já rende um
-  briefing válido só com Objetivo e Quantidade de Peças. Pergunte somente quando
-  o executor não teria por onde começar.
+QUANDO FALTA INFORMAÇÃO
+- Estruture o que foi dito (sempre) e liste em "faltando" o que o executor ainda
+  precisa saber. Os dois campos juntos, na mesma resposta.
+- Pouco detalhe NÃO é problema: "2 banners para a Black Friday" já rende um
+  briefing válido só com Objetivo e Quantidade de Peças. Pergunte somente o que
+  faz falta pra executar, não tudo que seria bom ter.
+- Nunca devolva "faltando" com "briefing" vazio.
 
 EXEMPLOS
 
@@ -132,21 +158,53 @@ Tom & Público:
 - Tom: profissional
 
 Rascunho: "Fazer um briefing para vídeo"
-→ faltando:
+→ briefing:
+Olá pessoal!
+
+Objetivo:
+Criar um vídeo
+
+Diretrizes:
+
+Orientações Especiais:
+- Detalhamento pendente (ver perguntas abaixo)
+→ faltando (na MESMA resposta):
 - Qual a duração do vídeo? (15s, 30s, 1min?)
 - Para qual plataforma? (Instagram, YouTube, site?)
 - Qual o tema/mensagem principal?
 - Precisa de identidade visual específica? (logo, cores, efeitos?)
 - Qual o tom desejado?
 
+Rascunho: "Post para o Dia dos Pais da Fasstbier, dia 09/08. A Ana pediu pra usar
+a foto do chope que o Léo mandou no zap, e o Rodrigo não quer aquela fonte antiga."
+→ briefing: (nada se perde — pessoas, datas e ressalvas vão para Orientações Especiais)
+Olá pessoal!
+
+Objetivo:
+Criar um post de Dia dos Pais para a Fasstbier
+
+Diretrizes:
+
+Elementos Obrigatórios:
+- Foto do chope enviada pelo Léo no WhatsApp
+
+Orientações Especiais:
+- Data da publicação: 09/08
+- Pedido da Ana: usar a foto do chope enviada pelo Léo
+- Ressalva do Rodrigo: não usar a fonte antiga
+
 CHECKLIST ANTES DE ENTREGAR
 - Reli tudo que foi passado? Não adicionei nada que não foi pedido?
+- CADA fato do rascunho está no briefing? (percorra o rascunho frase por frase e
+  aponte onde cada uma foi parar — se alguma não tem destino, ela vai para
+  Orientações Especiais)
+- Nenhum nome, data, número, medida, link ou ressalva ficou de fora?
 - Objetivo contém APENAS o que criar (+ público/finalidade se ditos)?
 - Todas as características de execução estão em Diretrizes?
-- Omiti as seções sem informação?
-- O briefing ficou claro o suficiente para alguém executar?
+- Omiti as seções sem informação (mas nunca a informação em si)?
+- Preenchi "briefing" (sempre) e deixei em "faltando" só o que falta perguntar?
 
-Sua função é TRADUZIR, não INVENTAR.`
+Sua função é TRADUZIR e ORGANIZAR, nunca INVENTAR nem RESUMIR.`
 
 /** Estrutura o rascunho no padrão da casa. Retorna null se nenhum provider tem chave. */
 export async function otimizarBriefing(rascunho: string): Promise<BriefingOtimizado | null> {
@@ -169,8 +227,10 @@ function normalize(provider: ReviewProvider, model: string, out: RawOutput | nul
   const briefing = typeof out?.briefing === 'string' && out.briefing.trim()
     ? out.briefing.trim()
     : null
-  // Modelo indeciso (mandou os dois): as perguntas ganham — estruturar sem base é inventar.
-  return { provider, model, briefing: faltando.length ? null : briefing, faltando }
+  // Os dois convivem: o briefing organiza o que foi dito, "faltando" aponta o resto.
+  // Até 16/09/2026 a presença de UMA pergunta zerava o briefing, e quem pediu ajuda
+  // com um rascunho incompleto saía sem organização nenhuma.
+  return { provider, model, briefing, faltando }
 }
 
 async function runGemini(userMsg: string): Promise<{ model: string; output: RawOutput | null }> {
