@@ -169,6 +169,16 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
   ] },
 ]
 
+/** Quebra a lista em blocos: cada `heading` abre um novo (o 1º bloco pode não ter título). */
+function blocosDoGrupo(items: NavItem[]): { heading?: string; items: NavItem[] }[] {
+  const out: { heading?: string; items: NavItem[] }[] = []
+  for (const it of items) {
+    if (it.heading || out.length === 0) out.push({ heading: it.heading, items: [] })
+    out[out.length - 1].items.push(it)
+  }
+  return out
+}
+
 function NavGroup({ base, pathname, group, open, onToggle }: {
   base: string; pathname: string; group: NavGroupDef; open: boolean
   /** Ausente = grupo fixo, sem colapsar (modo que tem um grupo só). */
@@ -202,26 +212,43 @@ function NavGroup({ base, pathname, group, open, onToggle }: {
         <div role="heading" aria-level={2} className={cabecalho}>{conteudo}</div>
       )}
       {open && (
-        <div className="ml-7 mr-2 mt-px space-y-px">
-          {group.items.map(it => {
-            const href = `${base}/${it.href}`
-            const active = it.exact ? pathname === href : pathname.startsWith(href)
+        <div className="ml-7 mr-2 mt-px">
+          {blocosDoGrupo(group.items).map((b, bi) => {
+            const tituloId = b.heading ? `nav-${group.id}-${bi}` : undefined
             return (
-              <div key={it.href}>
-                {it.heading && (
-                  <div className="px-2.5 pt-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 select-none">
-                    {it.heading}
+              // Bloco com título vira grupo nomeado: o leitor de tela anuncia
+              // "Ponto, grupo" ao entrar, em vez de ler o título como mais um item.
+              <div key={bi} role={b.heading ? 'group' : undefined} aria-labelledby={tituloId}
+                className={cn('space-y-px', b.heading && bi > 0 && 'mt-4')}>
+                {b.heading && (
+                  // Título, não link: tinha a mesma cor, o mesmo recuo e o mesmo
+                  // passo vertical dos itens e se lia como mais uma linha clicável.
+                  // O fio até a borda o torna divisória, e o ar fica EM CIMA —
+                  // o título cola nos itens que nomeia.
+                  <div id={tituloId} className="flex items-center gap-2 px-2.5 pb-1">
+                    <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500">
+                      {b.heading}
+                    </span>
+                    <span aria-hidden className="h-px min-w-3 flex-1 bg-gray-700" />
                   </div>
                 )}
-                <Link
-                  href={href}
-                  className={cn(
-                    'flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm transition-colors',
-                    active ? 'bg-orange-600/20 text-orange-300' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/60'
-                  )}
-                >
-                  <span className="truncate">{it.label}</span>
-                </Link>
+                {b.items.map(it => {
+                  const href = `${base}/${it.href}`
+                  const active = it.exact ? pathname === href : pathname.startsWith(href)
+                  return (
+                    <Link
+                      key={it.href}
+                      href={href}
+                      aria-current={active ? 'page' : undefined}
+                      className={cn(
+                        'flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm transition-colors',
+                        active ? 'bg-orange-600/20 text-orange-300' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/60'
+                      )}
+                    >
+                      <span className="truncate">{it.label}</span>
+                    </Link>
+                  )
+                })}
               </div>
             )
           })}
