@@ -30,18 +30,88 @@ function periodo(lista: MarcacaoFora[]) {
   return de === ate ? de : `${de} a ${ate}`
 }
 
-export function FilaForaLocal({ orgSlug, itens, locais = [], redesGrupo = [] }: {
-  orgSlug: string; itens: MarcacaoFora[]
-  /** Locais cadastrados — para cadastrar de uma vez o IP que trocou. */
-  locais?: LocalRh[]
-  /** Redes reconhecidas pela própria equipe (3+ pessoas no mesmo IP, mig. 284). */
-  redesGrupo?: RedeGrupo[]
-}) {
+/** Cadastra um IP num local ativo: as próximas batidas dessa rede entram como
+ *  dentro. Compartilhado pela fila (IP de duas pessoas) e pelas redes da equipe. */
+function useCadastrarIp(orgSlug: string, locais: LocalRh[]) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const ativos = useMemo(() => locais.filter(l => l.ativo), [locais])
   const [destinoId, setDestinoId] = useState('')
   const destino = ativos.find(l => l.id === destinoId) ?? ativos[0]
+
+  function cadastrarIp(ip: string) {
+    if (!destino) return
+    if (destino.ips.includes(ip)) { toast.info(`${ip} já está em ${destino.nome}.`); return }
+    start(async () => {
+      const r = await salvarLocal(orgSlug, destino.id, {
+        nome: destino.nome, ips: [...destino.ips, ip],
+        lat: destino.lat, lon: destino.lon, raio_m: destino.raio_m, ativo: destino.ativo,
+      })
+      if (r?.error) { toast.error(r.error); return }
+      toast.success(`${ip} cadastrado em ${destino.nome}.`, {
+        description: 'As próximas batidas dessa rede já entram como dentro.',
+      })
+      router.refresh()
+    })
+  }
+
+  return { ativos, destino, setDestinoId, cadastrarIp, pending }
+}
+
+/**
+ * Redes que a própria equipe provou ser o escritório (3+ pessoas no mesmo IP no
+ * mesmo dia, mig. 284). É configuração, não fila: mora no painel recolhível.
+ */
+export function RedesDaEquipe({ orgSlug, redes, locais = [] }: {
+  orgSlug: string; redes: RedeGrupo[]; locais?: LocalRh[]
+}) {
+  const { destino, cadastrarIp, pending } = useCadastrarIp(orgSlug, locais)
+  if (redes.length === 0) return null
+  return (
+    <section>
+      <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
+        <Wifi className="w-4 h-4" /> Redes reconhecidas pela equipe <span className="text-gray-400">{redes.length}</span>
+      </h2>
+      <p className="text-xs text-gray-400 mb-3">
+        Três pessoas ou mais batendo do mesmo IP no mesmo dia contam como escritório, mesmo sem cadastro.
+        É o que segura o dia em que o provedor troca o IP. Se alguma dessas redes <b>não</b> for a agência
+        (um time inteiro num cliente, por exemplo), é aqui que dá pra ver.
+      </p>
+      <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-50">
+        {redes.map(r => (
+          <div key={r.ip} className="flex flex-wrap items-center gap-2 px-4 py-3">
+            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-900 tabular-nums">
+              <Wifi className="w-3.5 h-3.5 text-gray-400" /> {r.ip}
+            </span>
+            <span className="text-xs text-gray-500">
+              {r.marcacoes} marcaç{r.marcacoes === 1 ? 'ão' : 'ões'} · {r.pessoas} pessoas · {faixa(r.primeira, r.ultima)}
+            </span>
+            <div className="flex-1" />
+            {r.cadastrado ? (
+              <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 rounded-lg px-2 py-1">no cadastro</span>
+            ) : destino && (
+              <button onClick={() => cadastrarIp(r.ip)} disabled={pending}
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 active:scale-[0.97] disabled:opacity-50 transition-colors">
+                {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
+                Fixar em {destino.nome}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+export function FilaForaLocal({ orgSlug, itens, locais = [] }: {
+  orgSlug: string; itens: MarcacaoFora[]
+  /** Locais cadastrados — para cadastrar de uma vez o IP que trocou. */
+  locais?: LocalRh[]
+}) {
+  const router = useRouter()
+  const { ativos, destino, setDestinoId, cadastrarIp, pending: cadastrando } = useCadastrarIp(orgSlug, locais)
+  const [decidindo, start] = useTransition()
+  const pending = cadastrando || decidindo
 
   /**
    * Agrupa por IP, e só mostra IP com mais de uma pessoa. Uma pessoa só é home
@@ -69,23 +139,6 @@ export function FilaForaLocal({ orgSlug, itens, locais = [], redesGrupo = [] }: 
     })
   }
 
-  /** Cadastra o IP no local escolhido: as próximas batidas dessa rede entram como dentro. */
-  function cadastrarIp(ip: string) {
-    if (!destino) return
-    if (destino.ips.includes(ip)) { toast.info(`${ip} já está em ${destino.nome}.`); return }
-    start(async () => {
-      const r = await salvarLocal(orgSlug, destino.id, {
-        nome: destino.nome, ips: [...destino.ips, ip],
-        lat: destino.lat, lon: destino.lon, raio_m: destino.raio_m, ativo: destino.ativo,
-      })
-      if (r?.error) { toast.error(r.error); return }
-      toast.success(`${ip} cadastrado em ${destino.nome}.`, {
-        description: 'As próximas batidas dessa rede já entram como dentro.',
-      })
-      router.refresh()
-    })
-  }
-
   /** Valida em lote as marcações de um IP (em blocos, pra não abrir 60 chamadas de uma vez). */
   function validarLote(lista: MarcacaoFora[]) {
     start(async () => {
@@ -108,52 +161,17 @@ export function FilaForaLocal({ orgSlug, itens, locais = [], redesGrupo = [] }: 
     </div>
   )
 
-  return (<>
-    {/* O IP público da agência troca sozinho. Em vez de depender de alguém
-        cadastrar o número novo, a própria equipe prova qual é a rede. */}
-    {redesGrupo.length > 0 && (
-      <section className="mb-8">
-        <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
-          <Wifi className="w-4 h-4" /> Redes reconhecidas pela equipe <span className="text-gray-400">{redesGrupo.length}</span>
-        </h2>
-        <p className="text-xs text-gray-400 mb-3">
-          Três pessoas ou mais batendo do mesmo IP no mesmo dia contam como escritório, mesmo sem cadastro.
-          É o que segura o dia em que o provedor troca o IP. Se alguma dessas redes <b>não</b> for a agência
-          (um time inteiro num cliente, por exemplo), é aqui que dá pra ver.
-        </p>
-        <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-50">
-          {redesGrupo.map(r => (
-            <div key={r.ip} className="flex flex-wrap items-center gap-2 px-4 py-3">
-              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-900 tabular-nums">
-                <Wifi className="w-3.5 h-3.5 text-gray-400" /> {r.ip}
-              </span>
-              <span className="text-xs text-gray-500">
-                {r.marcacoes} marcaç{r.marcacoes === 1 ? 'ão' : 'ões'} · {r.pessoas} pessoas · {faixa(r.primeira, r.ultima)}
-              </span>
-              <div className="flex-1" />
-              {r.cadastrado ? (
-                <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 rounded-lg px-2 py-1">no cadastro</span>
-              ) : destino && (
-                <button onClick={() => cadastrarIp(r.ip)} disabled={pending}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors">
-                  {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
-                  Fixar em {destino.nome}
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
-    )}
-
-    <section className="mb-8">
-      <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
-        <MapPinOff className="w-4 h-4" /> Batidas fora dos locais <span className="text-gray-400">{itens.length}</span>
-      </h2>
+  return (
+    <section>
       {itens.length === 0 ? (
-        <p className="text-sm text-gray-400 py-3">Nada pendente.</p>
+        <h2 className="text-sm font-medium text-gray-400 flex items-center gap-1.5">
+          <MapPinOff className="w-4 h-4" /> Batidas fora dos locais · nada pendente
+        </h2>
       ) : (
         <>
+          <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
+            <MapPinOff className="w-4 h-4" /> Batidas fora dos locais <span className="text-gray-400">{itens.length}</span>
+          </h2>
           <p className="text-xs text-gray-400 mb-3">
             As horas <b>já contam</b> — isto aqui é conferência, não liberação. Para corrigir o horário
             de fato, use o editor no espelho da pessoa.
@@ -231,5 +249,5 @@ export function FilaForaLocal({ orgSlug, itens, locais = [], redesGrupo = [] }: 
         </>
       )}
     </section>
-  </>)
+  )
 }

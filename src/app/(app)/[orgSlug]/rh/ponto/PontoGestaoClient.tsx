@@ -2,16 +2,15 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Clock, FileText, Check, X, Ban, CalendarX, CalendarClock, Paperclip } from 'lucide-react'
+import { Clock, FileText, Check, X, Ban, CalendarX, Paperclip, Timer } from 'lucide-react'
 import { toast } from 'sonner'
-import { decidirExtra, decidirJustificativa, setPontoObrigatorio } from '@/app/actions/rh-ponto'
+import { decidirExtra, decidirJustificativa } from '@/app/actions/rh-ponto'
 import { MarcacoesEditor, validarMarcacoes } from '@/components/ponto/MarcacoesEditor'
 import { DicaPresenca } from '@/components/rh/DicaPresenca'
-import { LocaisPonto } from '@/components/rh/LocaisPonto'
 import { FilaForaLocal, type MarcacaoFora, type RedeGrupo } from '@/components/rh/FilaForaLocal'
 import type { LocalRh } from '@/app/actions/rh-local'
-import { JornadaEditor, type JornadaVals } from '../JornadaEditor'
-import { ImportarPontomais } from './ImportarPontomais'
+import type { JornadaVals } from '../JornadaEditor'
+import { ConfiguracaoPonto } from './ConfiguracaoPonto'
 
 interface Colab { nome: string | null }
 /** Blocos previstos da jornada da pessoa (personalizada, senão a padrão da org). */
@@ -117,17 +116,6 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
-  const [obrig, setObrig] = useState(pontoObrigatorio)
-
-  function trocarObrigatorio(v: boolean) {
-    setObrig(v)
-    start(async () => {
-      const r = await setPontoObrigatorio(orgSlug, v)
-      if (r?.error) { toast.error(r.error); setObrig(!v); return }
-      toast.success(v ? 'A partir de agora o Flow exige ponto batido.' : 'Trava desligada.')
-      router.refresh()
-    })
-  }
   // O dia completo que a aprovação vai gravar, em N pares, pré-carregado com o
   // que a pessoa pediu (ou com as marcações atuais, se ela não pediu correção).
   const [pares, setPares] = useState<Record<string, string[]>>(() =>
@@ -180,194 +168,182 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
     })
   }
 
+  const nadaPendente = extras.length === 0 && justificativas.length === 0 && fora.length === 0
+
   return (
     <div className="p-6 max-w-4xl">
-      <div className="flex items-start justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-1"><Clock className="w-5 h-5 text-orange-600" /> Ponto — aprovações</h1>
-          <p className="text-gray-500 text-sm">Horas extras (aprova o gestor) e justificativas (decide o RH).</p>
-        </div>
-        <ImportarPontomais orgSlug={orgSlug} />
+      <div className="mb-6">
+        <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-1"><Clock className="w-5 h-5 text-orange-600" /> Ponto — aprovações</h1>
+        <p className="text-gray-500 text-sm">Horas extras (aprova o gestor) e justificativas (decide o RH).</p>
       </div>
 
-      {/* Trava do ponto — para ligar no dia da virada do Pontomais */}
-      <section className="mb-8">
-        <div className="rounded-2xl border border-gray-200 bg-white p-5">
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input type="checkbox" checked={obrig} disabled={pending}
-              onChange={e => trocarObrigatorio(e.target.checked)}
-              className="mt-0.5 w-4 h-4 accent-orange-600" />
-            <span className="min-w-0">
-              <span className="block text-sm font-medium text-gray-900">Exigir ponto batido para usar o Flow</span>
-              <span className="block text-xs text-gray-500 mt-0.5">
-                Ligada, quem tem ficha e jornada no dia vê uma tela de “bata o ponto para começar” — com o
-                botão que resolve ali mesmo. Não vale em feriado que abona, em dia fora da escala, nem para
-                quem não tem ficha. Ligue no dia em que o time sair do Pontomais de vez.
-              </span>
-            </span>
-          </label>
+      {/* Parâmetros se mexem uma vez por ano; as filas, todo dia. Recolhido, o
+          painel é uma linha no topo — à vista, sem empurrar o trabalho para baixo. */}
+      <ConfiguracaoPonto orgSlug={orgSlug} pontoObrigatorio={pontoObrigatorio} jornadaPadrao={jornadaPadrao}
+        locais={locais} ipAtual={ipAtual} redesGrupo={redesGrupo} />
+
+      {nadaPendente ? (
+        <div className="rounded-2xl border border-dashed border-gray-200 px-5 py-10 text-center">
+          <Check className="w-5 h-5 text-emerald-600 mx-auto mb-2" />
+          <p className="text-sm font-medium text-gray-700">Nada esperando decisão.</p>
+          <p className="text-xs text-gray-400 mt-1">
+            Horas extras, justificativas e batidas fora do local aparecem aqui assim que chegarem.
+          </p>
         </div>
-      </section>
-
-      {/* Locais de trabalho + fila de batidas fora (mig. 227) */}
-      <LocaisPonto orgSlug={orgSlug} locais={locais} ipAtual={ipAtual} />
-      <FilaForaLocal orgSlug={orgSlug} itens={fora} locais={locais} redesGrupo={redesGrupo} />
-
-      {/* Jornada padrão da empresa */}
-      <section className="mb-8">
-        <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5"><CalendarClock className="w-4 h-4" /> Jornada padrão da empresa</h2>
-        <p className="text-xs text-gray-400 mb-3">O modelo aplicado a quem não tem jornada personalizada. Personalização por pessoa fica na ficha.</p>
-        <div className="rounded-2xl border border-gray-200 bg-white p-5">
-          <JornadaEditor orgSlug={orgSlug} colaboradorId={null} inicial={jornadaPadrao} />
-        </div>
-      </section>
-
-      {/* Horas extras */}
-      <section className="mb-8">
-        <h2 className="text-sm font-semibold text-gray-700 mb-2">Horas extras pendentes <span className="text-gray-400">{extras.length}</span></h2>
-        {extras.length === 0 ? (
-          <p className="text-sm text-gray-400 py-3">Nada pendente.</p>
-        ) : (
-          <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-50">
-            {extras.map(e => {
-              // Carga LÍQUIDA (abono/feriado/escala) vinda da page; a extra
-              // exibida é trabalhado − esperado — a mesma régua do fechamento.
-              const esperado = e.esperado_min
-              const extraMin = Math.max(0, e.minutos - esperado)
-              const fora = batidasFora(e.batidas, e.jornada, esperado)
-              return (
-                <div key={e.id} className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-gray-900">{e.rh_colaborador?.nome ?? '—'}</div>
-                      <div className="text-xs text-gray-500 tabular-nums">{dataBR(e.data)} · extra <b className="text-emerald-600">{saldoStr(extraMin)}</b>{e.acima_10h && <span className="text-red-500"> · acima de 10h</span>}</div>
-                    </div>
-                    <button onClick={() => extra(e.id, 'aprovado')} disabled={pending}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 text-[#fff] hover:bg-emerald-700 disabled:opacity-50 transition"><Check className="w-3.5 h-3.5" /> Aprovar</button>
-                    <button onClick={() => extra(e.id, 'rejeitado')} disabled={pending}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition"><X className="w-3.5 h-3.5" /> Rejeitar</button>
-                  </div>
-                  <div className="mt-2 rounded-lg bg-gray-50 px-2.5 py-1.5 text-[11px] tabular-nums">
-                    <div className="flex flex-wrap gap-x-2 gap-y-0.5">
-                      <span className="w-14 shrink-0 text-gray-400 font-medium">Previsto</span>
-                      {esperado > 0 ? (
-                        e.jornada
-                          ? <span className="text-gray-600">{hhmm(e.jornada.entrada)}–{hhmm(e.jornada.intervalo_ini)} · {hhmm(e.jornada.intervalo_fim)}–{hhmm(e.jornada.saida)} <span className="text-gray-400">({hStr(esperado)})</span></span>
-                          : <span className="text-gray-600">{hStr(esperado)}</span>
-                      ) : (
-                        <span className="text-gray-500">sem carga no dia (feriado/fim de semana) — extra conta desde o 1º minuto</span>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
-                      <span className="w-14 shrink-0 text-gray-400 font-medium">Batido</span>
-                      <span className="text-gray-600">
-                        {e.batidas.length
-                          ? e.batidas.map((h, i) => (
-                              <span key={i}>{i > 0 && ' · '}<span className={fora[i] ? 'text-amber-600 font-semibold' : undefined}>{h}</span></span>
-                            ))
-                          : 'sem marcação'}
-                        {' '}<span className="text-gray-400">({hStr(e.minutos)} trabalhadas)</span>
-                      </span>
-                    </div>
-                  </div>
-                  {(e.motivo || e.justs.length > 0) && (
-                    <div className="mt-1.5 space-y-1">
-                      {e.motivo && (
-                        <div className="flex items-start gap-1.5 text-[11px] text-gray-600">
-                          <FileText className="w-3.5 h-3.5 text-gray-400 mt-px shrink-0" />
-                          <span><b className="font-medium">Motivo:</b> {e.motivo}</span>
+      ) : (
+        <div className="space-y-8">
+          {/* Horas extras */}
+          <section>
+            {extras.length === 0 ? (
+              <h2 className="text-sm font-medium text-gray-400 flex items-center gap-1.5"><Timer className="w-4 h-4" /> Horas extras · nada pendente</h2>
+            ) : (<>
+              <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5"><Timer className="w-4 h-4" /> Horas extras pendentes <span className="text-gray-400">{extras.length}</span></h2>
+              <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-50">
+                {extras.map(e => {
+                  // Carga LÍQUIDA (abono/feriado/escala) vinda da page; a extra
+                  // exibida é trabalhado − esperado — a mesma régua do fechamento.
+                  const esperado = e.esperado_min
+                  const extraMin = Math.max(0, e.minutos - esperado)
+                  const fora = batidasFora(e.batidas, e.jornada, esperado)
+                  return (
+                    <div key={e.id} className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-gray-900">{e.rh_colaborador?.nome ?? '—'}</div>
+                          <div className="text-xs text-gray-500 tabular-nums">{dataBR(e.data)} · extra <b className="text-emerald-600">{saldoStr(extraMin)}</b>{e.acima_10h && <span className="text-red-500"> · acima de 10h</span>}</div>
+                        </div>
+                        <button onClick={() => extra(e.id, 'aprovado')} disabled={pending}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 text-[#fff] hover:bg-emerald-700 disabled:opacity-50 transition"><Check className="w-3.5 h-3.5" /> Aprovar</button>
+                        <button onClick={() => extra(e.id, 'rejeitado')} disabled={pending}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition"><X className="w-3.5 h-3.5" /> Rejeitar</button>
+                      </div>
+                      <div className="mt-2 rounded-lg bg-gray-50 px-2.5 py-1.5 text-[11px] tabular-nums">
+                        <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                          <span className="w-14 shrink-0 text-gray-400 font-medium">Previsto</span>
+                          {esperado > 0 ? (
+                            e.jornada
+                              ? <span className="text-gray-600">{hhmm(e.jornada.entrada)}–{hhmm(e.jornada.intervalo_ini)} · {hhmm(e.jornada.intervalo_fim)}–{hhmm(e.jornada.saida)} <span className="text-gray-400">({hStr(esperado)})</span></span>
+                              : <span className="text-gray-600">{hStr(esperado)}</span>
+                          ) : (
+                            <span className="text-gray-500">sem carga no dia (feriado/fim de semana) — extra conta desde o 1º minuto</span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
+                          <span className="w-14 shrink-0 text-gray-400 font-medium">Batido</span>
+                          <span className="text-gray-600">
+                            {e.batidas.length
+                              ? e.batidas.map((h, i) => (
+                                  <span key={i}>{i > 0 && ' · '}<span className={fora[i] ? 'text-amber-600 font-semibold' : undefined}>{h}</span></span>
+                                ))
+                              : 'sem marcação'}
+                            {' '}<span className="text-gray-400">({hStr(e.minutos)} trabalhadas)</span>
+                          </span>
+                        </div>
+                      </div>
+                      {(e.motivo || e.justs.length > 0) && (
+                        <div className="mt-1.5 space-y-1">
+                          {e.motivo && (
+                            <div className="flex items-start gap-1.5 text-[11px] text-gray-600">
+                              <FileText className="w-3.5 h-3.5 text-gray-400 mt-px shrink-0" />
+                              <span><b className="font-medium">Motivo:</b> {e.motivo}</span>
+                            </div>
+                          )}
+                          {e.justs.map((j, i) => {
+                            const st = JUST_STATUS[j.status] ?? { label: j.status, cls: 'text-gray-400' }
+                            return (
+                              <div key={i} className="flex items-start gap-1.5 text-[11px] text-gray-600">
+                                <FileText className="w-3.5 h-3.5 text-gray-400 mt-px shrink-0" />
+                                <span>
+                                  <b className="font-medium">{TIPO[j.tipo] ?? j.tipo}</b>
+                                  <span className={st.cls}> ({st.label})</span>
+                                  {j.descricao && <> — {j.descricao}</>}
+                                </span>
+                              </div>
+                            )
+                          })}
                         </div>
                       )}
-                      {e.justs.map((j, i) => {
-                        const st = JUST_STATUS[j.status] ?? { label: j.status, cls: 'text-gray-400' }
-                        return (
-                          <div key={i} className="flex items-start gap-1.5 text-[11px] text-gray-600">
-                            <FileText className="w-3.5 h-3.5 text-gray-400 mt-px shrink-0" />
-                            <span>
-                              <b className="font-medium">{TIPO[j.tipo] ?? j.tipo}</b>
-                              <span className={st.cls}> ({st.label})</span>
-                              {j.descricao && <> — {j.descricao}</>}
-                            </span>
-                          </div>
-                        )
-                      })}
                     </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* Justificativas */}
-      <section>
-        <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5"><FileText className="w-4 h-4" /> Justificativas pendentes <span className="text-gray-400">{justificativas.length}</span></h2>
-        {justificativas.length === 0 ? (
-          <p className="text-sm text-gray-400 py-3">Nada pendente.</p>
-        ) : (
-          <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-50">
-            {justificativas.map(j => (
-              <div key={j.id} className="px-4 py-3">
-                <div className="flex items-start gap-3 mb-2">
-                  <div className="flex-1">
-                    <div className="text-sm font-medium text-gray-900">{j.rh_colaborador?.nome ?? '—'} <span className="text-[10px] font-medium text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 ml-1">{TIPO[j.tipo] ?? j.tipo}</span></div>
-                    <div className="text-xs text-gray-500 tabular-nums">{dataBR(j.data_ini)}{j.data_fim !== j.data_ini && ` – ${dataBR(j.data_fim)}`}{j.descricao && <span className="text-gray-400"> · {j.descricao}</span>}</div>
-                    {/* Atestado abre em aba nova pela rota autenticada — o arquivo
-                        mora em rh-privado/ e não tem URL pública. */}
-                    {j.doc_id && (
-                      <a href={`/api/rh/documento/${j.doc_id}`} target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 mt-1 text-xs font-medium text-orange-700 hover:text-orange-800 transition">
-                        <Paperclip className="w-3.5 h-3.5" /> Ver anexo
-                      </a>
-                    )}
-                  </div>
-                </div>
-                {/* Corrigir marcação só existe em justificativa de UM dia: aprovar
-                    aplica as mesmas horas a cada dia do intervalo, o que estaria
-                    errado em qualquer dia além do primeiro. */}
-                {j.data_ini === j.data_fim && (
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 mb-2 rounded-lg bg-sky-50 px-2.5 py-2">
-                    {/* É este período — e só ele — que sai da carga do dia.
-                        Atraso na entrada e volta depois do fim do atendimento
-                        continuam descontando (migration 212). */}
-                    <span className="text-[11px] text-sky-800 font-medium">Abonar o atendimento das</span>
-                    <input type="time" value={abonos[j.id]?.ausIni ?? ''} onChange={e => setAbono(j.id, 'ausIni', e.target.value)}
-                      className="px-2 py-1 text-xs bg-white border border-sky-200 rounded-md text-gray-800" />
-                    <span className="text-[11px] text-sky-800">às</span>
-                    <input type="time" value={abonos[j.id]?.ausFim ?? ''} onChange={e => setAbono(j.id, 'ausFim', e.target.value)}
-                      className="px-2 py-1 text-xs bg-white border border-sky-200 rounded-md text-gray-800" />
-                    <span className="text-[11px] text-sky-700">
-                      — em branco abona o dia inteiro
-                    </span>
-                  </div>
-                )}
-                {j.data_ini === j.data_fim ? (
-                  <div className="mb-2 rounded-lg bg-gray-50 px-2.5 py-2">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[11px] text-gray-500 font-medium">Como o dia fica ao aprovar:</span>
-                      <span className="text-[11px] text-gray-400 tabular-nums">hoje: {(j.atuais ?? []).join(' · ') || 'sem marcação'}</span>
-                    </div>
-                    <MarcacoesEditor horas={pares[j.id] ?? ['', '']} onChange={v => setPares(p => ({ ...p, [j.id]: v }))} />
-                    {j.data_ini === j.data_fim && (
-                      <DicaPresenca orgSlug={orgSlug} colaboradorId={j.colaborador_id} dia={j.data_ini} className="mt-2" />
-                    )}
-                    <p className="text-[11px] text-gray-400 mt-1.5">Igual às marcações atuais (ou tudo em branco) = só decide, não altera o ponto.</p>
-                  </div>
-                ) : (
-                  <p className="text-[11px] text-gray-400 mb-2">Vários dias — a decisão vale para os dias inteiros, sem alterar marcação.</p>
-                )}
-                <div className="flex items-center gap-2">
-                  <button onClick={() => just(j.id, 'aprovado')} disabled={pending} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 text-[#fff] hover:bg-emerald-700 disabled:opacity-50 transition"><Check className="w-3.5 h-3.5" /> Aprovar</button>
-                  <button onClick={() => just(j.id, 'abonado')} disabled={pending} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-sky-600 text-[#fff] hover:bg-sky-700 disabled:opacity-50 transition"><Check className="w-3.5 h-3.5" /> Abonar</button>
-                  <button onClick={() => just(j.id, 'falta')} disabled={pending} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-600 text-[#fff] hover:bg-amber-700 disabled:opacity-50 transition"><CalendarX className="w-3.5 h-3.5" /> Dar falta</button>
-                  <button onClick={() => just(j.id, 'rejeitado')} disabled={pending} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition"><Ban className="w-3.5 h-3.5" /> Rejeitar</button>
-                </div>
+                  )
+                })}
               </div>
-            ))}
-          </div>
-        )}
-      </section>
+            </>)}
+          </section>
+
+          {/* Justificativas */}
+          <section>
+            {justificativas.length === 0 ? (
+              <h2 className="text-sm font-medium text-gray-400 flex items-center gap-1.5"><FileText className="w-4 h-4" /> Justificativas · nada pendente</h2>
+            ) : (<>
+              <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5"><FileText className="w-4 h-4" /> Justificativas pendentes <span className="text-gray-400">{justificativas.length}</span></h2>
+              <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-50">
+                {justificativas.map(j => (
+                  <div key={j.id} className="px-4 py-3">
+                    <div className="flex items-start gap-3 mb-2">
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-gray-900">{j.rh_colaborador?.nome ?? '—'} <span className="text-[10px] font-medium text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 ml-1">{TIPO[j.tipo] ?? j.tipo}</span></div>
+                        <div className="text-xs text-gray-500 tabular-nums">{dataBR(j.data_ini)}{j.data_fim !== j.data_ini && ` – ${dataBR(j.data_fim)}`}{j.descricao && <span className="text-gray-400"> · {j.descricao}</span>}</div>
+                        {/* Atestado abre em aba nova pela rota autenticada — o arquivo
+                            mora em rh-privado/ e não tem URL pública. */}
+                        {j.doc_id && (
+                          <a href={`/api/rh/documento/${j.doc_id}`} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 mt-1 text-xs font-medium text-orange-700 hover:text-orange-800 transition">
+                            <Paperclip className="w-3.5 h-3.5" /> Ver anexo
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    {/* Corrigir marcação só existe em justificativa de UM dia: aprovar
+                        aplica as mesmas horas a cada dia do intervalo, o que estaria
+                        errado em qualquer dia além do primeiro. */}
+                    {j.data_ini === j.data_fim && (
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 mb-2 rounded-lg bg-sky-50 px-2.5 py-2">
+                        {/* É este período — e só ele — que sai da carga do dia.
+                            Atraso na entrada e volta depois do fim do atendimento
+                            continuam descontando (migration 212). */}
+                        <span className="text-[11px] text-sky-800 font-medium">Abonar o atendimento das</span>
+                        <input type="time" value={abonos[j.id]?.ausIni ?? ''} onChange={e => setAbono(j.id, 'ausIni', e.target.value)}
+                          className="px-2 py-1 text-xs bg-white border border-sky-200 rounded-md text-gray-800" />
+                        <span className="text-[11px] text-sky-800">às</span>
+                        <input type="time" value={abonos[j.id]?.ausFim ?? ''} onChange={e => setAbono(j.id, 'ausFim', e.target.value)}
+                          className="px-2 py-1 text-xs bg-white border border-sky-200 rounded-md text-gray-800" />
+                        <span className="text-[11px] text-sky-700">
+                          — em branco abona o dia inteiro
+                        </span>
+                      </div>
+                    )}
+                    {j.data_ini === j.data_fim ? (
+                      <div className="mb-2 rounded-lg bg-gray-50 px-2.5 py-2">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[11px] text-gray-500 font-medium">Como o dia fica ao aprovar:</span>
+                          <span className="text-[11px] text-gray-400 tabular-nums">hoje: {(j.atuais ?? []).join(' · ') || 'sem marcação'}</span>
+                        </div>
+                        <MarcacoesEditor horas={pares[j.id] ?? ['', '']} onChange={v => setPares(p => ({ ...p, [j.id]: v }))} />
+                        {j.data_ini === j.data_fim && (
+                          <DicaPresenca orgSlug={orgSlug} colaboradorId={j.colaborador_id} dia={j.data_ini} className="mt-2" />
+                        )}
+                        <p className="text-[11px] text-gray-400 mt-1.5">Igual às marcações atuais (ou tudo em branco) = só decide, não altera o ponto.</p>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-gray-400 mb-2">Vários dias — a decisão vale para os dias inteiros, sem alterar marcação.</p>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => just(j.id, 'aprovado')} disabled={pending} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 text-[#fff] hover:bg-emerald-700 disabled:opacity-50 transition"><Check className="w-3.5 h-3.5" /> Aprovar</button>
+                      <button onClick={() => just(j.id, 'abonado')} disabled={pending} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-sky-600 text-[#fff] hover:bg-sky-700 disabled:opacity-50 transition"><Check className="w-3.5 h-3.5" /> Abonar</button>
+                      <button onClick={() => just(j.id, 'falta')} disabled={pending} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-600 text-[#fff] hover:bg-amber-700 disabled:opacity-50 transition"><CalendarX className="w-3.5 h-3.5" /> Dar falta</button>
+                      <button onClick={() => just(j.id, 'rejeitado')} disabled={pending} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition"><Ban className="w-3.5 h-3.5" /> Rejeitar</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>)}
+          </section>
+
+          {/* Batidas fora: conferência, não liberação — as horas já contam. Por
+              isso vem por último. */}
+          <FilaForaLocal orgSlug={orgSlug} itens={fora} locais={locais} />
+        </div>
+      )}
     </div>
   )
 }

@@ -23,7 +23,7 @@ export function LocaisPonto({ orgSlug, locais, ipAtual }: {
   }
 
   return (
-    <section className="mb-8">
+    <section>
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
           <MapPin className="w-4 h-4" /> Locais de trabalho
@@ -35,7 +35,7 @@ export function LocaisPonto({ orgSlug, locais, ipAtual }: {
       </div>
       <p className="text-xs text-gray-400 mb-3">
         Com nenhum local cadastrado, o Flow não classifica ninguém — todo mundo bate normalmente.
-        A partir do primeiro, quem bater fora entra na fila abaixo. As horas contam de qualquer jeito.
+        A partir do primeiro, quem bater fora entra na fila de batidas fora. As horas contam de qualquer jeito.
       </p>
 
       {locais.length === 0 ? (
