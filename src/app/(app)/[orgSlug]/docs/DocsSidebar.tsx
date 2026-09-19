@@ -191,8 +191,13 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, clientes = [],
   const pastasVisiveis = visibleDocs.filter(d => d.is_folder).map(d => d.id)
   // Uma aberta basta para o botão oferecer "recolher" — é o que ainda ocupa espaço.
   const algumaAberta = pastasVisiveis.some(id => !closed.has(id))
+  // Mãe do outro lado (doc arquivado numa pasta ativa, ou o inverso): sem isto o
+  // item não era raiz nem filho de nada visível e SUMIA da árvore — 22 arquivados
+  // invisíveis em 19/09/2026, sem como reativar. Vira raiz do dono, com "em <pasta>".
+  const visiveis = new Set(visibleDocs.map(d => d.id))
+  const maeVisivel = (d: DocNo) => !!d.parent_id && visiveis.has(d.parent_id)
   const childrenByParent = new Map<string, DocNo[]>()
-  for (const d of visibleDocs) if (d.parent_id) {
+  for (const d of visibleDocs) if (d.parent_id && maeVisivel(d)) {
     const arr = childrenByParent.get(d.parent_id) ?? []
     arr.push(d); childrenByParent.set(d.parent_id, arr)
   }
@@ -213,7 +218,7 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, clientes = [],
   for (const d of visibleDocs) {
     const g = ensure(d)
     if (d.is_folder) g.folders.push(d)
-    if (!d.parent_id) g.roots.push(d)
+    if (!maeVisivel(d)) g.roots.push(d)
   }
   const groups = [...groupsMap.values()].sort((a, b) =>
     a.key === '__org__' ? -1 : b.key === '__org__' ? 1 : a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }))
@@ -224,7 +229,7 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, clientes = [],
   const destinoGrupo = (g: Grupo): Destino => ({ parentId: null, workspaceId: g.workspaceId, nome: g.name, chave: `grp:${g.key}` })
   /** Documento como alvo = a pasta (ou a raiz do dono) onde ele está. */
   function destinoDoDoc(d: DocNo): Destino | null {
-    if (d.parent_id) { const mae = byId.get(d.parent_id); return mae ? destinoPasta(mae) : null }
+    if (maeVisivel(d)) { const mae = byId.get(d.parent_id!); return mae ? destinoPasta(mae) : null }
     const g = groupsMap.get(d.workspace_id ?? '__org__')
     return g ? destinoGrupo(g) : null
   }
@@ -386,7 +391,8 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, clientes = [],
       <DocRow key={d.id} doc={d} orgSlug={orgSlug} active={d.id === currentDocId} depth={depth}
         menuOpen={menu === `doc:${d.id}`} onMenu={() => setMenu(menu === `doc:${d.id}` ? null : `doc:${d.id}`)}
         folders={groupFolders} onMove={move} onArchive={archive} acaoHover={acaoHover}
-        arraste={{ ...fonte(d), ...alvoDe(destinoDoDoc(d)) }} arrastado={arrastando?.id === d.id} />
+        arraste={{ ...fonte(d), ...alvoDe(destinoDoDoc(d)) }} arrastado={arrastando?.id === d.id}
+        pastaOculta={d.parent_id && !maeVisivel(d) ? byId.get(d.parent_id)?.title ?? null : null} />
     )
   }
 
@@ -491,7 +497,7 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, clientes = [],
   )
 }
 
-function DocRow({ doc, orgSlug, active, depth, menuOpen, onMenu, folders, onMove, onArchive, acaoHover, arraste, arrastado }: {
+function DocRow({ doc, orgSlug, active, depth, menuOpen, onMenu, folders, onMove, onArchive, acaoHover, arraste, arrastado, pastaOculta }: {
   doc: DocNo
   orgSlug: string
   active: boolean
@@ -505,6 +511,8 @@ function DocRow({ doc, orgSlug, active, depth, menuOpen, onMenu, folders, onMove
   /** Handlers do arrasto (fonte + alvo), montados na árvore. */
   arraste: React.HTMLAttributes<HTMLDivElement> & { draggable?: boolean }
   arrastado: boolean
+  /** Pasta onde o item está, quando ela não aparece neste lado (ativos × arquivados). */
+  pastaOculta?: string | null
 }) {
   const inFolder = !!doc.parent_id
   const isBriefing = !!(doc.briefing_workspace_id || doc.briefing_campaign_id)
@@ -525,6 +533,8 @@ function DocRow({ doc, orgSlug, active, depth, menuOpen, onMenu, folders, onMove
           : <FileText className={cn('w-3.5 h-3.5 shrink-0', active ? 'text-orange-400' : 'text-gray-500')} />}
         <span className="truncate">{doc.title || 'Sem título'}</span>
         {isBriefing && <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-orange-400/80">brief</span>}
+        {/* Reativar devolve para essa pasta — o parent_id continua lá. */}
+        {pastaOculta && <span className="min-w-0 max-w-[45%] shrink truncate text-[11px] text-gray-500">em {pastaOculta}</span>}
       </Link>
       <div className="relative shrink-0">
         <button type="button" aria-label={`Mais opções de ${doc.title || 'documento'}`} aria-expanded={menuOpen} onClick={onMenu}
