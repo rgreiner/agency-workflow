@@ -22,6 +22,8 @@ export async function PainelDocs({ orgSlug, docId }: { orgSlug: string; docId: s
       docs={arvore.docs}
       clientes={arvore.clientes}
       fechadasIniciais={fechadas}
+      meuId={arvore.meuId}
+      souAdmin={arvore.souAdmin}
     />
   )
 }

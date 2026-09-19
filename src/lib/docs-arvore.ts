@@ -1,6 +1,7 @@
 import 'server-only'
 import { cache } from 'react'
 import { createClient } from '@/lib/supabase/server'
+import { getUsuario } from '@/lib/auth/server'
 import { porNome } from '@/lib/utils'
 
 /**
@@ -21,6 +22,7 @@ export interface DocNo {
   archived: boolean
   briefing_workspace_id: string | null
   briefing_campaign_id: string | null
+  created_by: string | null
   workspaces: { name: string; color: string | null } | null
 }
 
@@ -28,19 +30,32 @@ export interface ArvoreDocs {
   orgId: string
   docs: DocNo[]
   clientes: { id: string; name: string; color: string | null }[]
+  /**
+   * Quem pode MOVER (arrastar) cada item: a régua de can_user_manage_doc, que é
+   * o que o move_document confere — quem criou, ou owner/admin da org. Editar é
+   * mais largo (doc da organização é do time, mig. 276); organizar, não.
+   */
+  meuId: string | null
+  souAdmin: boolean
 }
 
 export const carregarArvoreDocs = cache(async (orgSlug: string): Promise<ArvoreDocs | null> => {
   const supabase = await createClient()
-  const { data: org } = await supabase.from('organizations').select('id').eq('slug', orgSlug).single()
+  const [{ data: org }, user] = await Promise.all([
+    supabase.from('organizations').select('id').eq('slug', orgSlug).single(),
+    getUsuario(),
+  ])
   if (!org) return null
 
-  const [{ data: docs }, { data: clientes }] = await Promise.all([
+  const [{ data: docs }, { data: clientes }, { data: membro }] = await Promise.all([
     supabase
       .from('documents')
-      .select('id, title, visibility, workspace_id, parent_id, is_folder, archived, briefing_workspace_id, briefing_campaign_id, workspaces!workspace_id(name, color)')
+      .select('id, title, visibility, workspace_id, parent_id, is_folder, archived, briefing_workspace_id, briefing_campaign_id, created_by, workspaces!workspace_id(name, color)')
       .eq('org_id', org.id),
     supabase.from('workspaces').select('id, name, color').eq('org_id', org.id).neq('archived', true),
+    user
+      ? supabase.from('organization_members').select('role').eq('org_id', org.id).eq('user_id', user.id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ])
 
   // A–Z no JS, não no banco: o Postgres do VPS (Alpine/musl) ordena por BYTES e
@@ -52,5 +67,7 @@ export const carregarArvoreDocs = cache(async (orgSlug: string): Promise<ArvoreD
     orgId: org.id,
     docs: lista,
     clientes: ((clientes ?? []) as ArvoreDocs['clientes']).sort(porNome(c => c.name)),
+    meuId: user?.id ?? null,
+    souAdmin: ['owner', 'admin'].includes((membro as { role?: string } | null)?.role ?? ''),
   }
 })

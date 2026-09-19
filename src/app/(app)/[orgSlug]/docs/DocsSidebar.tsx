@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useTransition, type ReactNode } from 'react'
+import { useState, useEffect, useRef, useTransition, type ReactNode, type DragEvent } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -31,8 +31,15 @@ interface ShareState {
  * Desenho igual ao de Espaços: mesmo passo de linha, mesmo aceso de item
  * (laranja translúcido), mesma bolinha de cor do cliente. As ações aparecem no
  * hover E no foco do teclado; os menus continuam claros (são popovers).
+ *
+ * Arrastar para mover (19/09/2026) — o gesto que todo mundo tenta primeiro numa
+ * árvore; antes eram 3 cliques (menu → Mover para → destino). Soltar numa pasta
+ * = entra nela; num documento = vai para a pasta dele (alvo maior, menos erro);
+ * no bloco de um cliente = raiz dele (troca o dono, com a cascata do banco).
+ * Só arrasta quem pode mover (régua do move_document). O menu continua sendo
+ * o caminho no teclado e no toque — arrastar nativo não existe no celular.
  */
-export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, clientes = [], fechadasIniciais = [] }: {
+export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, clientes = [], fechadasIniciais = [], meuId = null, souAdmin = false }: {
   orgSlug: string
   orgId: string
   currentDocId: string
@@ -41,6 +48,9 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, clientes = [],
   clientes?: { id: string; name: string; color: string | null }[]
   /** Pastas fechadas, lidas do cookie no servidor. */
   fechadasIniciais?: string[]
+  /** Quem criou pode mover o que é seu; owner/admin move tudo (can_user_manage_doc). */
+  meuId?: string | null
+  souAdmin?: boolean
 }) {
   const router = useRouter()
   const [, start] = useTransition()
@@ -55,6 +65,17 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, clientes = [],
   const [renameValue, setRenameValue] = useState('')
   const [excluir, setExcluir] = useState<DocNo | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+
+  // Arrasto: o item em voo e a chave do destino aceso (`fld:<id>` | `grp:<dono>`).
+  const [arrastando, setArrastando] = useState<DocNo | null>(null)
+  const [alvo, setAlvo] = useState<string | null>(null)
+  // Movimento aparece na hora; a árvore do servidor chega logo depois e zera isto.
+  const [otimista, setOtimista] = useState<Record<string, Pick<DocNo, 'parent_id' | 'workspace_id'>>>({})
+  const [docsAntes, setDocsAntes] = useState(docs)
+  if (docs !== docsAntes) {
+    setDocsAntes(docs)
+    setOtimista({})
+  }
 
   useEffect(() => {
     if (!menu) return
@@ -158,7 +179,15 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, clientes = [],
   // Arquivadas × ativas: arquivar pasta arquiva o conteúdo, então a subárvore
   // inteira cai do mesmo lado.
   const corDe = new Map(clientes.map(c => [c.id, c.color]))
-  const visibleDocs = docs.filter(d => !!d.archived === showArchived)
+  const clienteDe = new Map(clientes.map(c => [c.id, c]))
+  const docsView = Object.keys(otimista).length === 0 ? docs : docs.map(d => {
+    const o = otimista[d.id]
+    if (!o) return d
+    const c = o.workspace_id ? clienteDe.get(o.workspace_id) : null
+    return { ...d, ...o, workspaces: c ? { name: c.name, color: c.color } : null }
+  })
+  const byId = new Map(docsView.map(d => [d.id, d]))
+  const visibleDocs = docsView.filter(d => !!d.archived === showArchived)
   const pastasVisiveis = visibleDocs.filter(d => d.is_folder).map(d => d.id)
   // Uma aberta basta para o botão oferecer "recolher" — é o que ainda ocupa espaço.
   const algumaAberta = pastasVisiveis.some(id => !closed.has(id))
@@ -189,6 +218,104 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, clientes = [],
   const groups = [...groupsMap.values()].sort((a, b) =>
     a.key === '__org__' ? -1 : b.key === '__org__' ? 1 : a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }))
 
+  // ── Arrastar para mover ──
+  type Destino = { parentId: string | null; workspaceId: string | null; nome: string; chave: string }
+  const destinoPasta = (f: DocNo): Destino => ({ parentId: f.id, workspaceId: f.workspace_id, nome: f.title, chave: `fld:${f.id}` })
+  const destinoGrupo = (g: Grupo): Destino => ({ parentId: null, workspaceId: g.workspaceId, nome: g.name, chave: `grp:${g.key}` })
+  /** Documento como alvo = a pasta (ou a raiz do dono) onde ele está. */
+  function destinoDoDoc(d: DocNo): Destino | null {
+    if (d.parent_id) { const mae = byId.get(d.parent_id); return mae ? destinoPasta(mae) : null }
+    const g = groupsMap.get(d.workspace_id ?? '__org__')
+    return g ? destinoGrupo(g) : null
+  }
+  const podeMover = (d: DocNo) => souAdmin || (!!meuId && d.created_by === meuId)
+  /** `id` está dentro da pasta `pastaId` (em qualquer nível)? */
+  function dentroDe(pastaId: string, id: string) {
+    for (let n = byId.get(id); n?.parent_id; n = byId.get(n.parent_id)) if (n.parent_id === pastaId) return true
+    return false
+  }
+  // O banco também barra o ciclo; aqui é pra o cursor já dizer "não" no hover.
+  function destinoValido(d: DocNo, dest: Destino) {
+    if (dest.parentId === d.id) return false
+    if (dest.parentId && d.is_folder && dentroDe(d.id, dest.parentId)) return false
+    return !(dest.parentId === d.parent_id && dest.workspaceId === d.workspace_id)
+  }
+  /** Acesso que vale para o item com essa mãe: manda a pasta-RAIZ; na raiz, o próprio. */
+  function acessoCom(d: DocNo, parentId: string | null) {
+    let r = parentId ? byId.get(parentId) : undefined
+    while (r?.parent_id) r = byId.get(r.parent_id)
+    return r ? { restrito: r.visibility === 'custom', raiz: r.title } : { restrito: d.visibility === 'custom', raiz: null }
+  }
+
+  function fonte(d: DocNo) {
+    if (!podeMover(d) || renamingId === d.id) return {}
+    return {
+      draggable: true,
+      onDragStart: (e: DragEvent) => {
+        e.stopPropagation()
+        e.dataTransfer.effectAllowed = 'move'
+        // Tipo próprio, não text/plain: soltado por engano sobre o editor, text/plain
+        // colaria o título dentro do documento aberto. O Firefox só arrasta com dado.
+        e.dataTransfer.setData('application/x-flow-doc', d.id)
+        // Um tique depois: o navegador fotografa a linha para a "sombra" no fim
+        // deste evento — apagar antes disso deixa a sombra apagada também.
+        setTimeout(() => { setMenu(null); setArrastando(d) }, 0)
+      },
+      onDragEnd: () => { setArrastando(null); setAlvo(null) },
+    }
+  }
+  function alvoDe(dest: Destino | null) {
+    return {
+      onDragOver: (e: DragEvent) => {
+        if (!arrastando || !dest) return
+        e.stopPropagation()   // a linha decide; o bloco do dono não "rouba" o hover
+        if (!destinoValido(arrastando, dest)) { if (alvo) setAlvo(null); return }   // sem preventDefault = cursor proibido
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+        if (alvo !== dest.chave) setAlvo(dest.chave)
+      },
+      onDrop: (e: DragEvent) => {
+        if (!arrastando || !dest) return
+        e.preventDefault(); e.stopPropagation()
+        const d = arrastando
+        setArrastando(null); setAlvo(null)
+        if (destinoValido(d, dest)) soltar(d, dest)
+      },
+    }
+  }
+  function soltar(d: DocNo, dest: Destino) {
+    const origem = { parent_id: d.parent_id, workspace_id: d.workspace_id }
+    const antes = acessoCom(d, d.parent_id)
+    const depois = acessoCom(d, dest.parentId)
+    setOtimista(o => ({ ...o, [d.id]: { parent_id: dest.parentId, workspace_id: dest.workspaceId } }))
+    if (dest.parentId) setPasta(dest.parentId, true)   // abre a pasta: mostra onde caiu
+    start(async () => {
+      const r = await moveDocument(d.id, orgSlug, dest.parentId, dest.workspaceId)
+      if (r?.error) {
+        setOtimista(o => { const n = { ...o }; delete n[d.id]; return n })
+        toast.error(r.error)
+        return
+      }
+      // O acesso herda da pasta-raiz: mudar de pasta pode abrir ou fechar o
+      // documento para o time. Isso não pode acontecer calado.
+      const aviso = antes.restrito && !depois.restrito ? ' Agora visível para toda a equipe.'
+        : !antes.restrito && depois.restrito ? ` Agora com o acesso restrito de "${depois.raiz}".` : ''
+      toast.success(`"${d.title || 'Sem título'}" movido para ${dest.nome}.${aviso}`, {
+        duration: aviso ? 8000 : 4000,
+        action: { label: 'Desfazer', onClick: () => desfazer(d, origem) },
+      })
+      router.refresh()
+    })
+  }
+  function desfazer(d: DocNo, origem: Pick<DocNo, 'parent_id' | 'workspace_id'>) {
+    setOtimista(o => ({ ...o, [d.id]: origem }))
+    start(async () => {
+      const r = await moveDocument(d.id, orgSlug, origem.parent_id, origem.workspace_id)
+      if (r?.error) toast.error(r.error)
+      router.refresh()
+    })
+  }
+
   // Ação que só aparece no hover da linha — e no foco, pra quem navega no teclado.
   const acaoHover = 'p-1 rounded text-gray-500 hover:text-gray-200 hover:bg-gray-700/60 opacity-0 focus-visible:opacity-100 transition-opacity'
 
@@ -199,7 +326,12 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, clientes = [],
       const open = !closed.has(d.id)
       return (
         <div key={d.id}>
-          <div className="group/f flex items-center gap-1 mx-2 pr-1 py-1 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-gray-800/60 transition-colors"
+          <div {...fonte(d)} {...alvoDe(destinoPasta(d))}
+            className={cn('group/f flex items-center gap-1 mx-2 pr-1 py-1 rounded-lg transition-colors',
+              alvo === `fld:${d.id}`
+                ? 'bg-orange-600/20 text-gray-100 ring-1 ring-inset ring-orange-500/50'
+                : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60',
+              arrastando?.id === d.id && 'opacity-40')}
             style={{ paddingLeft: 4 + depth * 14 }}>
             <button type="button" onClick={() => toggleFolder(d.id)} aria-expanded={open}
               aria-label={`${open ? 'Fechar' : 'Abrir'} pasta ${d.title}`}
@@ -253,13 +385,14 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, clientes = [],
     return (
       <DocRow key={d.id} doc={d} orgSlug={orgSlug} active={d.id === currentDocId} depth={depth}
         menuOpen={menu === `doc:${d.id}`} onMenu={() => setMenu(menu === `doc:${d.id}` ? null : `doc:${d.id}`)}
-        folders={groupFolders} onMove={move} onArchive={archive} acaoHover={acaoHover} />
+        folders={groupFolders} onMove={move} onArchive={archive} acaoHover={acaoHover}
+        arraste={{ ...fonte(d), ...alvoDe(destinoDoDoc(d)) }} arrastado={arrastando?.id === d.id} />
     )
   }
 
   return (
     <>
-    <div ref={ref} className="mt-1">
+    <div ref={ref} className="mt-1" onDragOver={() => { if (alvo) setAlvo(null) }}>
       {/* Cabeçalho: nome da seção + alternância ativos × arquivados. O rótulo
           acompanha o lado mostrado, pra ninguém confundir arquivado com ativo. */}
       <div className="flex items-center justify-between px-4 mb-1">
@@ -290,7 +423,9 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, clientes = [],
       )}
 
       {groups.map(g => (
-        <div key={g.key} className="mt-3 first:mt-2">
+        <div key={g.key} {...alvoDe(destinoGrupo(g))}
+          className={cn('mt-3 first:mt-2 pb-0.5 rounded-lg transition-colors',
+            alvo === `grp:${g.key}` && 'bg-orange-600/10 ring-1 ring-inset ring-orange-500/40')}>
           <div className="group/h flex items-center gap-2 px-4 mb-0.5">
             {g.workspaceId
               ? <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: g.color || '#f97316' }} />
@@ -356,7 +491,7 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, clientes = [],
   )
 }
 
-function DocRow({ doc, orgSlug, active, depth, menuOpen, onMenu, folders, onMove, onArchive, acaoHover }: {
+function DocRow({ doc, orgSlug, active, depth, menuOpen, onMenu, folders, onMove, onArchive, acaoHover, arraste, arrastado }: {
   doc: DocNo
   orgSlug: string
   active: boolean
@@ -367,6 +502,9 @@ function DocRow({ doc, orgSlug, active, depth, menuOpen, onMenu, folders, onMove
   onMove: (doc: DocNo, folder: DocNo | null) => void
   onArchive: (doc: DocNo) => void
   acaoHover: string
+  /** Handlers do arrasto (fonte + alvo), montados na árvore. */
+  arraste: React.HTMLAttributes<HTMLDivElement> & { draggable?: boolean }
+  arrastado: boolean
 }) {
   const inFolder = !!doc.parent_id
   const isBriefing = !!(doc.briefing_workspace_id || doc.briefing_campaign_id)
@@ -374,10 +512,12 @@ function DocRow({ doc, orgSlug, active, depth, menuOpen, onMenu, folders, onMove
   // 20 = chevron (18) + gap da pasta − o px da linha: o ícone do documento cai
   // exatamente sob o ícone da pasta do mesmo nível.
   return (
-    <div className={cn('group/d flex items-center mx-2 pr-1 rounded-lg transition-colors',
-      active ? 'bg-orange-600/20' : 'hover:bg-gray-800/60')}
+    <div {...arraste} className={cn('group/d flex items-center mx-2 pr-1 rounded-lg transition-colors',
+      active ? 'bg-orange-600/20' : 'hover:bg-gray-800/60', arrastado && 'opacity-40')}
       style={{ paddingLeft: 20 + depth * 14 }}>
-      <Link href={`/${orgSlug}/docs/${doc.id}`} aria-current={active ? 'page' : undefined}
+      {/* draggable=false: quem arrasta é a linha, não o link (senão o navegador
+          arrasta a URL e o drop vira "abrir link"). O clique continua navegando. */}
+      <Link href={`/${orgSlug}/docs/${doc.id}`} aria-current={active ? 'page' : undefined} draggable={false}
         className={cn('no-press flex items-center gap-2 flex-1 min-w-0 px-1.5 py-1.5 text-sm transition-colors',
           active ? 'text-orange-300 font-medium' : 'text-gray-400 hover:text-gray-100')}>
         {isBriefing
