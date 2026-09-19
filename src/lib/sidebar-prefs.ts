@@ -10,6 +10,8 @@ export const PREF_COOKIES = {
   recolhida: 'flow-sb-recolhida',
   grupos: 'flow-sb-grupos',
   espacos: 'flow-sb-espacos',
+  /** Pastas FECHADAS na árvore de Documentos (ids separados por `|`). */
+  docsFechadas: 'flow-docs-fechadas',
 } as const
 
 export interface SidebarPrefs {

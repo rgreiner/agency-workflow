@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { notFound } from 'next/navigation'
 import { DocumentEditor } from '@/components/docs/DocumentEditor'
-import { DocsSidebar } from '../DocsSidebar'
+import { carregarArvoreDocs } from '@/lib/docs-arvore'
 import { membrosAtivos } from '@/lib/membros'
 
 export default async function DocPage({
@@ -63,13 +63,9 @@ export default async function DocPage({
 
   const workspaceName = (doc.workspaces as unknown as { name: string } | null)?.name ?? null
 
-  // Documentos + pastas para a sidebar (navegar/organizar sem voltar à listagem)
-  const { data: allDocs } = await supabase
-    .from('documents')
-    .select('id, title, visibility, workspace_id, parent_id, is_folder, archived, briefing_workspace_id, briefing_campaign_id, workspaces!workspace_id(name)')
-    .eq('org_id', org.id)
-    .order('is_folder', { ascending: false })
-    .order('title', { ascending: true })
+  // Mesma árvore que o slot @painel desenha na sidebar — `cache` faz a consulta
+  // sair uma vez só no request. Aqui serve para achar a pasta-raiz do documento.
+  const arvore = await carregarArvoreDocs(orgSlug)
 
   // Clientes (+ campanhas) para associar o documento e para o seletor de briefing
   const { data: workspaces } = await supabase
@@ -92,42 +88,33 @@ export default async function DocPage({
   const docParentId = (doc as { parent_id: string | null }).parent_id
   let parentFolderName: string | null = null
   if (docParentId) {
-    const byId = new Map(((allDocs ?? []) as { id: string; title: string; parent_id: string | null }[]).map(d => [d.id, d]))
+    const byId = new Map((arvore?.docs ?? []).map(d => [d.id, d]))
     let node = byId.get(docParentId)
     while (node?.parent_id) node = byId.get(node.parent_id)
     parentFolderName = node?.title ?? null
   }
 
   return (
-    <div className="flex h-full">
-      <DocsSidebar
+    // A árvore de documentos fica na sidebar do app (slot @painel/docs).
+    <div className="h-full">
+      <DocumentEditor
+        docId={doc.id}
         orgSlug={orgSlug}
         orgId={org.id}
-        currentDocId={doc.id}
         currentUserId={user.id}
-        docs={(allDocs ?? []) as unknown as Parameters<typeof DocsSidebar>[0]['docs']}
-        clientes={(workspaces ?? []).map(w => ({ id: w.id, name: w.name }))}
+        canManage={canManage}
+        initialTitle={doc.title}
+        initialContent={doc.content as object}
+        initialVisibility={doc.visibility as 'org' | 'custom'}
+        initialMemberIds={(sharedMembers ?? []).map(m => m.user_id)}
+        members={members}
+        workspaceName={workspaceName}
+        workspaces={(workspaces ?? []).map(w => ({ id: w.id, name: w.name }))}
+        initialWorkspaceId={doc.workspace_id ?? null}
+        parentFolderName={parentFolderName}
+        briefingOptions={briefingOptions}
+        initialBriefingValue={initialBriefingValue}
       />
-      <div className="flex-1 min-w-0">
-        <DocumentEditor
-          docId={doc.id}
-          orgSlug={orgSlug}
-          orgId={org.id}
-          currentUserId={user.id}
-          canManage={canManage}
-          initialTitle={doc.title}
-          initialContent={doc.content as object}
-          initialVisibility={doc.visibility as 'org' | 'custom'}
-          initialMemberIds={(sharedMembers ?? []).map(m => m.user_id)}
-          members={members}
-          workspaceName={workspaceName}
-          workspaces={(workspaces ?? []).map(w => ({ id: w.id, name: w.name }))}
-          initialWorkspaceId={doc.workspace_id ?? null}
-          parentFolderName={parentFolderName}
-          briefingOptions={briefingOptions}
-          initialBriefingValue={initialBriefingValue}
-        />
-      </div>
     </div>
   )
 }

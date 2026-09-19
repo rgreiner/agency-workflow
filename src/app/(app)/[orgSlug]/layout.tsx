@@ -20,10 +20,13 @@ import { porNome } from '@/lib/utils'
 export default async function OrgLayout({
   children,
   modal,
+  painel,
   params,
 }: {
   children: React.ReactNode
   modal: React.ReactNode
+  /** Slot @painel — a página que quiser põe conteúdo no corpo da sidebar. */
+  painel: React.ReactNode
   params: Promise<{ orgSlug: string }>
 }) {
   const { orgSlug } = await params
@@ -173,6 +176,7 @@ export default async function OrgLayout({
         canListaGlobal={access.listaGlobal}
         onboardingPendente={onboardingPendente}
         midiaTransicao={midiaTransicao}
+        painel={painel}
         prefs={sidebarPrefs}
       >
         {children}

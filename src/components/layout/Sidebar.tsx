@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
+import { useState, useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -86,6 +86,11 @@ interface SidebarProps {
   onExpand?: () => void
   /** Preferências da casca lidas do cookie no servidor (modo, grupos, Espaços). */
   prefs: SidebarPrefs
+  /**
+   * Conteúdo que a PÁGINA põe no corpo da sidebar (slot @painel). Hoje só a
+   * árvore de Documentos: em /docs ela entra no lugar da lista do modo.
+   */
+  painel?: ReactNode
 }
 
 interface NavItem {
@@ -310,6 +315,12 @@ const grupoNoModo = (id: string, m: SidebarMode) => {
   return Array.isArray(v) ? v.includes(m) : v === m
 }
 
+/** A rota é `prefixo` ou está abaixo dele — por SEGMENTO, não por texto:
+ *  `/org/documentos` não está "em" `/org/docs`. */
+function noSegmento(path: string, prefixo: string) {
+  return path === prefixo || path.startsWith(`${prefixo}/`)
+}
+
 // Em que modo cada rota se encaixa (null = neutra, não troca o modo).
 function modeForPath(path: string, base: string): SidebarMode | null {
   if (path.startsWith(`${base}/rh`)) return 'rh'
@@ -346,7 +357,7 @@ export function Sidebar({
   positionName, canMidias = false, canProducao = false, canFinance = false, canCadastros = false, canRh = false,
   canMidiaHub = false,
   canListaGlobal = false,
-  onboardingPendente = 0, midiaTransicao = { migrar: 0, vincular: 0 }, collapsed, onCollapse, onExpand, prefs,
+  onboardingPendente = 0, midiaTransicao = { migrar: 0, vincular: 0 }, collapsed, onCollapse, onExpand, prefs, painel,
 }: SidebarProps) {
   const pathname = usePathname()
   const base = `/${orgSlug}`
@@ -448,6 +459,25 @@ export function Sidebar({
     setMode(m)
     gravarPref(PREF_COOKIES.modo, m)
   }
+
+  // Documentos: em /docs o corpo mostra a árvore (slot @painel) no lugar da
+  // lista do modo — antes era uma 2ª coluna ao lado da sidebar. O MODO não muda:
+  // a rota continua neutra, e ao sair de Docs a lista do modo volta sem salto.
+  // Nenhum chip fica aceso enquanto a árvore aparece (o chip diz "o corpo é
+  // este modo"); clicar num chip mostra o modo até a próxima navegação.
+  // Segmento exato: `/documentos` (Comercial) também começa com `/docs`.
+  const emDocs = noSegmento(pathname, `${base}/docs`)
+  const [modoNaFrente, setModoNaFrente] = useState(false)
+  const [rotaAnterior, setRotaAnterior] = useState(pathname)
+  if (pathname !== rotaAnterior) {
+    setRotaAnterior(pathname)
+    setModoNaFrente(false)
+  }
+  const mostrarDocs = emDocs && !!painel && !modoNaFrente
+  function escolherModo(m: SidebarMode) {
+    mudarModo(m)
+    if (emDocs) setModoNaFrente(true)
+  }
   useEffect(() => {
     const m = modeForPath(pathname, base)
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -463,7 +493,7 @@ export function Sidebar({
 
   // Trocar de modo troca a lista inteira (sem animação: é frequente). O que não
   // pode é herdar a rolagem do modo anterior e cair com a lista fora da tela.
-  useEffect(() => { corpoRef.current?.scrollTo({ top: 0 }) }, [mode])
+  useEffect(() => { corpoRef.current?.scrollTo({ top: 0 }) }, [mode, mostrarDocs])
 
   const isMac = useSyncExternalStore(noopSubscribe, isMacSnapshot, () => false)
   const shortcutLabel = isMac ? '⌘K' : 'Ctrl K'
@@ -573,13 +603,13 @@ export function Sidebar({
                 <button
                   key={m}
                   type="button"
-                  onClick={() => mudarModo(m)}
-                  aria-pressed={mode === m}
+                  onClick={() => escolherModo(m)}
+                  aria-pressed={mode === m && !mostrarDocs}
                   aria-label={label}
                   data-tip={label}
                   className={cn(
                     'tip press relative p-1.5 rounded-md',
-                    mode === m ? 'bg-gray-700 text-orange-400' : 'text-gray-500 hover:text-gray-200'
+                    mode === m && !mostrarDocs ? 'bg-gray-700 text-orange-400' : 'text-gray-500 hover:text-gray-200'
                   )}
                 >
                   <Icon className="w-4 h-4" />
@@ -607,7 +637,7 @@ export function Sidebar({
           {linha2.map(({ id, label, icon: Icon, href }, i) => {
             // "Trabalhar" mostra o cargo da pessoa, como o item antigo fazia.
             const titulo = id === 'trabalhar' && positionName ? `${label} · ${positionName}` : label
-            const ativo = pathname.startsWith(`${base}/${href}`)
+            const ativo = noSegmento(pathname, `${base}/${href}`)
             return (
               <Link
                 key={id}
@@ -632,6 +662,10 @@ export function Sidebar({
         {/* Mensagens — abre o chat (dock no canto inferior direito) */}
         <MessagesNavItem />
 
+        {/* ── Documentos: a árvore da página no lugar da lista do modo ── */}
+        {mostrarDocs && painel}
+
+        {!mostrarDocs && (<>
         {/* ── Modo Trabalho: Lista global (só quem coordena) + Espaços ── */}
         {mode === 'trabalho' && canListaGlobal && (
           <>
@@ -786,6 +820,7 @@ export function Sidebar({
           )}
         </div>
         )}
+        </>)}
 
       </div>
 
