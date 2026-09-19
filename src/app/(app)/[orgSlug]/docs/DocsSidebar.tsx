@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   FileText, Plus, Building2, Folder, FolderOpen, ChevronRight, MoreHorizontal, Pencil, Trash2,
-  FolderPlus, FilePlus, Lock, Archive, ArchiveRestore, Target, ChevronLeft, Landmark,
+  FolderPlus, FilePlus, Lock, Archive, ArchiveRestore, Target, ChevronLeft, Landmark, ChevronsUp, ChevronsDown,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -85,6 +85,16 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, clientes = [],
     })
   }
   const toggleFolder = (id: string) => setPasta(id, closed.has(id))
+  /** Recolher/expandir TODAS as pastas do lado mostrado (ativos ou arquivados) —
+   *  as do outro lado mantêm o estado que tinham. */
+  function setTodas(ids: string[], aberta: boolean) {
+    setClosed(prev => {
+      const n = new Set(prev)
+      for (const id of ids) { if (aberta) n.delete(id); else n.add(id) }
+      gravarPref(PREF_COOKIES.docsFechadas, [...n].join('|'))
+      return n
+    })
+  }
 
   // ── Ações ──
   function newDoc(workspaceId: string | null, parentId: string | null) {
@@ -149,6 +159,9 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, clientes = [],
   // inteira cai do mesmo lado.
   const corDe = new Map(clientes.map(c => [c.id, c.color]))
   const visibleDocs = docs.filter(d => !!d.archived === showArchived)
+  const pastasVisiveis = visibleDocs.filter(d => d.is_folder).map(d => d.id)
+  // Uma aberta basta para o botão oferecer "recolher" — é o que ainda ocupa espaço.
+  const algumaAberta = pastasVisiveis.some(id => !closed.has(id))
   const childrenByParent = new Map<string, DocNo[]>()
   for (const d of visibleDocs) if (d.parent_id) {
     const arr = childrenByParent.get(d.parent_id) ?? []
@@ -253,12 +266,23 @@ export function DocsSidebar({ orgSlug, orgId, currentDocId, docs, clientes = [],
         <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-[0.08em]">
           {showArchived ? 'Arquivados' : 'Documentos'}
         </span>
-        <button type="button" onClick={() => setShowArchived(v => !v)} aria-pressed={showArchived}
-          className={cn('press inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] transition-colors',
-            showArchived ? 'bg-gray-700 text-orange-400' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800')}>
-          <Archive className="w-3 h-3" />
-          {showArchived ? 'Ver ativos' : 'Arquivados'}
-        </button>
+        <div className="flex items-center gap-0.5">
+          {/* Recolher todas ↔ expandir todas, como em Espaços. Some sem pasta. */}
+          {pastasVisiveis.length > 0 && (
+            <button type="button" onClick={() => setTodas(pastasVisiveis, !algumaAberta)}
+              aria-label={algumaAberta ? 'Recolher todas as pastas' : 'Expandir todas as pastas'}
+              data-tip={algumaAberta ? 'Recolher todas' : 'Expandir todas'}
+              className="tip press p-1 rounded-md text-gray-500 hover:text-gray-200 hover:bg-gray-800 transition-colors">
+              {algumaAberta ? <ChevronsUp className="w-3.5 h-3.5" /> : <ChevronsDown className="w-3.5 h-3.5" />}
+            </button>
+          )}
+          <button type="button" onClick={() => setShowArchived(v => !v)} aria-pressed={showArchived}
+            className={cn('press inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] transition-colors',
+              showArchived ? 'bg-gray-700 text-orange-400' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800')}>
+            <Archive className="w-3 h-3" />
+            {showArchived ? 'Ver ativos' : 'Arquivados'}
+          </button>
+        </div>
       </div>
 
       {groups.length === 0 && (
