@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Clock, LogIn, Coffee, Undo2, Loader2, FileText, Check, FileSignature, Paperclip, X, ChevronRight } from 'lucide-react'
+import { Clock, LogIn, Coffee, Undo2, Loader2, FileText, Check, FileSignature, Paperclip, X, ChevronRight, Hourglass } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Modal } from '@/components/ui/Modal'
@@ -15,6 +15,7 @@ import { baterPonto, criarJustificativa } from '@/app/actions/rh-ponto'
 import { DicaPresenca } from '@/components/rh/DicaPresenca'
 import { anunciarPonto } from '@/components/ponto/ponto-sync'
 import { coordenadaDaBatida } from '@/components/ponto/coordenada'
+import { TIPO_JUSTIFICATIVA, rotuloTipo, type PedidoPendente } from '@/components/ponto/tipos-justificativa'
 
 export interface PontoDia {
   data: string; entrada: string | null; intervalo_ini: string | null; intervalo_fim: string | null
@@ -41,8 +42,10 @@ const dataBR = (d: string) => {
   return `${DOW[new Date(y, m - 1, dd).getDay()]} ${d.slice(8, 10)}/${d.slice(5, 7)}`
 }
 
-export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }: {
+export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes, pedidos = [] }: {
   orgSlug: string; colaboradorId: string; nome: string; hoje: string; diaHoje: PontoDia | null; recentes: PontoDia[]
+  /** Pedidos dela aguardando o RH (mig. 303) — o dia pedido não cobra de novo. */
+  pedidos?: PedidoPendente[]
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -53,6 +56,7 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
   const [extra, setExtra] = useState<ExtraNascida | null>(null)
   // Índice da marcação que acabou de ser batida: só ela entra animada.
   const [recemBatida, setRecemBatida] = useState<number | null>(null)
+  const pedidoDoDia = (dia: string) => pedidos.find(p => dia >= p.data_ini && dia <= p.data_fim) ?? null
   const d = diaHoje
 
   // N marcações livres: ímpar = está trabalhando (próxima é saída/pausa),
@@ -179,6 +183,33 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
 
       <div className="sm:hidden grid grid-cols-2 gap-2 mt-3">{acoes}</div>
 
+      {/* O que ela mandou e ainda está com o RH. Sem isto a tela só sabia
+          cobrar, e o mesmo pedido era enviado duas, três vezes. */}
+      {pedidos.length > 0 && (
+        <div className="mt-5 rounded-2xl border border-gray-200 bg-white overflow-hidden">
+          <div className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 flex items-center gap-1.5">
+            <Hourglass className="w-3.5 h-3.5" /> Aguardando o RH
+          </div>
+          <ul>
+            {pedidos.map(p => (
+              <li key={p.id} className="flex flex-wrap items-baseline gap-x-2 px-4 py-2.5 text-sm border-b border-gray-50 last:border-0">
+                <span className="text-gray-900 tabular-nums">
+                  {dataBR(p.data_ini)}{p.data_fim !== p.data_ini && <> a {dataBR(p.data_fim)}</>}
+                </span>
+                <span className="text-gray-500">{rotuloTipo(p.tipo)}</span>
+                <span className="flex-1" />
+                <span className="text-[11px] text-gray-400">
+                  enviado {new Date(p.criado_em).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' })}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="px-4 py-2 text-[11px] text-gray-400 border-t border-gray-100">
+            O RH decide (aprovar, abonar ou dar falta). Você não precisa pedir de novo.
+          </p>
+        </div>
+      )}
+
       {/* Últimos dias — no celular cada dia vira duas linhas (dia + saldo em
           cima, marcações + horas embaixo); em tela larga, uma linha só. */}
       {recentes.length > 0 && (
@@ -198,11 +229,18 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes }:
                       fica com zero hora até o RH ajustar (mig. 275). O selo abre
                       a justificativa já no dia — no toque não existe tooltip. */}
                   {(r.marcacoes?.length ?? 0) % 2 === 1 && (
-                    <button type="button" onClick={() => setJustificar(r.data)}
-                      aria-label={`Falta uma marcação em ${dataBR(r.data)} — o dia está contando zero hora. Pedir ajuste.`}
-                      className="ml-1.5 inline-flex items-center gap-0.5 align-middle text-[10px] font-medium text-amber-800 bg-amber-100 hover:bg-amber-200 rounded px-1.5 py-1 sm:py-0.5 transition-colors">
-                      falta marcação <ChevronRight className="w-3 h-3" />
-                    </button>
+                    pedidoDoDia(r.data) ? (
+                      <span title={`${rotuloTipo(pedidoDoDia(r.data)!.tipo)} — aguardando o RH`}
+                        className="ml-1.5 inline-flex items-center gap-1 align-middle text-[10px] font-medium text-gray-500 bg-gray-100 rounded px-1.5 py-1 sm:py-0.5">
+                        <Hourglass className="w-2.5 h-2.5" /> ajuste pedido
+                      </span>
+                    ) : (
+                      <button type="button" onClick={() => setJustificar(r.data)}
+                        aria-label={`Falta uma marcação em ${dataBR(r.data)} — o dia está contando zero hora. Pedir ajuste.`}
+                        className="ml-1.5 inline-flex items-center gap-0.5 align-middle text-[10px] font-medium text-amber-800 bg-amber-100 hover:bg-amber-200 rounded px-1.5 py-1 sm:py-0.5 transition-colors">
+                        falta marcação <ChevronRight className="w-3 h-3" />
+                      </button>
+                    )
                   )}
                   {r.ajuste_em && (
                     <span title={`Ajustado pelo RH. Marcação original: ${[r.ajuste_de?.entrada, r.ajuste_de?.saida].filter(Boolean).map(t => hm(t as string)).join(' – ') || '—'}`}
@@ -318,10 +356,7 @@ function JustificarModal({ orgSlug, colaboradorId, dias, onClose, diaInicial }: 
           <p className="text-xs text-gray-500 mt-0.5">Vai para o RH decidir (aprovar, abonar ou dar falta).</p></div>
         <div className="px-6 py-5 space-y-3">
           <div><label className="block text-sm text-gray-600 mb-1.5">Tipo</label>
-            <Select value={tipo} onChange={trocarTipo} options={[
-              { value: 'esqueci', label: 'Esqueci de bater' }, { value: 'atestado', label: 'Atestado médico' },
-              { value: 'medico', label: 'Consulta médica' }, { value: 'falta', label: 'Falta' }, { value: 'outro', label: 'Outro' },
-            ]} /></div>
+            <Select value={tipo} onChange={trocarTipo} options={TIPO_JUSTIFICATIVA} /></div>
 
           <div>
             <div className="flex items-center justify-between mb-1.5">

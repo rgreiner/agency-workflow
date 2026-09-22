@@ -134,7 +134,8 @@ export default async function DashboardPage({ params }: { params: Promise<{ orgS
 
       {ponto && (
         <PontoCardHome orgSlug={orgSlug} colaboradorId={ponto.colaborador_id}
-          marcacoes={ponto.marcacoes ?? []} diasIncompletos={ponto.dias_incompletos ?? []} />
+          marcacoes={ponto.marcacoes ?? []} diasIncompletos={ponto.dias_incompletos ?? []}
+          pedidosPendentes={ponto.pedidos_pendentes ?? []} />
       )}
 
       {/* Convite de push: o padrão é todo mundo ligado; some quando já ativou. */}

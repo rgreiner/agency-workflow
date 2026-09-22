@@ -3,12 +3,13 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Clock, LogIn, Coffee, Undo2, Loader2, ChevronRight, AlertTriangle } from 'lucide-react'
+import { Clock, LogIn, Coffee, Undo2, Loader2, ChevronRight, AlertTriangle, Hourglass } from 'lucide-react'
 import { toast } from 'sonner'
 import { baterPonto } from '@/app/actions/rh-ponto'
 import { anunciarPonto } from '@/components/ponto/ponto-sync'
 import { coordenadaDaBatida } from '@/components/ponto/coordenada'
 import { ExtraContextoModal, extraNascida, type ExtraNascida } from '@/components/ponto/ExtraContextoModal'
+import { rotuloPedido, type PedidoPendente } from '@/components/ponto/tipos-justificativa'
 
 const hm = (t: string) => t.slice(0, 5)
 const dm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
@@ -19,14 +20,20 @@ const dm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
  * devolveu algo). Mesma régua da tela /ponto: N marcações livres, ímpar =
  * trabalhando; o detalhe (justificar, espelho) continua morando lá.
  */
-export function PontoCardHome({ orgSlug, colaboradorId, marcacoes, diasIncompletos = [] }: {
+export function PontoCardHome({ orgSlug, colaboradorId, marcacoes, diasIncompletos = [], pedidosPendentes = [] }: {
   orgSlug: string; colaboradorId: string; marcacoes: string[]
   /** Dias passados sem fechar par — ficam com ZERO minuto até corrigir (mig. 275). */
-  diasIncompletos?: { data: string; marcacoes: number }[]
+  diasIncompletos?: { data: string; marcacoes: number; pedido?: string | null }[]
+  /** O que ela já mandou e está com o RH (mig. 303). */
+  pedidosPendentes?: PedidoPendente[]
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [extra, setExtra] = useState<ExtraNascida | null>(null)
+
+  // Dia já pedido não é mais tarefa dela: some do alerta e vira "aguardando".
+  const aPedir = diasIncompletos.filter(d => d.pedido !== 'pendente')
+  const recusado = aPedir.some(d => d.pedido === 'rejeitado')
 
   const dentro = marcacoes.length % 2 === 1
   const ultima = marcacoes.length ? hm(marcacoes[marcacoes.length - 1]) : null
@@ -98,23 +105,49 @@ export function PontoCardHome({ orgSlug, colaboradorId, marcacoes, diasIncomplet
       </div>
       {/* Dia sem fechar: o par não existe, então o dia inteiro conta ZERO.
           O caminho é pedir o ajuste ao RH — daí o link já no dia certo. */}
-      {diasIncompletos.length > 0 && (
+      {aPedir.length > 0 && (
         <div className="mt-3 rounded-xl bg-amber-50 ring-1 ring-amber-200 px-3 py-2.5 flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
           <div className="min-w-0 flex-1">
             <p className="text-xs font-medium text-amber-900">
-              {diasIncompletos.length === 1
-                ? `Falta uma marcação em ${dm(diasIncompletos[0].data)}`
-                : `Falta marcação em ${diasIncompletos.length} dias`}
+              {aPedir.length === 1
+                ? `Falta uma marcação em ${dm(aPedir[0].data)}`
+                : `Falta marcação em ${aPedir.length} dias`}
             </p>
             <p className="text-[11px] text-amber-800/80 mt-0.5">
               Sem o par de entrada e saída o dia fica com <b>zero hora</b> registrada.
-              {diasIncompletos.length > 1 && ` (${diasIncompletos.slice(0, 4).map(d => dm(d.data)).join(' · ')}${diasIncompletos.length > 4 ? '…' : ''})`}
+              {aPedir.length > 1 && ` (${aPedir.slice(0, 4).map(d => dm(d.data)).join(' · ')}${aPedir.length > 4 ? '…' : ''})`}
+              {/* Recusado volta a cobrar, mas dizendo por quê — senão parece que
+                  o pedido sumiu. */}
+              {recusado && <> O RH <b>recusou</b> um pedido destes dias.</>}
             </p>
           </div>
-          <Link href={`/${orgSlug}/ponto?justificar=${diasIncompletos[0].data}`}
+          <Link href={`/${orgSlug}/ponto?justificar=${aPedir[0].data}`}
             className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-amber-600 text-[#fff] hover:bg-amber-700 active:scale-[0.97] transition-colors shrink-0">
             Pedir ajuste
+          </Link>
+        </div>
+      )}
+
+      {/* Já pediu: não há o que fazer, só esperar. Antes o card continuava
+          pedindo o mesmo ajuste, e a pessoa mandava de novo. */}
+      {pedidosPendentes.length > 0 && (
+        <div className="mt-3 rounded-xl bg-gray-50 px-3 py-2.5 flex items-start gap-2">
+          <Hourglass className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium text-gray-700">
+              {pedidosPendentes.length === 1
+                ? 'Pedido enviado, aguardando o RH'
+                : `${pedidosPendentes.length} pedidos aguardando o RH`}
+            </p>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              {pedidosPendentes.slice(0, 3).map(rotuloPedido).join(' · ')}
+              {pedidosPendentes.length > 3 && ` · +${pedidosPendentes.length - 3}`}
+            </p>
+          </div>
+          <Link href={`/${orgSlug}/ponto`}
+            className="inline-flex items-center gap-0.5 px-2 py-1.5 text-[11px] font-medium text-gray-500 hover:text-gray-800 transition-colors shrink-0">
+            Ver <ChevronRight className="w-3 h-3" />
           </Link>
         </div>
       )}

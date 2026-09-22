@@ -39,8 +39,14 @@ export default async function PontoPage({ params }: { params: Promise<{ orgSlug:
   const { data: dias } = await (supabase as any)
     .rpc('rh_ponto_recentes', { p_colaborador: colab.id, p_limite: 15 })
 
+  // Pedidos aguardando o RH vêm do mesmo estado que a home usa (mig. 303):
+  // a tela precisa dizer o que já foi enviado, senão só sabe cobrar.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: estado } = await (supabase as any).rpc('rh_ponto_estado')
+
   const lista = ((dias ?? []) as PontoDia[])
   const diaHoje = lista.find(d => d.data === hoje) ?? null
 
-  return <PontoClient orgSlug={orgSlug} colaboradorId={colab.id} nome={colab.nome} hoje={hoje} diaHoje={diaHoje} recentes={lista.filter(d => d.data !== hoje)} />
+  return <PontoClient orgSlug={orgSlug} colaboradorId={colab.id} nome={colab.nome} hoje={hoje} diaHoje={diaHoje}
+    recentes={lista.filter(d => d.data !== hoje)} pedidos={estado?.pedidos_pendentes ?? []} />
 }

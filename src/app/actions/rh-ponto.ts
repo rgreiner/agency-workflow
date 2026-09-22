@@ -2,6 +2,7 @@
 
 import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
+import type { PedidoPendente } from '@/components/ponto/tipos-justificativa'
 import { getUsuario } from '@/lib/auth/server'
 import { revalidatePath } from 'next/cache'
 import { presencaPorDia, type PresencaDia } from '@/lib/rh/presenca'
@@ -232,8 +233,12 @@ export async function pontoEstado() {
       primeiro_foco: string | null
       agora: string
       /** Dias passados com marcação ímpar — o dia não fecha par nenhum e fica
-       *  com ZERO minuto até alguém corrigir (mig. 275). */
-      dias_incompletos: { data: string; marcacoes: number }[]
+       *  com ZERO minuto até alguém corrigir (mig. 275). `pedido` = status do
+       *  que a pessoa já mandou para aquele dia (mig. 303); dia resolvido
+       *  (corrigido ou abonado) nem aparece. */
+      dias_incompletos: { data: string; marcacoes: number; pedido: string | null }[]
+      /** Pedidos dela aguardando o RH — some o "peça de novo" (mig. 303). */
+      pedidos_pendentes: PedidoPendente[]
     } | null
   } catch {
     return null
