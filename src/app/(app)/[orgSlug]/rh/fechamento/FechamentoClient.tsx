@@ -385,7 +385,14 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
             <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
             <div>
               <b>{pendentes.length} pessoa(s) com hora extra pendente de aprovação</b> — o não aprovado <b>não entra</b> nas colunas H.E.
-              <div className="text-xs mt-0.5">Aprove em RH → Ponto antes de fechar: {pendentes.map(p => `${p.nome.split(' ')[0]} (${hm(p.pendente_min)})`).join(' · ')}</div>
+              <div className="text-xs mt-0.5">
+                {/* Link direto: a instrução em texto não levava a lugar nenhum
+                    quando a fila não mostrava o dia (caso aviso prévio, mig. 301). */}
+                <Link href={`/${orgSlug}/rh/ponto`} className="font-medium underline underline-offset-2 hover:text-amber-950 transition-colors">
+                  Aprovar em RH → Ponto
+                </Link>{' '}
+                antes de fechar: {pendentes.map(p => `${p.nome.split(' ')[0]} (${hm(p.pendente_min)})`).join(' · ')}
+              </div>
             </div>
           </div>
         )}
