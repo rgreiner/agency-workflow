@@ -32,8 +32,10 @@ export default async function MidiaTrabalharPage({ params }: { params: Promise<{
       data: e.prazoEnvio,
       activityId: e.activityId,
       status: e.tarefaStatus,
-      workspaceId: t?.workspaceId ?? null,
-      campaignId: t?.campaignId ?? null,
+      // Sem o fallback da view, a entrega "com a criação" não abria a tarefa: ela
+      // não está na fila da mídia, então `t` é nulo (pedido do Rafael, 23/09).
+      workspaceId: t?.workspaceId ?? e.tarefaWorkspaceId,
+      campaignId: t?.campaignId ?? e.tarefaCampaignId,
       pastaPath: t?.pastaPath ?? null,
       pastaUrl: t?.pastaUrl ?? null,
       redacaoUrl: t?.redacaoUrl ?? null,

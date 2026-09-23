@@ -46,6 +46,12 @@ export interface FilaEntrega {
   prazoEnvio: string | null; conflito: boolean
   activityId: string | null
   tarefaTitulo: string | null; tarefaStatus: string | null
+  /**
+   * Onde a tarefa vive. Vem da view, não da fila: enquanto a peça está COM A
+   * CRIAÇÃO a tarefa está em Briefing/Design, fora dos status da mídia — e era
+   * justamente essa linha que ficava sem link para abrir e ver o andamento.
+   */
+  tarefaWorkspaceId: string | null; tarefaCampaignId: string | null
   /** A tarefa já chegou num status que a mídia opera (ou concluiu). */
   materialPronto: boolean
 }
@@ -89,7 +95,7 @@ export async function carregarFilaMidia(sb: any, orgId: string): Promise<FilaMid
       .eq('org_id', orgId).eq('ativo', true),
     sb.from('org_status').select('valor, label, bg, txt').eq('org_id', orgId),
     sb.from('midia_entrega_view')
-      .select('id, titulo, cliente, veiculo, veiculo_emails, veiculo_telefones, formato, especificacao, prazo_envio, conflito_prazo, activity_id, tarefa_titulo, tarefa_status')
+      .select('id, titulo, cliente, veiculo, veiculo_emails, veiculo_telefones, formato, especificacao, prazo_envio, conflito_prazo, activity_id, tarefa_titulo, tarefa_status, tarefa_campaign_id, tarefa_workspace_id')
       .eq('org_id', orgId).eq('situacao', 'aguardando')
       .order('prazo_envio', { ascending: true, nullsFirst: false }),
   ])
@@ -178,6 +184,7 @@ export async function carregarFilaMidia(sb: any, orgId: string): Promise<FilaMid
     prazoEnvio: e.prazo_envio ?? null, conflito: !!e.conflito_prazo,
     activityId: e.activity_id ?? null,
     tarefaTitulo: e.tarefa_titulo ?? null, tarefaStatus: e.tarefa_status ?? null,
+    tarefaWorkspaceId: e.tarefa_workspace_id ?? null, tarefaCampaignId: e.tarefa_campaign_id ?? null,
     materialPronto: !e.tarefa_titulo || (!!e.tarefa_status && prontos.has(e.tarefa_status)),
   }))
 

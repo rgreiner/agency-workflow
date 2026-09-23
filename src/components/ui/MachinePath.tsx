@@ -14,6 +14,7 @@ import Link from 'next/link'
 import { Check, Copy, AlertTriangle, Pencil, X, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useUserPrefs } from '@/components/providers/UserPrefsProvider'
+import { cn } from '@/lib/utils'
 import { updateActivityField } from '@/app/actions/activity'
 import { ultimoSegmento, isSubpastaTarefa } from '@/lib/task-folder-names'
 
@@ -59,13 +60,16 @@ const cleanWin = (p: string) => p.replace(/\\+$/, '')
 interface Props {
   winPath: string
   compact?: boolean
+  /** Mostra este rótulo no lugar do caminho (o caminho vai para o tooltip). Para
+   *  listas, onde o caminho inteiro rouba a linha sem ajudar a decidir. */
+  rotulo?: string
   /** Permite editar o caminho (salva em drive_path). Requer activityId + path. */
   editable?: boolean
   activityId?: string
   path?: string
 }
 
-export function MachinePath({ winPath, compact = false, editable = false, activityId, path }: Props) {
+export function MachinePath({ winPath, compact = false, editable = false, activityId, path, rotulo }: Props) {
   const prefs = useUserPrefs()
   const [mounted, setMounted] = useState(false)
   const [mac, setMac] = useState(false)
@@ -174,10 +178,13 @@ export function MachinePath({ winPath, compact = false, editable = false, activi
       <button
         type="button"
         onClick={copy}
-        title="Clique para copiar"
-        className="flex items-center gap-1.5 min-w-0 text-xs text-gray-600 font-mono hover:text-orange-600 transition-colors text-left"
+        title={rotulo ? `${display} · clique para copiar` : 'Clique para copiar'}
+        className={cn('flex items-center gap-1.5 min-w-0 text-xs hover:text-orange-600 transition-colors text-left',
+          rotulo
+            ? 'px-2 py-0.5 rounded-lg bg-gray-50 font-medium text-gray-600 hover:bg-orange-50'
+            : 'text-gray-600 font-mono')}
       >
-        <span className="truncate">{display}</span>
+        <span className="truncate">{rotulo ?? display}</span>
         {copied
           ? <Check className="w-3.5 h-3.5 text-green-600 shrink-0" />
           : <Copy className="w-3.5 h-3.5 text-gray-400 shrink-0" />}

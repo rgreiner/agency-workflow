@@ -400,12 +400,16 @@ function Linha({ orgSlug, item, cfg, links, variante, onFeito }: {
         item.entrouEm ? `entrou ${fmt(item.entrouEm)}` : item.criadaEm ? `criada ${fmt(item.criadaEm)}` : null,
       ].filter(Boolean).join(' · ')
     : ''
+  // A linha é para DECIDIR o que fazer agora, não para executar (Rafael, 23/09).
+  // Ficam fora: a especificação (detalhe de execução — está na tarefa e no aviso
+  // dentro dela) e o contato do veículo, que só serve na hora de enviar e por isso
+  // aparece apenas quando a peça já está pronta para ir.
+  const prontaParaEnviar = item.tipo === 'entrega' && !!item.entregaId && !item.esperandoCriacao
   const meta = [
     item.cliente,
     item.veiculo,
     item.formato,
-    item.especificacao,
-    item.veiculoContato,
+    prontaParaEnviar ? item.veiculoContato : null,
     item.frequencia ? (FREQ[item.frequencia] ?? item.frequencia) : null,
     origem || null,
   ].filter(Boolean).join(' · ')
@@ -677,8 +681,10 @@ function Links({ item, links, compacta }: { item: ItemFila; links: LinksVisiveis
           <ExternalLink className="w-3 h-3" aria-hidden /> {l.label}
         </a>
       ))}
+      {/* Chip, não o caminho inteiro: o caminho ocupava a linha toda e não é
+          informação de decisão — clicar copia, e o caminho fica no tooltip. */}
       {pasta === 'caminho' && (
-        <div className="min-w-0 max-w-full"><MachinePath winPath={item.pastaPath!} compact /></div>
+        <MachinePath winPath={item.pastaPath!} compact rotulo="Pasta" />
       )}
       {pasta === 'drive' && (
         <a href={item.pastaUrl!} target="_blank" rel="noopener noreferrer"

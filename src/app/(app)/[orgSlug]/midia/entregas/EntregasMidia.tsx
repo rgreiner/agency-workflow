@@ -601,9 +601,15 @@ function ModalEntrega({ orgSlug, clientes, veiculos, membros, equipes, entrega, 
             </div>
             <label className="block">
               <span className="text-[11px] text-orange-800">Pedido para a criação · vira o briefing da tarefa</span>
-              <textarea value={form.pedido} onChange={e => setForm(f => ({ ...f, pedido: e.target.value }))} rows={4}
-                placeholder="O que precisa ser criado, para quem, com que foco. Ex.: capas para os destaques 'News' e 'Quem somos' do perfil, com fotos da fábrica."
-                className={cn(campo, 'resize-y')} />
+              <textarea value={form.pedido} onChange={e => setForm(f => ({ ...f, pedido: e.target.value }))} rows={9}
+                placeholder={'O que precisa ser criado, para quem e com que foco. Quanto mais contexto, menos ida e volta.\n\n'
+                  + 'Linha em branco separa parágrafo no briefing. Ex.:\n\n'
+                  + 'Capas para os destaques "News" e "Quem somos" do perfil.\n\n'
+                  + 'Foco na comunicação da empresa, com fotos da fábrica. Evitar banco de imagens.'}
+                className={cn(campo, 'resize-y leading-relaxed')} />
+              <span className="text-[11px] text-orange-800/70 mt-1 block">
+                Vira o briefing da tarefa, com um parágrafo por linha em branco. A criação lê isto primeiro.
+              </span>
             </label>
             <p className="text-[11px] text-orange-800/80">
               A tarefa nasce em <b>Briefing</b>{form.responsaveis.length ? ' com os responsáveis acima' : <>, <b>sem responsável</b> — cai na fila &ldquo;Sem responsável&rdquo; do atendimento</>},
@@ -617,9 +623,13 @@ function ModalEntrega({ orgSlug, clientes, veiculos, membros, equipes, entrega, 
         )}
 
         <label className="block">
-          <span className="text-[11px] text-gray-400">Observação</span>
-          <input value={form.observacao} onChange={e => setForm(f => ({ ...f, observacao: e.target.value }))}
-            placeholder="ex.: enviar por e-mail para comercial@veiculo.com.br" className={campo} />
+          <span className="text-[11px] text-gray-400">
+            Observação <span className="text-gray-300">· anotação da mídia; não vai para o briefing</span>
+          </span>
+          <textarea value={form.observacao} onChange={e => setForm(f => ({ ...f, observacao: e.target.value }))} rows={3}
+            placeholder={'Como e para quem enviar, combinados com o veículo, o que conferir antes.\n'
+              + 'Ex.: enviar por e-mail para comercial@veiculo.com.br, aos cuidados do Anderson.'}
+            className={cn(campo, 'resize-y leading-relaxed')} />
         </label>
 
         <div className="flex items-center justify-between gap-2 pt-1">
