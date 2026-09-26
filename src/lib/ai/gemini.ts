@@ -61,9 +61,9 @@ export function geminiConfigured(): boolean {
 }
 
 /** URL + headers do backend em uso. */
-export async function geminiEndpoint(model: string): Promise<{ url: string; headers: Record<string, string> }> {
-  const backend = (process.env.GEMINI_BACKEND || 'auto').toLowerCase()
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY
+export async function geminiEndpoint(model: string, chave?: string | null): Promise<{ url: string; headers: Record<string, string> }> {
+  const backend = chave ? 'studio' : (process.env.GEMINI_BACKEND || 'auto').toLowerCase()
+  const apiKey = chave || process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY
 
   if (backend !== 'vertex' && apiKey) {
     return {
@@ -119,6 +119,8 @@ export interface GeminiJsonOpts {
   temperature?: number
   /** Prazo por tentativa; estourou = pula pro próximo modelo da cadeia. Default 3 min (PDF grande). */
   timeoutMs?: number
+  /** Chave do AI Studio cadastrada pela org (Revisão IA); sem ela, a do ambiente. */
+  apiKey?: string | null
 }
 
 /**
@@ -151,7 +153,7 @@ export async function geminiJson<T>(opts: GeminiJsonOpts): Promise<{ model: stri
     },
   }
 
-  const { model, res } = await postNoModelo(pedido, JSON.stringify(body), opts.timeoutMs ?? 180_000)
+  const { model, res } = await postNoModelo(pedido, JSON.stringify(body), opts.timeoutMs ?? 180_000, opts.apiKey)
   const json = await res.json() as {
     candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[]
     promptFeedback?: { blockReason?: string }
@@ -206,7 +208,7 @@ function modelosFallback(pedido: string): string[] {
  *  • capacidade (503/429 por minuto/timeout/rede) — percorre a cadeia de reserva.
  *    Se todos caírem, o erro que vale é o do modelo pedido (é o que a env configura).
  */
-async function postNoModelo(pedido: string, body: string, timeoutMs: number): Promise<{ model: string; res: Response }> {
+async function postNoModelo(pedido: string, body: string, timeoutMs: number, chave?: string | null): Promise<{ model: string; res: Response }> {
   const fila = [pedido, ...modelosFallback(pedido)]
   const tentados = new Set<string>()
   let primeiroErro: ErroIA | null = null
@@ -217,7 +219,7 @@ async function postNoModelo(pedido: string, body: string, timeoutMs: number): Pr
     tentados.add(modelo)
     try {
       // O modelo pedido merece insistência; o reserva é só uma segunda chance.
-      return { model: modelo, res: await postComRetry(modelo, body, timeoutMs, modelo === pedido ? 3 : 2) }
+      return { model: modelo, res: await postComRetry(modelo, body, timeoutMs, modelo === pedido ? 3 : 2, chave) }
     } catch (e) {
       if (!(e instanceof ErroIA)) throw e
       if (e.status === 404) {
@@ -259,8 +261,8 @@ const transitorio = (e: ErroIA) => { e.transitorio = true; return e }
  * Sem resposta no prazo também não repete no mesmo modelo: insistir num modelo lento
  * só custa mais espera — levanta como transitório e o chamador passa pro próximo.
  */
-async function postComRetry(modelo: string, body: string, timeoutMs: number, tentativas: number): Promise<Response> {
-  const { url, headers } = await geminiEndpoint(modelo)
+async function postComRetry(modelo: string, body: string, timeoutMs: number, tentativas: number, chave?: string | null): Promise<Response> {
+  const { url, headers } = await geminiEndpoint(modelo, chave)
   let ultimo: ErroIA | null = null
 
   for (let i = 0; i < tentativas; i++) {
@@ -283,7 +285,11 @@ async function postComRetry(modelo: string, body: string, timeoutMs: number, ten
     const erro = new ErroIA(res.status, `Gemini ${res.status}: ${texto.slice(0, 400)}`)
     const semSaldo = /credit|billing|quota|exceeded/i.test(texto)
     const capacidade = (res.status === 429 && !semSaldo) || res.status === 500 || res.status === 503
-    if (capacidade) erro.transitorio = true
+    // Cota estourada é POR MODELO: em 26/09/2026 a chave de produção dava 429
+    // "exceeded your current quota" no Flash e o Flash-Lite respondia. Então pula
+    // pro próximo da cadeia (sem insistir no mesmo). Sem crédito de verdade, todos
+    // caem e o erro que sobe continua sendo o do modelo pedido.
+    if (capacidade || (res.status === 429 && semSaldo)) erro.transitorio = true
     if (!capacidade || i === tentativas - 1) throw erro
     ultimo = erro
     await espera(i)
