@@ -12,7 +12,9 @@ import { StatusChanger } from './StatusChanger'
 import { MobileStatusBar } from './MobileStatusBar'
 import { AbasMobile } from './AbasMobile'
 import { AvisoTarefaArquivada } from './AvisoTarefaArquivada'
-import { ReviewBanner } from './ReviewBanner'
+import { RevisaoIA } from './RevisaoIA'
+import { etapaRevisavel, ETAPAS } from '@/lib/ai/revisao-modelos'
+import { lerRevisaoConfigPublica } from '@/lib/ai/revisao-config'
 import { PortalFeedback, type PortalFeedbackItem } from './PortalFeedback'
 import { AutoRefresh } from '@/components/ui/AutoRefresh'
 import { FocusTracker } from '@/components/ui/FocusTracker'
@@ -244,6 +246,27 @@ export default async function ActivityPage({
   ].sort((a, b) => a.at.localeCompare(b.at))
 
   // Cores de status seguem Configurações → Aparência (mescladas) — rawSettings vem do Lote 2
+  // Revisão IA sob demanda: o botão só aparece com a revisão ligada na org e
+  // nesta etapa. Falha ao ler a config (ex.: sem banco direto) = sem botão.
+  const etapaRev = etapaRevisavel(activity.status)
+  let revisaoLigada = false
+  if (orgId && etapaRev) {
+    try {
+      const c = await lerRevisaoConfigPublica(orgId)
+      revisaoLigada = c.enabled && c.stages[etapaRev]
+    } catch (e) { console.error('[revisao] config', e) }
+  }
+  // Última revisão gravada, se for desta etapa (activities.review_*).
+  const ultimaRevisao = (() => {
+    if (!etapaRev || activity.review_kind !== etapaRev) return null
+    const lista = ((activity.review_errors ?? []) as unknown as Record<string, string>[])
+      .map(e => ({ trecho: e.trecho ?? '', correcao: e.correcao ?? e.sugestao ?? '' }))
+      .filter(e => e.trecho && e.correcao)
+    if (activity.review_status === 'errors' && lista.length) return { tipo: 'erros' as const, errors: lista }
+    if (activity.review_status === 'clean') return { tipo: 'limpo' as const }
+    return null
+  })()
+
   const statusConfig = await getStatusConfig(supabase, orgId, (rawSettings?.status_overrides ?? []) as StatusOverride[])
 
   const priorityCfg  = PRIORITY_CONFIG[activity.priority as ActivityPriority]
@@ -596,23 +619,23 @@ export default async function ActivityPage({
               </div>
             )}
 
-            {/* Atualiza a tarefa sozinha (revisão em 2º plano, mudanças de outros);
-                mais rápido enquanto uma revisão está rodando. */}
-            <AutoRefresh fast={activity.review_status === 'reviewing'} />
+            {/* Atualiza a tarefa sozinha (mudanças de outras pessoas). */}
+            <AutoRefresh />
 
             {/* Apontamento de horas implícito: marca a abertura desta tarefa.
                 O tempo vai daqui até a próxima tarefa aberta, dentro do ponto. */}
             <FocusTracker activityId={activityId} origem={modal ? 'modal' : 'pagina'} />
 
-            {/* Revisão por IA (Redação/Design/Finalização) — "revisando…" / apontamentos + avançar mesmo assim */}
-            <ReviewBanner
-              activityId={activityId}
-              path={path}
-              status={activity.review_status ?? null}
-              errors={(activity.review_errors as unknown as { trecho: string; problema: string; sugestao: string; tipo?: string }[] | null) ?? null}
-              kind={activity.review_kind ?? null}
-              currentStatus={activity.status}
-            />
+            {/* Revisão por IA sob demanda — antes de mover o status */}
+            {revisaoLigada && etapaRev && (
+              <RevisaoIA
+                key={`${etapaRev}-${activity.review_at ?? ''}`}
+                activityId={activityId}
+                path={path}
+                etapaLabel={ETAPAS.find(e => e.key === etapaRev)!.label}
+                ultima={ultimaRevisao}
+              />
+            )}
 
             {/* ── Campos ───────────────────────────────────────── */}
             <div className="mt-8">

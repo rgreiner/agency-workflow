@@ -8,7 +8,11 @@ import { after } from 'next/server'
 import { dispatchPushNotificacoes } from '@/lib/push'
 import { provisionActivitiesDrive, moveActivityDrive, regenerateActivityDrive, renameActivityDrive, relinkActivityDrive, syncFolderNameAfterTitleChange } from '@/lib/drive-provision'
 import { ultimoSegmento, isSubpastaTarefa } from '@/lib/task-folder-names'
-import { scheduleReview, reviewKindForAdvance, ordemStatusDaAtividade } from '@/lib/review-gate'
+import { revisarAtividade, comentarioRevisao } from '@/lib/review-gate'
+import { etapaRevisavel } from '@/lib/ai/revisao-modelos'
+import { lerRevisaoConfig } from '@/lib/ai/revisao-config'
+import { mensagemErroRevisao } from '@/lib/ai/review'
+import { logSystemError } from '@/lib/system-error'
 import { scheduleRecurrence, isConclusion } from '@/lib/recurrence-gate'
 
 /**
@@ -182,7 +186,7 @@ export async function updateActivityStatus(
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
-  // Status atual — p/ detectar avanço a partir de Redação (gate de revisão).
+  // Status atual — p/ detectar conclusão (recorrência).
   const { data: cur } = await supabase
     .from('activities').select('status').eq('id', activityId).single()
   const fromStatus = cur?.status ?? null
@@ -196,10 +200,6 @@ export async function updateActivityStatus(
 
   if (error) return { error: error.message }
 
-  const reviewKind = reviewKindForAdvance(fromStatus, newStatus, await ordemStatusDaAtividade(supabase, activityId))
-  if (reviewKind) {
-    scheduleReview({ supabase, userId: user.id, activityId, kind: reviewKind, toStatus: newStatus })
-  }
   if (isConclusion(fromStatus, newStatus)) {
     scheduleRecurrence({ supabase, userId: user.id, activityId })
   }
@@ -326,7 +326,7 @@ export async function bulkUpdateStatus(path: string, ids: string[], newStatus: s
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
-  // Status atuais — p/ disparar o gate de revisão nos que avançam a partir de Redação.
+  // Status atuais — p/ detectar conclusão (recorrência).
   const { data: curRows } = await supabase.from('activities').select('id, status').in('id', ids)
   const fromMap = new Map((curRows ?? []).map(r => [r.id, r.status as string]))
 
@@ -336,14 +336,8 @@ export async function bulkUpdateStatus(path: string, ids: string[], newStatus: s
     }).then(r => ({ error: r.error })))
   if (err) return { error: err.message }
 
-  // Todas as tarefas do lote são da mesma org — resolve a ordem uma vez só.
-  const ordem = await ordemStatusDaAtividade(supabase, ids[0])
   for (const id of ids) {
     const from = fromMap.get(id) ?? null
-    const reviewKind = reviewKindForAdvance(from, newStatus, ordem)
-    if (reviewKind) {
-      scheduleReview({ supabase, userId: user.id, activityId: id, kind: reviewKind, toStatus: newStatus })
-    }
     if (isConclusion(from, newStatus)) {
       scheduleRecurrence({ supabase, userId: user.id, activityId: id })
     }
@@ -604,55 +598,48 @@ export async function toggleCommentReaction(path: string, commentId: string, emo
 }
 
 /**
- * "Tentar de novo" — redispara a revisão que falhou por erro técnico (ex.: 529
- * "Overloaded" do provider). A tarefa não se move: ela já avançou quando o gate
- * rodou; aqui só a checagem roda outra vez, em 2º plano.
+ * Botão "Revisar" da tarefa: roda a Revisão IA AGORA, sobre o material da etapa
+ * atual, e devolve os apontamentos para a pessoa decidir antes de mover o status.
+ * Nada trava: seguir com o erro é decisão dela. O resultado fica no comentário
+ * ("Revisão solicitada: …") e em activities.review_* (painel da tarefa).
  */
-export async function retryReview(path: string, activityId: string) {
+export async function revisarTarefa(path: string, activityId: string): Promise<
+  | { ok: true; errors: { trecho: string; correcao: string }[]; model: string; truncated: boolean }
+  | { ok: false; aviso: string }
+  | { error: string }
+> {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
 
   const { data: act } = await supabase
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .from('activities').select('status, review_kind, review_status').eq('id', activityId).single() as any
+    .from('activities').select('status, campaigns(workspaces(org_id))').eq('id', activityId).single()
   if (!act) return { error: 'Tarefa não encontrada' }
-  if (act.review_status !== 'failed') return { error: 'Esta revisão não está pendente de nova tentativa' }
+  const orgId = (act as unknown as { campaigns: { workspaces: { org_id: string } | null } | null })
+    .campaigns?.workspaces?.org_id
+  const etapa = etapaRevisavel(act.status as string)
+  if (!orgId || !etapa) return { error: 'Esta etapa não tem revisão.' }
 
-  const kind = (act.review_kind || 'redacao') as 'redacao' | 'design' | 'finalizacao'
-  scheduleReview({ supabase, userId: user.id, activityId, kind, toStatus: act.status as string })
-  revalidatePath(path)
-  return { ok: true }
-}
-
-/**
- * "Avançar mesmo assim" — assume os apontamentos da revisão e avança a tarefa para
- * o status que tentou antes (review_target), via RPC direto p/ não re-disparar a
- * revisão. Quem clica fica registrado no comentário (responsabilização).
- */
-export async function confirmReviewErrors(path: string, activityId: string) {
-  const supabase = await createClient()
-  const user = await getUsuario()
-  if (!user) return { error: 'Não autenticado' }
-
-  const { data: act } = await supabase
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .from('activities').select('review_target, review_kind').eq('id', activityId).single() as any
-  const target = act?.review_target || 'design'
-  const kind = act?.review_kind || 'redacao'
+  const cfg = await lerRevisaoConfig(orgId)
+  if (!cfg.enabled || !cfg.stages[etapa]) return { error: 'A Revisão IA está desligada para esta etapa.' }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).rpc('set_review', {
-    p_user_id: user.id, p_activity_id: activityId, p_kind: kind, p_status: 'overridden', p_errors: null, p_target: null,
-  })
-  await supabase.rpc('add_activity_comment', {
-    p_user_id: user.id, p_activity_id: activityId,
-    p_content: '✋ Apontamentos da revisão assumidos — avançando mesmo assim.',
+  const setReview = (status: string, errors: unknown) => (supabase as any).rpc('set_review', {
+    p_user_id: user.id, p_activity_id: activityId, p_kind: etapa, p_status: status, p_errors: errors, p_target: null,
   })
 
-  const { error } = await supabase.rpc('update_activity_status', {
-    p_user_id: user.id, p_activity_id: activityId, p_new_status: target, p_comment: '',
-  })
-  if (error) return { error: error.message }
-  revalidatePath(path)
+  try {
+    const out = await revisarAtividade(supabase, activityId, user.id, etapa, cfg)
+    if (!out.ok) return { ok: false, aviso: out.vazio }
+    await setReview(out.errors.length ? 'errors' : 'clean', out.errors.length ? out.errors : null)
+    await supabase.rpc('add_activity_comment', {
+      p_user_id: user.id, p_activity_id: activityId, p_content: comentarioRevisao(out.errors),
+    })
+    revalidatePath(path)
+    return { ok: true, errors: out.errors, model: out.model, truncated: out.truncated }
+  } catch (e) {
+    console.error('[revisao] falhou', e)
+    await logSystemError(supabase, { userId: user.id, context: `review:${etapa}`, error: e, activityId })
+    return { error: mensagemErroRevisao(e, cfg.provider) }
+  }
 }

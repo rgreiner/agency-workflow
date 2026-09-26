@@ -1,12 +1,13 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
+import { lerRevisaoConfigPublica } from '@/lib/ai/revisao-config'
+import { geminiConfigured } from '@/lib/ai/gemini'
 import { RevisaoClient } from './RevisaoClient'
-import type { ReviewGates } from '@/app/actions/org-settings'
 
 export const metadata = { title: 'Configurações — Revisão IA' }
-
-const DEFAULT_GATES: ReviewGates = { redacao: true, design: true, finalizacao: true }
+// Lê a config pela conexão direta (runtime); nunca no build.
+export const dynamic = 'force-dynamic'
 
 export default async function RevisaoPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params
@@ -22,14 +23,6 @@ export default async function RevisaoPage({ params }: { params: Promise<{ orgSlu
     .from('organization_members').select('role').eq('org_id', org.id).eq('user_id', user.id).single() as { data: { role: string } | null }
   if (!m || !['owner', 'admin'].includes(m.role)) redirect(`/${orgSlug}/settings/membros`)
 
-  // Ausente/erro = todos ligados (mesmo default do gate em review-gate.ts).
-  let gates = DEFAULT_GATES
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: s } = await (supabase as any)
-      .from('org_settings').select('review_gates').eq('org_id', org.id).single()
-    if (s?.review_gates) gates = { ...DEFAULT_GATES, ...s.review_gates }
-  } catch { /* default-on */ }
-
-  return <RevisaoClient orgSlug={orgSlug} orgId={org.id} initial={gates} />
+  const cfg = await lerRevisaoConfigPublica(org.id)
+  return <RevisaoClient orgSlug={orgSlug} initial={cfg} geminiNoServidor={geminiConfigured()} />
 }

@@ -1,5 +1,5 @@
 import 'server-only'
-import { type ReviewProvider } from './review'
+type ReviewProvider = 'gemini'
 import { geminiConfigured, geminiJson } from './gemini'
 
 /**

@@ -56,22 +56,3 @@ export async function setOrgPaymentInfo(orgSlug: string, orgId: string, info: st
   revalidatePath(`/${orgSlug}/settings/documentos`)
   return {}
 }
-
-export interface ReviewGates { redacao: boolean; design: boolean; finalizacao: boolean }
-
-/** Liga/desliga a revisão por IA por gate (Configurações → Revisão IA; owner/admin). */
-export async function setOrgReviewGates(orgSlug: string, orgId: string, gates: ReviewGates) {
-  const supabase = await createClient()
-  const user = await getUsuario()
-  if (!user) return { error: 'Não autenticado' }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any).rpc('set_org_review_gates', {
-    p_user_id: user.id,
-    p_org_id:  orgId,
-    p_gates:   gates,
-  })
-
-  if (error) return { error: error.message }
-  revalidatePath(`/${orgSlug}/settings/revisao`)
-}
