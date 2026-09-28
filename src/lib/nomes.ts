@@ -98,3 +98,27 @@ export function filtraSugestoes(sugestoes: string[], texto: string, limite = 8):
   }
   return [...comeca, ...contem].slice(0, limite)
 }
+
+/** Partículas que ficam minúsculas no meio do nome (nunca na primeira palavra). */
+const PARTICULAS = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'di', 'del', 'van', 'von', 'y'])
+
+/**
+ * Nome de pessoa legível em lista. O cadastro do RH vem da folha em CAIXA ALTA
+ * ("LUIZA SERAFINI BOSCHIROLLI"): quebra em duas linhas na tabela e lê-se mais
+ * devagar, porque a caixa alta apaga a silhueta da palavra — que é o que o olho
+ * reconhece. Só mexe em nome TODO em maiúsculas; o digitado à mão ("Ana de
+ * Souza", "McDonald") fica como foi escrito. É exibição: o gravado não muda.
+ */
+export function nomeLegivel(nome: string): string {
+  if (!nome || !ehCaixaAlta(nome)) return nome
+  return nome
+    .toLowerCase()
+    .split(/(\s+)/)
+    .map((palavra, i) => {
+      if (!palavra.trim()) return palavra
+      if (i > 0 && PARTICULAS.has(palavra)) return palavra
+      // Maiúscula depois de hífen e apóstrofo também: "Maria-José", "D'Ávila".
+      return palavra.replace(/(^|[-'’])(\p{L})/gu, (_, sep, letra) => sep + letra.toUpperCase())
+    })
+    .join('')
+}
