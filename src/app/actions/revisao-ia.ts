@@ -54,6 +54,9 @@ export async function testarRevisaoIA(orgSlug: string): Promise<{ ok?: string; e
     return { ok: e ? `Funcionou (${r.model}): Erro "${e.trecho}" - ${e.correcao}` : `A chave funciona (${r.model}), mas o modelo não apontou o erro de teste.` }
   } catch (e) {
     console.error('[revisao-ia] teste falhou', e)
-    return { error: mensagemErroRevisao(e, cfg.provider) }
+    // Tela só de admin: junto do recado, o começo do erro técnico — sem isso, um
+    // 400 de formato apareceu como "chave recusada" em 28/09 e ninguém tinha como ver.
+    const tecnico = (e instanceof Error ? e.message : String(e)).replace(/\s+/g, ' ').slice(0, 180)
+    return { error: `${mensagemErroRevisao(e, cfg.provider)} (${tecnico})` }
   }
 }

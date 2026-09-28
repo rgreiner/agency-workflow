@@ -149,6 +149,9 @@ export function RevisaoClient({ orgSlug, initial, geminiNoServidor }: { orgSlug:
         <p className="text-sm font-medium text-gray-900 inline-flex items-center gap-2">
           <KeyRound className="w-4 h-4 text-orange-500" /> Modelo e chave
         </p>
+        <p className="text-xs text-gray-500 -mt-2">
+          Vale para toda a IA do Flow — Revisão, otimização de briefing, leitura de folha e de guias —, mesmo com a Revisão desligada.
+        </p>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">

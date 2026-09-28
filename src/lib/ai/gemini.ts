@@ -26,7 +26,7 @@ export type IAPart =
   | { kind: 'text'; text: string }
   | { kind: 'media'; mimeType: string; base64: string }
 
-/** Erro de IA com o status HTTP preservado (lib/ai/erro.ts traduz pela pessoa). */
+/** Erro de IA com o status HTTP preservado (mensagemErroRevisao, lib/ai/review.ts, traduz pela pessoa). */
 export class ErroIA extends Error {
   status: number
   /** Falha de CAPACIDADE (503, 429 por minuto, timeout, rede) — outro modelo tende a responder. */

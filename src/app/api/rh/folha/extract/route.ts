@@ -6,7 +6,9 @@ import { NextResponse } from 'next/server'
 import { getUsuario } from '@/lib/auth/server'
 import { getAccess } from '@/lib/auth/access'
 import { pdfToText, extrairFolha } from '@/lib/ai/folha'
-import { mensagemErroIA } from '@/lib/ai/erro'
+import { mensagemErroRevisao } from '@/lib/ai/review'
+import { iaDaOrg } from '@/lib/ai/provedor'
+import type { RevisaoConfig } from '@/lib/ai/revisao-config'
 import { createClient } from '@/lib/supabase/server'
 import { logSystemError } from '@/lib/system-error'
 
@@ -28,11 +30,13 @@ export async function POST(request: Request) {
   const acc = await getAccess(orgSlug)
   if (!acc || !acc.access.rh) return NextResponse.json({ error: 'Sem acesso ao RH' }, { status: 403 })
 
+  let cfg: RevisaoConfig | null = null
   try {
     const texto = await pdfToText(Buffer.from(await file.arrayBuffer()))
     if (texto.trim().length < 50) return NextResponse.json({ error: 'Não consegui ler texto do PDF (é digitalizado?)' }, { status: 422 })
-    const folha = await extrairFolha(texto)
-    if (!folha) return NextResponse.json({ error: 'IA não configurada (GEMINI_API_KEY)' }, { status: 503 })
+    cfg = await iaDaOrg(acc.orgId)
+    const folha = await extrairFolha(texto, cfg)
+    if (!folha) return NextResponse.json({ error: 'IA não configurada. Um administrador cadastra a chave em Configurações → Revisão IA.' }, { status: 503 })
     if (!folha.linhas.length) return NextResponse.json({ error: 'Nenhum trabalhador reconhecido no PDF' }, { status: 422 })
     return NextResponse.json(folha)
   } catch (e) {
@@ -40,7 +44,7 @@ export async function POST(request: Request) {
     console.error('[folha/extract] falha', e)
     await logSystemError(await createClient(), { userId: user.id, context: 'rh:folha-extract', error: e })
     return NextResponse.json(
-      { error: mensagemErroIA(e, 'Não consegui ler a folha. O erro foi registrado para o administrador.') },
+      { error: mensagemErroRevisao(e, cfg?.apiKey ? cfg.provider : 'gemini', 'Não consegui ler a folha. O erro foi registrado para o administrador.') },
       { status: 500 },
     )
   }

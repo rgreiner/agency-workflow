@@ -8,7 +8,7 @@ import 'server-only'
  *
  * ⚠️ Até 11/08/2026 esta extração só falava Claude — e como produção nunca teve
  * ANTHROPIC_API_KEY, ela respondia 503 "IA não configurada" desde que nasceu.
- * Agora usa o mesmo Gemini do resto (lib/ai/gemini.ts).
+ * Desde 28/09/2026 usa a chave de IA da org (lib/ai/provedor.ts), como o resto.
  */
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -16,7 +16,8 @@ import { writeFile, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import { geminiConfigured, geminiJson } from './gemini'
+import { iaDisponivel, iaJson } from './provedor'
+import type { RevisaoConfig } from './revisao-config'
 
 const exec = promisify(execFile)
 
@@ -81,14 +82,14 @@ export async function pdfToText(bytes: Buffer): Promise<string> {
 }
 
 /** Extrai a folha estruturada a partir do texto. Retorna null se não há IA configurada. */
-export async function extrairFolha(texto: string): Promise<FolhaExtraida | null> {
-  if (!geminiConfigured()) return null
+export async function extrairFolha(texto: string, cfg: RevisaoConfig | null): Promise<FolhaExtraida | null> {
+  if (!iaDisponivel(cfg)) return null
 
-  const { data } = await geminiJson<{ competencia?: unknown; trabalhadores?: unknown }>({
+  const { data } = await iaJson<{ competencia?: unknown; trabalhadores?: unknown }>(cfg, {
     system: SYSTEM,
     parts: [{ kind: 'text', text: `Extraia a folha abaixo.\n\n<folha>\n${texto.slice(0, 120000)}\n</folha>` }],
-    schema: SCHEMA,
-    model: process.env.FOLHA_MODEL_GEMINI,
+    schema: SCHEMA as unknown as Record<string, unknown>,
+    modeloAmbiente: process.env.FOLHA_MODEL_GEMINI,
     // Uma folha de 30 pessoas × 14 campos já passa de 8k só de JSON, e o raciocínio
     // divide o mesmo orçamento. Teto do modelo: 65.536.
     maxOutputTokens: 32768,

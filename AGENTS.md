@@ -13,7 +13,7 @@ Gestão de pauta/atividades da One a One (pode virar SaaS). Produção: **https:
 - **Postgres 17 + PostgREST self-hosted** (`https://flow-api.oneaone.com.br`). O `@supabase/supabase-js` é usado **de propósito como cliente HTTP do PostgREST** — NÃO sugerir remover nem "migrar pra Supabase". Não existe Supabase Cloud/GoTrue.
 - Auth própria: cookie JWT **`flow-jwt`** (HS256, `JWT_SECRET`, `src/lib/auth/*`); RLS no banco lê `request.jwt.claims`.
 - Conexão direta (`lib postgres`) só para `auth.users` — e sempre **lazy** (nunca conectar no import).
-- E-mail: Resend. IA: **Gemini e só** — tudo passa por `src/lib/ai/gemini.ts` (AI Studio por chave ou Vertex por service account). `npm run test:revisao` testa a chave.
+- E-mail: Resend. IA: **a chave/provedor/modelo que a org cadastra em Configurações → Revisão IA** (Claude ou Gemini; tabela `org_ai_config`, cifrada, só via conexão direta). Toda chamada passa por `src/lib/ai/provedor.ts` (`iaDaOrg` + `iaJson`), que traduz o schema para o dialeto de cada um (Gemini recusa `additionalProperties`; Claude exige). Sem chave cadastrada, cai no Gemini do ambiente (`GEMINI_API_KEY`). O botão Testar da tela prova a chave.
 
 ## Comandos
 - `npm run dev` · `npm run build` · `npm run lint` · `npm run typecheck`

@@ -1,6 +1,8 @@
 import 'server-only'
-type ReviewProvider = 'gemini'
-import { geminiConfigured, geminiJson } from './gemini'
+import { iaDisponivel, iaJson } from './provedor'
+import type { RevisaoConfig } from './revisao-config'
+
+type ReviewProvider = 'gemini' | 'anthropic'
 
 /**
  * Otimização de briefing — a "GEM Briefing" do atendimento, dentro do Flow.
@@ -17,8 +19,8 @@ import { geminiConfigured, geminiJson } from './gemini'
  *     perguntas e o rascunho ficava exatamente como estava: quem pediu ajuda saía
  *     sem nada. Agora estrutura o que foi dito E aponta o que falta.
  *
- * Roda no Gemini como o resto (lib/ai/gemini.ts); modelo por env:
- * BRIEFING_MODEL_GEMINI, senão GEMINI_MODEL.
+ * Provedor: a chave/modelo da org (Configurações → Revisão IA, lib/ai/provedor.ts).
+ * Sem chave cadastrada, o Gemini do ambiente (BRIEFING_MODEL_GEMINI, senão GEMINI_MODEL).
  */
 
 export interface BriefingOtimizado {
@@ -207,15 +209,14 @@ CHECKLIST ANTES DE ENTREGAR
 Sua função é TRADUZIR e ORGANIZAR, nunca INVENTAR nem RESUMIR.`
 
 /** Estrutura o rascunho no padrão da casa. Retorna null se nenhum provider tem chave. */
-export async function otimizarBriefing(rascunho: string): Promise<BriefingOtimizado | null> {
-  if (!geminiConfigured()) return null
-  const provider: ReviewProvider = 'gemini'
+export async function otimizarBriefing(rascunho: string, cfg: RevisaoConfig | null): Promise<BriefingOtimizado | null> {
+  if (!iaDisponivel(cfg)) return null
   const texto = (rascunho ?? '').trim().slice(0, MAX_CHARS)
   if (!texto) return null
 
   const userMsg = `Rascunho do atendimento:\n\n--- INÍCIO ---\n${texto}\n--- FIM ---`
-  const raw = await runGemini(userMsg)
-  return normalize(provider, raw.model, raw.output)
+  const raw = await run(userMsg, cfg)
+  return normalize(raw.provider, raw.model, raw.output)
 }
 
 interface RawOutput { briefing?: unknown; faltando?: unknown }
@@ -233,8 +234,8 @@ function normalize(provider: ReviewProvider, model: string, out: RawOutput | nul
   return { provider, model, briefing, faltando }
 }
 
-async function runGemini(userMsg: string): Promise<{ model: string; output: RawOutput | null }> {
-  const { model, data } = await geminiJson<RawOutput>({
+async function run(userMsg: string, cfg: RevisaoConfig | null): Promise<{ provider: ReviewProvider; model: string; output: RawOutput | null }> {
+  const { provider, model, data } = await iaJson<RawOutput>(cfg, {
     system: SYSTEM,
     parts: [{ kind: 'text', text: userMsg }],
     schema: {
@@ -243,13 +244,14 @@ async function runGemini(userMsg: string): Promise<{ model: string; output: RawO
         briefing: { type: 'string' },
         faltando: { type: 'array', items: { type: 'string' } },
       },
+      required: ['briefing', 'faltando'],
     },
-    model: process.env.BRIEFING_MODEL_GEMINI,
+    modeloAmbiente: process.env.BRIEFING_MODEL_GEMINI,
     // Modelo de raciocínio divide este orçamento com o pensamento (ver lib/ai/gemini.ts).
     maxOutputTokens: 8192,
     // A pessoa está esperando com o spinner: modelo que não responde em 25 s cede a
     // vez pro reserva (em 02/09 o 3.6-flash levou 45 s num "ok"; o 3.8-flash, 2 s).
     timeoutMs: 25_000,
   })
-  return { model, output: data }
+  return { provider, model, output: data }
 }

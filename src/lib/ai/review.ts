@@ -1,7 +1,7 @@
 import 'server-only'
 import type { DriveAsset } from '@/lib/google-drive'
-import { geminiConfigured, geminiJson, type IAPart } from './gemini'
-import { claudeJson } from './claude'
+import type { IAPart } from './gemini'
+import { iaDisponivel, iaJson } from './provedor'
 import type { RevisaoConfig } from './revisao-config'
 
 /**
@@ -111,15 +111,10 @@ export async function reviewArtwork(cfg: RevisaoConfig, assets: DriveAsset[], te
 // ── Execução ────────────────────────────────────────────────────────────────
 
 async function run(cfg: RevisaoConfig, system: string, parts: IAPart[]): Promise<{ model: string; list: ReviewError[] }> {
-  if (cfg.provider === 'anthropic') {
-    if (!cfg.apiKey) throw new Error('SEM_CHAVE')
-    const { model, data } = await claudeJson<{ erros?: unknown }>({ apiKey: cfg.apiKey, model: cfg.model, system, parts, schema: SCHEMA })
-    return { model, list: normalizar(data?.erros) }
-  }
-  // Gemini sem chave cadastrada usa a do ambiente (GEMINI_API_KEY), se houver.
-  if (!cfg.apiKey && !geminiConfigured()) throw new Error('SEM_CHAVE')
-  const { model, data } = await geminiJson<{ erros?: unknown }>({
-    system, parts, schema: SCHEMA, model: cfg.model, apiKey: cfg.apiKey, maxOutputTokens: 16384, timeoutMs: 120_000,
+  // Claude exige chave cadastrada; Gemini sem chave usa a do ambiente, se houver.
+  if (!iaDisponivel(cfg) || (cfg.provider === 'anthropic' && !cfg.apiKey)) throw new Error('SEM_CHAVE')
+  const { model, data } = await iaJson<{ erros?: unknown }>(cfg, {
+    system, parts, schema: SCHEMA, maxOutputTokens: 16384, timeoutMs: 120_000,
   })
   return { model, list: normalizar(data?.erros) }
 }
@@ -144,14 +139,24 @@ function normalizar(value: unknown): ReviewError[] {
   return out
 }
 
-/** Motivo da falha em pt-BR, apontando para onde se resolve. */
-export function mensagemErroRevisao(e: unknown, provider: RevisaoConfig['provider']): string {
+/**
+ * Motivo da falha em pt-BR, apontando para onde se resolve. Vale para toda IA
+ * que usa a chave da org (revisão, briefing, folha, guia) — `fallback` é o
+ * recado quando o motivo não é reconhecido.
+ */
+export function mensagemErroRevisao(
+  e: unknown,
+  provider: RevisaoConfig['provider'],
+  fallback = 'A revisão não pôde ser concluída. O erro foi registrado para o administrador.',
+): string {
   const bruto = (e instanceof Error ? e.message : String(e ?? '')).toLowerCase()
   const status = typeof (e as { status?: unknown } | null)?.status === 'number' ? (e as { status: number }).status : null
   const conta = provider === 'anthropic' ? 'na conta da Anthropic (console.anthropic.com → Billing)' : 'no Google AI Studio (Billing)'
   if (bruto === 'sem_chave') return 'Nenhuma chave de IA cadastrada. Um administrador cadastra em Configurações → Revisão IA.'
-  if (/credit|billing|prepay|depleted|quota|exceeded/.test(bruto)) return `A IA está sem créditos. Um administrador precisa recarregar ${conta}.`
-  if (status === 401 || status === 403 || /api key|x-api-key|authentication|permission_denied|invalid/.test(bruto)) {
+  if (/credit|billing|prepay|depleted|quota|exceeded/.test(bruto)) return `A IA está sem créditos ou sem cota. Um administrador precisa conferir ${conta}.`
+  // Só erro de CHAVE aqui. Até 28/09 qualquer "invalid" caía nesta frase — e um
+  // 400 de formato do pedido virou "chave recusada" com a chave certa.
+  if (status === 401 || status === 403 || /api key not valid|api_key_invalid|x-api-key|authentication_error|permission_denied|denied access/.test(bruto)) {
     return 'A chave da IA foi recusada. Um administrador precisa conferir em Configurações → Revisão IA.'
   }
   if (status === 404 || /not_found|not found|no longer available/.test(bruto)) return 'O modelo escolhido não está disponível. Troque o modelo em Configurações → Revisão IA.'
@@ -159,5 +164,5 @@ export function mensagemErroRevisao(e: unknown, provider: RevisaoConfig['provide
     return 'A IA está sobrecarregada agora. Tente de novo em instantes.'
   }
   if (/timeout|tempo esgotado|timed out/.test(bruto)) return 'A IA demorou demais para responder. Tente de novo em instantes.'
-  return 'A revisão não pôde ser concluída. O erro foi registrado para o administrador.'
+  return fallback
 }

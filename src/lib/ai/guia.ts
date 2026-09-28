@@ -7,10 +7,12 @@ import 'server-only'
  * por schema fixo, conservador (só transcreve o que está no documento).
  *
  * ⚠️ Como a folha, só falava Claude até 11/08/2026 — e produção nunca teve a
- * chave, então respondia 503 desde o primeiro dia. Agora usa lib/ai/gemini.ts.
+ * chave, então respondia 503 desde o primeiro dia. Desde 28/09/2026 usa a chave
+ * de IA da org (lib/ai/provedor.ts).
  */
 
-import { geminiConfigured, geminiJson } from './gemini'
+import { iaDisponivel, iaJson } from './provedor'
+import type { RevisaoConfig } from './revisao-config'
 
 export type GuiaTipo = 'darf' | 'fgts' | 'das' | 'gps' | 'parcelamento' | 'outro'
 
@@ -54,15 +56,15 @@ const SYSTEM = `Você extrai dados de uma GUIA DE RECOLHIMENTO brasileira (texto
 - Responda no formato JSON pedido.`
 
 /** Extrai a guia estruturada a partir do texto. Retorna null se não há IA configurada. */
-export async function extrairGuia(texto: string): Promise<GuiaExtraida | null> {
-  if (!geminiConfigured()) return null
+export async function extrairGuia(texto: string, cfg: RevisaoConfig | null): Promise<GuiaExtraida | null> {
+  if (!iaDisponivel(cfg)) return null
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = await geminiJson<any>({
+  const { data } = await iaJson<any>(cfg, {
     system: SYSTEM,
     parts: [{ kind: 'text', text: `Extraia a guia abaixo.\n\n<guia>\n${texto.slice(0, 60000)}\n</guia>` }],
-    schema: SCHEMA,
-    model: process.env.GUIA_MODEL_GEMINI || process.env.FOLHA_MODEL_GEMINI,
+    schema: SCHEMA as unknown as Record<string, unknown>,
+    modeloAmbiente: process.env.GUIA_MODEL_GEMINI || process.env.FOLHA_MODEL_GEMINI,
     // Folgado de propósito: o JSON da guia é minúsculo, mas o raciocínio do modelo
     // sai do mesmo orçamento — 1024 (o número que servia no Claude) voltaria vazio.
     maxOutputTokens: 8192,

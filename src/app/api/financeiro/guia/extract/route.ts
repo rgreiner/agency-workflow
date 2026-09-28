@@ -8,7 +8,9 @@ import { getUsuario } from '@/lib/auth/server'
 import { getAccess } from '@/lib/auth/access'
 import { pdfToText } from '@/lib/ai/folha'
 import { extrairGuia } from '@/lib/ai/guia'
-import { mensagemErroIA } from '@/lib/ai/erro'
+import { mensagemErroRevisao } from '@/lib/ai/review'
+import { iaDaOrg } from '@/lib/ai/provedor'
+import type { RevisaoConfig } from '@/lib/ai/revisao-config'
 import { createClient } from '@/lib/supabase/server'
 import { logSystemError } from '@/lib/system-error'
 
@@ -30,11 +32,13 @@ export async function POST(request: Request) {
   const acc = await getAccess(orgSlug)
   if (!acc || !acc.access.financeiro) return NextResponse.json({ error: 'Sem acesso ao Financeiro' }, { status: 403 })
 
+  let cfg: RevisaoConfig | null = null
   try {
     const texto = await pdfToText(Buffer.from(await file.arrayBuffer()))
     if (texto.trim().length < 30) return NextResponse.json({ error: 'Não consegui ler texto do PDF (é digitalizado?)' }, { status: 422 })
-    const guia = await extrairGuia(texto)
-    if (!guia) return NextResponse.json({ error: 'IA não configurada (GEMINI_API_KEY)' }, { status: 503 })
+    cfg = await iaDaOrg(acc.orgId)
+    const guia = await extrairGuia(texto, cfg)
+    if (!guia) return NextResponse.json({ error: 'IA não configurada. Um administrador cadastra a chave em Configurações → Revisão IA.' }, { status: 503 })
     if (!guia.valor || !guia.vencimento) return NextResponse.json({ error: 'Não reconheci valor e vencimento na guia — confira o PDF' }, { status: 422 })
     return NextResponse.json(guia)
   } catch (e) {
@@ -43,7 +47,7 @@ export async function POST(request: Request) {
     console.error('[guia/extract] falha', e)
     await logSystemError(await createClient(), { userId: user.id, context: 'financeiro:guia-extract', error: e })
     return NextResponse.json(
-      { error: mensagemErroIA(e, 'Não consegui ler a guia. O erro foi registrado para o administrador.') },
+      { error: mensagemErroRevisao(e, cfg?.apiKey ? cfg.provider : 'gemini', 'Não consegui ler a guia. O erro foi registrado para o administrador.') },
       { status: 500 },
     )
   }
