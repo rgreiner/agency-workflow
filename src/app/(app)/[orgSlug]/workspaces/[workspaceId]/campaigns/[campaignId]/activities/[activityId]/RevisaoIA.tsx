@@ -22,9 +22,9 @@ interface Props {
 }
 
 /**
- * Botão "Revisar" — a pessoa pede a revisão ANTES de mover o status e vê só os
- * apontamentos, no formato: Erro "trecho" - correção. Nada trava: corrigir ou
- * seguir é decisão dela.
+ * Botão "Revisar" — a pessoa revisa ANTES de avançar o status (obrigatório nas
+ * etapas ligadas) e vê só os apontamentos: Erro "trecho" - correção. Seguir com
+ * erro é decisão dela, confirmada ao mover (useAvancoRevisado).
  */
 export function RevisaoIA({ activityId, path, etapaLabel, ultima }: Props) {
   const [res, setRes] = useState<Resultado | null>(ultima)
@@ -45,7 +45,9 @@ export function RevisaoIA({ activityId, path, etapaLabel, ultima }: Props) {
       <div className="flex items-center gap-3">
         <Sparkles className="w-4 h-4 text-orange-500 shrink-0" />
         <p className="flex-1 min-w-0 text-sm text-gray-700">
-          {pending ? `Revisando ${etapaLabel}… pode levar até um minuto.` : `Revise ${etapaLabel} antes de mover a tarefa.`}
+          {pending
+            ? `Revisando ${etapaLabel}… pode levar até um minuto.`
+            : res ? `Revisão de ${etapaLabel}.` : `Revise ${etapaLabel} antes de avançar a tarefa — é obrigatório.`}
         </p>
         <button
           type="button"
@@ -66,6 +68,7 @@ export function RevisaoIA({ activityId, path, etapaLabel, ultima }: Props) {
               <li key={i}>Erro &quot;{e.trecho}&quot; - {e.correcao}</li>
             ))}
           </ul>
+          <p className="mt-2 text-xs text-gray-500">Corrija e revise de novo — ou, ao avançar, confirme que segue com estes erros.</p>
         </div>
       )}
       {!pending && res?.tipo === 'limpo' && (

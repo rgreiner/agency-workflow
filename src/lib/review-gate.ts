@@ -6,12 +6,17 @@ import { backendForRef } from '@/lib/task-folders'
 import { readReviewAssetsS3 } from '@/lib/s3-folders'
 import { reviewText, reviewArtwork, type ReviewError } from '@/lib/ai/review'
 import type { RevisaoConfig } from '@/lib/ai/revisao-config'
-import type { RevisaoEtapa } from '@/lib/ai/revisao-modelos'
+import { etapaRevisavel, ETAPAS, type RevisaoEtapa } from '@/lib/ai/revisao-modelos'
+import { iaDaOrg } from '@/lib/ai/provedor'
+import { geminiConfigured } from '@/lib/ai/gemini'
+import { STATUS_CONFIG } from '@/types'
 import { logSystemError } from '@/lib/system-error'
 
 /**
  * Revisão IA SOB DEMANDA: a pessoa aperta "Revisar" na tarefa ANTES de mover o
- * status, espera o resultado ali mesmo e decide. Nada trava a tarefa.
+ * status e vê o resultado ali mesmo. Para AVANÇAR a etapa é preciso ter revisado
+ * desde que a tarefa entrou nela; com apontamentos, a pessoa confirma que segue
+ * com eles (decisão dela, registrada). Ver checarAvanco.
  *
  * Substitui a revisão automática depois do avanço (até 09/2026): ela rodava em 2º
  * plano, a resposta chegava minutos depois e a tarefa VOLTAVA de status quando a
@@ -75,8 +80,83 @@ export async function revisarAtividade(
   return { ok: true, ...r }
 }
 
-/** Texto do comentário no formato combinado: "Erro "trecho" - correção". */
-export function comentarioRevisao(errors: ReviewError[]): string {
-  if (!errors.length) return 'Revisão solicitada: nenhum erro encontrado.'
-  return ['Revisão solicitada:', ...errors.map(e => `Erro "${e.trecho}" - ${e.correcao}`)].join('\n')
+type SB = SupabaseClient<Database>
+
+export type VeredictoAvanco =
+  | { ok: true; nota?: string }
+  | { ok: false; motivo: 'precisa_revisar'; mensagem: string }
+  | { ok: false; motivo: 'confirmar'; mensagem: string; erros: ReviewError[]; falhou: boolean }
+
+/**
+ * Pode sair da etapa? Regra do Rafael (28/09/2026): antes de AVANÇAR de uma etapa
+ * com Revisão ligada, a pessoa revisa; se a revisão apontou erros (ou a IA não
+ * respondeu), ela confirma que segue assim — `aceitar` = essa confirmação, que
+ * vira 'overridden' e uma nota na movimentação.
+ *
+ * "Revisou" = revisão desta etapa feita DEPOIS da última entrada na etapa: voltou
+ * da validação, revisa de novo. Voltar para trás nunca é barrado. Revisão
+ * desligada, etapa desligada ou org sem IA utilizável = não barra.
+ */
+export async function checarAvanco(
+  supabase: SB, userId: string, activityId: string, from: string | null, to: string, aceitar: boolean,
+): Promise<VeredictoAvanco> {
+  const etapa = from ? etapaRevisavel(from) : null
+  if (!etapa || to === from) return { ok: true }
+
+  const { data: act } = await supabase
+    .from('activities').select('review_kind, review_status, review_at, review_errors, campaigns(workspaces(org_id))')
+    .eq('id', activityId).single()
+  const orgId = (act as unknown as { campaigns: { workspaces: { org_id: string } | null } | null } | null)
+    ?.campaigns?.workspaces?.org_id
+  if (!act || !orgId) return { ok: true }
+
+  if (!(await ehAvanco(supabase, orgId, etapa, to))) return { ok: true }
+
+  const cfg = await iaDaOrg(orgId)
+  if (!cfg?.enabled || !cfg.stages[etapa]) return { ok: true }
+  // Sem IA que responda (Claude sem chave; Gemini sem chave nem no ambiente) não
+  // dá pra exigir revisão — o botão nem funcionaria.
+  if (!cfg.apiKey && (cfg.provider === 'anthropic' || !geminiConfigured())) return { ok: true }
+
+  const label = ETAPAS.find(e => e.key === etapa)!.label
+  const { data: entrada } = await supabase
+    .from('activity_history').select('changed_at').eq('activity_id', activityId).eq('to_status', etapa)
+    .order('changed_at', { ascending: false }).limit(1).maybeSingle()
+  const a = act as unknown as { review_kind: string | null; review_status: string | null; review_at: string | null; review_errors: unknown }
+  const valida = a.review_kind === etapa && !!a.review_at
+    && (!entrada?.changed_at || new Date(a.review_at) >= new Date(entrada.changed_at as string))
+  if (!valida || !a.review_status || a.review_status === 'reviewing') {
+    return { ok: false, motivo: 'precisa_revisar', mensagem: `Revise ${label} antes de avançar: use o botão Revisar na tarefa.` }
+  }
+  if (a.review_status !== 'errors' && a.review_status !== 'failed') return { ok: true }
+
+  const erros = Array.isArray(a.review_errors) ? (a.review_errors as ReviewError[]) : []
+  const falhou = a.review_status === 'failed'
+  if (!aceitar) {
+    return {
+      ok: false, motivo: 'confirmar', erros, falhou,
+      mensagem: falhou
+        ? `A revisão de ${label} não foi concluída. Abra a tarefa para confirmar que segue sem ela.`
+        : `A revisão de ${label} apontou ${erros.length} ${erros.length === 1 ? 'erro' : 'erros'}. Abra a tarefa para confirmar que segue com ${erros.length === 1 ? 'ele' : 'eles'}.`,
+    }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any).rpc('set_review', {
+    p_user_id: userId, p_activity_id: activityId, p_kind: etapa, p_status: 'overridden', p_errors: falhou ? null : erros, p_target: to,
+  })
+  return {
+    ok: true,
+    nota: falhou
+      ? `Seguiu sem a revisão de ${label} (a IA não respondeu).`
+      : `Seguiu com ${erros.length} ${erros.length === 1 ? 'apontamento' : 'apontamentos'} da revisão de ${label}.`,
+  }
+}
+
+/** `to` vem depois de `from` na ordem de status da org (cadastro org_status)? */
+async function ehAvanco(supabase: SB, orgId: string, from: string, to: string): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (supabase as any).from('org_status').select('valor').eq('org_id', orgId).order('ordem') as { data: { valor: string }[] | null }
+  const ordem = data?.length ? data.map(r => r.valor) : STATUS_CONFIG.map(s => s.value as string)
+  const pos = (v: string) => { const i = ordem.indexOf(v); return i === -1 ? Number.MAX_SAFE_INTEGER : i }
+  return pos(to) > pos(from)
 }

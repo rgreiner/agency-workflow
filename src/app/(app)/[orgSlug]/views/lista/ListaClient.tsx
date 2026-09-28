@@ -413,7 +413,12 @@ export function ListaClient({ orgSlug, activities, campMap, members, initialWork
         setOverrides(prev => { const n = { ...prev }; ids.forEach(id => delete n[id]); return n })
         toast.error(r.error)
       } else {
-        toast.success(`${ids.length} movida${ids.length !== 1 ? 's' : ''} para ${label}`)
+        // Quem precisa da Revisão IA ficou onde estava: desfaz só essas.
+        const barradas = r?.barradas ?? []
+        if (barradas.length) setOverrides(prev => { const n = { ...prev }; barradas.forEach(id => delete n[id]); return n })
+        const movidas = ids.length - barradas.length
+        toast.success(`${movidas} movida${movidas !== 1 ? 's' : ''} para ${label}`)
+        if (barradas.length) toast.warning(`${barradas.length} ${barradas.length === 1 ? 'ficou' : 'ficaram'} na etapa: precisa${barradas.length === 1 ? '' : 'm'} da Revisão IA antes de avançar.`)
         clearSelection()
       }
     })

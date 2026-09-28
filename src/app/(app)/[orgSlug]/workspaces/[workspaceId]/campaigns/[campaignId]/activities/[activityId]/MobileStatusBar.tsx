@@ -5,6 +5,7 @@ import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { updateActivityStatus } from '@/app/actions/activity'
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useAvancoRevisado } from './useAvancoRevisado'
 
 interface Props {
   activityId: string
@@ -25,6 +26,7 @@ interface Props {
 export function MobileStatusBar({ activityId, currentStatus, path, meusStatus = [], ignoraCargo = false }: Props) {
   const [status, setStatus] = useState(currentStatus)
   const [pending, start] = useTransition()
+  const { mover, dialogo } = useAvancoRevisado()
   const statusConfig = useStatusConfig()
 
   const cfg = statusConfig.find(s => s.value === status)
@@ -39,7 +41,8 @@ export function MobileStatusBar({ activityId, currentStatus, path, meusStatus = 
     const antes = status
     setStatus(novo) // otimista
     start(async () => {
-      const r = await updateActivityStatus(path, activityId, novo, '')
+      const r = await mover(aceitar => updateActivityStatus(path, activityId, novo, '', aceitar))
+      if (r && 'cancelado' in r) { setStatus(antes); return }
       if (r?.error) { setStatus(antes); toast.error(r.error); return }
       toast.success(`Status: ${statusConfig.find(s => s.value === novo)?.label}`)
     })
@@ -50,6 +53,7 @@ export function MobileStatusBar({ activityId, currentStatus, path, meusStatus = 
       className="lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur px-3 pt-2"
       style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)' }}
     >
+      {dialogo}
       <div className="flex items-center gap-2">
         {/* Voltar uma etapa */}
         <button

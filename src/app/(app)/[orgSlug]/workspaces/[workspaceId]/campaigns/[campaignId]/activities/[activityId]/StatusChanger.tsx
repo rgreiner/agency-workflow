@@ -6,6 +6,7 @@ import { updateActivityStatus } from '@/app/actions/activity'
 import { cn } from '@/lib/utils'
 import { ChevronDown, Check, Loader2, Search, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
+import { useAvancoRevisado } from './useAvancoRevisado'
 
 const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim()
 
@@ -27,6 +28,7 @@ export function StatusChanger({ activityId, currentStatus, path, compact, meusSt
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [isPending, startTransition] = useTransition()
+  const { mover, dialogo } = useAvancoRevisado()
   const ref = useRef<HTMLDivElement>(null)
 
   const statusConfig = useStatusConfig()
@@ -53,7 +55,8 @@ export function StatusChanger({ activityId, currentStatus, path, compact, meusSt
   function handleSave() {
     if (!changed) return
     startTransition(async () => {
-      const result = await updateActivityStatus(path, activityId, selected, comment)
+      const result = await mover(aceitar => updateActivityStatus(path, activityId, selected, comment, aceitar))
+      if (result && 'cancelado' in result) return
       if (result?.error) {
         toast.error(result.error)
       } else {
@@ -70,7 +73,8 @@ export function StatusChanger({ activityId, currentStatus, path, compact, meusSt
     if (status === currentStatus) return
     setSelected(status) // otimista
     startTransition(async () => {
-      const result = await updateActivityStatus(path, activityId, status, '')
+      const result = await mover(aceitar => updateActivityStatus(path, activityId, status, '', aceitar))
+      if (result && 'cancelado' in result) { setSelected(currentStatus); return }
       if (result?.error) {
         setSelected(currentStatus) // rollback
         toast.error(result.error)
@@ -84,6 +88,7 @@ export function StatusChanger({ activityId, currentStatus, path, compact, meusSt
   if (compact) {
     return (
       <div ref={ref} className="relative">
+        {dialogo}
         <span className="inline-flex items-stretch rounded-lg overflow-hidden">
           <button
             type="button"
@@ -177,6 +182,7 @@ export function StatusChanger({ activityId, currentStatus, path, compact, meusSt
   // ── Full card mode (kept for backward compat) ───────────────────────
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
+      {dialogo}
       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">Avançar status</p>
 
       <div className="relative mb-3">

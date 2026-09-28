@@ -8,7 +8,7 @@ import { after } from 'next/server'
 import { dispatchPushNotificacoes } from '@/lib/push'
 import { provisionActivitiesDrive, moveActivityDrive, regenerateActivityDrive, renameActivityDrive, relinkActivityDrive, syncFolderNameAfterTitleChange } from '@/lib/drive-provision'
 import { ultimoSegmento, isSubpastaTarefa } from '@/lib/task-folder-names'
-import { revisarAtividade, comentarioRevisao } from '@/lib/review-gate'
+import { revisarAtividade, checarAvanco } from '@/lib/review-gate'
 import { etapaRevisavel } from '@/lib/ai/revisao-modelos'
 import { lerRevisaoConfig } from '@/lib/ai/revisao-config'
 import { mensagemErroRevisao } from '@/lib/ai/review'
@@ -180,8 +180,10 @@ export async function updateActivityStatus(
   path: string,
   activityId: string,
   newStatus: string,
-  comment: string
-) {
+  comment: string,
+  /** A pessoa confirmou que segue com os apontamentos da Revisão IA. */
+  aceitarRevisao = false,
+): Promise<{ error?: string; revisao?: 'confirmar'; erros?: { trecho: string; correcao: string }[]; falhou?: boolean } | undefined> {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
@@ -191,11 +193,19 @@ export async function updateActivityStatus(
     .from('activities').select('status').eq('id', activityId).single()
   const fromStatus = cur?.status ?? null
 
+  // Revisão IA obrigatória antes de avançar (Redação/Design/Finalização ligadas).
+  const v = await checarAvanco(supabase, user.id, activityId, fromStatus, newStatus, aceitarRevisao)
+  if (!v.ok) {
+    return v.motivo === 'confirmar'
+      ? { error: v.mensagem, revisao: 'confirmar', erros: v.erros, falhou: v.falhou }
+      : { error: v.mensagem }
+  }
+
   const { error } = await supabase.rpc('update_activity_status', {
     p_user_id: user.id,
     p_activity_id: activityId,
     p_new_status: newStatus,
-    p_comment: comment,
+    p_comment: [comment?.trim(), v.nota].filter(Boolean).join('\n'),
   })
 
   if (error) return { error: error.message }
@@ -321,7 +331,7 @@ async function runChunked(
   return null
 }
 
-export async function bulkUpdateStatus(path: string, ids: string[], newStatus: string) {
+export async function bulkUpdateStatus(path: string, ids: string[], newStatus: string): Promise<{ error?: string; barradas?: string[] } | undefined> {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
@@ -330,13 +340,23 @@ export async function bulkUpdateStatus(path: string, ids: string[], newStatus: s
   const { data: curRows } = await supabase.from('activities').select('id, status').in('id', ids)
   const fromMap = new Map((curRows ?? []).map(r => [r.id, r.status as string]))
 
-  const err = await runChunked(ids, id =>
+  // Em lote não há como confirmar apontamento: quem precisa de revisão (ou de
+  // confirmação) fica onde está e volta na resposta para a tela avisar.
+  const barradas: string[] = []
+  for (const id of ids) {
+    const v = await checarAvanco(supabase, user.id, id, fromMap.get(id) ?? null, newStatus, false)
+    if (!v.ok) barradas.push(id)
+  }
+  const livres = ids.filter(id => !barradas.includes(id))
+  if (!livres.length) return { error: 'Nenhuma tarefa movida: todas precisam da Revisão IA (abra cada uma e use Revisar).', barradas }
+
+  const err = await runChunked(livres, id =>
     supabase.rpc('update_activity_status', {
       p_user_id: user.id, p_activity_id: id, p_new_status: newStatus, p_comment: '',
     }).then(r => ({ error: r.error })))
   if (err) return { error: err.message }
 
-  for (const id of ids) {
+  for (const id of livres) {
     const from = fromMap.get(id) ?? null
     if (isConclusion(from, newStatus)) {
       scheduleRecurrence({ supabase, userId: user.id, activityId: id })
@@ -344,6 +364,7 @@ export async function bulkUpdateStatus(path: string, ids: string[], newStatus: s
   }
   after(() => dispatchPushNotificacoes().catch(() => {}))
   revalidatePath(path)
+  return barradas.length ? { barradas } : undefined
 }
 
 export async function bulkUpdateField(path: string, ids: string[], field: string, value: string | null) {
@@ -600,8 +621,8 @@ export async function toggleCommentReaction(path: string, commentId: string, emo
 /**
  * Botão "Revisar" da tarefa: roda a Revisão IA AGORA, sobre o material da etapa
  * atual, e devolve os apontamentos para a pessoa decidir antes de mover o status.
- * Nada trava: seguir com o erro é decisão dela. O resultado fica no comentário
- * ("Revisão solicitada: …") e em activities.review_* (painel da tarefa).
+ * O resultado fica em activities.review_* (painel da tarefa) — sem comentário:
+ * o painel já mostra. Para avançar com erros, a pessoa confirma (checarAvanco).
  */
 export async function revisarTarefa(path: string, activityId: string): Promise<
   | { ok: true; errors: { trecho: string; correcao: string }[]; model: string; truncated: boolean }
@@ -630,16 +651,17 @@ export async function revisarTarefa(path: string, activityId: string): Promise<
 
   try {
     const out = await revisarAtividade(supabase, activityId, user.id, etapa, cfg)
-    if (!out.ok) return { ok: false, aviso: out.vazio }
+    // Sem material para revisar (pasta vazia, Doc vazio) conta como revisado.
+    if (!out.ok) { await setReview('vazio', null); revalidatePath(path); return { ok: false, aviso: out.vazio } }
     await setReview(out.errors.length ? 'errors' : 'clean', out.errors.length ? out.errors : null)
-    await supabase.rpc('add_activity_comment', {
-      p_user_id: user.id, p_activity_id: activityId, p_content: comentarioRevisao(out.errors),
-    })
     revalidatePath(path)
     return { ok: true, errors: out.errors, model: out.model, truncated: out.truncated }
   } catch (e) {
     console.error('[revisao] falhou', e)
     await logSystemError(supabase, { userId: user.id, context: `review:${etapa}`, error: e, activityId })
+    // Falha da IA não prende a tarefa: para avançar, a pessoa confirma que segue sem.
+    await setReview('failed', null)
+    revalidatePath(path)
     return { error: mensagemErroRevisao(e, cfg.provider) }
   }
 }

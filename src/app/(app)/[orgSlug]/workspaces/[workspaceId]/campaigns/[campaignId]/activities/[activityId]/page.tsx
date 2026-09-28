@@ -250,15 +250,24 @@ export default async function ActivityPage({
   // nesta etapa. Falha ao ler a config (ex.: sem banco direto) = sem botão.
   const etapaRev = etapaRevisavel(activity.status)
   let revisaoLigada = false
+  let entradaEtapa: string | null = null
   if (orgId && etapaRev) {
     try {
       const c = await lerRevisaoConfigPublica(orgId)
       revisaoLigada = c.enabled && c.stages[etapaRev]
     } catch (e) { console.error('[revisao] config', e) }
+    if (revisaoLigada) {
+      const { data: ent } = await supabase
+        .from('activity_history').select('changed_at').eq('activity_id', activityId).eq('to_status', etapaRev)
+        .order('changed_at', { ascending: false }).limit(1).maybeSingle()
+      entradaEtapa = (ent?.changed_at as string | undefined) ?? null
+    }
   }
-  // Última revisão gravada, se for desta etapa (activities.review_*).
+  // Última revisão desta etapa, se for desta passagem por ela (voltou da
+  // validação = revisão antiga não vale; é a mesma régua de checarAvanco).
   const ultimaRevisao = (() => {
     if (!etapaRev || activity.review_kind !== etapaRev) return null
+    if (entradaEtapa && (!activity.review_at || new Date(activity.review_at) < new Date(entradaEtapa))) return null
     const lista = ((activity.review_errors ?? []) as unknown as Record<string, string>[])
       .map(e => ({ trecho: e.trecho ?? '', correcao: e.correcao ?? e.sugestao ?? '' }))
       .filter(e => e.trecho && e.correcao)
