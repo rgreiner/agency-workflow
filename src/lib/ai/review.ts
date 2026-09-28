@@ -12,10 +12,12 @@ import type { RevisaoConfig } from './revisao-config'
  */
 
 export interface ReviewError {
-  /** Trecho exato como aparece no material. */
+  /** Trecho exato do material (erro) ou resumo do pedido (pendência). */
   trecho: string
-  /** Correção curta ("Casa com s e não z."). */
+  /** Correção curta ("Casa com s e não z.") ou o que está no material. */
   correcao: string
+  /** 'pendencia' = pedido do briefing/comentários não atendido; ausente = erro de língua. */
+  tipo?: 'pendencia'
 }
 
 export interface ReviewResult {
@@ -23,6 +25,12 @@ export interface ReviewResult {
   errors: ReviewError[]
   /** Entrada foi cortada por exceder o limite enviado ao modelo. */
   truncated: boolean
+}
+
+/** O que a tarefa pediu: briefing + comentários recentes (texto puro). */
+export interface ContextoRevisao {
+  briefing: string
+  comentarios: { autor: string; data: string; texto: string }[]
 }
 
 // Limite de caracteres de texto enviados ao modelo (controla custo/latência). ~12-16 páginas.
@@ -41,42 +49,57 @@ NÃO aponte: estilo, tom, vírgula opcional, gíria, informalidade, neologismo p
 nome de marca, hashtag, CTA, maiúsculas de título, quebra de linha, diagramação.
 Na dúvida entre erro e escolha de quem escreveu, NÃO aponte.
 
-Formato de cada apontamento:
+Formato de cada item de "erros":
 - "trecho": o trecho exato, curto, copiado como está no material.
 - "correcao": a correção em UMA frase curta (até 12 palavras), sem explicar a regra.
   Exemplo: trecho "A sua caza é bonita" → correcao "Casa com s e não z."
 Um apontamento por erro; não repita o mesmo trecho. Sem nenhum erro claro, lista vazia.`
 
-const SYSTEM_TEXTO = `Você revisa textos publicitários em português do Brasil.\n\n${REGRAS}`
+// Olhar de contexto (28/09/2026, pedido do Rafael): o material atende ao que a
+// tarefa pediu? Conservador como o resto — só pedido claro e verificável.
+const REGRAS_CONTEXTO = `
+Você também recebe o BRIEFING da tarefa e os COMENTÁRIOS recentes da equipe (do mais antigo
+ao mais novo). Em "pendencias", aponte SÓ quando o material claramente NÃO atende:
+- um pedido de ajuste objetivo feito nos comentários (ex.: "trocar X por Y" e X continua);
+- um item obrigatório do briefing que ficou de fora (texto, dado, data, preço, peça pedida);
+- uma informação do material que contradiz o briefing (data, preço, nome, medida).
 
-const SYSTEM_PECAS = `Você revisa o texto VISÍVEL em peças publicitárias (imagens/PDF) em português do Brasil.\n\n${REGRAS}`
+NÃO aponte: sugestão vaga, opinião, elogio, conversa, pergunta; pedido já atendido; pedido
+que um comentário POSTERIOR cancelou ou mudou (o mais recente vale); o que não dá para
+verificar no material que você recebeu (ex.: cor ou layout quando o material é só texto;
+arquivo mandado "no WhatsApp"); pedido sobre outra etapa ou outra peça. Na dúvida, NÃO aponte.
+
+Formato de cada item de "pendencias":
+- "pedido": o pedido, resumido em até 10 palavras, fiel ao que foi escrito.
+- "situacao": o que está no material, em até 12 palavras.
+  Exemplo: pedido "Trocar 'Garanta já' por 'Peça o seu'" → situacao "Continua 'Garanta já' no título."
+Sem nenhuma pendência clara, lista vazia.`
+
+const SYSTEM_TEXTO = `Você revisa textos publicitários em português do Brasil.\n\n${REGRAS}\n${REGRAS_CONTEXTO}`
+
+const SYSTEM_PECAS = `Você revisa o texto VISÍVEL em peças publicitárias (imagens/PDF) em português do Brasil.\n\n${REGRAS}\n${REGRAS_CONTEXTO}`
 
 const SYSTEM_PECAS_COM_TEXTO = `${SYSTEM_PECAS}
 
-Você também recebe o TEXTO APROVADO pela Redação. Além dos erros de língua, aponte quando
-a peça DIVERGE do texto aprovado de forma relevante: trecho faltando, trocado ou com
+Você também recebe o TEXTO APROVADO pela Redação. Além dos erros de língua, aponte em "erros"
+quando a peça DIVERGE do texto aprovado de forma relevante: trecho faltando, trocado ou com
 informação diferente (ex.: dado de um produto usado no rótulo de outro), ou página/peça
 prevista que não veio. Nesses casos "trecho" é o que está na peça (ou o nome da peça
 faltante) e "correcao" é o que deveria estar, em poucas palavras.`
 
+const ITEM = (a: string, b: string) => ({
+  type: 'object',
+  properties: { [a]: { type: 'string' }, [b]: { type: 'string' } },
+  required: [a, b],
+})
+
 const SCHEMA = {
   type: 'object',
   properties: {
-    erros: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          trecho:   { type: 'string' },
-          correcao: { type: 'string' },
-        },
-        required: ['trecho', 'correcao'],
-        additionalProperties: false,
-      },
-    },
+    erros: { type: 'array', items: ITEM('trecho', 'correcao') },
+    pendencias: { type: 'array', items: ITEM('pedido', 'situacao') },
   },
-  required: ['erros'],
-  additionalProperties: false,
+  required: ['erros', 'pendencias'],
 }
 
 // ── Entradas ────────────────────────────────────────────────────────────────
@@ -86,11 +109,22 @@ function cortar(txt: string): { texto: string; truncated: boolean } {
   return t.length > MAX_CHARS ? { texto: t.slice(0, MAX_CHARS), truncated: true } : { texto: t, truncated: false }
 }
 
+/** Bloco de texto com briefing + comentários, antes do material. */
+function blocoContexto(ctx?: ContextoRevisao | null): IAPart[] {
+  if (!ctx) return []
+  const briefing = ctx.briefing.trim().slice(0, 8000) || '(sem briefing)'
+  const coms = ctx.comentarios.length
+    ? ctx.comentarios.map(c => `[${c.data} · ${c.autor}] ${c.texto.slice(0, 1200)}`).join('\n')
+    : '(sem comentários)'
+  return [{ kind: 'text', text: `BRIEFING DA TAREFA:\n--- INÍCIO ---\n${briefing}\n--- FIM ---\n\nCOMENTÁRIOS RECENTES (antigo → novo):\n--- INÍCIO ---\n${coms}\n--- FIM ---` }]
+}
+
 /** Revisão de um texto puro (Redação). */
-export async function reviewText(cfg: RevisaoConfig, text: string): Promise<ReviewResult> {
+export async function reviewText(cfg: RevisaoConfig, text: string, ctx?: ContextoRevisao | null): Promise<ReviewResult> {
   const { texto, truncated } = cortar(text)
   const { model, list } = await run(cfg, SYSTEM_TEXTO, [
-    { kind: 'text', text: `--- INÍCIO DO TEXTO ---\n${texto}\n--- FIM DO TEXTO ---` },
+    ...blocoContexto(ctx),
+    { kind: 'text', text: `MATERIAL A REVISAR:\n--- INÍCIO DO TEXTO ---\n${texto}\n--- FIM DO TEXTO ---` },
   ])
   return { model, errors: list, truncated }
 }
@@ -99,10 +133,11 @@ export async function reviewText(cfg: RevisaoConfig, text: string): Promise<Revi
  * Revisão das peças (Design/Finalização). Com o texto aprovado da Redação, a
  * mesma chamada também confere se a peça usou o texto certo.
  */
-export async function reviewArtwork(cfg: RevisaoConfig, assets: DriveAsset[], textoAprovado?: string): Promise<ReviewResult> {
+export async function reviewArtwork(cfg: RevisaoConfig, assets: DriveAsset[], textoAprovado?: string, ctx?: ContextoRevisao | null): Promise<ReviewResult> {
   const { texto, truncated } = cortar(textoAprovado ?? '')
-  const parts: IAPart[] = []
-  if (texto) parts.push({ kind: 'text', text: `TEXTO APROVADO PELA REDAÇÃO:\n--- INÍCIO ---\n${texto}\n--- FIM ---\n\nPeças:` })
+  const parts: IAPart[] = [...blocoContexto(ctx)]
+  if (texto) parts.push({ kind: 'text', text: `TEXTO APROVADO PELA REDAÇÃO:\n--- INÍCIO ---\n${texto}\n--- FIM ---` })
+  parts.push({ kind: 'text', text: 'MATERIAL A REVISAR (peças):' })
   for (const a of assets) parts.push({ kind: 'media', mimeType: a.mimeType, base64: a.base64 })
   const { model, list } = await run(cfg, texto ? SYSTEM_PECAS_COM_TEXTO : SYSTEM_PECAS, parts)
   return { model, errors: list, truncated }
@@ -112,21 +147,21 @@ export async function reviewArtwork(cfg: RevisaoConfig, assets: DriveAsset[], te
 
 async function run(cfg: RevisaoConfig, system: string, parts: IAPart[]): Promise<{ model: string; list: ReviewError[] }> {
   // Claude exige chave cadastrada; Gemini sem chave usa a do ambiente, se houver.
-  if (!iaDisponivel(cfg) || (cfg.provider === 'anthropic' && !cfg.apiKey)) throw new Error('SEM_CHAVE')
-  const { model, data } = await iaJson<{ erros?: unknown }>(cfg, {
+  if (!iaDisponivel(cfg)) throw new Error('SEM_CHAVE')
+  const { model, data } = await iaJson<{ erros?: unknown; pendencias?: unknown }>(cfg, {
     system, parts, schema: SCHEMA, maxOutputTokens: 16384, timeoutMs: 120_000,
   })
-  return { model, list: normalizar(data?.erros) }
+  return { model, list: [...normalizar(data?.erros), ...normalizar(data?.pendencias, 'pendencia')] }
 }
 
-function normalizar(value: unknown): ReviewError[] {
+function normalizar(value: unknown, tipo?: 'pendencia'): ReviewError[] {
   if (!Array.isArray(value)) return []
   const vistos = new Set<string>()
   const out: ReviewError[] = []
   for (const e of value) {
     const o = (e ?? {}) as Record<string, unknown>
-    const trecho = String(o.trecho ?? '').trim().slice(0, 300)
-    const correcao = String(o.correcao ?? o.sugestao ?? '').trim().slice(0, 200)
+    const trecho = String(o.trecho ?? o.pedido ?? '').trim().slice(0, 300)
+    const correcao = String(o.correcao ?? o.situacao ?? o.sugestao ?? '').trim().slice(0, 200)
     if (!trecho || !correcao) continue
     // O modelo às vezes repete o mesmo apontamento (medido em 26/09: 5× o mesmo).
     const chave = `${trecho.toLowerCase()}|${correcao.toLowerCase()}`
@@ -134,7 +169,7 @@ function normalizar(value: unknown): ReviewError[] {
     // "Correção" igual ao trecho não é apontamento.
     if (correcao.toLowerCase() === trecho.toLowerCase()) continue
     vistos.add(chave)
-    out.push({ trecho, correcao })
+    out.push(tipo ? { trecho, correcao, tipo } : { trecho, correcao })
   }
   return out
 }

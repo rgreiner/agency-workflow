@@ -10,6 +10,7 @@ import { lerRevisaoConfig, type RevisaoConfig } from './revisao-config'
  * cadastrada, cai no Gemini do ambiente (GEMINI_API_KEY), como era antes.
  *
  * O liga/desliga daquela tela é só do botão Revisar; a chave vale sempre.
+ * Redundância (28/09/2026): chave RESERVA opcional, tentada quando a principal falha.
  */
 
 /** Config de IA da org, ou null se não há org/banco (a chamada usa o ambiente). */
@@ -23,40 +24,63 @@ export async function iaDaOrg(orgId: string | null | undefined): Promise<Revisao
   }
 }
 
-/** Há alguma IA utilizável para esta org (chave cadastrada ou Gemini do ambiente)? */
+/** Há alguma IA utilizável para esta org (chave, reserva ou Gemini do ambiente)? */
 export function iaDisponivel(cfg: RevisaoConfig | null): boolean {
-  if (cfg?.apiKey) return true
+  if (cfg?.apiKey || cfg?.reserva?.apiKey) return true
   return geminiConfigured()
 }
 
-/**
- * Uma chamada, saída JSON estruturada, no provedor da org. `modeloAmbiente` é o
- * override por uso do Gemini do ambiente (ex.: FOLHA_MODEL_GEMINI), usado só
- * quando a org não cadastrou chave.
- */
-export async function iaJson<T>(cfg: RevisaoConfig | null, opts: {
+type Destino = { provider: 'anthropic' | 'gemini'; model: string | null | undefined; apiKey: string | null }
+
+interface IaOpts {
   system: string
   parts: IAPart[]
   schema: Record<string, unknown>
   maxOutputTokens?: number
   timeoutMs?: number
   modeloAmbiente?: string | null
-}): Promise<{ provider: 'anthropic' | 'gemini'; model: string; data: T | null }> {
-  if (cfg?.apiKey && cfg.provider === 'anthropic') {
+}
+
+/**
+ * Uma chamada, saída JSON estruturada, no provedor da org. Falhou a principal
+ * (qualquer motivo: crédito, chave, provedor fora do ar), tenta a RESERVA
+ * cadastrada; sem reserva, o erro da principal sobe. `modeloAmbiente` é o
+ * override por uso do Gemini do ambiente (ex.: FOLHA_MODEL_GEMINI), usado só
+ * quando a org não cadastrou chave principal.
+ */
+export async function iaJson<T>(cfg: RevisaoConfig | null, opts: IaOpts): Promise<{ provider: 'anthropic' | 'gemini'; model: string; data: T | null }> {
+  const principal: Destino | null = cfg?.apiKey
+    ? { provider: cfg.provider, model: cfg.model, apiKey: cfg.apiKey }
+    : geminiConfigured() ? { provider: 'gemini', model: opts.modeloAmbiente, apiKey: null } : null
+  const reserva: Destino | null = cfg?.reserva?.apiKey
+    ? { provider: cfg.reserva.provider, model: cfg.reserva.model, apiKey: cfg.reserva.apiKey }
+    : null
+
+  if (!principal && !reserva) throw new Error('SEM_CHAVE')
+  if (!principal) return chamar<T>(reserva!, opts)
+  try {
+    return await chamar<T>(principal, opts)
+  } catch (e) {
+    if (!reserva) throw e
+    console.warn(`[ia] principal (${principal.provider}) falhou; tentando a reserva (${reserva.provider}):`, e instanceof Error ? e.message.slice(0, 200) : e)
+    return chamar<T>(reserva, opts)
+  }
+}
+
+async function chamar<T>(d: Destino, opts: IaOpts): Promise<{ provider: 'anthropic' | 'gemini'; model: string; data: T | null }> {
+  if (d.provider === 'anthropic') {
     const r = await claudeJson<T>({
-      apiKey: cfg.apiKey, model: cfg.model, system: opts.system, parts: opts.parts,
+      apiKey: d.apiKey!, model: d.model!, system: opts.system, parts: opts.parts,
       schema: paraClaude(opts.schema),
       // Sem cadeia de reserva no Claude: prazo mínimo de 60 s.
       timeoutMs: Math.max(opts.timeoutMs ?? 150_000, 60_000),
     })
     return { provider: 'anthropic', ...r }
   }
-  const chave = cfg?.apiKey && cfg.provider === 'gemini' ? cfg.apiKey : null
   const r = await geminiJson<T>({
     system: opts.system, parts: opts.parts,
     schema: paraGemini(opts.schema),
-    model: chave ? cfg!.model : opts.modeloAmbiente,
-    apiKey: chave,
+    model: d.model, apiKey: d.apiKey,
     maxOutputTokens: opts.maxOutputTokens,
     timeoutMs: opts.timeoutMs,
   })

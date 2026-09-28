@@ -269,7 +269,7 @@ export default async function ActivityPage({
     if (!etapaRev || activity.review_kind !== etapaRev) return null
     if (entradaEtapa && (!activity.review_at || new Date(activity.review_at) < new Date(entradaEtapa))) return null
     const lista = ((activity.review_errors ?? []) as unknown as Record<string, string>[])
-      .map(e => ({ trecho: e.trecho ?? '', correcao: e.correcao ?? e.sugestao ?? '' }))
+      .map(e => ({ trecho: e.trecho ?? '', correcao: e.correcao ?? e.sugestao ?? '', tipo: e.tipo }))
       .filter(e => e.trecho && e.correcao)
     if (activity.review_status === 'errors' && lista.length) return { tipo: 'erros' as const, errors: lista }
     if (activity.review_status === 'clean') return { tipo: 'limpo' as const }

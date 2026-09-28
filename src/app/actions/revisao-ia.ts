@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
-import { lerRevisaoConfig, salvarRevisaoConfig } from '@/lib/ai/revisao-config'
+import { lerRevisaoConfig, salvarRevisaoConfig, salvarReservaConfig } from '@/lib/ai/revisao-config'
 import { reviewText, mensagemErroRevisao } from '@/lib/ai/review'
 import { modeloValido, type RevisaoEtapas, type RevisaoProvider } from '@/lib/ai/revisao-modelos'
 
@@ -42,11 +42,39 @@ export async function salvarRevisaoIA(orgSlug: string, dados: {
   return {}
 }
 
-/** Revisa uma frase com erro conhecido usando a config SALVA — prova chave + modelo. */
-export async function testarRevisaoIA(orgSlug: string): Promise<{ ok?: string; error?: string }> {
+/** Grava a chave RESERVA. `apiKey` undefined mantém a atual; '' remove a reserva. */
+export async function salvarReservaIA(orgSlug: string, dados: {
+  provider: RevisaoProvider
+  model: string
+  apiKey?: string
+}): Promise<{ error?: string }> {
   const auth = await orgAdmin(orgSlug)
   if ('error' in auth) return auth
-  const cfg = await lerRevisaoConfig(auth.orgId)
+  const provider: RevisaoProvider = dados.provider === 'gemini' ? 'gemini' : 'anthropic'
+  try {
+    await salvarReservaConfig(auth.orgId, auth.userId, { ...dados, provider, model: modeloValido(provider, dados.model) })
+  } catch (e) {
+    console.error('[revisao-ia] salvar reserva falhou', e)
+    return { error: 'Não consegui salvar a reserva.' }
+  }
+  revalidatePath(`/${orgSlug}/settings/revisao`)
+  return {}
+}
+
+/**
+ * Revisa uma frase com erro conhecido usando a config SALVA — prova chave +
+ * modelo. Testa UMA chave de cada vez (sem cair na outra), senão a reserva
+ * mascararia a principal quebrada.
+ */
+export async function testarRevisaoIA(orgSlug: string, qual: 'principal' | 'reserva' = 'principal'): Promise<{ ok?: string; error?: string }> {
+  const auth = await orgAdmin(orgSlug)
+  if ('error' in auth) return auth
+  const salvo = await lerRevisaoConfig(auth.orgId)
+  const r = salvo.reserva
+  if (qual === 'reserva' && !r) return { error: 'Nenhuma chave reserva cadastrada.' }
+  const cfg = qual === 'reserva'
+    ? { ...salvo, provider: r!.provider, model: r!.model, apiKey: r!.apiKey, keyIlegivel: r!.keyIlegivel, reserva: null }
+    : { ...salvo, reserva: null }
   if (cfg.keyIlegivel) return { error: 'A chave salva não pôde ser lida (o segredo do servidor mudou). Cadastre a chave de novo.' }
   try {
     const r = await reviewText(cfg, 'A sua caza é bonita.')

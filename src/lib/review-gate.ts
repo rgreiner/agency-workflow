@@ -4,11 +4,11 @@ import type { Database } from '@/types/database'
 import { driveConfigured, readRedacaoText, readReviewAssets } from '@/lib/google-drive'
 import { backendForRef } from '@/lib/task-folders'
 import { readReviewAssetsS3 } from '@/lib/s3-folders'
-import { reviewText, reviewArtwork, type ReviewError } from '@/lib/ai/review'
+import { reviewText, reviewArtwork, type ReviewError, type ContextoRevisao } from '@/lib/ai/review'
 import type { RevisaoConfig } from '@/lib/ai/revisao-config'
 import { etapaRevisavel, ETAPAS, type RevisaoEtapa } from '@/lib/ai/revisao-modelos'
-import { iaDaOrg } from '@/lib/ai/provedor'
-import { geminiConfigured } from '@/lib/ai/gemini'
+import { iaDaOrg, iaDisponivel } from '@/lib/ai/provedor'
+import { stripHtml } from '@/lib/html'
 import { STATUS_CONFIG } from '@/types'
 import { logSystemError } from '@/lib/system-error'
 
@@ -59,7 +59,7 @@ export async function revisarAtividade(
     if (!act?.redacao_url) return { ok: false, vazio: 'Sem link de Redação nesta tarefa.' }
     const text = await lerRedacao('review:redacao')
     if (!text.trim()) return { ok: false, vazio: 'O Doc de Redação está vazio.' }
-    const r = await reviewText(cfg, text)
+    const r = await reviewText(cfg, text, await contextoDaTarefa(supabase, activityId))
     return { ok: true, ...r }
   }
 
@@ -76,8 +76,31 @@ export async function revisarAtividade(
 
   // Design confere também contra o texto aprovado da Redação (mesma chamada).
   const aprovado = etapa === 'design' ? await lerRedacao('review:design') : ''
-  const r = await reviewArtwork(cfg, assets, aprovado)
+  const r = await reviewArtwork(cfg, assets, aprovado, await contextoDaTarefa(supabase, activityId))
   return { ok: true, ...r }
+}
+
+/**
+ * Briefing + últimos comentários da tarefa, em texto puro, para o olhar de
+ * contexto da revisão (o material atende ao que foi pedido?). 25 comentários
+ * cobrem as idas e vindas de uma etapa sem estourar o custo.
+ */
+async function contextoDaTarefa(supabase: SupabaseClient<Database>, activityId: string): Promise<ContextoRevisao> {
+  const [{ data: act }, { data: coms }] = await Promise.all([
+    supabase.from('activities').select('description').eq('id', activityId).single(),
+    supabase.from('activity_comments').select('content, created_at, profiles(full_name)')
+      .eq('activity_id', activityId).order('created_at', { ascending: false }).limit(25),
+  ])
+  const comentarios = ((coms ?? []) as unknown as { content: string; created_at: string; profiles: { full_name: string | null } | null }[])
+    .reverse()
+    .map(c => ({
+      autor: c.profiles?.full_name ?? 'Equipe',
+      data: new Date(c.created_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      texto: stripHtml(c.content),
+    }))
+    // Comentários antigos da própria revisão (até 28/09) não são pedido de ninguém.
+    .filter(c => c.texto && !/^(Revisão solicitada|✅ \*\*Revisão|⚠️ \*\*Revisão|⚠️ A revisão|ℹ️ Revisão)/.test(c.texto))
+  return { briefing: stripHtml((act?.description as string | null) ?? ''), comentarios }
 }
 
 type SB = SupabaseClient<Database>
@@ -116,7 +139,7 @@ export async function checarAvanco(
   if (!cfg?.enabled || !cfg.stages[etapa]) return { ok: true }
   // Sem IA que responda (Claude sem chave; Gemini sem chave nem no ambiente) não
   // dá pra exigir revisão — o botão nem funcionaria.
-  if (!cfg.apiKey && (cfg.provider === 'anthropic' || !geminiConfigured())) return { ok: true }
+  if (!iaDisponivel(cfg)) return { ok: true }
 
   const label = ETAPAS.find(e => e.key === etapa)!.label
   const { data: entrada } = await supabase
@@ -137,7 +160,7 @@ export async function checarAvanco(
       ok: false, motivo: 'confirmar', erros, falhou,
       mensagem: falhou
         ? `A revisão de ${label} não foi concluída. Abra a tarefa para confirmar que segue sem ela.`
-        : `A revisão de ${label} apontou ${erros.length} ${erros.length === 1 ? 'erro' : 'erros'}. Abra a tarefa para confirmar que segue com ${erros.length === 1 ? 'ele' : 'eles'}.`,
+        : `A revisão de ${label} tem ${erros.length} ${erros.length === 1 ? 'apontamento' : 'apontamentos'}. Abra a tarefa para confirmar que segue assim.`,
     }
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

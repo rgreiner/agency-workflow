@@ -183,7 +183,7 @@ export async function updateActivityStatus(
   comment: string,
   /** A pessoa confirmou que segue com os apontamentos da Revisão IA. */
   aceitarRevisao = false,
-): Promise<{ error?: string; revisao?: 'confirmar'; erros?: { trecho: string; correcao: string }[]; falhou?: boolean } | undefined> {
+): Promise<{ error?: string; revisao?: 'confirmar'; erros?: { trecho: string; correcao: string; tipo?: string }[]; falhou?: boolean } | undefined> {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
@@ -625,7 +625,7 @@ export async function toggleCommentReaction(path: string, commentId: string, emo
  * o painel já mostra. Para avançar com erros, a pessoa confirma (checarAvanco).
  */
 export async function revisarTarefa(path: string, activityId: string): Promise<
-  | { ok: true; errors: { trecho: string; correcao: string }[]; model: string; truncated: boolean }
+  | { ok: true; errors: { trecho: string; correcao: string; tipo?: string }[]; model: string; truncated: boolean }
   | { ok: false; aviso: string }
   | { error: string }
 > {

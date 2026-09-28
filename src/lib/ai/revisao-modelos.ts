@@ -58,3 +58,8 @@ export function modeloValido(p: RevisaoProvider, m: string | null | undefined): 
 export function etapaRevisavel(status: string): RevisaoEtapa | null {
   return status === 'redacao' || status === 'design' || status === 'finalizacao' ? status : null
 }
+
+/** Linha no formato combinado: Erro "trecho" - correção / Pendente "pedido" - situação. */
+export function linhaApontamento(e: { trecho: string; correcao: string; tipo?: string }): string {
+  return `${e.tipo === 'pendencia' ? 'Pendente' : 'Erro'} "${e.trecho}" - ${e.correcao}`
+}

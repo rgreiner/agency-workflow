@@ -4,8 +4,9 @@ import { useState, useTransition } from 'react'
 import { Sparkles, Loader2, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { revisarTarefa } from '@/app/actions/activity'
+import { linhaApontamento } from '@/lib/ai/revisao-modelos'
 
-interface Apontamento { trecho: string; correcao: string }
+interface Apontamento { trecho: string; correcao: string; tipo?: string }
 
 type Resultado =
   | { tipo: 'erros'; errors: Apontamento[] }
@@ -65,10 +66,10 @@ export function RevisaoIA({ activityId, path, etapaLabel, ultima }: Props) {
           <p className="font-medium">Revisão solicitada:</p>
           <ul className="mt-1 space-y-1">
             {res.errors.map((e, i) => (
-              <li key={i}>Erro &quot;{e.trecho}&quot; - {e.correcao}</li>
+              <li key={i}>{linhaApontamento(e)}</li>
             ))}
           </ul>
-          <p className="mt-2 text-xs text-gray-500">Corrija e revise de novo — ou, ao avançar, confirme que segue com estes erros.</p>
+          <p className="mt-2 text-xs text-gray-500">Corrija e revise de novo — ou, ao avançar, confirme que segue com estes apontamentos.</p>
         </div>
       )}
       {!pending && res?.tipo === 'limpo' && (

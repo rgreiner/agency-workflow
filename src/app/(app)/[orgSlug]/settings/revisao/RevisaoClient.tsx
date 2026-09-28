@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/Select'
 import { Switch } from '@/components/ui/Switch'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { salvarRevisaoIA, testarRevisaoIA } from '@/app/actions/revisao-ia'
+import { ReservaCard } from './ReservaCard'
 import { ETAPAS, PROVEDORES, modeloPadrao, type RevisaoEtapa, type RevisaoEtapas, type RevisaoProvider } from '@/lib/ai/revisao-modelos'
 
 interface Config {
@@ -17,6 +18,7 @@ interface Config {
   model: string
   keyHint: string | null
   keyIlegivel: boolean
+  reserva: { provider: RevisaoProvider; model: string; keyHint: string | null; keyIlegivel: boolean } | null
 }
 
 const ICONE: Record<RevisaoEtapa, typeof FileText> = { redacao: FileText, design: Palette, finalizacao: PackageCheck }
@@ -97,8 +99,8 @@ export function RevisaoClient({ orgSlug, initial, geminiNoServidor }: { orgSlug:
           <Sparkles className="w-4 h-4 text-orange-500" /> Revisão por IA
         </h2>
         <p className="text-gray-500 text-sm mt-0.5">
-          Botão <strong>Revisar</strong> na tarefa: a pessoa pede a revisão antes de mover o status e vê só os erros
-          apontados. Seguir ou corrigir é decisão dela — nada trava a tarefa.
+          Botão <strong>Revisar</strong> na tarefa: antes de avançar a etapa, a pessoa revisa — erros de português e
+          pedidos do briefing ou dos comentários que ficaram de fora. Para seguir com apontamentos, ela confirma que concorda.
         </p>
       </div>
 
@@ -232,6 +234,8 @@ export function RevisaoClient({ orgSlug, initial, geminiNoServidor }: { orgSlug:
           )}
         </div>
       </div>
+
+      <ReservaCard orgSlug={orgSlug} initial={salvo.reserva} principal={salvo.provider} />
 
       <ConfirmDialog
         open={confirmarRemocao}

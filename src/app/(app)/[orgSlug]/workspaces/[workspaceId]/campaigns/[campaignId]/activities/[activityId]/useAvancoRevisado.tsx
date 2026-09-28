@@ -3,8 +3,10 @@
 import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { linhaApontamento } from '@/lib/ai/revisao-modelos'
 
-type Resultado = { error?: string; revisao?: 'confirmar'; erros?: { trecho: string; correcao: string }[]; falhou?: boolean } | undefined
+type Apontamento = { trecho: string; correcao: string; tipo?: string }
+type Resultado = { error?: string; revisao?: 'confirmar'; erros?: Apontamento[]; falhou?: boolean } | undefined
 
 /**
  * Mover o status passando pela Revisão IA: quando o servidor pede confirmação
@@ -12,7 +14,7 @@ type Resultado = { error?: string; revisao?: 'confirmar'; erros?: { trecho: stri
  * pessoa concordar, repete o pedido com `aceitar`. Cancelar = `{ cancelado }`.
  */
 export function useAvancoRevisado() {
-  const [pedido, setPedido] = useState<{ erros: { trecho: string; correcao: string }[]; falhou: boolean } | null>(null)
+  const [pedido, setPedido] = useState<{ erros: Apontamento[]; falhou: boolean } | null>(null)
   const resolver = useRef<((ok: boolean) => void) | null>(null)
 
   function responder(ok: boolean) {
@@ -38,7 +40,7 @@ export function useAvancoRevisado() {
   const dialogo = pedido && typeof document !== 'undefined' && createPortal(
     <ConfirmDialog
       open
-      title={pedido?.falhou ? 'Seguir sem a revisão?' : `Seguir com ${n} ${n === 1 ? 'erro apontado' : 'erros apontados'}?`}
+      title={pedido?.falhou ? 'Seguir sem a revisão?' : `Seguir com ${n} ${n === 1 ? 'apontamento' : 'apontamentos'}?`}
       description={pedido?.falhou
         ? 'A revisão por IA não foi concluída. Confirmando, você assume seguir sem ela — fica registrado na movimentação.'
         : 'Confirmando, você concorda em seguir com os apontamentos abaixo sem corrigir — fica registrado na movimentação.'}
@@ -49,7 +51,7 @@ export function useAvancoRevisado() {
     >
       {!!n && (
         <ul className="mt-3 space-y-1 text-sm text-gray-700 max-h-48 overflow-y-auto">
-          {pedido!.erros.map((e, i) => <li key={i}>Erro &quot;{e.trecho}&quot; - {e.correcao}</li>)}
+          {pedido!.erros.map((e, i) => <li key={i}>{linhaApontamento(e)}</li>)}
         </ul>
       )}
     </ConfirmDialog>,
