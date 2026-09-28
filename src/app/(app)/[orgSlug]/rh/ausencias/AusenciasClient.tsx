@@ -153,7 +153,7 @@ export function AusenciasClient({ orgSlug, hoje }: { orgSlug: string; hoje: stri
             <tbody>
               {pessoas.map(p => (
                 <tr key={p.id} className="group">
-                  <td className="sticky left-0 z-10 bg-white group-hover:bg-orange-50/40 px-4 py-2 border-b border-gray-50 transition-colors">
+                  <td className="sticky left-0 z-10 bg-white group-hover:bg-orange-500/100/10 px-4 py-2 border-b border-gray-50 transition-colors">
                     <Link href={`/${orgSlug}/rh/${p.id}`}
                       className="font-medium text-gray-900 hover:text-orange-600 transition-colors truncate block">
                       {p.nome}

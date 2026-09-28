@@ -261,14 +261,14 @@ export function DateRangeEditor({ activityId, path, startDate, dueDate, canEdit,
       <Calendar className="w-3.5 h-3.5 text-gray-400 shrink-0" />
       <button type="button" title="Editar só o início"
         onClick={() => { decidePos(); setPhase('start'); setSoUmaData(true); setOpen(true) }}
-        className={cn('px-1.5 py-0.5 rounded-md hover:bg-orange-50 hover:text-orange-700 transition-colors',
+        className={cn('px-1.5 py-0.5 rounded-md hover:bg-orange-500/10 hover:text-orange-700 transition-colors',
           localStart ? 'text-gray-700' : 'text-gray-400')}>
         {localStart ? fmtDisplay(localStart) : 'início'}
       </button>
       <span className="text-gray-300">→</span>
       <button type="button" title="Editar só o prazo"
         onClick={() => { decidePos(); setPhase('end'); setSoUmaData(true); setOpen(true) }}
-        className={cn('px-1.5 py-0.5 rounded-md hover:bg-orange-50 hover:text-orange-700 transition-colors',
+        className={cn('px-1.5 py-0.5 rounded-md hover:bg-orange-500/10 hover:text-orange-700 transition-colors',
           localEnd ? 'text-gray-700' : 'text-gray-400')}>
         {localEnd ? fmtDisplay(localEnd) : 'prazo'}
       </button>

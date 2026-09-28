@@ -181,7 +181,7 @@ export function MachinePath({ winPath, compact = false, editable = false, activi
         title={rotulo ? `${display} · clique para copiar` : 'Clique para copiar'}
         className={cn('flex items-center gap-1.5 min-w-0 text-xs hover:text-orange-600 transition-colors text-left',
           rotulo
-            ? 'px-2 py-0.5 rounded-lg bg-gray-50 font-medium text-gray-600 hover:bg-orange-50'
+            ? 'px-2 py-0.5 rounded-lg bg-gray-50 font-medium text-gray-600 hover:bg-orange-500/10'
             : 'text-gray-600 font-mono')}
       >
         <span className="truncate">{rotulo ?? display}</span>

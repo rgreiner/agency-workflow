@@ -103,7 +103,7 @@ export function PortalAccessButton({ orgSlug, workspaceId, contatos }: Props) {
                           onClick={() => handleConvite(c.id)}
                           disabled={isPending}
                           title="Enviar link de acesso por e-mail"
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-50 transition-colors disabled:opacity-50"
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-500/10 transition-colors disabled:opacity-50"
                         >
                           <Send className="w-4 h-4" />
                         </button>

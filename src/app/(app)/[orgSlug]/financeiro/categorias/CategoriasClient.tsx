@@ -169,7 +169,7 @@ export function CategoriasClient({ orgSlug, categorias: initCats, centros: initC
       )}
 
       <button onClick={addGrupo}
-        className="flex items-center justify-center gap-2 px-4 py-2.5 mb-8 text-sm text-orange-600 hover:bg-orange-50/50 rounded-xl border border-dashed border-orange-200 transition w-full">
+        className="flex items-center justify-center gap-2 px-4 py-2.5 mb-8 text-sm text-orange-600 hover:bg-orange-500/10 rounded-xl border border-dashed border-orange-200 transition w-full">
         <Plus className="w-4 h-4" /> Adicionar categoria de {tab === 'entrada' ? 'receita' : 'despesa'}
       </button>
 
@@ -206,7 +206,7 @@ export function CategoriasClient({ orgSlug, categorias: initCats, centros: initC
           ))}
         </div>
         <button onClick={() => setCentros(prev => [...prev, { nome: '', cor: COR_PRESETS[prev.length % COR_PRESETS.length] }])}
-          className="flex items-center gap-2 px-4 py-2.5 mt-2 text-sm text-orange-600 hover:bg-orange-50/50 rounded-xl border border-dashed border-orange-200 transition w-full justify-center">
+          className="flex items-center gap-2 px-4 py-2.5 mt-2 text-sm text-orange-600 hover:bg-orange-500/10 rounded-xl border border-dashed border-orange-200 transition w-full justify-center">
           <Plus className="w-4 h-4" /> Adicionar centro de custo
         </button>
 

@@ -255,7 +255,7 @@ function GraficoCategoria({ titulo, serie, categorias, ano, mesFoco, onMes, mesC
             </button>
           ))}
           <button onClick={onMostrarTudo}
-            className="px-2 py-1 rounded-lg text-[11px] font-medium text-orange-600 hover:bg-orange-50 transition-colors">
+            className="px-2 py-1 rounded-lg text-[11px] font-medium text-orange-600 hover:bg-orange-500/10 transition-colors">
             mostrar tudo
           </button>
         </div>

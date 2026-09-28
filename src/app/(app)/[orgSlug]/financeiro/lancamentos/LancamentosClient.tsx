@@ -596,7 +596,7 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
   }
 
   return (
-    <tr className={cn('group/linha transition-colors', isPending ? 'opacity-50' : 'hover:bg-orange-50/40', l.revisar && 'bg-amber-50/40')}>
+    <tr className={cn('group/linha transition-colors', isPending ? 'opacity-50' : 'hover:bg-orange-500/10', l.revisar && 'bg-amber-50/40')}>
       <td className="pl-4 pr-1 py-2.5">
         <input type="checkbox" checked={selecionado} disabled={!sel.ok}
           onChange={() => onToggleSel(l.id)} title={sel.motivo ?? 'Selecionar'}

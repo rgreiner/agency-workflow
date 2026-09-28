@@ -185,7 +185,7 @@ export function MargemClient({ orgSlug, hoje }: { orgSlug: string; hoje: string 
             </tr></thead>
             <tbody>
               {clientes.map(l => (
-                <tr key={l.workspace_id ?? l.cliente} className="border-b border-gray-50 last:border-0 hover:bg-orange-50/40 transition-colors">
+                <tr key={l.workspace_id ?? l.cliente} className="border-b border-gray-50 last:border-0 hover:bg-orange-500/10 transition-colors">
                   <td className="px-4 py-3 font-medium text-gray-900">
                     {l.cliente}
                     {emImplantacao(l) && (

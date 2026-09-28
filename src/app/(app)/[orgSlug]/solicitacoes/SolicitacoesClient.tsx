@@ -198,7 +198,7 @@ function EntradaCard({
                   onClick={() => onStatus(e.id, 'lido')}
                   disabled={busy}
                   title="Marcar como lida"
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-50 transition-colors disabled:opacity-50"
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-500/10 transition-colors disabled:opacity-50"
                 >
                   <Check className="w-4 h-4" />
                 </button>

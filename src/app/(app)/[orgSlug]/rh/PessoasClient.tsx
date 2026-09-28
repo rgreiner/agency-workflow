@@ -53,25 +53,33 @@ function tempoDeCasa(admISO: string, refISO: string): string {
  *  Duas réguas diferentes de propósito: a EXPERIÊNCIA conta do contrato atual
  *  (a admissão CLT), o TEMPO DE CASA conta de quando a pessoa entrou. Para quem
  *  foi efetivada, são datas distintas. */
-function periodo(c: ColaboradorRow, hoje: string): { txt: string; sub?: string; urgente?: boolean } | null {
+type Periodo =
+  /** Em contrato de experiência: a fase e, em destaque, a DATA LIMITE. */
+  | { tipo: 'exp'; fase: string; limite: string; extra: string; urgente: boolean }
+  | { tipo: 'casa'; txt: string; sub?: string }
+
+function periodo(c: ColaboradorRow, hoje: string): Periodo | null {
   if (!c.data_admissao) return null
   const naCasa = c.data_entrada_casa ?? c.data_admissao
-  if (c.status === 'desligado') return { txt: `durou ${tempoDeCasa(naCasa, c.data_demissao || hoje)}` }
+  if (c.status === 'desligado') return { tipo: 'casa', txt: `durou ${tempoDeCasa(naCasa, c.data_demissao || hoje)}` }
   const days = diffDays(c.data_admissao, hoje)
   const temExperiencia = c.tipo_vinculo !== 'estagio' && c.tipo_vinculo !== 'pj' && c.tipo_vinculo !== 'socio'
   if (temExperiencia && days >= 0 && days <= 90) {
     const primeiro = days <= 45
     const limite = primeiro ? 45 : 90
     const faltam = limite - days
-    // Âmbar só na reta final — é quando existe decisão a tomar (prorrogar aos
-    // 45 dias, efetivar aos 90). Aceso em todo mundo, o aviso não avisava nada.
     return {
+      tipo: 'exp',
+      fase: `Experiência ${primeiro ? '1º' : '2º'}`,
+      // A data é o que se decide em cima: prorrogar aos 45, efetivar aos 90.
+      limite: `${primeiro ? 'vence' : 'efetiva'} ${dd(addDays(c.data_admissao, limite))}`,
+      // Na reta final a contagem regressiva substitui o progresso — é o número
+      // que faz alguém agir.
+      extra: faltam <= 10 ? `faltam ${faltam} d` : `${days}/${limite} d`,
       urgente: faltam <= 10,
-      txt: `Experiência ${primeiro ? '1º' : '2º'}${faltam <= 10 ? ` · faltam ${faltam} d` : ''}`,
-      sub: `${days}/${limite} d · ${primeiro ? 'vence' : 'efetiva'} ${dd(addDays(c.data_admissao, limite))}`,
     }
   }
-  return { txt: tempoDeCasa(naCasa, hoje), sub: `aniversário ${dd(naCasa)}` }
+  return { tipo: 'casa', txt: tempoDeCasa(naCasa, hoje), sub: `aniversário ${dd(naCasa)}` }
 }
 /**
  * Marca só o que FOGE do normal. "Ativo" em toda linha não informava nada e
@@ -83,7 +91,7 @@ function marcador(c: ColaboradorRow, hoje: string): { label: string; cls: string
   const fim = c.aviso_previo_fim || c.data_demissao
   if (c.aviso_previo_modo && c.aviso_previo_ini && fim && hoje >= c.aviso_previo_ini && hoje <= fim && c.status !== 'desligado') {
     return {
-      label: `Em aviso até ${dd(fim)}`, cls: 'bg-amber-50 text-amber-800',
+      label: `Em aviso até ${dd(fim)}`, cls: 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
       title: c.aviso_previo_modo === 'reducao_2h'
         ? 'Aviso prévio — jornada reduzida em 2h/dia'
         : 'Aviso prévio — dispensa dos últimos 7 dias',
@@ -92,7 +100,7 @@ function marcador(c: ColaboradorRow, hoje: string): { label: string; cls: string
   if (c.status === 'desligado') {
     return { label: c.data_demissao ? `Desligado em ${dd(c.data_demissao)}` : 'Desligado', cls: 'bg-gray-100 text-gray-500' }
   }
-  if (c.status === 'afastado') return { label: 'Afastado', cls: 'bg-amber-50 text-amber-800' }
+  if (c.status === 'afastado') return { label: 'Afastado', cls: 'bg-amber-500/15 text-amber-800 dark:text-amber-300' }
   return null
 }
 
@@ -190,7 +198,7 @@ export function PessoasClient({ orgSlug, colaboradores, hoje }: { orgSlug: strin
                 const p = periodo(c, hoje)
                 const marca = marcador(c, hoje)
                 return (
-                  <tr key={c.id} className="group border-b border-gray-50 last:border-0 hover:bg-orange-50/40 transition-colors">
+                  <tr key={c.id} className="group border-b border-gray-50 last:border-0 hover:bg-orange-500/10 transition-colors">
                     <td className="px-4 py-2.5">
                       <Link href={`/${orgSlug}/rh/${c.id}`} className="block">
                         <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -220,11 +228,22 @@ export function PessoasClient({ orgSlug, colaboradores, hoje }: { orgSlug: strin
                       )}
                     </td>
                     <td className="px-4 py-2.5">
-                      {!p ? <span className="text-gray-300">—</span> : (
+                      {!p ? <span className="text-gray-300">—</span> : p.tipo === 'exp' ? (
                         <div className="leading-tight">
-                          {p.urgente
-                            ? <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-800">{p.txt}</span>
-                            : <span className="text-gray-700">{p.txt}</span>}
+                          {/* Âmbar translúcido: no escuro, amber-50 vira bloco
+                              claro. O texto muda de tom por tema. */}
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold
+                            ${p.urgente ? 'bg-amber-500/20 text-amber-800 dark:text-amber-300' : 'bg-amber-500/10 text-amber-800 dark:text-amber-300'}`}>
+                            {p.fase}
+                          </span>
+                          <div className="mt-1 text-sm leading-tight">
+                            <b className={`font-semibold tabular-nums ${p.urgente ? 'text-amber-800 dark:text-amber-300' : 'text-gray-900'}`}>{p.limite}</b>
+                            <span className={`text-[11px] tabular-nums ${p.urgente ? 'text-amber-700 dark:text-amber-400' : 'text-gray-400'}`}> · {p.extra}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="leading-tight">
+                          <span className="text-gray-700">{p.txt}</span>
                           {p.sub && <div className="text-[11px] text-gray-400 mt-0.5">{p.sub}</div>}
                         </div>
                       )}
@@ -240,7 +259,7 @@ export function PessoasClient({ orgSlug, colaboradores, hoje }: { orgSlug: strin
                           </button>
                         )}
                         <button onClick={() => setDocsFor({ id: c.id, nome: nomeLegivel(c.nome) })} title="Documentos"
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-50 transition-colors">
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-500/10 transition-colors">
                           <Paperclip className="w-3.5 h-3.5" /> Documentos
                         </button>
                         {/* Excluir é raro e sem volta: aparece ao passar na linha

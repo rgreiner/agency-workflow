@@ -96,7 +96,7 @@ export function DocumentosClient({ linhas }: { linhas: DocHistLinha[] }) {
                 return (
                   <Fragment key={d.documento}>
                     <tr
-                      className={cn('border-b border-gray-50 transition-colors', multi && 'cursor-pointer hover:bg-orange-50/30')}
+                      className={cn('border-b border-gray-50 transition-colors', multi && 'cursor-pointer hover:bg-orange-500/10')}
                       onClick={() => multi && setAberto(open ? null : d.documento)}
                     >
                       <td className="px-4 py-2 text-sm font-medium text-gray-900 tabular-nums whitespace-nowrap">

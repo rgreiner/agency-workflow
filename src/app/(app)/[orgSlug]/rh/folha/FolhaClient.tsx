@@ -100,7 +100,7 @@ export function FolhaClient({ orgSlug, linhas, pessoas = [] }: {
             </tr></thead>
             <tbody>
               {competencias.map(c => (
-                <tr key={c.competencia} className="border-b border-gray-50 last:border-0 hover:bg-orange-50/40 transition">
+                <tr key={c.competencia} className="border-b border-gray-50 last:border-0 hover:bg-orange-500/10 transition">
                   <td className="px-4 py-3 font-medium text-gray-900 tabular-nums">{compLabel(c.competencia)}</td>
                   <td className="px-4 py-3 text-gray-500"><span className="inline-flex items-center gap-1"><Users className="w-3.5 h-3.5" />{c.pessoas}</span></td>
                   <td className="px-4 py-3 text-right tabular-nums font-medium text-gray-900">{formatBRL(c.liquido)}</td>

@@ -272,7 +272,7 @@ function LinhaEntrega({ orgSlug, e, cfg, onEditar }: {
 function Atalho({ url, label }: { url: string; label: string }) {
   return (
     <a href={url} target="_blank" rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-gray-50 text-[11px] font-medium text-gray-600 hover:bg-orange-50 hover:text-orange-700 transition-colors">
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-gray-50 text-[11px] font-medium text-gray-600 hover:bg-orange-500/10 hover:text-orange-700 transition-colors">
       <ExternalLink className="w-3 h-3" /> {label}
     </a>
   )

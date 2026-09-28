@@ -626,7 +626,7 @@ function BotaoPastaDoMes({ orgSlug, vinculoId, temPastaCliente, pasta }: {
       <button onClick={abrir} disabled={pending}
         title={`Pasta do mês em ${pasta}`} aria-label={`Abrir a pasta do mês em ${pasta}`}
         className="shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-lg text-gray-400
-                   hover:bg-orange-50 hover:text-orange-600 transition-colors disabled:opacity-60
+                   hover:bg-orange-500/10 hover:text-orange-600 transition-colors disabled:opacity-60
                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60">
         {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderPlus className="w-4 h-4" />}
       </button>
@@ -643,7 +643,7 @@ function BotaoPastaDoMes({ orgSlug, vinculoId, temPastaCliente, pasta }: {
               {escolha.opcoes.map(o => (
                 <li key={o.id}>
                   <button onClick={() => definir(o.id)} disabled={pending}
-                    className="w-full text-left px-3 py-2 rounded-xl border border-gray-200 hover:border-orange-300 hover:bg-orange-50/50 transition-colors text-sm text-gray-700 disabled:opacity-60">
+                    className="w-full text-left px-3 py-2 rounded-xl border border-gray-200 hover:border-orange-300 hover:bg-orange-500/10 transition-colors text-sm text-gray-700 disabled:opacity-60">
                     {o.nome}
                   </button>
                 </li>

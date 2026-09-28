@@ -677,7 +677,7 @@ function Links({ item, links, compacta }: { item: ItemFila; links: LinksVisiveis
     <div className={cn('flex items-center gap-1.5 flex-wrap', compacta ? 'mt-1.5' : 'mt-2')}>
       {externos.map(l => (
         <a key={l.label} href={l.url} target="_blank" rel="noopener noreferrer"
-          className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-gray-50 text-[11px] font-medium text-gray-600 hover:bg-orange-50 hover:text-orange-700 transition-colors', FOCO)}>
+          className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-gray-50 text-[11px] font-medium text-gray-600 hover:bg-orange-500/10 hover:text-orange-700 transition-colors', FOCO)}>
           <ExternalLink className="w-3 h-3" aria-hidden /> {l.label}
         </a>
       ))}
@@ -688,7 +688,7 @@ function Links({ item, links, compacta }: { item: ItemFila; links: LinksVisiveis
       )}
       {pasta === 'drive' && (
         <a href={item.pastaUrl!} target="_blank" rel="noopener noreferrer"
-          className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-gray-50 text-[11px] font-medium text-gray-600 hover:bg-orange-50 hover:text-orange-700 transition-colors', FOCO)}>
+          className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-gray-50 text-[11px] font-medium text-gray-600 hover:bg-orange-500/10 hover:text-orange-700 transition-colors', FOCO)}>
           <ExternalLink className="w-3 h-3" aria-hidden /> Pasta
         </a>
       )}

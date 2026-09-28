@@ -66,7 +66,7 @@ export function Referencias({ activityId, hasFolder, canEdit }: {
                     <li key={f.ref}>
                       {f.link ? (
                         <a href={f.link} target="_blank" rel="noopener noreferrer" title={`${f.name} · ${fmtBytes(f.size)}`}
-                          className="inline-flex items-center gap-1 max-w-[16rem] px-2 py-0.5 rounded-lg bg-gray-50 text-[11px] font-medium text-gray-600 hover:bg-orange-50 hover:text-orange-700 transition-colors">
+                          className="inline-flex items-center gap-1 max-w-[16rem] px-2 py-0.5 rounded-lg bg-gray-50 text-[11px] font-medium text-gray-600 hover:bg-orange-500/10 hover:text-orange-700 transition-colors">
                           <ExternalLink className="w-3 h-3 shrink-0" /> <span className="truncate">{f.name}</span>
                           <span className="text-gray-400 shrink-0">{fmtBytes(f.size)}</span>
                         </a>

@@ -33,7 +33,7 @@ export function ContatosButton({ contatos, titulo }: { contatos: ContatoCard[]; 
         type="button"
         onClick={() => setOpen(true)}
         title="Ver contatos (cliente / fornecedor / veículo)"
-        className="p-1.5 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-50 transition-colors"
+        className="p-1.5 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-500/10 transition-colors"
       >
         <Contact className="w-4 h-4" />
       </button>

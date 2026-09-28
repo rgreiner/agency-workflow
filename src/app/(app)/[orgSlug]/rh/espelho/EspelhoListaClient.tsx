@@ -53,7 +53,7 @@ export function EspelhoListaClient({ orgSlug, compInicial }: { orgSlug: string; 
             </tr></thead>
             <tbody>
               {lista.colaboradores.map(c => (
-                <tr key={c.id} className="border-b border-gray-50 last:border-0 hover:bg-orange-50/40 transition">
+                <tr key={c.id} className="border-b border-gray-50 last:border-0 hover:bg-orange-500/10 transition">
                   <td className="px-4 py-3">
                     <Link href={`/${orgSlug}/rh/espelho/${c.id}?comp=${comp}`} className="font-medium text-gray-900 hover:text-orange-600 transition">{c.nome}</Link>
                     <div className="text-xs text-gray-400">

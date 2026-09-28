@@ -330,7 +330,7 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
               </tr></thead>
               <tbody>
                 {run.rh_fechamento_run_linha.slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')).map(l => (
-                  <tr key={l.colaborador_id} className="border-b border-gray-50 last:border-0 hover:bg-orange-50/40 transition-colors">
+                  <tr key={l.colaborador_id} className="border-b border-gray-50 last:border-0 hover:bg-orange-500/10 transition-colors">
                     <td className="px-4 py-3">
                       <Link href={`/${orgSlug}/rh/espelho/${l.colaborador_id}?comp=${comp}`}
                         className="font-medium text-gray-900 hover:text-orange-600 transition-colors">{l.nome}</Link>
@@ -433,7 +433,7 @@ export function FechamentoClient({ orgSlug, config, hoje, runs, emailsContab }: 
                     const jaCoberto = !!l.data_demissao && cobertoAteDemissao(l.colaborador_id, l.data_demissao)
                     return (
                       <tr key={l.colaborador_id} className={cn('border-b border-gray-50 last:border-0 transition-colors',
-                        marcado ? 'hover:bg-orange-50/40' : 'opacity-50')}>
+                        marcado ? 'hover:bg-orange-500/10' : 'opacity-50')}>
                         <td className="pl-4 pr-1 py-3">
                           <input type="checkbox" checked={marcado}
                             onChange={e => setIncluir(p => ({ ...p, [l.colaborador_id]: e.target.checked }))}

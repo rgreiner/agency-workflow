@@ -117,7 +117,7 @@ export function FaturarButton({ action, missing, okToast, enviar, destinatarioPa
       {enviar && (
         <button onClick={() => { setDest(destinatarioPadrao ?? ''); setMode('enviar') }}
           title="Faturar e enviar o financeiro ao cliente por e-mail"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-orange-200 text-orange-700 text-xs font-medium rounded-lg hover:bg-orange-50 active:scale-[0.97] transition">
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-orange-200 text-orange-700 text-xs font-medium rounded-lg hover:bg-orange-500/10 active:scale-[0.97] transition">
           <Send className="w-3.5 h-3.5" /> <span className="hidden sm:inline">e enviar</span>
         </button>
       )}

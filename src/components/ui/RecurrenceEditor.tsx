@@ -112,7 +112,7 @@ export function RecurrenceEditor({ activityId, path, recurrence, remaining, rese
           'flex items-center gap-1.5 text-xs rounded-lg px-3 py-1.5 transition',
           state.enabled
             ? 'bg-orange-50 border border-orange-200 text-orange-700 hover:bg-orange-100'
-            : 'bg-gray-50 border border-gray-200 text-gray-400 hover:border-orange-300 hover:bg-orange-50',
+            : 'bg-gray-50 border border-gray-200 text-gray-400 hover:border-orange-300 hover:bg-orange-500/10',
         )}
       >
         <Repeat className="w-3.5 h-3.5 shrink-0" />

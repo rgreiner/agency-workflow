@@ -367,7 +367,7 @@ function TaskPicker({ orgSlug, onPick, onClose }: {
         )}
         {results.map(a => (
           <button key={a.id} onClick={() => onPick(a)}
-            className="w-full text-left px-3 py-1.5 hover:bg-orange-50 transition-colors">
+            className="w-full text-left px-3 py-1.5 hover:bg-orange-500/10 transition-colors">
             <p className="text-xs text-gray-800 truncate">{a.title}</p>
             <p className="text-[10px] text-gray-400 truncate">{a.workspaceName} › {a.campaignName}</p>
           </button>

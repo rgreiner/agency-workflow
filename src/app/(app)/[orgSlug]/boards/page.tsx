@@ -66,7 +66,7 @@ export default async function BoardsPage({
           {/* New board card */}
           <Link
             href={`/${orgSlug}/boards/new`}
-            className="group flex flex-col items-center justify-center h-40 rounded-2xl border-2 border-dashed border-gray-200 hover:border-orange-300 hover:bg-orange-50/50 transition"
+            className="group flex flex-col items-center justify-center h-40 rounded-2xl border-2 border-dashed border-gray-200 hover:border-orange-300 hover:bg-orange-500/10 transition"
           >
             <div className="w-10 h-10 rounded-xl bg-gray-100 group-hover:bg-orange-100 flex items-center justify-center mb-2 transition">
               <Plus className="w-5 h-5 text-gray-400 group-hover:text-orange-500 transition" />

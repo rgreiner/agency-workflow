@@ -642,7 +642,7 @@ function PairRow({ orgSlug, movement }: { orgSlug: string; movement: MovementVie
         <SeloModo status={movement.status} modo={movement.modo} />
         <button onClick={desfazer} disabled={isPending} title="Desfazer conciliação"
           aria-label="Desfazer conciliação"
-          className="p-1 rounded-md text-gray-300 hover:text-orange-600 hover:bg-orange-50 transition-colors disabled:opacity-40">
+          className="p-1 rounded-md text-gray-300 hover:text-orange-600 hover:bg-orange-500/10 transition-colors disabled:opacity-40">
           {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
         </button>
       </div>

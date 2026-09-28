@@ -174,7 +174,7 @@ export function ImportarClient({ orgSlug, totalAtual, ultimoImport }: {
 
       {/* dropzone / file picker */}
       <label
-        className="block border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center cursor-pointer hover:border-orange-300 hover:bg-orange-50/30 transition-colors"
+        className="block border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center cursor-pointer hover:border-orange-300 hover:bg-orange-500/10 transition-colors"
         onDragOver={e => e.preventDefault()}
         onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) onFile(f) }}
       >

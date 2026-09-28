@@ -240,7 +240,7 @@ export function VeiculosClient({ orgSlug, veiculos, archivedView }: {
                     <div className="flex items-center justify-end gap-1.5">
                       {v.type === 'externa' && !v.archived && (
                         <button onClick={() => setImportando(v)}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-50 transition" title="Importar/atualizar inventário de pontos">
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-500/10 transition" title="Importar/atualizar inventário de pontos">
                           <MapPinned className="w-3.5 h-3.5" />
                         </button>
                       )}

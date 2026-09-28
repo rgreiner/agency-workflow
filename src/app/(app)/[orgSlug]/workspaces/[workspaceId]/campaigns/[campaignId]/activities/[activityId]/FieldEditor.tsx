@@ -64,7 +64,7 @@ export function FieldEditor({ activityId, path, field, value, canEdit, type = 't
           {isPending && <Loader2 aria-hidden className="w-3 h-3 text-orange-500 animate-spin shrink-0" />}
         </>
       )
-      const cls = `relative flex items-center gap-1.5 group/fe flex-1 min-w-0 rounded px-1 -ml-1 py-1 text-left ${canEdit ? 'cursor-pointer hover:bg-orange-50 transition' : ''}`
+      const cls = `relative flex items-center gap-1.5 group/fe flex-1 min-w-0 rounded px-1 -ml-1 py-1 text-left ${canEdit ? 'cursor-pointer hover:bg-orange-500/10 transition' : ''}`
       return canEdit
         ? <button type="button" onClick={open} className={cls}>{inner}</button>
         : <div className={cls}>{inner}</div>
@@ -131,7 +131,7 @@ export function FieldEditor({ activityId, path, field, value, canEdit, type = 't
           <button
             onClick={open}
             aria-label="Editar"
-            className="p-1 rounded text-gray-400 hover:text-orange-500 hover:bg-orange-50 opacity-0 group-hover/fe:opacity-100 focus-visible:opacity-100 transition shrink-0"
+            className="p-1 rounded text-gray-400 hover:text-orange-500 hover:bg-orange-500/10 opacity-0 group-hover/fe:opacity-100 focus-visible:opacity-100 transition shrink-0"
           >
             <Pencil aria-hidden className="w-3 h-3" />
           </button>

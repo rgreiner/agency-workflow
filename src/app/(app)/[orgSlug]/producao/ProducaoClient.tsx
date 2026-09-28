@@ -138,7 +138,7 @@ export function ProducaoClient({
                   {g.rows.map(r => {
                     const cor = MIDIA_SITUACAO_COLORS[r.situacao]
                     return (
-                      <tr key={r.id} className="border-b border-gray-50 hover:bg-orange-50/30 transition-colors">
+                      <tr key={r.id} className="border-b border-gray-50 hover:bg-orange-500/10 transition-colors">
                         <td className="px-4 py-1.5 text-sm text-gray-400 tabular-nums whitespace-nowrap">{docNumero(r.serie, r.numero)}</td>
                         <td className="px-4 py-1.5 text-sm font-medium"><Link href={`${base}/${r.id}`} className="text-gray-900 hover:text-orange-600 transition-colors">{r.titulo}</Link></td>
                         <td className="px-4 py-1.5 text-sm text-gray-900 text-right font-medium tabular-nums">{formatBRL(r.valor)}</td>
@@ -168,13 +168,13 @@ export function ProducaoClient({
                             )}
                             {gerarPedidos && r.situacao === 'aprovado' && (r.gerados?.length ?? 0) === 0 && (
                               <button onClick={() => gerarPPs(r)} disabled={isPending} title="Gerar Pedidos de Produção das opções escolhidas"
-                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg border border-orange-200 text-orange-700 hover:bg-orange-50 transition-colors disabled:opacity-50 whitespace-nowrap">
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg border border-orange-200 text-orange-700 hover:bg-orange-500/10 transition-colors disabled:opacity-50 whitespace-nowrap">
                                 <Factory className="w-3.5 h-3.5 shrink-0" /> Gerar PPs
                               </button>
                             )}
                             {gerarDocs && r.situacao === 'aprovado' && (
                               <button onClick={() => gerarDocsFn(r)} disabled={isPending} title="Gerar mídias/produções/fees em rascunho"
-                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg border border-orange-200 text-orange-700 hover:bg-orange-50 transition-colors disabled:opacity-50 whitespace-nowrap">
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg border border-orange-200 text-orange-700 hover:bg-orange-500/10 transition-colors disabled:opacity-50 whitespace-nowrap">
                                 <Files className="w-3.5 h-3.5 shrink-0" /> Gerar docs
                               </button>
                             )}

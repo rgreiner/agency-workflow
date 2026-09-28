@@ -48,7 +48,7 @@ export function ResetPasswordButton({ orgId, userId, name }: { orgId: string; us
         onClick={() => setOpen(true)}
         title="Redefinir senha"
         aria-label="Redefinir senha"
-        className="p-1.5 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-50 transition"
+        className="p-1.5 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-500/10 transition"
       >
         <KeyRound className="w-3.5 h-3.5" />
       </button>

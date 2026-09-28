@@ -286,7 +286,7 @@ function ContaCard({ conta: c, orgSlug, isPending, onEditar, onToggleAtivo, onTo
           </button>
         ) : (
           <Link href={`/${orgSlug}/financeiro/contas/${c.id}`}
-            className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:text-orange-600 hover:bg-orange-50 transition-colors active:scale-[0.97]">
+            className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:text-orange-600 hover:bg-orange-500/10 transition-colors active:scale-[0.97]">
             <Landmark className="w-3.5 h-3.5" /> Extrato
           </Link>
         )}

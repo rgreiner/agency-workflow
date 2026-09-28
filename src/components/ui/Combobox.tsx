@@ -143,7 +143,7 @@ export function Combobox({
               type="button"
               disabled={creating}
               onMouseDown={e => { e.preventDefault(); criar() }}
-              className={cn('w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-orange-700 hover:bg-orange-50 transition-colors disabled:opacity-60',
+              className={cn('w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-orange-700 hover:bg-orange-500/10 transition-colors disabled:opacity-60',
                 filtered.length > 0 && 'border-t border-gray-100 mt-1')}
             >
               {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> : <Plus className="w-3.5 h-3.5 shrink-0" />}

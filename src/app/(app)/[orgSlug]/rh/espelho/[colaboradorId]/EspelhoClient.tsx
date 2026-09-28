@@ -121,7 +121,7 @@ export function EspelhoClient({ orgSlug, colaboradorId, compInicial }: { orgSlug
                 const temHist = !!d.ajuste || d.log.length > 0 || !!d.justificativa
                 return (
                   <>
-                    <tr key={d.data} className={`border-b border-gray-50 last:border-0 transition ${fds || semCarga ? 'bg-gray-50/50' : 'hover:bg-orange-50/40'}`}>
+                    <tr key={d.data} className={`border-b border-gray-50 last:border-0 transition ${fds || semCarga ? 'bg-gray-50/50' : 'hover:bg-orange-500/10'}`}>
                       <td className="px-4 py-2.5">
                         <span className="text-gray-500 text-xs">{DOW[d.dow]}</span>{' '}
                         <span className="tabular-nums text-gray-900">{dataBR(d.data)}</span>

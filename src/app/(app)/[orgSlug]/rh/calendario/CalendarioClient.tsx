@@ -100,7 +100,7 @@ export function CalendarioClient({ orgSlug, feriados, hoje }: { orgSlug: string;
               return (
                 <button key={i} onClick={() => abrir(d)}
                   className={`aspect-square rounded-xl text-sm transition active:scale-[0.97] flex flex-col items-center justify-center gap-0.5 ring-1
-                    ${f ? `${CLS[f.tipo] ?? CLS.feriado} font-medium` : fds ? 'bg-gray-50 text-gray-400 ring-transparent hover:bg-gray-100' : 'bg-white text-gray-700 ring-gray-100 hover:bg-orange-50'}
+                    ${f ? `${CLS[f.tipo] ?? CLS.feriado} font-medium` : fds ? 'bg-gray-50 text-gray-400 ring-transparent hover:bg-gray-100' : 'bg-white text-gray-700 ring-gray-100 hover:bg-orange-500/10'}
                     ${isHoje ? 'ring-2 ring-orange-500' : ''}`}
                   title={f ? `${tipoLabel(f.tipo)}${f.nome ? ` — ${f.nome}` : ''}` : 'Marcar este dia'}>
                   <span>{d}</span>
