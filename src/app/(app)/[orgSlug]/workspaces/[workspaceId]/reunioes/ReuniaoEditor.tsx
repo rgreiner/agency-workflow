@@ -47,7 +47,6 @@ export function ReuniaoEditor({
   const sujo = JSON.stringify(ata) !== salvo
   const [salvando, startSalvar] = useTransition()
   const [organizando, setOrganizando] = useState(false)
-  const [verTranscricao, setVerTranscricao] = useState(!!inicial.transcricao && !inicial.notas)
   const [abertos, setAbertos] = useState<Set<number>>(new Set())
   const [confirmPublicar, setConfirmPublicar] = useState(false)
   const [confirmExcluir, setConfirmExcluir] = useState(false)
@@ -270,51 +269,65 @@ export function ReuniaoEditor({
         </label>
       </div>
 
-      {/* ── Material bruto (interno) ── */}
-      <section className="mb-6">
-        <div className="flex items-end justify-between gap-3 mb-2">
-          <div>
-            <h2 className="text-sm font-semibold text-gray-900">Notas da reunião</h2>
-            <p className="text-xs text-gray-500">Cole as notas do Granola. Só o time vê.</p>
-          </div>
-          {podeEditar && (
-            <button type="button" onClick={organizar} disabled={!temTexto || organizando}
-              className="press inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl bg-orange-50 text-orange-700 hover:bg-orange-100 transition-colors disabled:opacity-50">
-              {organizando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              {organizando ? 'Organizando…' : 'Organizar com IA'}
-            </button>
-          )}
-        </div>
-        <textarea value={ata.notas} disabled={ro} rows={8}
-          onChange={e => set('notas', e.target.value)}
-          placeholder="Resumo, decisões e combinados, do jeito que o Granola gerou"
-          className={cn(inputCls, 'resize-y leading-relaxed')} />
-        <button type="button" onClick={() => setVerTranscricao(v => !v)}
-          className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors">
-          <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', verTranscricao && 'rotate-180')} />
-          Transcrição {ata.transcricao.trim() ? `(${Math.round(ata.transcricao.length / 1000)} mil caracteres)` : '(opcional)'}
-        </button>
-        {verTranscricao && (
+      {/* ── 1. O que aconteceu: material bruto, só o time vê ── */}
+      <section className="mb-4">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500 mb-3">
+          1 · O que aconteceu <span className="normal-case tracking-normal font-normal text-gray-400">— só o time vê</span>
+        </h2>
+        <label className="block mb-3">
+          <span className="block text-sm font-semibold text-gray-900">Notas da reunião</span>
+          <span className="block text-xs text-gray-500 mb-2">Cole as notas que o Granola gerou.</span>
+          <textarea value={ata.notas} disabled={ro} rows={8}
+            onChange={e => set('notas', e.target.value)}
+            placeholder="Resumo, decisões e combinados, do jeito que o Granola gerou"
+            className={cn(inputCls, 'resize-y leading-relaxed')} />
+        </label>
+        <label className="block">
+          <span className="block text-sm font-semibold text-gray-900">
+            Transcrição <span className="font-normal text-gray-400">(opcional{ata.transcricao.trim() ? ` · ${Math.round(ata.transcricao.length / 1000)} mil caracteres` : ''})</span>
+          </span>
+          <span className="block text-xs text-gray-500 mb-2">A IA usa para achar detalhes que as notas não trazem. Nunca vai para o cliente.</span>
           <textarea value={ata.transcricao} disabled={ro} rows={10}
             onChange={e => set('transcricao', e.target.value)}
-            placeholder="Cole a transcrição completa. A IA usa para achar detalhes que as notas não trazem. Nunca vai para o cliente."
-            className={cn(inputCls, 'mt-2 resize-y font-mono text-xs leading-relaxed')} />
-        )}
+            placeholder="Cole a transcrição completa"
+            className={cn(inputCls, 'resize-y font-mono text-xs leading-relaxed')} />
+        </label>
       </section>
 
-      {/* ── O que o cliente lê ── */}
+      {/* A ponte entre os dois blocos: a IA lê o 1 e escreve o 2. */}
+      {podeEditar && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-orange-500/40 bg-orange-500/5 px-4 py-3 mb-6">
+          <p className="flex-1 min-w-[14rem] text-sm text-gray-600">
+            A IA lê as notas e a transcrição e escreve o resumo e os próximos passos abaixo. Você revisa antes de salvar.
+          </p>
+          <button type="button" onClick={organizar} disabled={!temTexto || organizando}
+            className="press inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold rounded-xl text-[#fff] bg-orange-600 hover:bg-orange-700 transition-colors disabled:opacity-50">
+            {organizando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            {organizando ? 'Organizando…' : 'Organizar com IA'}
+          </button>
+        </div>
+      )}
+
+      {/* ── 2. O resultado: o que o cliente vê quando a ata é publicada ── */}
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500 mb-3">
+        2 · Resultado <span className="normal-case tracking-normal font-normal text-gray-400">— o cliente vê se você publicar</span>
+      </h2>
       <section className="mb-6">
-        <h2 className="text-sm font-semibold text-gray-900">Resumo</h2>
-        <p className="text-xs text-gray-500 mb-2">É o texto que o cliente lê no portal quando a ata é publicada.</p>
-        <textarea value={ata.resumo} disabled={ro} rows={7}
-          onChange={e => set('resumo', e.target.value)}
-          placeholder="Contexto, decisões e pontos em aberto"
-          className={cn(inputCls, 'resize-y leading-relaxed')} />
+        <label className="block">
+          <span className="block text-sm font-semibold text-gray-900">Resumo para o cliente</span>
+          <span className="block text-xs text-gray-500 mb-2">
+            A versão limpa das notas: contexto, decisões e pontos em aberto, sem comentário interno. É o texto que o cliente lê no portal.
+          </span>
+          <textarea value={ata.resumo} disabled={ro} rows={7}
+            onChange={e => set('resumo', e.target.value)}
+            placeholder={podeEditar ? 'Use "Organizar com IA" para escrever a partir das notas, ou escreva aqui' : ''}
+            className={cn(inputCls, 'resize-y leading-relaxed')} />
+        </label>
       </section>
 
       <section className="mb-6">
-        <h2 className="text-sm font-semibold text-gray-900">Próximos passos</h2>
-        <p className="text-xs text-gray-500 mb-2">Os da agência viram tarefa com o briefing rascunhado. Os do cliente aparecem para ele no portal.</p>
+        <h3 className="text-sm font-semibold text-gray-900">Próximos passos</h3>
+        <p className="text-xs text-gray-500 mb-2">Os da agência viram tarefa (ou se ligam a uma que já existe). Os do cliente aparecem para ele no portal.</p>
 
         <ul className="space-y-2">
           {ata.passos.map((p, i) => {
