@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import { Plus, GanttChart } from 'lucide-react'
+import { Plus, GanttChart, NotebookPen } from 'lucide-react'
 import { loadActivityList } from '@/lib/activity-list'
 import { ListaClient } from '../../views/lista/ListaClient'
 import { WorkspaceEditButton } from './WorkspaceEditButton'
@@ -116,6 +116,13 @@ export default async function WorkspacePage({
         }
         secondaryActions={
           <>
+            <Link
+              href={`/${orgSlug}/workspaces/${workspaceId}/reunioes`}
+              title="Atas das reuniões com o cliente"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition"
+            >
+              <NotebookPen className="w-4 h-4" /> <span className="hidden sm:inline">Reuniões</span>
+            </Link>
             <Link
               href={`/${orgSlug}/workspaces/${workspaceId}/tempos`}
               title="Quanto tempo cada trabalho ficou em cada etapa"

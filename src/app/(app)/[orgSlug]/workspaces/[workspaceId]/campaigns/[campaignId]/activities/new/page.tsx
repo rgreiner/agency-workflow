@@ -3,7 +3,8 @@ import { getUsuario } from '@/lib/auth/server'
 import { membrosAtivos } from '@/lib/membros'
 import { porNome } from '@/lib/utils'
 import { decomporTitulo, pautaListasDe } from '@/lib/atividade-titulo'
-import { NewActivityForm, type MembroSelecionavel, type NovaAtividadeInicial } from './NewActivityForm'
+import { NewActivityForm, type MembroSelecionavel, type NovaAtividadeInicial, type OrigemReuniao } from './NewActivityForm'
+import { dataBR } from '@/lib/reunioes'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -15,15 +16,19 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * `?from=<id>` = duplicar: herda veículo/formato/objetivo/título, briefing, prioridade,
  * complexidade, horas e responsáveis da tarefa de origem; data e período são de
  * hoje. A leitura passa pela RLS — quem não enxerga a origem cria em branco.
+ *
+ * `?passo=<id>` = próximo passo de uma ata (mig. 306): título da demanda = o passo,
+ * briefing = o rascunho que a IA tirou da reunião. Passo que já virou tarefa, ou de
+ * outro cliente, é ignorado.
  */
 export default async function NewActivityPage({ params, searchParams, modal = false }: {
   params: Promise<{ orgSlug: string; workspaceId: string; campaignId: string }>
-  searchParams?: Promise<{ from?: string }>
+  searchParams?: Promise<{ from?: string; passo?: string }>
   /** Renderizada dentro do TaskModal (intercept): layout ocupa a altura do card. */
   modal?: boolean
 }) {
   const { workspaceId } = await params
-  const { from } = (await searchParams) ?? {}
+  const { from, passo } = (await searchParams) ?? {}
   const supabase = await createClient()
   const user = await getUsuario()
 
@@ -76,5 +81,20 @@ export default async function NewActivityPage({ params, searchParams, modal = fa
     }
   }
 
-  return <NewActivityForm members={members} currentUserId={user?.id ?? null} inicial={inicial} equipeIds={equipeIds} modal={modal} />
+  let origem: OrigemReuniao | null = null
+  if (!inicial && passo && UUID_RE.test(passo)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: p } = await (supabase as any).from('reuniao_passos')
+      .select('id, texto, rascunho, activity_id, reunioes(titulo, realizada_em, workspace_id)')
+      .eq('id', passo).maybeSingle()
+    const r = p?.reunioes as { titulo: string; realizada_em: string; workspace_id: string } | null
+    if (p && r && !p.activity_id && r.workspace_id === workspaceId) {
+      origem = {
+        passoId: p.id, texto: p.texto, rascunho: p.rascunho ?? '',
+        reuniaoTitulo: r.titulo, reuniaoData: dataBR(r.realizada_em),
+      }
+    }
+  }
+
+  return <NewActivityForm members={members} currentUserId={user?.id ?? null} inicial={inicial} origem={origem} equipeIds={equipeIds} modal={modal} />
 }

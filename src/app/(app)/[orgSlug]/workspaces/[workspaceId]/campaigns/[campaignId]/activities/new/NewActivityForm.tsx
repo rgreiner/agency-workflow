@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useTransition, useMemo } from 'react'
+import { useState, useTransition, useMemo, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { EditorContent } from '@tiptap/react'
 import { createActivity } from '@/app/actions/activity'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity } from '@/types'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
-import { ArrowLeft, FolderOpen, ExternalLink, Sparkles, X, Flag, Copy } from 'lucide-react'
+import { ArrowLeft, FolderOpen, ExternalLink, Sparkles, X, Flag, Copy, NotebookPen } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { DatePicker } from '@/components/ui/DatePicker'
@@ -45,6 +45,15 @@ export interface NovaAtividadeInicial {
   assigneeIds: string[]
 }
 
+/** Passo de uma ata de reunião (mig. 306, ?passo=<id>): o rascunho vira o briefing. */
+export interface OrigemReuniao {
+  passoId: string
+  reuniaoTitulo: string
+  reuniaoData: string
+  texto: string
+  rascunho: string
+}
+
 function parseDriveId(url: string): string | null {
   // https://drive.google.com/drive/folders/ID
   let m = url.match(/\/folders\/([a-zA-Z0-9_-]+)/)
@@ -79,10 +88,11 @@ function Semaforo({ aceso, className }: { aceso: ActivityComplexity; className?:
   )
 }
 
-export function NewActivityForm({ members, currentUserId, inicial, equipeIds, modal = false }: {
+export function NewActivityForm({ members, currentUserId, inicial, origem, equipeIds, modal = false }: {
   members: MembroSelecionavel[]
   currentUserId: string | null
   inicial?: NovaAtividadeInicial | null
+  origem?: OrigemReuniao | null
   /** Equipe do cliente (workspaces.equipe, mig. 280): ponto de partida dos responsáveis. */
   equipeIds?: string[]
   /** Dentro do TaskModal (fill): ocupa a altura do card e só o briefing rola. */
@@ -118,7 +128,7 @@ export function NewActivityForm({ members, currentUserId, inicial, equipeIds, mo
   const [formatoCustom, setFormatoCustom] = useState(() => inicial?.formato && !conhecido(pauta.formato, inicial.formato) ? inicial.formato : '')
   const [objetivo, setObjetivo] = useState(() => !inicial?.objetivo ? '' : conhecido(pauta.objetivo, inicial.objetivo) ? inicial.objetivo : 'Outro')
   const [objetivoCustom, setObjetivoCustom] = useState(() => inicial?.objetivo && !conhecido(pauta.objetivo, inicial.objetivo) ? inicial.objetivo : '')
-  const [titulo, setTitulo] = useState(inicial?.titulo ?? '')
+  const [titulo, setTitulo] = useState(inicial?.titulo ?? origem?.texto ?? '')
 
   // Tarefa não nasce sem dono e quem cria NÃO vira dono por padrão (mig. 253). O
   // ponto de partida é a EQUIPE DO CLIENTE (mig. 280) — ou, ao duplicar, os
@@ -140,7 +150,7 @@ export function NewActivityForm({ members, currentUserId, inicial, equipeIds, mo
   const [mostrarDrive, setMostrarDrive] = useState(false)
 
   const { editor, insertImage } = useBriefingEditor({
-    content: toHTML(inicial?.description),
+    content: toHTML(inicial?.description ?? origem?.rascunho),
     placeholder: 'Objetivo, diretrizes e referências… cole ou solte imagens aqui',
   })
   const briefingVazio = useBriefingVazio(editor)
@@ -198,6 +208,15 @@ export function NewActivityForm({ members, currentUserId, inicial, equipeIds, mo
     }
   }
 
+  // Veio de uma ata: organiza o rascunho no padrão da casa uma vez, ao abrir
+  // (mesmo prompt do botão; "Desfazer" do toast volta ao rascunho da reunião).
+  const organizouOrigem = useRef(false)
+  useEffect(() => {
+    if (!editor || organizouOrigem.current || !origem?.rascunho.trim()) return
+    organizouOrigem.current = true
+    void handleImproveWithAI()
+  }, [editor]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // As perguntas viram checklist no fim do briefing — a pessoa responde ali mesmo.
   function inserirPerguntas() {
     if (!editor || !faltandoIA.length) return
@@ -220,6 +239,7 @@ export function NewActivityForm({ members, currentUserId, inicial, equipeIds, mo
     formData.set('description', isEmptyHtml(html) ? '' : html)
     if (driveUrl) formData.set('drive_folder_url', driveUrl)
     for (const id of assignees) formData.append('assignee_ids', id)
+    if (origem) formData.set('reuniao_passo_id', origem.passoId)
 
     startTransition(async () => {
       const result = await createActivity(orgSlug, workspaceId, campaignId, formData)
@@ -259,6 +279,16 @@ export function NewActivityForm({ members, currentUserId, inicial, equipeIds, mo
             </span>
           )}
         </div>
+
+        {origem && (
+          <div className="shrink-0 -mt-2 mb-4 flex items-center gap-2 text-xs text-gray-500 min-w-0">
+            <NotebookPen className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+            <span className="truncate">
+              Da reunião <span className="font-medium text-gray-700">{origem.reuniaoTitulo}</span>
+              {origem.reuniaoData && <> de {origem.reuniaoData}</>}. O briefing partiu da ata; confira antes de criar.
+            </span>
+          </div>
+        )}
 
         <div className="flex-1 min-h-0 grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-x-10">
 

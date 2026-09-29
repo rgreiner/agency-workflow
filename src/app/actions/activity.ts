@@ -121,6 +121,16 @@ export async function createActivity(
     })
   }
 
+  // Veio de um passo de ata (mig. 306): grava o vínculo. Só pega passo ainda
+  // livre; a RLS exige Atendimento/admin e tarefa do mesmo cliente da ata.
+  const passoId = formData.get('reuniao_passo_id') as string
+  if (passoId) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: passoErr } = await (supabase as any).from('reuniao_passos')
+      .update({ activity_id: activityId }).eq('id', passoId).is('activity_id', null)
+    if (passoErr) console.error('[reuniao] vínculo do passo com a tarefa falhou', passoErr)
+  }
+
   // `replace`: o form abre em modal (intercepting route) e o detalhe da tarefa nova
   // também. Com push, fechar o detalhe voltava pro "Nova atividade" — parecia que
   // o Flow abria outra tarefa sozinho. Substituindo a entrada, fechar volta pra

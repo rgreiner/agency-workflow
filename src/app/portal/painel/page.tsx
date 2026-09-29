@@ -4,7 +4,8 @@ import { sessaoPortal, portalTemSenha } from '@/lib/auth/portal'
 import { createPortalClient } from '@/lib/supabase/portal'
 import { sairPortal } from '@/app/actions/portal'
 import { AutoRefresh } from '@/components/ui/AutoRefresh'
-import { LogOut, Clock, Building2, BadgeCheck, Plus, ArrowRight } from 'lucide-react'
+import { LogOut, Clock, Building2, BadgeCheck, Plus, ArrowRight, NotebookPen } from 'lucide-react'
+import { dataBR } from '@/lib/reunioes'
 import { PortalThemeToggle } from '../PortalThemeToggle'
 import { SenhaPortalButton } from './SenhaPortalButton'
 import { FlowMark } from '@/components/brand/FlowMark'
@@ -64,6 +65,12 @@ export default async function PortalPainelPage() {
 
   const dash = data as PortalDashboard
   const tarefas = dash.tarefas ?? []
+
+  // Atas publicadas pelo atendimento (mig. 306). Falhou? O painel segue sem elas.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: atasRaw } = await (supabase as any).rpc('portal_reunioes')
+  const atas = (Array.isArray(atasRaw) ? atasRaw : []) as
+    { id: string; titulo: string; realizada_em: string; passos_cliente: number }[]
 
   const colunas = [
     {
@@ -206,6 +213,33 @@ export default async function PortalPainelPage() {
           )
         })}
       </div>
+
+      {atas.length > 0 && (
+        <section className="mt-6 bg-white rounded-2xl border border-gray-200 shadow-sm">
+          <div className="px-4 pt-4 pb-3 flex items-center gap-2">
+            <NotebookPen className="w-4 h-4 text-orange-600" />
+            <h2 className="font-semibold text-gray-900">Reuniões</h2>
+            <p className="text-xs text-gray-500 ml-1 hidden sm:block">Resumo e próximos passos combinados</p>
+          </div>
+          <ul className="px-3 pb-3 space-y-1.5">
+            {atas.slice(0, 8).map((a) => (
+              <li key={a.id}>
+                <Link href={`/portal/reunioes/${a.id}`}
+                  className="group flex items-center gap-3 rounded-xl bg-gray-50 px-3.5 py-2.5 hover:bg-gray-100 transition-colors">
+                  <span className="text-xs text-gray-500 tabular-nums shrink-0">{dataBR(a.realizada_em)}</span>
+                  <span className="text-sm font-medium text-gray-900 truncate flex-1">{a.titulo}</span>
+                  {a.passos_cliente > 0 && (
+                    <span className="shrink-0 text-xs font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">
+                      {a.passos_cliente} com você
+                    </span>
+                  )}
+                  <ArrowRight className="w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform group-hover:translate-x-0.5" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <p className="text-center text-xs text-gray-400 mt-8">
         Atualizado automaticamente · Dúvidas? Fale com o seu atendimento.
