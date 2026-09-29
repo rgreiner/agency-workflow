@@ -26,6 +26,7 @@ import { EMITENTES, EMITENTE_LABEL, chipDocumento, numeroDoNome, textoBuscavel }
 import { uploadFile } from '@/lib/storage/upload-client'
 import { Paperclip, ExternalLink, CalendarClock, Landmark } from 'lucide-react'
 import { GuiaImportModal } from './GuiaImportModal'
+import { ItensCompra, DetalharLote } from './ItensCompra'
 import { Modal } from '@/components/ui/Modal'
 
 export interface Lancamento {
@@ -328,6 +329,10 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar por contato, descrição ou categoria"
             className="w-full pl-9 pr-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent" />
         </div>
+        {/* Recupera o histórico: lê os cupons já anexados que ainda não têm itens.
+            Serve para a virada (17 cupons em 29/09) e para as compras do mês. */}
+        <DetalharLote orgSlug={orgSlug} />
+
         {/* Pendências de classificação: o botão some só quando não existe NENHUMA em
             período algum. Ligado, ele mostra tudo — inclusive o que vence fora do
             período da tela (era o caso das parcelas de Fee de 2027). */}
@@ -1263,6 +1268,17 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
               </ul>
             )}
           </div>
+        )}
+
+        {/* O que compõe a despesa (mig. 307). Só no lançamento já salvo: o item
+            pende do id. Saída apenas — item de receita não existe. */}
+        {lancamento && !imported && form.tipo === 'saida' && (
+          <ItensCompra
+            orgSlug={orgSlug}
+            lancamentoId={lancamento.id}
+            valorLancamento={Number(lancamento.valor_realizado ?? lancamento.valor) || 0}
+            temAnexo={anexos.some(a => !!a.url)}
+          />
         )}
 
         <div className="flex justify-end gap-2 pt-2">
