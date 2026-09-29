@@ -50,6 +50,10 @@ export function SolicitacoesClient({
         </p>
       </header>
 
+      {/* Aba ativa = gray-900 + text-white: os dois invertem no .dark (claro sobre
+          escuro → escuro sobre claro). Com text-[#fff] fixo, no escuro ficava
+          branco sobre creme. Chips de tipo/peças usam tinta translúcida (/15),
+          que funciona nos dois temas — o amber-50 fixo apagava o texto no escuro. */}
       <div className="flex items-center gap-1.5 mb-5">
         {FILTROS.map((f) => (
           <Link
@@ -57,7 +61,7 @@ export function SolicitacoesClient({
             href={`/${orgSlug}/solicitacoes?status=${f.key}`}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               filtro === f.key
-                ? 'bg-gray-900 text-[#fff]'
+                ? 'bg-gray-900 text-white'
                 : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
             }`}
           >
@@ -101,10 +105,10 @@ function EntradaCard({
   })
 
   const TIPO = {
-    resposta:    { icon: MessageSquareReply, cls: 'bg-orange-100 text-orange-600', verbo: 'Respondeu a pendência' },
-    solicitacao: { icon: Inbox,              cls: 'bg-blue-100 text-blue-600',     verbo: 'Nova solicitação' },
-    aprovacao:   { icon: BadgeCheck,         cls: 'bg-green-100 text-green-600',   verbo: '✅ Aprovou o trabalho' },
-    ajuste:      { icon: PenLine,            cls: 'bg-amber-100 text-amber-700',   verbo: '✏️ Pediu ajustes' },
+    resposta:    { icon: MessageSquareReply, cls: 'bg-orange-500/15 text-orange-600', verbo: 'Respondeu a pendência' },
+    solicitacao: { icon: Inbox,              cls: 'bg-blue-500/15 text-blue-500',     verbo: 'Nova solicitação' },
+    aprovacao:   { icon: BadgeCheck,         cls: 'bg-green-500/15 text-green-600',   verbo: '✅ Aprovou o trabalho' },
+    ajuste:      { icon: PenLine,            cls: 'bg-amber-500/15 text-amber-600',   verbo: '✏️ Pediu ajustes' },
   }[e.kind] ?? { icon: Inbox, cls: 'bg-gray-100 text-gray-600', verbo: 'Entrada' }
   const TipoIcon = TIPO.icon
   const temTarefa = e.kind !== 'solicitacao'
@@ -128,7 +132,7 @@ function EntradaCard({
             <span className="text-xs text-gray-400">·</span>
             <span className="text-xs text-gray-500">{e.workspaceNome}</span>
             {e.status === 'novo' && (
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-orange-700 bg-orange-100 rounded-full px-2 py-0.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-orange-600 bg-orange-500/15 rounded-full px-2 py-0.5">
                 Nova
               </span>
             )}
@@ -150,7 +154,7 @@ function EntradaCard({
           {e.pecas.length > 0 && (
             <ul className="mt-3 space-y-1.5">
               {e.pecas.map((p, i) => (
-                <li key={i} className="text-sm bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                <li key={i} className="text-sm bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-2">
                   <span className="font-medium text-gray-800">{p.nome}</span>
                   <span className="text-gray-600"> — {p.comentario}</span>
                 </li>
