@@ -24,6 +24,16 @@ export interface Reuniao {
   passos: PassoReuniao[]
 }
 
+/** Tarefa do cliente candidata a vínculo com um passo. */
+export interface TarefaVinculavel {
+  id: string
+  titulo: string
+  status: string
+  arquivada: boolean
+  campaignId: string
+  campanha: string
+}
+
 /** 2026-09-29 → 29/09/2026 (sem fuso: é data civil). */
 export function dataBR(ymd: string | null | undefined): string {
   if (!ymd) return ''

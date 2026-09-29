@@ -12,7 +12,7 @@ import { organizarAta, type AtaOrganizada } from '@/lib/ai/ata'
 import { iaDaOrg } from '@/lib/ai/provedor'
 import { mensagemErroRevisao } from '@/lib/ai/review'
 import { logSystemError } from '@/lib/system-error'
-import type { Reuniao } from '@/lib/reunioes'
+import type { Reuniao, TarefaVinculavel } from '@/lib/reunioes'
 
 type Resultado<T> = ({ ok: true } & T) | { ok: false; error: string }
 
@@ -142,4 +142,51 @@ export async function organizarReuniao(
     await logSystemError(supabase, { userId: user.id, context: 'ai:ata', error })
     return { ok: false, error: mensagemErroRevisao(error, provider, 'Não foi possível organizar a ata agora.') }
   }
+}
+
+/** Tarefas do cliente pra vincular a um passo (busca pelo título; ativas primeiro). */
+export async function buscarTarefasCliente(
+  workspaceId: string, busca: string,
+): Promise<Resultado<{ tarefas: TarefaVinculavel[] }>> {
+  const user = await getUsuario()
+  if (!user) return { ok: false, error: 'Sessão expirada. Entre de novo.' }
+  const supabase = await createClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let q = (supabase as any).from('activities')
+    .select('id, title, status, archived, campaign_id, campaigns!inner(name, workspace_id)')
+    .eq('campaigns.workspace_id', workspaceId)
+    .order('archived', { ascending: true })
+    .order('created_at', { ascending: false })
+    .limit(20)
+  // Cada palavra tem de aparecer no título, em qualquer ordem ("lacre mockup").
+  for (const termo of busca.trim().split(/\s+/).filter(Boolean).slice(0, 5)) {
+    q = q.ilike('title', `%${termo.replace(/[%_,()]/g, ' ')}%`)
+  }
+  const { data, error } = await q
+  if (error) return { ok: false, error: error.message }
+  type Row = { id: string; title: string; status: string; archived: boolean; campaign_id: string; campaigns: { name: string } }
+  return {
+    ok: true,
+    tarefas: ((data ?? []) as Row[]).map(a => ({
+      id: a.id, titulo: a.title, status: a.status, arquivada: a.archived,
+      campaignId: a.campaign_id, campanha: a.campaigns?.name ?? '',
+    })),
+  }
+}
+
+/** Liga um passo salvo a uma tarefa que já existe (ou solta, com null). */
+export async function vincularPasso(
+  orgSlug: string, workspaceId: string, reuniaoId: string, passoId: string, activityId: string | null,
+): Promise<Resultado<object>> {
+  const user = await getUsuario()
+  if (!user) return { ok: false, error: 'Sessão expirada. Entre de novo.' }
+  const supabase = await createClient()
+  // A RLS (mig. 306) só aceita tarefa do MESMO cliente da ata e quem gerencia o portal.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).from('reuniao_passos')
+    .update({ activity_id: activityId }).eq('id', passoId).eq('reuniao_id', reuniaoId).select('id')
+  if (error) return { ok: false, error: error.code === '42501' ? 'Essa tarefa não é deste cliente.' : error.message }
+  if (!data?.length) return { ok: false, error: 'Só o Atendimento (ou admin) vincula tarefas.' }
+  rotas(orgSlug, workspaceId, reuniaoId)
+  return { ok: true }
 }

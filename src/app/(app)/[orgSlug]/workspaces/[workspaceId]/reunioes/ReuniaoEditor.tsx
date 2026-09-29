@@ -1,19 +1,20 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
-  NotebookPen, Sparkles, Loader2, Plus, X, Trash2, Globe, ChevronDown, ExternalLink, ListPlus,
+  NotebookPen, Sparkles, Loader2, Plus, X, Trash2, Globe, ChevronDown, ExternalLink, ListPlus, Link2, Unlink, Search,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { Switch } from '@/components/ui/Switch'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { salvarReuniao, excluirReuniao, organizarReuniao } from '@/app/actions/reunioes'
-import type { Reuniao, PassoReuniao, ResponsavelPasso } from '@/lib/reunioes'
+import { salvarReuniao, excluirReuniao, organizarReuniao, buscarTarefasCliente, vincularPasso } from '@/app/actions/reunioes'
+import type { Reuniao, PassoReuniao, ResponsavelPasso, TarefaVinculavel } from '@/lib/reunioes'
+import { useStatusConfig } from '@/components/ui/StatusBadge'
 
 export interface TarefaDoPasso { titulo: string; href: string }
 
@@ -54,6 +55,14 @@ export function ReuniaoEditor({
   // Passo à espera de uma campanha pra virar tarefa (ata sem campanha).
   const [pedeCampanha, setPedeCampanha] = useState<number | null>(null)
   const [campanhaEscolhida, setCampanhaEscolhida] = useState('')
+  // Vincular a uma tarefa que já existe (em vez de criar outra).
+  const [vinculando, setVinculando] = useState<number | null>(null)
+  const [busca, setBusca] = useState('')
+  const [achadas, setAchadas] = useState<TarefaVinculavel[]>([])
+  const [buscando, setBuscando] = useState(false)
+  // Vínculos feitos nesta tela, até o refresh trazer o `tarefas` novo do servidor.
+  const [vinculadas, setVinculadas] = useState<Record<string, TarefaDoPasso>>({})
+  const statusCfg = useStatusConfig()
 
   const base = `/${orgSlug}/workspaces/${workspaceId}/reunioes`
   const lista = `/${orgSlug}/reunioes?ws=${workspaceId}`
@@ -67,7 +76,7 @@ export function ReuniaoEditor({
     setAta(a => ({ ...a, passos: a.passos.map((p, j) => (j === i ? { ...p, ...patch } : p)) }))
 
   /** Grava e devolve a ata com os ids que o banco deu (passos novos incluídos). */
-  async function gravar(dados: Reuniao): Promise<Reuniao | null> {
+  async function gravar(dados: Reuniao, navegar = true): Promise<Reuniao | null> {
     const res = await salvarReuniao(orgSlug, workspaceId, dados)
     if (!res.ok) { toast.error(res.error); return null }
     const gravada: Reuniao = {
@@ -78,6 +87,7 @@ export function ReuniaoEditor({
     }
     setAta(gravada)
     setSalvo(JSON.stringify(gravada))
+    if (!navegar) return gravada
     if (!dados.id) router.replace(`${base}/${res.id}`)
     else router.refresh()
     return gravada
@@ -141,6 +151,62 @@ export function ReuniaoEditor({
       if (!passo?.id) return
       setPedeCampanha(null)
       router.push(`/${orgSlug}/workspaces/${workspaceId}/campaigns/${campaignId}/activities/new?passo=${passo.id}`)
+    })
+  }
+
+  // Busca com respiro de 250 ms; abrir o modal já lista as mais recentes do cliente.
+  useEffect(() => {
+    if (vinculando === null) return
+    let vivo = true
+    const t = setTimeout(async () => {
+      setBuscando(true)
+      const res = await buscarTarefasCliente(workspaceId, busca)
+      if (!vivo) return
+      setBuscando(false)
+      if (res.ok) setAchadas(res.tarefas)
+      else toast.error(res.error)
+    }, 250)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [busca, vinculando, workspaceId])
+
+  function abrirVincular(i: number) {
+    setBusca(''); setAchadas([]); setVinculando(i)
+  }
+
+  function vincular(t: TarefaVinculavel) {
+    const i = vinculando
+    if (i === null) return
+    startSalvar(async () => {
+      // Passo novo ou editado precisa existir no banco antes do vínculo.
+      const base = sujo || !ata.passos[i]?.id ? await gravar(ata, false) : ata
+      const passo = base?.passos[i]
+      if (!base?.id || !passo?.id) return
+      const res = await vincularPasso(orgSlug, workspaceId, base.id, passo.id, t.id)
+      if (!res.ok) { toast.error(res.error); return }
+      const href = `/${orgSlug}/workspaces/${workspaceId}/campaigns/${t.campaignId}/activities/${t.id}`
+      setVinculadas(v => ({ ...v, [passo.id!]: { titulo: t.titulo, href } }))
+      const novos = base.passos.map((p, j) => (j === i ? { ...p, activityId: t.id } : p))
+      setAta(a => ({ ...a, passos: novos }))
+      setSalvo(JSON.stringify({ ...base, passos: novos }))
+      setVinculando(null)
+      toast.success('Passo vinculado à tarefa.')
+      // Ata nova ganhou id agora: a URL passa a ser a dela.
+      if (!ata.id) router.replace(`/${orgSlug}/workspaces/${workspaceId}/reunioes/${base.id}`)
+      else router.refresh()
+    })
+  }
+
+  function desvincular(i: number) {
+    const passo = ata.passos[i]
+    if (!ata.id || !passo?.id) return
+    startSalvar(async () => {
+      const res = await vincularPasso(orgSlug, workspaceId, ata.id!, passo.id!, null)
+      if (!res.ok) { toast.error(res.error); return }
+      setVinculadas(v => { const n = { ...v }; delete n[passo.id!]; return n })
+      const novos = ata.passos.map((p, j) => (j === i ? { ...p, activityId: null } : p))
+      setAta(a => ({ ...a, passos: novos }))
+      setSalvo(s => { const o = JSON.parse(s) as Reuniao; return JSON.stringify({ ...o, passos: o.passos.map((p, j) => (j === i ? { ...p, activityId: null } : p)) }) })
+      toast.success('Vínculo desfeito. A tarefa continua existindo.')
     })
   }
 
@@ -251,7 +317,7 @@ export function ReuniaoEditor({
 
         <ul className="space-y-2">
           {ata.passos.map((p, i) => {
-            const tarefa = p.id ? tarefas[p.id] : undefined
+            const tarefa = p.id && p.activityId ? (vinculadas[p.id] ?? tarefas[p.id]) : undefined
             const aberto = abertos.has(i)
             return (
               <li key={p.id ?? `novo-${i}`} className="rounded-2xl bg-white border border-gray-200 px-3 py-2.5">
@@ -270,18 +336,34 @@ export function ReuniaoEditor({
                     placeholder="O que foi combinado"
                     className="flex-1 min-w-0 bg-transparent text-sm text-gray-900 placeholder-gray-400 px-2 py-1.5 rounded-lg focus:outline-none focus:bg-gray-100 disabled:opacity-100" />
                   {p.responsavel === 'agencia' && (
-                    tarefa ? (
-                      <Link href={tarefa.href} title={tarefa.titulo}
-                        className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-1 rounded-lg hover:bg-green-200 transition-colors">
-                        Tarefa <ExternalLink className="w-3 h-3" />
-                      </Link>
-                    ) : p.activityId ? (
-                      <span className="shrink-0 text-xs text-gray-400">Tarefa criada</span>
+                    tarefa || p.activityId ? (
+                      <span className="shrink-0 inline-flex items-center rounded-lg bg-green-500/15 text-green-600">
+                        {tarefa ? (
+                          <Link href={tarefa.href} title={tarefa.titulo}
+                            className="inline-flex items-center gap-1 text-xs font-medium pl-2 pr-1.5 py-1 rounded-lg hover:bg-green-500/15 transition-colors">
+                            Tarefa <ExternalLink className="w-3 h-3" />
+                          </Link>
+                        ) : <span className="text-xs font-medium px-2 py-1">Tarefa vinculada</span>}
+                        {podeEditar && (
+                          <button type="button" onClick={() => desvincular(i)} disabled={salvando}
+                            title="Desvincular (a tarefa continua existindo)"
+                            className="p-1 mr-0.5 rounded-md text-green-600/70 hover:text-red-600 hover:bg-red-500/10 transition-colors disabled:opacity-50">
+                            <Unlink className="w-3 h-3" />
+                          </button>
+                        )}
+                      </span>
                     ) : podeEditar && (
-                      <button type="button" onClick={() => criarTarefa(i)} disabled={salvando || !p.texto.trim()}
-                        className="press shrink-0 inline-flex items-center gap-1 text-xs font-medium text-[#fff] bg-orange-600 hover:bg-orange-700 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50">
-                        <ListPlus className="w-3.5 h-3.5" /> Criar tarefa
-                      </button>
+                      <span className="shrink-0 inline-flex items-center gap-1">
+                        <button type="button" onClick={() => abrirVincular(i)} disabled={salvando || !p.texto.trim()}
+                          title="Já existe uma tarefa para isso? Vincule em vez de criar outra"
+                          className="press inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+                          <Link2 className="w-3.5 h-3.5" /> Vincular
+                        </button>
+                        <button type="button" onClick={() => criarTarefa(i)} disabled={salvando || !p.texto.trim()}
+                          className="press inline-flex items-center gap-1 text-xs font-medium text-[#fff] bg-orange-600 hover:bg-orange-700 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+                          <ListPlus className="w-3.5 h-3.5" /> Criar tarefa
+                        </button>
+                      </span>
                     )
                   )}
                   {p.responsavel === 'agencia' && (
@@ -369,6 +451,49 @@ export function ReuniaoEditor({
             {salvando && <Loader2 className="w-4 h-4 animate-spin" />} Criar tarefa
           </button>
         </div>
+      </Modal>
+
+      <Modal open={vinculando !== null} onClose={() => setVinculando(null)} size="lg" label="Vincular tarefa" dismissable={!salvando}>
+        <ModalHeader title="Vincular a uma tarefa existente" onClose={() => setVinculando(null)} />
+        <div className="px-6 pt-4 pb-2">
+          {vinculando !== null && (
+            <p className="text-xs text-gray-500 mb-2 truncate">Passo: <span className="text-gray-700">{ata.passos[vinculando]?.texto}</span></p>
+          )}
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input autoFocus value={busca} onChange={e => setBusca(e.target.value)}
+              placeholder={`Buscar nas tarefas de ${clienteNome}`}
+              className={cn(inputCls, 'pl-10')} />
+          </div>
+        </div>
+        <ul className="px-3 pb-4 max-h-[50vh] overflow-y-auto">
+          {buscando && achadas.length === 0 && (
+            <li className="flex items-center justify-center gap-2 py-8 text-sm text-gray-400"><Loader2 className="w-4 h-4 animate-spin" /> Buscando…</li>
+          )}
+          {!buscando && achadas.length === 0 && (
+            <li className="py-8 text-center text-sm text-gray-400">Nenhuma tarefa encontrada{busca.trim() ? ' com esse termo' : ''}.</li>
+          )}
+          {achadas.map(t => {
+            const st = statusCfg.find(x => x.value === t.status)
+            return (
+              <li key={t.id}>
+                <button type="button" onClick={() => vincular(t)} disabled={salvando}
+                  className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100 transition-colors disabled:opacity-50">
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm text-gray-900 truncate">{t.titulo}</span>
+                    <span className="block text-xs text-gray-500 truncate">{t.campanha}{t.arquivada ? ' · arquivada' : ''}</span>
+                  </span>
+                  {st && (
+                    <span className="shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full"
+                      style={{ backgroundColor: st.bg, color: st.text }}>
+                      {st.label}
+                    </span>
+                  )}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
       </Modal>
 
       <ConfirmDialog
