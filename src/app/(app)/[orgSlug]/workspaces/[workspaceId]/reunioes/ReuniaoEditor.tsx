@@ -56,6 +56,7 @@ export function ReuniaoEditor({
   const [campanhaEscolhida, setCampanhaEscolhida] = useState('')
 
   const base = `/${orgSlug}/workspaces/${workspaceId}/reunioes`
+  const lista = `/${orgSlug}/reunioes?ws=${workspaceId}`
   const opcoesCampanha = useMemo(
     () => [{ value: '', label: 'Sem campanha' }, ...campanhas.map(c => ({ value: c.id, label: c.name }))],
     [campanhas],
@@ -150,7 +151,7 @@ export function ReuniaoEditor({
     setExcluindo(false)
     if (!res.ok) { toast.error(res.error); return }
     toast.success('Ata excluída.')
-    router.replace(base)
+    router.replace(lista)
   }
 
   const temTexto = !!(ata.notas.trim() || ata.transcricao.trim())
@@ -163,7 +164,7 @@ export function ReuniaoEditor({
         {' / '}
         <Link href={`/${orgSlug}/workspaces/${workspaceId}`} className="hover:text-gray-600 transition-colors">{clienteNome}</Link>
         {' / '}
-        <Link href={base} className="hover:text-gray-600 transition-colors">Reuniões</Link>
+        <Link href={lista} className="hover:text-gray-600 transition-colors">Reuniões</Link>
       </div>
 
       <div className="flex items-start gap-3 mb-5">

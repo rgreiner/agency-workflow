@@ -16,6 +16,7 @@ import {
   Briefcase,
   Gauge,
   List,
+  NotebookPen,
   GanttChart,
   BookOpen,
   PenTool,
@@ -330,7 +331,7 @@ function modeForPath(path: string, base: string): SidebarMode | null {
   if (path.startsWith(`${base}/midia`)) return 'midia'
   if (['producao', 'relatorios', 'solicitacoes', 'documentos']
       .some(p => path.startsWith(`${base}/${p}`))) return 'comercial'
-  if (['dashboard', 'views/lista'].some(p => path.startsWith(`${base}/${p}`))) return 'trabalho'
+  if (['dashboard', 'views/lista', 'reunioes'].some(p => path.startsWith(`${base}/${p}`))) return 'trabalho'
   // NEUTRAS de propósito (null = não trocam o modo):
   // - `cadastros`: o grupo vive em dois modos (Comercial e Mídia). Amarrar a rota
   //   ao Comercial faria a sidebar pular de contexto quando a mídia abre Veículos.
@@ -666,9 +667,10 @@ export function Sidebar({
         {mostrarDocs && painel}
 
         {!mostrarDocs && (<>
-        {/* ── Modo Trabalho: Lista global (só quem coordena) + Espaços ── */}
-        {mode === 'trabalho' && canListaGlobal && (
+        {/* ── Modo Trabalho: Lista global (só quem coordena), Reuniões (todos) + Espaços ── */}
+        {mode === 'trabalho' && (
           <>
+            {canListaGlobal && (
             <Link
               href={`${base}/views/lista`}
               className={cn(
@@ -680,6 +682,21 @@ export function Sidebar({
             >
               <List className="w-4 h-4 shrink-0" />
               <span className="flex-1">Lista</span>
+            </Link>
+            )}
+            {/* Atas de reunião (mig. 306): o Atendimento não tinha como achar
+                o botão escondido na tela de cada cliente. */}
+            <Link
+              href={`${base}/reunioes`}
+              className={cn(
+                'flex items-center gap-2.5 mx-2 px-2 py-2 rounded-lg text-sm font-medium transition-colors',
+                noSegmento(pathname, `${base}/reunioes`) || /\/workspaces\/[^/]+\/reunioes/.test(pathname)
+                  ? 'bg-gray-800 text-gray-100'
+                  : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
+              )}
+            >
+              <NotebookPen className="w-4 h-4 shrink-0" />
+              <span className="flex-1">Reuniões</span>
             </Link>
             <div className="mx-3 my-2 border-t border-gray-800" />
           </>

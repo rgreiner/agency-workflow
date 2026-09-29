@@ -4,14 +4,16 @@ import { contextoReuniao } from '../dados'
 
 export const metadata = { title: 'Nova ata — Flow' }
 
-export default async function NovaReuniaoPage({ params }: {
+export default async function NovaReuniaoPage({ params, searchParams }: {
   params: Promise<{ orgSlug: string; workspaceId: string }>
+  searchParams: Promise<{ c?: string }>
 }) {
   const { orgSlug, workspaceId } = await params
+  const { c } = await searchParams
   const ctx = await contextoReuniao(workspaceId)
   if (!ctx) notFound()
   // Só o Atendimento (ou admin) cria: quem não pode volta pra lista.
-  if (!ctx.podeGerir) redirect(`/${orgSlug}/workspaces/${workspaceId}/reunioes`)
+  if (!ctx.podeGerir) redirect(`/${orgSlug}/reunioes?ws=${workspaceId}`)
 
   // Data civil de Brasília: à noite o UTC já virou o dia.
   const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
@@ -24,7 +26,9 @@ export default async function NovaReuniaoPage({ params }: {
       tarefas={{}}
       podeEditar
       inicial={{
-        id: null, titulo: '', realizadaEm: hoje, campaignId: null, participantes: '',
+        id: null, titulo: '', realizadaEm: hoje,
+        // Vindo da campanha (?c=): já nasce amarrada a ela.
+        campaignId: c && ctx.campanhas.some(x => x.id === c) ? c : null, participantes: '',
         notas: '', transcricao: '', resumo: '', publicada: false, passos: [],
       }}
     />

@@ -117,7 +117,7 @@ export default async function WorkspacePage({
         secondaryActions={
           <>
             <Link
-              href={`/${orgSlug}/workspaces/${workspaceId}/reunioes`}
+              href={`/${orgSlug}/reunioes?ws=${workspaceId}`}
               title="Atas das reuniões com o cliente"
               className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition"
             >

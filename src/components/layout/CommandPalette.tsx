@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import {
-  Search, List, GanttChart, BookOpen, PenTool, Briefcase, Gauge, Home,
+  Search, List, GanttChart, BookOpen, PenTool, Briefcase, Gauge, Home, NotebookPen,
   Folder, AlignLeft, Plus, Settings, User, Palette,
   CornerDownLeft, CheckSquare, Loader2, Archive,
   Inbox, Megaphone, ClipboardList,
@@ -135,6 +135,7 @@ function PalettePanel({ orgSlug, workspaces, onClose, canManage, canListaGlobal,
       ...(canListaGlobal ? [
         { id: 'v-lista', label: 'Lista',           group: 'Ir para', href: `${base}/views/lista`,       icon: List, keywords: 'atividades' },
       ] : []),
+      { id: 'v-reun',   label: 'Reuniões',         group: 'Ir para', href: `${base}/reunioes`,          icon: NotebookPen, keywords: 'ata atas granola' },
       { id: 'v-gantt',  label: 'Gantt',            group: 'Ir para', href: `${base}/views/gantt`,       icon: GanttChart },
       { id: 'v-docs',   label: 'Documentos',       group: 'Ir para', href: `${base}/docs`,              icon: BookOpen },
       { id: 'v-boards', label: 'Quadros',          group: 'Ir para', href: `${base}/boards`,            icon: PenTool, keywords: 'visuais' },
