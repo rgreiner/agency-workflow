@@ -263,8 +263,9 @@ export function ReuniaoEditor({
             : <Select value={ata.campaignId ?? ''} onChange={v => set('campaignId', v || null)} options={opcoesCampanha} className="w-full" />}
         </div>
         <label className="block">
-          <span className="block text-xs font-medium text-gray-500 mb-1">Participantes</span>
-          <input value={ata.participantes} disabled={ro} placeholder="Ana (cliente), Rafael…"
+          {/* Só quem veio do cliente: da agência vai sempre o Rafael (29/09/2026). */}
+          <span className="block text-xs font-medium text-gray-500 mb-1">Participantes do cliente</span>
+          <input value={ata.participantes} disabled={ro} placeholder="Ana (marketing), Rodrigo…"
             onChange={e => set('participantes', e.target.value)} className={inputCls} />
         </label>
       </div>
