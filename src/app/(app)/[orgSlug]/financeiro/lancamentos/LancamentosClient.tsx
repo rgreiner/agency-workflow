@@ -298,15 +298,15 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
           <input ref={guiaRef} type="file" accept="application/pdf" className="hidden"
             onChange={e => { const f = e.target.files?.[0]; if (f) setGuiaFile(f); e.target.value = '' }} />
           <button onClick={() => guiaRef.current?.click()} title="Importar guia (Darf/FGTS/DAS…) — atualiza o lançamento em aberto ou cria um novo"
-            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50 transition active:scale-[0.97]">
+            className="press inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50">
             <Landmark className="w-4 h-4" /> Guia
           </button>
           <button onClick={() => setTransferindo(true)}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50 transition active:scale-[0.97]">
+            className="press inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50">
             <ArrowLeftRight className="w-4 h-4" /> Transferência
           </button>
           <button onClick={() => setCreating(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition">
+            className="press inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700">
             <Plus className="w-4 h-4" /> Nova
           </button>
         </div>
@@ -389,7 +389,11 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
               de dado, o resumo fica com a sobra e é ele que trunca. */}
           <table className="w-full min-w-[960px] table-fixed">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/60 text-xs font-medium text-gray-400">
+              {/* gray-400 sobre branco dá ~2.8:1 e o cabeçalho some; 500 lê.
+                  (Cabeçalho grudado ao rolar NÃO cabe aqui: o contêiner tem
+                  overflow-x, o que torna o eixo vertical rolável também, e o
+                  sticky passaria a se referir a uma caixa que nunca rola.) */}
+              <tr className="border-b border-gray-100 bg-gray-50/60 text-xs font-medium text-gray-500">
                 <th className="pl-4 pr-1 py-2.5 w-10">
                   {/* Marca só o que é selecionável e está VISÍVEL — respeita o filtro
                       ativo, senão "todos" pegaria coisa que a pessoa não está vendo. */}
@@ -688,7 +692,10 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
           {l.revisar && <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 text-[10px] font-medium px-1.5 py-0.5" title="Documento alterado depois de lançado"><AlertTriangle className="w-2.5 h-2.5" /> alterado</span>}
         </div>
       </td>
-      <td className={cn('px-3 py-2.5 text-sm font-medium text-right whitespace-nowrap', isSaida ? 'text-red-600' : 'text-gray-900')}>
+      {/* tabular-nums: numeral proporcional desalinha a vírgula entre as linhas,
+          e a coluna de dinheiro é lida na VERTICAL — a olho, 1.234,00 sobre 998,00
+          fica torto sem isso. */}
+      <td className={cn('px-3 py-2.5 text-sm font-medium text-right whitespace-nowrap tabular-nums', isSaida ? 'text-red-600' : 'text-gray-900')}>
         {isSaida ? '− ' : ''}{formatBRL(val(l))}
         {/* O valor cheio é o do documento; o que importa pra cobrança é o que falta. */}
         {parcial && (
@@ -741,7 +748,7 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
                     <RefreshCw className="w-3.5 h-3.5" />
                   </button>
                   <button onClick={marcarRevisado} disabled={isPending} title="Marcar como revisado"
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition disabled:opacity-50"><Check className="w-3.5 h-3.5" /></button>
+                    className="press p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"><Check className="w-3.5 h-3.5" /></button>
                 </>
               )}
               {/* Renegociar prazo: o vencimento sempre foi editável no modal, mas
@@ -754,7 +761,7 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
                   <CalendarClock className="w-3.5 h-3.5" />
                 </button>
               )}
-              <button onClick={() => onEdit(l)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" title="Editar"><Pencil className="w-3.5 h-3.5" /></button>
+              <button onClick={() => onEdit(l)} className="press p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title="Editar"><Pencil className="w-3.5 h-3.5" /></button>
               {/* A trava real está na RPC (136): pago/recebido, baixa parcial ou
                   conciliado recusam com motivo. Aqui o botão aparece sempre e o
                   servidor é quem diz não — evita ter duas regras divergentes. */}
@@ -840,11 +847,13 @@ function Card({ label, value, tone, highlight, active, onClick }: {
     : tone === 'red-soft' ? 'text-red-500'
     : value >= 0 ? 'text-gray-900' : 'text-red-600'
   return (
-    <button type="button" onClick={onClick}
-      className={cn('w-full text-left rounded-xl border bg-white px-4 py-3 transition-colors active:scale-[0.99]',
-        active ? 'border-orange-300 ring-2 ring-orange-200' : highlight ? 'border-gray-300 shadow-sm hover:border-gray-400' : 'border-gray-200 hover:border-gray-300')}>
-      <p className="text-[11px] font-medium text-gray-400 mb-1">{label}</p>
-      <p className={cn('text-base font-semibold', color)}>{formatBRL(value)}</p>
+    // no-press: bloco de largura total não afunda ao clique (régua da casa) — o
+    // aceso já diz que o filtro ligou. Aceso é UM desenho (anel), não anel + borda.
+    <button type="button" onClick={onClick} aria-pressed={!!active}
+      className={cn('no-press w-full text-left rounded-xl border bg-white px-4 py-3 transition-colors',
+        active ? 'border-orange-400 ring-1 ring-orange-400' : highlight ? 'border-gray-300 shadow-sm hover:border-gray-400' : 'border-gray-200 hover:border-gray-300')}>
+      <p className="text-[11px] font-medium text-gray-500 mb-1">{label}</p>
+      <p className={cn('text-base font-semibold tabular-nums', color)}>{formatBRL(value)}</p>
     </button>
   )
 }
