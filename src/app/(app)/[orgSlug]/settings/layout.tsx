@@ -74,6 +74,7 @@ export default async function SettingsLayout({
             { href: `/${orgSlug}/settings/pauta`,     label: 'Pauta',            badge: 0 },
             { href: `/${orgSlug}/settings/documentos`,label: 'Documentos',       badge: 0 },
             { href: `/${orgSlug}/settings/revisao`,   label: 'Revisão IA',       badge: 0 },
+            { href: `/${orgSlug}/settings/fiscal`,    label: 'Nota fiscal',      badge: 0 },
             { href: `/${orgSlug}/settings/saude`,     label: 'Verificações',     badge: verificacoesPendentes },
             { href: `/${orgSlug}/settings/erros`,     label: 'Erros do sistema', badge: errosPendentes },
           ] : []),
