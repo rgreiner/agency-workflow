@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Check, Loader2, Plus, Trash2, CircleCheck, Circle } from 'lucide-react'
+import { ArrowLeft, Check, Loader2, Plus, Trash2, CircleCheck, Circle, Send } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { Combobox } from '@/components/ui/Combobox'
@@ -11,8 +11,14 @@ import { PRODUCAO_SITUACAO_OPTIONS, formatBRL, parseMoney } from '@/lib/midia'
 import { ItemImageField } from '@/components/ui/ItemImageField'
 import type { ClienteOpt, MemberOpt } from '../../midias/simplificada/MidiaForm'
 import type { FornecedorOpt } from '@/lib/midia-selectors'
+import { aplicarResposta, type CotacaoItem, type Resposta } from '@/lib/cotacao'
+import { CotacaoPainel, type CotacaoView, type FornecedorCotacaoOpt } from './CotacaoPainel'
 
-export interface Opcao { fornecedor_id: string; n_orc: string; pgto: string; quant: string; valor_unit: string; valor_total?: string; selecionado: boolean }
+export interface Opcao {
+  fornecedor_id: string; n_orc: string; pgto: string; quant: string; valor_unit: string; valor_total?: string; selecionado: boolean
+  /** Veio da proposta de um fornecedor no pedido de cotação (mig. 310). */
+  cotacao_convite_id?: string
+}
 export interface ItemOrc { nome: string; descricao: string; job: string; opcoes: Opcao[]; imagem?: string }
 export interface OrcamentoValues {
   workspace_id: string; campaign_id: string; faturar: string; emissao: string; validade_dias: string; bv_pct: string
@@ -52,12 +58,14 @@ function emptyValues(today: string, responsavelId: string): OrcamentoValues {
 }
 
 export function OrcamentoForm({
-  clientes, fornecedores, members, defaultResponsavelId, today, redirectTo, initial, submitLabel = 'Gravar', onSubmit,
+  clientes, fornecedores, members, defaultResponsavelId, today, redirectTo, initial, submitLabel = 'Gravar', onSubmit, cotacao,
 }: {
   clientes: ClienteOpt[]; fornecedores: FornecedorOpt[]; members: MemberOpt[]
   defaultResponsavelId: string; today: string; redirectTo: string
   initial?: Partial<OrcamentoValues>; submitLabel?: string
   onSubmit: (fd: FormData) => Promise<{ error?: string } | void>
+  /** Só na edição: o pedido de cotação sai de orçamento já gravado. */
+  cotacao?: { orcamentoId: string; agencia: string; cotacoes: CotacaoView[]; fornecedores: FornecedorCotacaoOpt[]; abrir?: boolean }
 }) {
   const router = useRouter()
   const [form, setForm] = useState<OrcamentoValues>({
@@ -69,6 +77,11 @@ export function OrcamentoForm({
   })
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
+  // O pedido de cotação guarda a POSIÇÃO do item; só sai com os itens iguais ao gravado.
+  const assinaturaItens = (its: ItemOrc[]) => JSON.stringify(its.map(i => [i.nome, i.descricao, i.imagem ?? '']))
+  const [itensGravados] = useState(() => assinaturaItens(form.itens))
+  const aplicarCotacao = (conviteId: string, fornecedorId: string, pedidos: CotacaoItem[], resposta: Resposta) =>
+    setForm(f => ({ ...f, itens: aplicarResposta(f.itens, conviteId, fornecedorId, pedidos, resposta) as ItemOrc[] }))
 
   function set<K extends keyof OrcamentoValues>(k: K, v: OrcamentoValues[K]) { setForm(f => ({ ...f, [k]: v })) }
   const patchItem = (i: number, patch: Partial<ItemOrc>) => setForm(f => ({ ...f, itens: f.itens.map((it, idx) => idx === i ? { ...it, ...patch } : it) }))
@@ -102,7 +115,7 @@ export function OrcamentoForm({
     return (c?.campaigns ?? []).map(cp => ({ value: cp.id, label: cp.name }))
   }, [clientes, form.workspace_id])
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: { preventDefault(): void }, destino?: string) {
     e.preventDefault()
     setError('')
     if (!form.workspace_id) { setError('Selecione o cliente'); return }
@@ -115,7 +128,7 @@ export function OrcamentoForm({
     fd.set('bv_pct', String(parseMoney(form.bv_pct)))
     fd.set('honorarios_pct', String(parseMoney(form.honorarios_pct)))
     fd.set('valor', String(valorFaturar))
-    fd.set('redirect_to', redirectTo)
+    fd.set('redirect_to', destino ?? redirectTo)
     fd.set('detalhe', JSON.stringify({ itens: form.itens }))
 
     startTransition(async () => {
@@ -156,6 +169,14 @@ export function OrcamentoForm({
             <input value={form.titulo} onChange={e => set('titulo', e.target.value)} className={inputCls} required /></div>
         </div>
 
+        {cotacao && (
+          <CotacaoPainel
+            orgSlug={orgSlug} orcamentoId={cotacao.orcamentoId} titulo={form.titulo} agencia={cotacao.agencia}
+            itens={form.itens} itensSalvos={assinaturaItens(form.itens) === itensGravados}
+            cotacoes={cotacao.cotacoes} fornecedores={cotacao.fornecedores} onAplicar={aplicarCotacao} abrir={cotacao.abrir}
+          />
+        )}
+
         {/* Itens */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -194,8 +215,9 @@ export function OrcamentoForm({
                             {o.selecionado ? <CircleCheck className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
                           </button>
                         </td>
-                        <td className="px-1 py-1"><Combobox size="sm" value={o.fornecedor_id} onChange={v => setOpcao(ii, oi, 'fornecedor_id', v)} options={fornecedorOptions} placeholder="Fornecedor"
-                          onCreate={async nome => { const id = await criarFornecedor(nome); if (id) setOpcao(ii, oi, 'fornecedor_id', id) }} /></td>
+                        <td className="px-1 py-1 relative"><Combobox size="sm" value={o.fornecedor_id} onChange={v => setOpcao(ii, oi, 'fornecedor_id', v)} options={fornecedorOptions} placeholder="Fornecedor"
+                          onCreate={async nome => { const id = await criarFornecedor(nome); if (id) setOpcao(ii, oi, 'fornecedor_id', id) }} />
+                          {o.cotacao_convite_id && <span title="Valor enviado pelo fornecedor no pedido de cotação" className="absolute -top-0.5 right-2 px-1 rounded bg-orange-100 text-orange-700 text-[9px] font-semibold uppercase tracking-wide pointer-events-none">cotação</span>}</td>
                         <td className="px-1 py-1"><input value={o.n_orc} onChange={e => setOpcao(ii, oi, 'n_orc', e.target.value)} className={cellCls} /></td>
                         <td className="px-1 py-1"><input value={o.pgto} onChange={e => setOpcao(ii, oi, 'pgto', e.target.value)} className={cellCls} /></td>
                         <td className="px-1 py-1"><input inputMode="numeric" value={o.quant} onChange={e => setOpcaoQuant(ii, oi, e.target.value)} className={cn(cellCls, 'text-right')} /></td>
@@ -235,6 +257,12 @@ export function OrcamentoForm({
 
         <div className="flex justify-end gap-2 pb-10">
           <button type="button" onClick={() => router.back()} className="px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
+          {!cotacao && (
+            <button type="button" disabled={isPending} onClick={e => handleSubmit(e, `/${orgSlug}/producao/orcamento/{id}?cotacao=1`)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 disabled:opacity-50 transition">
+              <Send className="w-4 h-4" /> {submitLabel} e pedir cotação
+            </button>
+          )}
           <button aria-label="Salvar" type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-5 py-2.5 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{submitLabel}
           </button>

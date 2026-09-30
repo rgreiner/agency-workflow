@@ -50,9 +50,10 @@ export async function createProducao(orgSlug: string, formData: FormData) {
 
   const payload = { ...data, detalhe: readDetalhe(formData) }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any).rpc('create_producao', { p_user_id: user.id, p_org_id: org.id, p_data: payload })
+  const { data: novoId, error } = await (supabase as any).rpc('create_producao', { p_user_id: user.id, p_org_id: org.id, p_data: payload })
   if (error) return { error: error.message }
-  redirect(redirectTo || `/${orgSlug}/producao/orcamento`)
+  // "{id}" no destino = ir para o documento recém-criado (ex.: "Gravar e pedir cotação").
+  redirect((redirectTo || `/${orgSlug}/producao/orcamento`).replace('{id}', String(novoId ?? '')))
 }
 
 export async function updateProducao(orgSlug: string, producaoId: string, formData: FormData) {

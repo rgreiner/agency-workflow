@@ -63,7 +63,8 @@ export async function getNotifications(
     } | null
     const d = (n.data as Record<string, unknown>) ?? {}
     // Notificações de campanha (ex.: drive_sync) não têm activity → usam o data.
-    const title = act?.title ?? (typeof d.campanha === 'string' ? d.campanha : null) ?? 'Atualização'
+    const title = act?.title ?? (typeof d.campanha === 'string' ? d.campanha : null)
+      ?? (typeof d.orcamento === 'string' ? d.orcamento : null) ?? 'Atualização'
     return {
       id: n.id,
       type: n.type,

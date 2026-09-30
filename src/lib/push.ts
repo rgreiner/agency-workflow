@@ -87,6 +87,7 @@ function urlDe(n: Claim): string {
   if (n.type === 'drive_sync' && n.workspace_id && n.campaign_id)
     return `/${slug}/workspaces/${n.workspace_id}/campaigns/${n.campaign_id}?drive=sync`
   if (n.type === 'portal_solicitacao') return `/${slug}/solicitacoes`
+  if (typeof n.data?.href === 'string' && n.data.href.startsWith('/')) return n.data.href
   if (n.workspace_id && n.campaign_id && n.activity_id)
     return `/${slug}/workspaces/${n.workspace_id}/campaigns/${n.campaign_id}/activities/${n.activity_id}`
   return `/${slug}/inbox`

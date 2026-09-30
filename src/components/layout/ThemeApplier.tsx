@@ -13,7 +13,8 @@ export function ThemeApplier() {
     try {
       // O /portal tem tema PRÓPRIO (chave portal-theme, aplicada no layout dele)
       // — não sobrescrever com a preferência do membro.
-      if (window.location.pathname.startsWith('/portal')) return
+      // A página do fornecedor (/cotacao) é sempre clara.
+      if (/^\/(portal|cotacao)/.test(window.location.pathname)) return
       const t = localStorage.getItem('theme')
       const m = window.matchMedia('(prefers-color-scheme: dark)').matches
       const dark = t === 'dark' || (t !== 'light' && m)

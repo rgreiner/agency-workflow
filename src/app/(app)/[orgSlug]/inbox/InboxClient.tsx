@@ -52,6 +52,11 @@ export function InboxClient({ orgSlug, initial }: { orgSlug: string; initial: No
       return
     }
     // Solicitação do cliente não tem tarefa — abre a caixa de solicitações.
+    // Aviso fora de tarefa (ex.: proposta de cotação) leva o destino no próprio dado.
+    if (typeof n.data?.href === 'string' && n.data.href.startsWith('/')) {
+      router.push(n.data.href)
+      return
+    }
     if (n.type === 'portal_solicitacao') {
       router.push(`/${orgSlug}/solicitacoes`)
       return

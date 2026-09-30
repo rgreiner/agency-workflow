@@ -36,7 +36,11 @@ export async function updateSession(request: NextRequest) {
   // compartilhamento são arquivos (.png/.jpg/.ico) que o matcher do proxy já
   // deixa passar pela extensão — não precisam entrar aqui.
   const isPwaAsset = path === '/manifest.webmanifest' || path === '/sw.js' || path === '/offline'
-  const isPublic = isAuthPage || isConvite || isCron || isPortal || isRest || isPwaAsset || isSenha
+  // Pedido de cotação: o FORNECEDOR abre o link sem conta. O token do convite é a
+  // credencial (validado na página e em cada rota de /api/cotacao/<token>/…).
+  // /api/cotacao/arquivo é do MEMBRO e faz a própria checagem de sessão.
+  const isCotacao = path.startsWith('/cotacao/') || path.startsWith('/api/cotacao/')
+  const isPublic = isAuthPage || isConvite || isCron || isPortal || isRest || isPwaAsset || isSenha || isCotacao
 
   if (!claims && !isPublic) {
     const url = request.nextUrl.clone()

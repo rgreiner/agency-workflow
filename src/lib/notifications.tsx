@@ -1,4 +1,4 @@
-import { MessageSquare, ArrowRightLeft, UserPlus, LogIn, AtSign, FolderSync, AlarmClock, MessageSquareReply, Inbox, BadgeCheck, PenLine } from 'lucide-react'
+import { MessageSquare, ArrowRightLeft, UserPlus, LogIn, AtSign, FolderSync, AlarmClock, MessageSquareReply, Inbox, BadgeCheck, PenLine, Receipt } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { commentPreview } from '@/lib/html'
 import { STATUS_CONFIG, type StatusConfig } from '@/types'
@@ -44,6 +44,10 @@ export function messageOf(n: NotificationItem, statuses: StatusConfig[] = STATUS
       const q = Number(n.data?.pecas ?? 0)
       return `✏️ ${cli} pediu ajustes${q ? ` em ${q} peça${q > 1 ? 's' : ''}` : ''}${previa(n.data?.preview)}`
     }
+    case 'cotacao_resposta': {
+      const f = n.data?.fornecedor ?? 'Um fornecedor'
+      return n.data?.recusou ? `${f} não vai cotar desta vez` : `💰 ${f} enviou a proposta da cotação`
+    }
     default:               return 'Atualização'
   }
 }
@@ -59,6 +63,7 @@ export function NotifIcon({ type, className = 'w-3.5 h-3.5' }: { type: string; c
   if (type === 'portal_solicitacao') return <Inbox className={cn(className, 'text-orange-500')} />
   if (type === 'portal_aprovado')    return <BadgeCheck className={cn(className, 'text-green-500')} />
   if (type === 'portal_ajuste')      return <PenLine className={cn(className, 'text-orange-500')} />
+  if (type === 'cotacao_resposta')   return <Receipt className={cn(className, 'text-emerald-500')} />
   return <ArrowRightLeft className={cn(className, 'text-orange-500')} />
 }
 
