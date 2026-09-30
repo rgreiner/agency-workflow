@@ -13,7 +13,7 @@ import { MobileStatusBar } from './MobileStatusBar'
 import { AbasMobile } from './AbasMobile'
 import { AvisoTarefaArquivada } from './AvisoTarefaArquivada'
 import { RevisaoIA } from './RevisaoIA'
-import { etapaRevisavel, ETAPAS } from '@/lib/ai/revisao-modelos'
+import { etapaRevisavel, ETAPAS, type RevisaoEtapa } from '@/lib/ai/revisao-modelos'
 import { lerRevisaoConfigPublica } from '@/lib/ai/revisao-config'
 import { PortalFeedback, type PortalFeedbackItem } from './PortalFeedback'
 import { AutoRefresh } from '@/components/ui/AutoRefresh'
@@ -246,37 +246,50 @@ export default async function ActivityPage({
   ].sort((a, b) => a.at.localeCompare(b.at))
 
   // Cores de status seguem Configurações → Aparência (mescladas) — rawSettings vem do Lote 2
-  // Revisão IA sob demanda: o botão só aparece com a revisão ligada na org e
-  // nesta etapa. Falha ao ler a config (ex.: sem banco direto) = sem botão.
+  const statusConfig = await getStatusConfig(supabase, orgId, (rawSettings?.status_overrides ?? []) as StatusOverride[])
+
+  // Revisão IA sob demanda (activity_revisao, mig. 312): painel da etapa atual e,
+  // para etapas já passadas com revisão, o aviso de "material mudou depois da
+  // revisão" (conferido no cliente, sem atrasar a página). Config ilegível = sem painel.
   const etapaRev = etapaRevisavel(activity.status)
-  let revisaoLigada = false
-  let entradaEtapa: string | null = null
-  if (orgId && etapaRev) {
+  const posStatus = (v: string) => { const i = statusConfig.findIndex(s => s.value === v); return i === -1 ? Number.MAX_SAFE_INTEGER : i }
+  let etapasLigadas: RevisaoEtapa[] = []
+  if (orgId) {
     try {
       const c = await lerRevisaoConfigPublica(orgId)
-      revisaoLigada = c.enabled && c.stages[etapaRev]
+      if (c.enabled) etapasLigadas = ETAPAS.map(e => e.key).filter(e => c.stages[e])
     } catch (e) { console.error('[revisao] config', e) }
-    if (revisaoLigada) {
-      const { data: ent } = await supabase
-        .from('activity_history').select('changed_at').eq('activity_id', activityId).eq('to_status', etapaRev)
-        .order('changed_at', { ascending: false }).limit(1).maybeSingle()
-      entradaEtapa = (ent?.changed_at as string | undefined) ?? null
-    }
   }
-  // Última revisão desta etapa, se for desta passagem por ela (voltou da
-  // validação = revisão antiga não vale; é a mesma régua de checarAvanco).
-  const ultimaRevisao = (() => {
-    if (!etapaRev || activity.review_kind !== etapaRev) return null
-    if (entradaEtapa && (!activity.review_at || new Date(activity.review_at) < new Date(entradaEtapa))) return null
-    const lista = ((activity.review_errors ?? []) as unknown as Record<string, string>[])
-      .map(e => ({ trecho: e.trecho ?? '', correcao: e.correcao ?? e.sugestao ?? '', tipo: e.tipo }))
+  const revisoes = new Map<string, { status: string; apontamentos: Record<string, string>[] | null; revisado_em: string }>()
+  let entradaEtapa: string | null = null
+  if (etapasLigadas.length) {
+    const [{ data: revs }, { data: ent }] = await Promise.all([
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase as any).from('activity_revisao').select('etapa, status, apontamentos, revisado_em').eq('activity_id', activityId),
+      etapaRev
+        ? supabase.from('activity_history').select('changed_at').eq('activity_id', activityId).eq('to_status', etapaRev)
+            .order('changed_at', { ascending: false }).limit(1).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ])
+    for (const r of (revs ?? []) as { etapa: string; status: string; apontamentos: Record<string, string>[] | null; revisado_em: string }[]) revisoes.set(r.etapa, r)
+    entradaEtapa = ((ent as { changed_at?: string } | null)?.changed_at) ?? null
+  }
+  const resultado = (r: { status: string; apontamentos: Record<string, string>[] | null } | undefined) => {
+    if (!r) return null
+    const lista = (r.apontamentos ?? []).map(e => ({ trecho: e.trecho ?? '', correcao: e.correcao ?? e.sugestao ?? '', tipo: e.tipo }))
       .filter(e => e.trecho && e.correcao)
-    if (activity.review_status === 'errors' && lista.length) return { tipo: 'erros' as const, errors: lista }
-    if (activity.review_status === 'clean') return { tipo: 'limpo' as const }
+    if ((r.status === 'errors' || r.status === 'overridden') && lista.length) return { tipo: 'erros' as const, errors: lista }
+    if (r.status === 'clean') return { tipo: 'limpo' as const }
     return null
-  })()
+  }
+  const revisaoLigada = !!etapaRev && etapasLigadas.includes(etapaRev)
+  // Última revisão da etapa atual, se for desta passagem por ela (voltou da
+  // validação = a antiga não vale; mesma régua de checarAvanco).
+  const revAtual = etapaRev ? revisoes.get(etapaRev) : undefined
+  const ultimaRevisao = revAtual && (!entradaEtapa || new Date(revAtual.revisado_em) >= new Date(entradaEtapa)) ? resultado(revAtual) : null
+  // Etapas já passadas, ligadas e com revisão registrada: candidatas ao aviso de mudança.
+  const etapasAnteriores = etapasLigadas.filter(e => e !== etapaRev && posStatus(e) < posStatus(activity.status) && revisoes.has(e))
 
-  const statusConfig = await getStatusConfig(supabase, orgId, (rawSettings?.status_overrides ?? []) as StatusOverride[])
 
   const priorityCfg  = PRIORITY_CONFIG[activity.priority as ActivityPriority]
   const complexityCfg = COMPLEXITY_CONFIG[activity.complexity as ActivityComplexity]
@@ -636,9 +649,21 @@ export default async function ActivityPage({
             <FocusTracker activityId={activityId} origem={modal ? 'modal' : 'pagina'} />
 
             {/* Revisão por IA sob demanda — antes de mover o status */}
+            {etapasAnteriores.map(e => (
+              <RevisaoIA
+                key={`${e}-${revisoes.get(e)?.revisado_em ?? ''}`}
+                activityId={activityId}
+                path={path}
+                etapa={e}
+                etapaLabel={ETAPAS.find(x => x.key === e)!.label}
+                ultima={resultado(revisoes.get(e))}
+                anterior
+              />
+            ))}
             {revisaoLigada && etapaRev && (
               <RevisaoIA
-                key={`${etapaRev}-${activity.review_at ?? ''}`}
+                key={`${etapaRev}-${revAtual?.revisado_em ?? ''}`}
+                etapa={etapaRev}
                 activityId={activityId}
                 path={path}
                 etapaLabel={ETAPAS.find(e => e.key === etapaRev)!.label}

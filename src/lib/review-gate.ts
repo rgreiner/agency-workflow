@@ -1,16 +1,17 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
-import { driveConfigured, readRedacaoText, readReviewAssets } from '@/lib/google-drive'
+import { driveConfigured, readRedacaoText, readReviewAssets, versoesRedacao, versoesPecas, type VersaoArquivo } from '@/lib/google-drive'
 import { backendForRef } from '@/lib/task-folders'
-import { readReviewAssetsS3 } from '@/lib/s3-folders'
-import { reviewText, reviewArtwork, type ReviewError, type ContextoRevisao } from '@/lib/ai/review'
+import { readReviewAssetsS3, versoesPecasS3 } from '@/lib/s3-folders'
+import { reviewText, reviewTextAlteracoes, reviewArtwork, type ReviewError, type ContextoRevisao } from '@/lib/ai/review'
 import type { RevisaoConfig } from '@/lib/ai/revisao-config'
 import { etapaRevisavel, ETAPAS, type RevisaoEtapa } from '@/lib/ai/revisao-modelos'
 import { iaDaOrg, iaDisponivel } from '@/lib/ai/provedor'
 import { stripHtml } from '@/lib/html'
 import { STATUS_CONFIG } from '@/types'
 import { logSystemError } from '@/lib/system-error'
+import { createHash } from 'crypto'
 
 /**
  * Revisão IA SOB DEMANDA: a pessoa aperta "Revisar" na tarefa ANTES de mover o
@@ -21,27 +22,94 @@ import { logSystemError } from '@/lib/system-error'
  * Substitui a revisão automática depois do avanço (até 09/2026): ela rodava em 2º
  * plano, a resposta chegava minutos depois e a tarefa VOLTAVA de status quando a
  * pessoa já estava em outra coisa.
+ *
+ * Cada revisão guarda a "impressão digital" do material (activity_revisao.fonte,
+ * mig. 312). Mexeram no material depois — mesmo com a tarefa já em outra etapa —,
+ * a revisão deixa de valer e o avanço pede revisar de novo (só o que mudou).
  */
 
+type SB = SupabaseClient<Database>
+
+/** Impressão digital do material revisado: versões dos arquivos + hash do texto. */
+export interface FonteRevisao { arquivos: VersaoArquivo[]; hash?: string }
+
+/** Revisão vigente de uma etapa (tabela activity_revisao). */
+export interface RevisaoSalva {
+  etapa: RevisaoEtapa
+  status: string
+  apontamentos: ReviewError[]
+  fonte: FonteRevisao | null
+  texto: string | null
+  revisado_em: string
+}
+
 export type RevisaoOutcome =
-  | { ok: true; errors: ReviewError[]; model: string; truncated: boolean }
-  | { ok: false; vazio: string }
+  | { ok: true; errors: ReviewError[]; model: string; truncated: boolean; fonte: FonteRevisao | null; texto: string | null; parcial: boolean }
+  | { ok: false; vazio: string; fonte: FonteRevisao | null }
+
+const hashTexto = (t: string) => createHash('sha256').update(t.replace(/\s+/g, ' ').trim()).digest('hex')
+
+interface Material { drive_folder_id: string | null; redacao_url: string | null; preview_url: string | null; finalizacao_url: string | null }
+
+async function material(supabase: SB, activityId: string): Promise<Material | null> {
+  const { data } = await supabase
+    .from('activities').select('drive_folder_id, redacao_url, preview_url, finalizacao_url').eq('id', activityId).single()
+  return (data as Material | null) ?? null
+}
+
+const ehS3 = (m: Material | null) => { const ref = (m?.drive_folder_id ?? '').trim(); return !!ref && backendForRef(ref) === 's3' }
+const subpasta = (etapa: RevisaoEtapa) => etapa === 'design' ? 'Preview' : 'Final'
+
+/** Versões atuais dos arquivos que a revisão da etapa lê (sem baixar). null = sem como saber. */
+async function versoesAtuais(m: Material, etapa: RevisaoEtapa): Promise<VersaoArquivo[] | null> {
+  const s3 = ehS3(m)
+  if (etapa === 'redacao') {
+    if (s3 || !m.redacao_url || !driveConfigured()) return null
+    return versoesRedacao(m.redacao_url)
+  }
+  if (s3) return versoesPecasS3(`${(m.drive_folder_id ?? '').trim()}/${subpasta(etapa)}`)
+  const link = etapa === 'design' ? m.preview_url : m.finalizacao_url
+  if (!link || !driveConfigured()) return null
+  return versoesPecas(link)
+}
+
+const mesmasVersoes = (a: VersaoArquivo[], b: VersaoArquivo[]) => {
+  if (a.length !== b.length) return false
+  const mapa = new Map(a.map(x => [x.id, x.v]))
+  return b.every(x => mapa.get(x.id) === x.v)
+}
+
+/**
+ * O material mudou desde a revisão? Versões iguais = não. Na Redação, versão
+ * diferente ainda confere o TEXTO: o Doc ganha versão nova com um comentário ou
+ * uma mudança de formatação, e isso não justifica revisar de novo. Falha ao
+ * consultar o Drive/S3 = "não mudou" (não prende a tarefa por instabilidade).
+ */
+export async function materialMudou(m: Material, rev: RevisaoSalva): Promise<boolean> {
+  if (!rev.fonte?.arquivos) return false
+  try {
+    const atuais = await versoesAtuais(m, rev.etapa)
+    if (!atuais || mesmasVersoes(rev.fonte.arquivos, atuais)) return false
+    if (rev.etapa !== 'redacao' || !rev.fonte.hash) return true
+    const texto = (await readRedacaoText(m.redacao_url!)).text
+    return hashTexto(texto) !== rev.fonte.hash
+  } catch (e) {
+    console.error('[revisao] conferir material falhou', e)
+    return false
+  }
+}
 
 /** Lê o material da etapa e chama a IA. Lança em falha da IA (quem chama traduz). */
 export async function revisarAtividade(
-  supabase: SupabaseClient<Database>,
+  supabase: SB,
   activityId: string,
   userId: string,
   etapa: RevisaoEtapa,
   cfg: RevisaoConfig,
+  anterior: RevisaoSalva | null,
 ): Promise<RevisaoOutcome> {
-  const { data: act } = await supabase
-    .from('activities').select('drive_folder_id, redacao_url, preview_url, finalizacao_url').eq('id', activityId).single()
-
-  // Backend da pasta pelo formato da ref. No S3 as peças vêm da subpasta derivada
-  // (a ref é o caminho no bucket); no Drive, dos links salvos.
-  const folderRef = (act?.drive_folder_id ?? '').trim()
-  const isS3 = !!folderRef && backendForRef(folderRef) === 's3'
+  const act = await material(supabase, activityId)
+  const isS3 = ehS3(act)
 
   const lerRedacao = async (contexto: string): Promise<string> => {
     const link = act?.redacao_url ?? ''
@@ -52,32 +120,79 @@ export async function revisarAtividade(
       return ''
     }
   }
+  // Versões ANTES de ler: se alguém editar durante a revisão, a próxima checagem pega.
+  const versoes = act ? await versoesAtuais(act, etapa).catch(() => null) : null
 
   if (etapa === 'redacao') {
     // No S3 a redação é .docx; o leitor de Word entra com o módulo de Redação.
-    if (isS3) return { ok: false, vazio: 'A redação desta tarefa está em arquivo Word — a revisão de texto ainda não lê .docx.' }
-    if (!act?.redacao_url) return { ok: false, vazio: 'Sem link de Redação nesta tarefa.' }
+    if (isS3) return { ok: false, vazio: 'A redação desta tarefa está em arquivo Word — a revisão de texto ainda não lê .docx.', fonte: null }
+    if (!act?.redacao_url) return { ok: false, vazio: 'Sem link de Redação nesta tarefa.', fonte: null }
     const text = await lerRedacao('review:redacao')
-    if (!text.trim()) return { ok: false, vazio: 'O Doc de Redação está vazio.' }
-    const r = await reviewText(cfg, text, await contextoDaTarefa(supabase, activityId))
-    return { ok: true, ...r }
+    const fonte = versoes ? { arquivos: versoes, hash: hashTexto(text) } : null
+    if (!text.trim()) return { ok: false, vazio: 'O Doc de Redação está vazio.', fonte }
+    const ctx = await contextoDaTarefa(supabase, activityId)
+    // Já revisada antes (com o texto guardado): olha só o que mudou.
+    if (anterior?.texto && anterior.status !== 'failed') {
+      const r = await reviewTextAlteracoes(cfg, text, {
+        texto: anterior.texto, apontamentos: anterior.apontamentos, aceitos: anterior.status === 'overridden',
+      }, ctx)
+      return { ok: true, ...r, fonte, texto: text.slice(0, 40000) }
+    }
+    const r = await reviewText(cfg, text, ctx)
+    return { ok: true, ...r, fonte, texto: text.slice(0, 40000), parcial: false }
   }
 
-  const sub = etapa === 'design' ? 'Preview' : 'Final'
+  const sub = subpasta(etapa)
   let assets
   if (isS3) {
-    assets = (await readReviewAssetsS3(`${folderRef}/${sub}`)).assets
+    assets = (await readReviewAssetsS3(`${(act?.drive_folder_id ?? '').trim()}/${sub}`)).assets
   } else {
     const link = (etapa === 'design' ? act?.preview_url : act?.finalizacao_url) ?? ''
-    if (!link || !driveConfigured()) return { ok: false, vazio: `Sem pasta de ${sub} nesta tarefa.` }
+    if (!link || !driveConfigured()) return { ok: false, vazio: `Sem pasta de ${sub} nesta tarefa.`, fonte: null }
     assets = (await readReviewAssets(link)).assets
   }
-  if (!assets.length) return { ok: false, vazio: `Nenhuma peça (imagem/PDF) na pasta ${sub}.` }
+  const fonte = versoes ? { arquivos: versoes } : null
+  if (!assets.length) return { ok: false, vazio: `Nenhuma peça (imagem/PDF) na pasta ${sub}.`, fonte }
 
   // Design confere também contra o texto aprovado da Redação (mesma chamada).
   const aprovado = etapa === 'design' ? await lerRedacao('review:design') : ''
   const r = await reviewArtwork(cfg, assets, aprovado, await contextoDaTarefa(supabase, activityId))
-  return { ok: true, ...r }
+  return { ok: true, ...r, fonte, texto: null, parcial: false }
+}
+
+/** Revisões vigentes da tarefa, por etapa. */
+export async function revisoesDaTarefa(supabase: SB, activityId: string): Promise<Map<RevisaoEtapa, RevisaoSalva>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (supabase as any).from('activity_revisao')
+    .select('etapa, status, apontamentos, fonte, texto, revisado_em').eq('activity_id', activityId) as { data: RevisaoSalva[] | null }
+  return new Map((data ?? []).map(r => [r.etapa, { ...r, apontamentos: Array.isArray(r.apontamentos) ? r.apontamentos : [] }]))
+}
+
+/** Grava a revisão da etapa (substitui a anterior). */
+export async function salvarRevisao(supabase: SB, activityId: string, userId: string, etapa: RevisaoEtapa, dados: {
+  status: string; apontamentos: ReviewError[] | null; fonte?: FonteRevisao | null; texto?: string | null
+}): Promise<void> {
+  const row: Record<string, unknown> = {
+    activity_id: activityId, etapa, status: dados.status, apontamentos: dados.apontamentos,
+    revisado_em: new Date().toISOString(), revisado_por: userId,
+  }
+  if (dados.fonte !== undefined) row.fonte = dados.fonte
+  if (dados.texto !== undefined) row.texto = dados.texto
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).from('activity_revisao').upsert(row, { onConflict: 'activity_id,etapa' })
+  if (error) throw new Error(`activity_revisao: ${error.message}`)
+}
+
+/** Etapas cujo material mudou depois da revisão (para o aviso na tarefa). */
+export async function etapasComMudanca(supabase: SB, activityId: string, etapas: RevisaoEtapa[]): Promise<RevisaoEtapa[]> {
+  const [m, revs] = await Promise.all([material(supabase, activityId), revisoesDaTarefa(supabase, activityId)])
+  if (!m) return []
+  const out: RevisaoEtapa[] = []
+  for (const e of etapas) {
+    const rev = revs.get(e)
+    if (rev && await materialMudou(m, rev)) out.push(e)
+  }
+  return out
 }
 
 /**
@@ -103,83 +218,104 @@ async function contextoDaTarefa(supabase: SupabaseClient<Database>, activityId: 
   return { briefing: stripHtml((act?.description as string | null) ?? ''), comentarios }
 }
 
-type SB = SupabaseClient<Database>
-
 export type VeredictoAvanco =
   | { ok: true; nota?: string }
   | { ok: false; motivo: 'precisa_revisar'; mensagem: string }
   | { ok: false; motivo: 'confirmar'; mensagem: string; erros: ReviewError[]; falhou: boolean }
 
+/** Como a tarefa se refere ao material de cada etapa nos avisos. */
+export const MATERIAL: Record<RevisaoEtapa, string> = {
+  redacao: 'O texto da Redação', design: 'As peças do Preview', finalizacao: 'O arquivo Final',
+}
+
 /**
- * Pode sair da etapa? Regra do Rafael (28/09/2026): antes de AVANÇAR de uma etapa
- * com Revisão ligada, a pessoa revisa; se a revisão apontou erros (ou a IA não
- * respondeu), ela confirma que segue assim — `aceitar` = essa confirmação, que
- * vira 'overridden' e uma nota na movimentação.
- *
- * "Revisou" = revisão desta etapa feita DEPOIS da última entrada na etapa: voltou
- * da validação, revisa de novo. Voltar para trás nunca é barrado. Revisão
- * desligada, etapa desligada ou org sem IA utilizável = não barra.
+ * Pode avançar? Regras do Rafael (28–30/09/2026):
+ *  1. Sair PARA FRENTE de uma etapa com Revisão ligada exige revisão feita depois
+ *     da última entrada nela (voltou da validação, revisa de novo).
+ *  2. Revisão de qualquer etapa já passada (ou da atual) deixa de valer se o
+ *     material MUDOU depois dela — texto da Redação editado com a tarefa em
+ *     Design, peça trocada no Preview… A pessoa revisa de novo (só o que mudou).
+ *  3. Revisão com apontamentos (ou IA sem resposta) pede confirmação — `aceitar` =
+ *     "Concordo, seguir": vira 'overridden' e uma nota na movimentação.
+ * Voltar para trás nunca é barrado. Revisão/etapa desligada ou sem IA = não barra.
+ * Etapa passada SEM revisão registrada (tarefa antiga, etapa pulada) não barra.
  */
 export async function checarAvanco(
   supabase: SB, userId: string, activityId: string, from: string | null, to: string, aceitar: boolean,
 ): Promise<VeredictoAvanco> {
-  const etapa = from ? etapaRevisavel(from) : null
-  if (!etapa || to === from) return { ok: true }
+  if (!from || to === from) return { ok: true }
 
   const { data: act } = await supabase
-    .from('activities').select('review_kind, review_status, review_at, review_errors, campaigns(workspaces(org_id))')
-    .eq('id', activityId).single()
+    .from('activities').select('campaigns(workspaces(org_id))').eq('id', activityId).single()
   const orgId = (act as unknown as { campaigns: { workspaces: { org_id: string } | null } | null } | null)
     ?.campaigns?.workspaces?.org_id
-  if (!act || !orgId) return { ok: true }
+  if (!orgId) return { ok: true }
 
-  if (!(await ehAvanco(supabase, orgId, etapa, to))) return { ok: true }
+  const pos = await posicaoNaOrg(supabase, orgId)
+  if (pos(to) <= pos(from)) return { ok: true }
 
   const cfg = await iaDaOrg(orgId)
-  if (!cfg?.enabled || !cfg.stages[etapa]) return { ok: true }
-  // Sem IA que responda (Claude sem chave; Gemini sem chave nem no ambiente) não
-  // dá pra exigir revisão — o botão nem funcionaria.
-  if (!iaDisponivel(cfg)) return { ok: true }
+  // Sem IA que responda não dá pra exigir revisão — o botão nem funcionaria.
+  if (!cfg?.enabled || !iaDisponivel(cfg)) return { ok: true }
 
-  const label = ETAPAS.find(e => e.key === etapa)!.label
-  const { data: entrada } = await supabase
-    .from('activity_history').select('changed_at').eq('activity_id', activityId).eq('to_status', etapa)
-    .order('changed_at', { ascending: false }).limit(1).maybeSingle()
-  const a = act as unknown as { review_kind: string | null; review_status: string | null; review_at: string | null; review_errors: unknown }
-  const valida = a.review_kind === etapa && !!a.review_at
-    && (!entrada?.changed_at || new Date(a.review_at) >= new Date(entrada.changed_at as string))
-  if (!valida || !a.review_status || a.review_status === 'reviewing') {
-    return { ok: false, motivo: 'precisa_revisar', mensagem: `Revise ${label} antes de avançar: use o botão Revisar na tarefa.` }
+  const etapaAtual = etapaRevisavel(from)
+  const emJogo = ETAPAS.map(e => e.key).filter(e => cfg.stages[e] && pos(e) <= pos(from))
+  if (!emJogo.length) return { ok: true }
+
+  const [revs, m] = await Promise.all([revisoesDaTarefa(supabase, activityId), material(supabase, activityId)])
+  const precisa: string[] = []
+  const confirmar: { etapa: RevisaoEtapa; rev: RevisaoSalva }[] = []
+
+  for (const e of emJogo) {
+    const rev = revs.get(e)
+    const label = ETAPAS.find(x => x.key === e)!.label
+    if (e === etapaAtual) {
+      const { data: entrada } = await supabase
+        .from('activity_history').select('changed_at').eq('activity_id', activityId).eq('to_status', e)
+        .order('changed_at', { ascending: false }).limit(1).maybeSingle()
+      if (!rev || (entrada?.changed_at && new Date(rev.revisado_em) < new Date(entrada.changed_at as string))) {
+        precisa.push(`Revise ${label} antes de avançar: use o botão Revisar na tarefa.`)
+        continue
+      }
+    } else if (!rev) continue
+    if (m && await materialMudou(m, rev)) {
+      precisa.push(`${MATERIAL[e]} mudou depois da revisão de ${label}: revise de novo na tarefa.`)
+      continue
+    }
+    if (rev.status === 'errors' || rev.status === 'failed') confirmar.push({ etapa: e, rev })
   }
-  if (a.review_status !== 'errors' && a.review_status !== 'failed') return { ok: true }
 
-  const erros = Array.isArray(a.review_errors) ? (a.review_errors as ReviewError[]) : []
-  const falhou = a.review_status === 'failed'
+  if (precisa.length) return { ok: false, motivo: 'precisa_revisar', mensagem: precisa.join(' ') }
+  if (!confirmar.length) return { ok: true }
+
+  const erros = confirmar.flatMap(c => c.rev.status === 'failed' ? [] : c.rev.apontamentos)
+  const falhou = confirmar.every(c => c.rev.status === 'failed')
+  const labels = confirmar.map(c => ETAPAS.find(x => x.key === c.etapa)!.label).join(' e ')
   if (!aceitar) {
     return {
       ok: false, motivo: 'confirmar', erros, falhou,
       mensagem: falhou
-        ? `A revisão de ${label} não foi concluída. Abra a tarefa para confirmar que segue sem ela.`
-        : `A revisão de ${label} tem ${erros.length} ${erros.length === 1 ? 'apontamento' : 'apontamentos'}. Abra a tarefa para confirmar que segue assim.`,
+        ? `A revisão de ${labels} não foi concluída. Abra a tarefa para confirmar que segue sem ela.`
+        : `A revisão de ${labels} tem ${erros.length} ${erros.length === 1 ? 'apontamento' : 'apontamentos'}. Abra a tarefa para confirmar que segue assim.`,
     }
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).rpc('set_review', {
-    p_user_id: userId, p_activity_id: activityId, p_kind: etapa, p_status: 'overridden', p_errors: falhou ? null : erros, p_target: to,
-  })
+  for (const c of confirmar) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from('activity_revisao').update({ status: 'overridden' })
+      .eq('activity_id', activityId).eq('etapa', c.etapa)
+  }
   return {
     ok: true,
     nota: falhou
-      ? `Seguiu sem a revisão de ${label} (a IA não respondeu).`
-      : `Seguiu com ${erros.length} ${erros.length === 1 ? 'apontamento' : 'apontamentos'} da revisão de ${label}.`,
+      ? `Seguiu sem a revisão de ${labels} (a IA não respondeu).`
+      : `Seguiu com ${erros.length} ${erros.length === 1 ? 'apontamento' : 'apontamentos'} da revisão de ${labels}.`,
   }
 }
 
-/** `to` vem depois de `from` na ordem de status da org (cadastro org_status)? */
-async function ehAvanco(supabase: SB, orgId: string, from: string, to: string): Promise<boolean> {
+/** Posição de cada status na ordem da org (cadastro org_status). Desconhecido = fim. */
+export async function posicaoNaOrg(supabase: SB, orgId: string): Promise<(v: string) => number> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data } = await (supabase as any).from('org_status').select('valor').eq('org_id', orgId).order('ordem') as { data: { valor: string }[] | null }
   const ordem = data?.length ? data.map(r => r.valor) : STATUS_CONFIG.map(s => s.value as string)
-  const pos = (v: string) => { const i = ordem.indexOf(v); return i === -1 ? Number.MAX_SAFE_INTEGER : i }
-  return pos(to) > pos(from)
+  return (v: string) => { const i = ordem.indexOf(v); return i === -1 ? Number.MAX_SAFE_INTEGER : i }
 }

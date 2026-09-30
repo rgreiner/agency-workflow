@@ -8,8 +8,8 @@ import { after } from 'next/server'
 import { dispatchPushNotificacoes } from '@/lib/push'
 import { provisionActivitiesDrive, moveActivityDrive, regenerateActivityDrive, renameActivityDrive, relinkActivityDrive, syncFolderNameAfterTitleChange } from '@/lib/drive-provision'
 import { ultimoSegmento, isSubpastaTarefa } from '@/lib/task-folder-names'
-import { revisarAtividade, checarAvanco } from '@/lib/review-gate'
-import { etapaRevisavel } from '@/lib/ai/revisao-modelos'
+import { revisarAtividade, checarAvanco, revisoesDaTarefa, salvarRevisao, etapasComMudanca, posicaoNaOrg } from '@/lib/review-gate'
+import { etapaRevisavel, type RevisaoEtapa } from '@/lib/ai/revisao-modelos'
 import { lerRevisaoConfig } from '@/lib/ai/revisao-config'
 import { mensagemErroRevisao } from '@/lib/ai/review'
 import { logSystemError } from '@/lib/system-error'
@@ -629,13 +629,14 @@ export async function toggleCommentReaction(path: string, commentId: string, emo
 }
 
 /**
- * Botão "Revisar" da tarefa: roda a Revisão IA AGORA, sobre o material da etapa
- * atual, e devolve os apontamentos para a pessoa decidir antes de mover o status.
- * O resultado fica em activities.review_* (painel da tarefa) — sem comentário:
- * o painel já mostra. Para avançar com erros, a pessoa confirma (checarAvanco).
+ * Botão "Revisar" da tarefa: roda a Revisão IA AGORA e devolve os apontamentos
+ * para a pessoa decidir antes de mover o status. `etapaAlvo` revisa uma etapa já
+ * passada cujo material mudou (ex.: texto da Redação editado com a tarefa em
+ * Design); sem ele, a etapa atual. O resultado fica em activity_revisao (mig. 312)
+ * com a impressão digital do material — sem comentário, o painel já mostra.
  */
-export async function revisarTarefa(path: string, activityId: string): Promise<
-  | { ok: true; errors: { trecho: string; correcao: string; tipo?: string }[]; model: string; truncated: boolean }
+export async function revisarTarefa(path: string, activityId: string, etapaAlvo?: RevisaoEtapa): Promise<
+  | { ok: true; errors: { trecho: string; correcao: string; tipo?: string }[]; model: string; truncated: boolean; parcial: boolean }
   | { ok: false; aviso: string }
   | { error: string }
 > {
@@ -648,30 +649,45 @@ export async function revisarTarefa(path: string, activityId: string): Promise<
   if (!act) return { error: 'Tarefa não encontrada' }
   const orgId = (act as unknown as { campaigns: { workspaces: { org_id: string } | null } | null })
     .campaigns?.workspaces?.org_id
-  const etapa = etapaRevisavel(act.status as string)
+  const etapa = etapaAlvo ?? etapaRevisavel(act.status as string)
   if (!orgId || !etapa) return { error: 'Esta etapa não tem revisão.' }
 
   const cfg = await lerRevisaoConfig(orgId)
   if (!cfg.enabled || !cfg.stages[etapa]) return { error: 'A Revisão IA está desligada para esta etapa.' }
+  // Revisar etapa à frente não faz sentido (o material nem existe ainda).
+  const pos = await posicaoNaOrg(supabase, orgId)
+  if (pos(etapa) > pos(act.status as string)) return { error: 'Esta etapa ainda não chegou.' }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const setReview = (status: string, errors: unknown) => (supabase as any).rpc('set_review', {
-    p_user_id: user.id, p_activity_id: activityId, p_kind: etapa, p_status: status, p_errors: errors, p_target: null,
-  })
-
+  const anterior = (await revisoesDaTarefa(supabase, activityId)).get(etapa) ?? null
   try {
-    const out = await revisarAtividade(supabase, activityId, user.id, etapa, cfg)
+    const out = await revisarAtividade(supabase, activityId, user.id, etapa, cfg, anterior)
     // Sem material para revisar (pasta vazia, Doc vazio) conta como revisado.
-    if (!out.ok) { await setReview('vazio', null); revalidatePath(path); return { ok: false, aviso: out.vazio } }
-    await setReview(out.errors.length ? 'errors' : 'clean', out.errors.length ? out.errors : null)
+    if (!out.ok) {
+      await salvarRevisao(supabase, activityId, user.id, etapa, { status: 'vazio', apontamentos: null, fonte: out.fonte, texto: null })
+      revalidatePath(path)
+      return { ok: false, aviso: out.vazio }
+    }
+    await salvarRevisao(supabase, activityId, user.id, etapa, {
+      status: out.errors.length ? 'errors' : 'clean', apontamentos: out.errors.length ? out.errors : null,
+      fonte: out.fonte, texto: out.texto,
+    })
     revalidatePath(path)
-    return { ok: true, errors: out.errors, model: out.model, truncated: out.truncated }
+    return { ok: true, errors: out.errors, model: out.model, truncated: out.truncated, parcial: out.parcial }
   } catch (e) {
     console.error('[revisao] falhou', e)
     await logSystemError(supabase, { userId: user.id, context: `review:${etapa}`, error: e, activityId })
     // Falha da IA não prende a tarefa: para avançar, a pessoa confirma que segue sem.
-    await setReview('failed', null)
+    // Mantém a impressão digital/texto anteriores (a próxima tentativa compara com eles).
+    await salvarRevisao(supabase, activityId, user.id, etapa, { status: 'failed', apontamentos: null }).catch(() => {})
     revalidatePath(path)
     return { error: mensagemErroRevisao(e, cfg.provider) }
   }
+}
+
+/** Etapas (já passadas ou a atual) cujo material mudou depois da revisão — aviso da tarefa. */
+export async function mudancasDesdeRevisao(activityId: string, etapas: RevisaoEtapa[]): Promise<RevisaoEtapa[]> {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return []
+  return etapasComMudanca(supabase, activityId, etapas.filter(e => etapaRevisavel(e)))
 }

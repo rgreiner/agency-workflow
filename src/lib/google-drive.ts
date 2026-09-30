@@ -366,11 +366,57 @@ export async function readReviewAssets(link: string): Promise<{ assets: DriveAss
   return { assets, truncated }
 }
 
+// ── Versões (revisão: "o material mudou desde a revisão?") ─────────────────
+
+/** Arquivo + a versão que o Drive dá a ele (sem baixar nada). */
+export interface VersaoArquivo { id: string; v: string }
+
+/**
+ * Versões dos Docs de Redação de um link (Doc único ou pasta). Doc do Google não
+ * tem md5; `version` sobe a cada edição — inclusive comentário/formatação, por
+ * isso quem compara confirma pelo texto antes de pedir nova revisão.
+ */
+export async function versoesRedacao(link: string): Promise<VersaoArquivo[]> {
+  const id = extractFolderId(link)
+  if (!id) return []
+  const drive = getDrive()
+  const meta = (await drive.files.get({ fileId: id, fields: 'id, mimeType, version', supportsAllDrives: true })).data
+  if (meta.mimeType !== FOLDER_MIME) return meta.mimeType === DOC_MIME ? [{ id, v: String(meta.version ?? '') }] : []
+  const r = await drive.files.list({
+    q: `'${id}' in parents and mimeType = '${DOC_MIME}' and trashed = false`,
+    fields: 'files(id, version)', pageSize: 50, orderBy: 'name',
+    supportsAllDrives: true, includeItemsFromAllDrives: true,
+  })
+  return (r.data.files ?? []).filter(f => f.id).map(f => ({ id: f.id!, v: String(f.version ?? '') }))
+}
+
+/** Versões das peças revisáveis de um link: md5 do arquivo (Slides: `version`). */
+export async function versoesPecas(link: string): Promise<VersaoArquivo[]> {
+  const id = extractFolderId(link)
+  if (!id) return []
+  const drive = getDrive()
+  const meta = (await drive.files.get({ fileId: id, fields: 'id, mimeType, md5Checksum, version', supportsAllDrives: true })).data
+  const ver = (f: drive_v3.Schema$File) => String(f.md5Checksum || f.version || '')
+  if (meta.mimeType !== FOLDER_MIME) return meta.mimeType && isReviewable(meta.mimeType) ? [{ id, v: ver(meta) }] : []
+  const out: VersaoArquivo[] = []
+  let pageToken: string | undefined
+  do {
+    const r: drive_v3.Schema$FileList = (await drive.files.list({
+      q: `'${id}' in parents and trashed = false`,
+      fields: 'nextPageToken, files(id, mimeType, md5Checksum, version)',
+      pageSize: 200, orderBy: 'name', supportsAllDrives: true, includeItemsFromAllDrives: true, pageToken,
+    })).data
+    for (const f of r.files ?? []) if (f.id && f.mimeType && isReviewable(f.mimeType)) out.push({ id: f.id, v: ver(f) })
+    pageToken = r.nextPageToken ?? undefined
+  } while (pageToken)
+  return out
+}
+
 // ── Reconciliação campanha ↔ Drive ──────────────────────────────────────────
 
 /** Lista as subpastas (1 nível) de uma pasta. Pagina tudo. */
 /** Um arquivo dentro de uma pasta de tarefa (usado pelo portal do cliente). */
-export interface FolderFile { ref: string; name: string; mime: string; size: number; link?: string }
+export interface FolderFile { ref: string; name: string; mime: string; size: number; link?: string; /** Versão do conteúdo (ETag no S3), quando o backend informa. */ versao?: string }
 
 /** Lista os ARQUIVOS (não pastas) de uma pasta do Drive. */
 export async function listFolderFiles(folderId: string): Promise<FolderFile[]> {

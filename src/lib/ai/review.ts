@@ -129,6 +129,65 @@ export async function reviewText(cfg: RevisaoConfig, text: string, ctx?: Context
   return { model, errors: list, truncated }
 }
 
+// ── Revisão só do que mudou (Redação) ──────────────────────────────────────
+
+const SYSTEM_ALTERADO = `Você revisa textos publicitários em português do Brasil. O texto JÁ FOI
+revisado antes; você recebe só os TRECHOS ALTERADOS desde então.
+
+1. Em "erros", aponte erro CLARO de língua APENAS nos trechos alterados:
+${REGRAS}
+
+2. Você também recebe as PENDÊNCIAS da revisão anterior (pedidos do briefing/comentários que o
+texto não atendia). Em "pendencias", repita SÓ as que os trechos alterados NÃO resolveram, com o
+mesmo "pedido" e a "situacao" atualizada. Se um trecho alterado resolveu a pendência, não repita.
+Não crie pendência nova. Sem pendências anteriores, lista vazia.`
+
+/** Linhas do texto, sem espaço sobrando e sem vazias. */
+function linhas(t: string): string[] {
+  return t.split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean)
+}
+
+/**
+ * Revisão da Redação que já tinha sido revisada: manda à IA só as linhas novas ou
+ * alteradas. Erros de linhas que não mudaram continuam valendo (se ainda não foram
+ * aceitos); pendências anteriores voltam para a IA dizer se a alteração resolveu.
+ * Mudou mais da metade do texto = revisão completa (o recorte deixaria de ajudar).
+ */
+export async function reviewTextAlteracoes(
+  cfg: RevisaoConfig,
+  textoNovo: string,
+  anterior: { texto: string; apontamentos: ReviewError[]; aceitos: boolean },
+  ctx?: ContextoRevisao | null,
+): Promise<ReviewResult & { parcial: boolean }> {
+  const antes = new Set(linhas(anterior.texto))
+  const novas = linhas(textoNovo)
+  const alteradas = novas.filter(l => !antes.has(l))
+  if (novas.length && alteradas.length / novas.length > 0.5) {
+    return { ...(await reviewText(cfg, textoNovo, ctx)), parcial: false }
+  }
+
+  // Erros antigos cujo trecho segue igual no texto — ninguém mexeu, continuam.
+  // Se a pessoa já tinha aceitado seguir com eles, não voltam a cobrar.
+  const velhosErros = anterior.aceitos ? [] : anterior.apontamentos
+    .filter(e => e.tipo !== 'pendencia' && textoNovo.includes(e.trecho))
+  const velhasPend = anterior.aceitos ? [] : anterior.apontamentos.filter(e => e.tipo === 'pendencia')
+
+  if (!alteradas.length && !velhasPend.length) return { model: '—', errors: velhosErros, truncated: false, parcial: true }
+
+  const pend = velhasPend.length
+    ? velhasPend.map(p => `- pedido: ${p.trecho} | situação anterior: ${p.correcao}`).join('\n')
+    : '(nenhuma)'
+  const { texto, truncated } = cortar(alteradas.join('\n'))
+  const { model, list } = await run(cfg, SYSTEM_ALTERADO, [
+    { kind: 'text', text: `PENDÊNCIAS DA REVISÃO ANTERIOR:\n${pend}` },
+    { kind: 'text', text: `TRECHOS ALTERADOS:\n--- INÍCIO ---\n${texto || '(só remoções)'}\n--- FIM ---` },
+  ])
+  // Um erro "novo" pode repetir um velho (mesmo trecho): fica um só.
+  const chaves = new Set(velhosErros.map(e => e.trecho.toLowerCase()))
+  const errors = [...velhosErros, ...list.filter(e => e.tipo === 'pendencia' || !chaves.has(e.trecho.toLowerCase()))]
+  return { model, errors, truncated, parcial: true }
+}
+
 /**
  * Revisão das peças (Design/Finalização). Com o texto aprovado da Redação, a
  * mesma chamada também confere se a peça usou o texto certo.

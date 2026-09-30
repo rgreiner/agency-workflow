@@ -152,7 +152,7 @@ export async function listFolderFilesS3(folderPath: string): Promise<FolderFile[
       if (!o.Key || o.Key.endsWith('/')) continue // marcador de pasta
       const name = o.Key.slice(prefix.length)
       if (!name) continue
-      out.push({ ref: o.Key, name, mime: mimeFromKey(name), size: Number(o.Size ?? 0) })
+      out.push({ ref: o.Key, name, mime: mimeFromKey(name), size: Number(o.Size ?? 0), versao: o.ETag ?? undefined })
     }
     token = r.IsTruncated ? r.NextContinuationToken : undefined
   } while (token)
@@ -196,6 +196,12 @@ const REVIEW_MAX_FILE_BYTES  = 6  * 1024 * 1024
 const REVIEW_MAX_TOTAL_BYTES = 12 * 1024 * 1024
 const REVIEW_IMAGE_RE = /^image\/(png|jpe?g|webp|gif)$/i
 const isReviewableMime = (m: string) => REVIEW_IMAGE_RE.test(m) || m === 'application/pdf'
+
+/** Versões (ETag) das peças revisáveis de uma subpasta — sem baixar nada. */
+export async function versoesPecasS3(folderPath: string): Promise<{ id: string; v: string }[]> {
+  return (await listFolderFilesS3(folderPath)).filter(f => isReviewableMime(f.mime))
+    .map(f => ({ id: f.ref, v: f.versao ?? String(f.size) }))
+}
 
 /**
  * Peças de uma subpasta (Preview/Final) em base64 p/ revisão por IA — só imagem/PDF,
