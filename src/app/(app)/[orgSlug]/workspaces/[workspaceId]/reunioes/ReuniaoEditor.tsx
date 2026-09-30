@@ -5,23 +5,30 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
-  NotebookPen, Sparkles, Loader2, Plus, X, Trash2, Globe, ChevronDown, ExternalLink, ListPlus, Link2, Unlink, Search,
+  NotebookPen, Sparkles, Loader2, Plus, X, Trash2, Globe, ChevronDown, ExternalLink, ListPlus, Link2, Unlink, Search, Check, Undo2, Calculator,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { Switch } from '@/components/ui/Switch'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { salvarReuniao, excluirReuniao, organizarReuniao, buscarTarefasCliente, vincularPasso } from '@/app/actions/reunioes'
-import type { Reuniao, PassoReuniao, ResponsavelPasso, TarefaVinculavel } from '@/lib/reunioes'
+import {
+  salvarReuniao, excluirReuniao, organizarReuniao, buscarTarefasCliente, buscarOrcamentosCliente, ajustarPasso,
+} from '@/app/actions/reunioes'
+import {
+  passoResolvido,
+  type Reuniao, type PassoReuniao, type ResponsavelPasso, type TarefaVinculavel, type OrcamentoVinculavel, type LinkPasso,
+} from '@/lib/reunioes'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 
-export interface TarefaDoPasso { titulo: string; href: string }
+export type TarefaDoPasso = LinkPasso
+
+const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 const inputCls = 'w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent disabled:opacity-70'
 
 const passoVazio = (responsavel: ResponsavelPasso = 'agencia'): PassoReuniao =>
-  ({ id: null, texto: '', responsavel, rascunho: '', activityId: null })
+  ({ id: null, texto: '', responsavel, rascunho: '', activityId: null, producaoId: null, feito: false })
 
 /**
  * Editor da ata (mig. 306). Colar notas → "Organizar com IA" propõe resumo e
@@ -30,7 +37,7 @@ const passoVazio = (responsavel: ResponsavelPasso = 'agencia'): PassoReuniao =>
  * organiza no padrão da casa.
  */
 export function ReuniaoEditor({
-  orgSlug, workspaceId, clienteNome, inicial, campanhas, tarefas, podeEditar,
+  orgSlug, workspaceId, clienteNome, inicial, campanhas, tarefas, orcamentos, podeEditar,
 }: {
   orgSlug: string
   workspaceId: string
@@ -38,7 +45,9 @@ export function ReuniaoEditor({
   inicial: Reuniao
   campanhas: { id: string; name: string }[]
   /** passoId → tarefa criada a partir dele. */
-  tarefas: Record<string, TarefaDoPasso>
+  tarefas: Record<string, LinkPasso>
+  /** passoId → orçamento ligado a ele (mig. 307). */
+  orcamentos: Record<string, LinkPasso>
   podeEditar: boolean
 }) {
   const router = useRouter()
@@ -54,13 +63,14 @@ export function ReuniaoEditor({
   // Passo à espera de uma campanha pra virar tarefa (ata sem campanha).
   const [pedeCampanha, setPedeCampanha] = useState<number | null>(null)
   const [campanhaEscolhida, setCampanhaEscolhida] = useState('')
-  // Vincular a uma tarefa que já existe (em vez de criar outra).
-  const [vinculando, setVinculando] = useState<number | null>(null)
+  // Vincular a uma tarefa ou orçamento que já existe (em vez de criar outra tarefa).
+  const [vinculando, setVinculando] = useState<{ i: number; aba: 'tarefa' | 'orcamento' } | null>(null)
   const [busca, setBusca] = useState('')
   const [achadas, setAchadas] = useState<TarefaVinculavel[]>([])
+  const [achados, setAchados] = useState<OrcamentoVinculavel[]>([])
   const [buscando, setBuscando] = useState(false)
-  // Vínculos feitos nesta tela, até o refresh trazer o `tarefas` novo do servidor.
-  const [vinculadas, setVinculadas] = useState<Record<string, TarefaDoPasso>>({})
+  // Links feitos nesta tela, até o refresh trazer tarefas/orçamentos novos do servidor.
+  const [linksLocais, setLinksLocais] = useState<Record<string, { tarefa?: LinkPasso; orcamento?: LinkPasso }>>({})
   const statusCfg = useStatusConfig()
 
   const base = `/${orgSlug}/workspaces/${workspaceId}/reunioes`
@@ -123,8 +133,8 @@ export function ReuniaoEditor({
       const res = await organizarReuniao(workspaceId, ata.notas, ata.transcricao)
       if (!res.ok) { toast.error(res.error, { duration: 8000 }); return }
       const { ata: ia } = res
-      // Passo que já virou tarefa não some: a IA propõe, o vínculo fica.
-      const comTarefa = ata.passos.filter(p => p.activityId)
+      // Passo que já tem desfecho (tarefa, orçamento, feito) não some: a IA propõe, o vínculo fica.
+      const comTarefa = ata.passos.filter(passoResolvido)
       setAta(a => ({
         ...a,
         titulo: a.titulo.trim() ? a.titulo : (ia.titulo ?? ''),
@@ -153,61 +163,64 @@ export function ReuniaoEditor({
     })
   }
 
-  // Busca com respiro de 250 ms; abrir o modal já lista as mais recentes do cliente.
+  // Busca com respiro de 250 ms; abrir o modal já lista os mais recentes do cliente.
+  const abaAberta = vinculando?.aba ?? null
   useEffect(() => {
-    if (vinculando === null) return
+    if (!abaAberta) return
     let vivo = true
     const t = setTimeout(async () => {
       setBuscando(true)
-      const res = await buscarTarefasCliente(workspaceId, busca)
+      const res = abaAberta === 'tarefa'
+        ? await buscarTarefasCliente(workspaceId, busca)
+        : await buscarOrcamentosCliente(workspaceId, busca)
       if (!vivo) return
       setBuscando(false)
-      if (res.ok) setAchadas(res.tarefas)
-      else toast.error(res.error)
+      if (!res.ok) { toast.error(res.error); return }
+      if ('tarefas' in res) setAchadas(res.tarefas)
+      else setAchados(res.orcamentos)
     }, 250)
     return () => { vivo = false; clearTimeout(t) }
-  }, [busca, vinculando, workspaceId])
+  }, [busca, abaAberta, workspaceId])
 
   function abrirVincular(i: number) {
-    setBusca(''); setAchadas([]); setVinculando(i)
+    setBusca(''); setAchadas([]); setAchados([]); setVinculando({ i, aba: 'tarefa' })
   }
 
-  function vincular(t: TarefaVinculavel) {
-    const i = vinculando
-    if (i === null) return
+  type Patch = { activityId?: string | null; producaoId?: string | null; feito?: boolean }
+
+  /** Grava o desfecho de um passo (salvando a ata antes, se preciso) e reflete na tela. */
+  function ajustar(i: number, patch: Patch, links: { tarefa?: LinkPasso | null; orcamento?: LinkPasso | null } = {}, aviso = '') {
     startSalvar(async () => {
       // Passo novo ou editado precisa existir no banco antes do vínculo.
-      const base = sujo || !ata.passos[i]?.id ? await gravar(ata, false) : ata
+      const base = sujo || !ata.id || !ata.passos[i]?.id ? await gravar(ata, false) : ata
       const passo = base?.passos[i]
       if (!base?.id || !passo?.id) return
-      const res = await vincularPasso(orgSlug, workspaceId, base.id, passo.id, t.id)
+      const res = await ajustarPasso(orgSlug, workspaceId, base.id, passo.id, patch)
       if (!res.ok) { toast.error(res.error); return }
-      const href = `/${orgSlug}/workspaces/${workspaceId}/campaigns/${t.campaignId}/activities/${t.id}`
-      setVinculadas(v => ({ ...v, [passo.id!]: { titulo: t.titulo, href } }))
-      const novos = base.passos.map((p, j) => (j === i ? { ...p, activityId: t.id } : p))
-      setAta(a => ({ ...a, passos: novos }))
-      setSalvo(JSON.stringify({ ...base, passos: novos }))
+      const pid = passo.id
+      setLinksLocais(v => {
+        const atual = { ...(v[pid] ?? {}) }
+        if (links.tarefa !== undefined) atual.tarefa = links.tarefa ?? undefined
+        if (links.orcamento !== undefined) atual.orcamento = links.orcamento ?? undefined
+        return { ...v, [pid]: atual }
+      })
+      const mudar = (lista: PassoReuniao[]) => lista.map((p, j) => (j === i ? { ...p, ...patch } : p))
+      setAta(a => ({ ...a, passos: mudar(a.passos) }))
+      setSalvo(JSON.stringify({ ...base, passos: mudar(base.passos) }))
       setVinculando(null)
-      toast.success('Passo vinculado à tarefa.')
+      if (aviso) toast.success(aviso)
       // Ata nova ganhou id agora: a URL passa a ser a dela.
       if (!ata.id) router.replace(`/${orgSlug}/workspaces/${workspaceId}/reunioes/${base.id}`)
       else router.refresh()
     })
   }
 
-  function desvincular(i: number) {
-    const passo = ata.passos[i]
-    if (!ata.id || !passo?.id) return
-    startSalvar(async () => {
-      const res = await vincularPasso(orgSlug, workspaceId, ata.id!, passo.id!, null)
-      if (!res.ok) { toast.error(res.error); return }
-      setVinculadas(v => { const n = { ...v }; delete n[passo.id!]; return n })
-      const novos = ata.passos.map((p, j) => (j === i ? { ...p, activityId: null } : p))
-      setAta(a => ({ ...a, passos: novos }))
-      setSalvo(s => { const o = JSON.parse(s) as Reuniao; return JSON.stringify({ ...o, passos: o.passos.map((p, j) => (j === i ? { ...p, activityId: null } : p)) }) })
-      toast.success('Vínculo desfeito. A tarefa continua existindo.')
-    })
-  }
+  const vincularTarefa = (t: TarefaVinculavel) => vinculando && ajustar(vinculando.i, { activityId: t.id }, {
+    tarefa: { titulo: t.titulo, href: `/${orgSlug}/workspaces/${workspaceId}/campaigns/${t.campaignId}/activities/${t.id}` },
+  }, 'Passo vinculado à tarefa.')
+  const vincularOrcamento = (o: OrcamentoVinculavel) => vinculando && ajustar(vinculando.i, { producaoId: o.id }, {
+    orcamento: { titulo: `${o.numero} · ${o.titulo}`, href: `/${orgSlug}/producao/orcamento/${o.id}` },
+  }, 'Passo vinculado ao orçamento.')
 
   async function excluir() {
     if (!ata.id) return
@@ -331,14 +344,15 @@ export function ReuniaoEditor({
 
         <ul className="space-y-2">
           {ata.passos.map((p, i) => {
-            const tarefa = p.id && p.activityId ? (vinculadas[p.id] ?? tarefas[p.id]) : undefined
+            const tarefa = p.id && p.activityId ? (linksLocais[p.id]?.tarefa ?? tarefas[p.id]) : undefined
+            const orcamento = p.id && p.producaoId ? (linksLocais[p.id]?.orcamento ?? orcamentos[p.id]) : undefined
             const aberto = abertos.has(i)
             return (
               <li key={p.id ?? `novo-${i}`} className="rounded-2xl bg-white border border-gray-200 px-3 py-2.5">
                 <div className="flex items-center gap-2">
                   <div className="inline-flex shrink-0 rounded-lg bg-gray-100 p-0.5 text-xs">
                     {(['agencia', 'cliente'] as const).map(r => (
-                      <button key={r} type="button" disabled={ro || !!p.activityId}
+                      <button key={r} type="button" disabled={ro || passoResolvido(p)}
                         onClick={() => setPasso(i, { responsavel: r })}
                         className={cn('px-2 py-1 rounded-md font-medium transition-colors',
                           p.responsavel === r ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
@@ -348,28 +362,70 @@ export function ReuniaoEditor({
                   </div>
                   <input value={p.texto} disabled={ro} onChange={e => setPasso(i, { texto: e.target.value })}
                     placeholder="O que foi combinado"
-                    className="flex-1 min-w-0 bg-transparent text-sm text-gray-900 placeholder-gray-400 px-2 py-1.5 rounded-lg focus:outline-none focus:bg-gray-100 disabled:opacity-100" />
-                  {p.responsavel === 'agencia' && (
-                    tarefa || p.activityId ? (
-                      <span className="shrink-0 inline-flex items-center rounded-lg bg-green-500/15 text-green-600">
-                        {tarefa ? (
-                          <Link href={tarefa.href} title={tarefa.titulo}
-                            className="inline-flex items-center gap-1 text-xs font-medium pl-2 pr-1.5 py-1 rounded-lg hover:bg-green-500/15 transition-colors">
-                            Tarefa <ExternalLink className="w-3 h-3" />
-                          </Link>
-                        ) : <span className="text-xs font-medium px-2 py-1">Tarefa vinculada</span>}
-                        {podeEditar && (
-                          <button type="button" onClick={() => desvincular(i)} disabled={salvando}
-                            title="Desvincular (a tarefa continua existindo)"
-                            className="p-1 mr-0.5 rounded-md text-green-600/70 hover:text-red-600 hover:bg-red-500/10 transition-colors disabled:opacity-50">
-                            <Unlink className="w-3 h-3" />
-                          </button>
-                        )}
-                      </span>
-                    ) : podeEditar && (
-                      <span className="shrink-0 inline-flex items-center gap-1">
+                    className={cn('flex-1 min-w-0 bg-transparent text-sm placeholder-gray-400 px-2 py-1.5 rounded-lg focus:outline-none focus:bg-gray-100 disabled:opacity-100',
+                      p.feito ? 'text-gray-400 line-through' : 'text-gray-900')} />
+                  {/* Desfechos: tarefa, orçamento, feito — cada um com o seu "desfazer". */}
+                  {(p.activityId || p.producaoId || p.feito) && (
+                    <span className="shrink-0 inline-flex items-center gap-1">
+                      {p.activityId && (
+                        <span className="inline-flex items-center rounded-lg bg-green-500/15 text-green-600">
+                          {tarefa ? (
+                            <Link href={tarefa.href} title={tarefa.titulo}
+                              className="inline-flex items-center gap-1 text-xs font-medium pl-2 pr-1.5 py-1 rounded-lg hover:bg-green-500/15 transition-colors">
+                              Tarefa <ExternalLink className="w-3 h-3" />
+                            </Link>
+                          ) : <span className="text-xs font-medium px-2 py-1">Tarefa</span>}
+                          {podeEditar && (
+                            <button type="button" disabled={salvando} title="Desvincular (a tarefa continua existindo)"
+                              onClick={() => ajustar(i, { activityId: null }, { tarefa: null }, 'Vínculo desfeito. A tarefa continua existindo.')}
+                              className="p-1 mr-0.5 rounded-md text-green-600/70 hover:text-red-600 hover:bg-red-500/10 transition-colors disabled:opacity-50">
+                              <Unlink className="w-3 h-3" />
+                            </button>
+                          )}
+                        </span>
+                      )}
+                      {p.producaoId && (
+                        <span className="inline-flex items-center rounded-lg bg-blue-500/15 text-blue-500">
+                          {orcamento ? (
+                            <Link href={orcamento.href} title={orcamento.titulo}
+                              className="inline-flex items-center gap-1 text-xs font-medium pl-2 pr-1.5 py-1 rounded-lg hover:bg-blue-500/15 transition-colors">
+                              <Calculator className="w-3 h-3" /> Orçamento <ExternalLink className="w-3 h-3" />
+                            </Link>
+                          ) : <span className="text-xs font-medium px-2 py-1">Orçamento</span>}
+                          {podeEditar && (
+                            <button type="button" disabled={salvando} title="Desvincular (o orçamento continua existindo)"
+                              onClick={() => ajustar(i, { producaoId: null }, { orcamento: null }, 'Vínculo desfeito. O orçamento continua existindo.')}
+                              className="p-1 mr-0.5 rounded-md text-blue-500/70 hover:text-red-600 hover:bg-red-500/10 transition-colors disabled:opacity-50">
+                              <Unlink className="w-3 h-3" />
+                            </button>
+                          )}
+                        </span>
+                      )}
+                      {p.feito && (
+                        <span className="inline-flex items-center rounded-lg bg-gray-100 text-gray-600">
+                          <span className="inline-flex items-center gap-1 text-xs font-medium pl-2 pr-1.5 py-1"><Check className="w-3 h-3" /> Feito</span>
+                          {podeEditar && (
+                            <button type="button" disabled={salvando} title="Reabrir o passo"
+                              onClick={() => ajustar(i, { feito: false }, {}, 'Passo reaberto.')}
+                              className="p-1 mr-0.5 rounded-md text-gray-400 hover:text-gray-800 hover:bg-gray-200 transition-colors disabled:opacity-50">
+                              <Undo2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                  {podeEditar && !passoResolvido(p) && (
+                    <span className="shrink-0 inline-flex items-center gap-1">
+                      <button type="button" onClick={() => ajustar(i, { feito: true }, {}, 'Marcado como feito.')}
+                        disabled={salvando || !p.texto.trim()}
+                        title="Consulta ou combinado resolvido, sem virar trabalho de pauta"
+                        className="press inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+                        <Check className="w-3.5 h-3.5" /> Feito
+                      </button>
+                      {p.responsavel === 'agencia' && (<>
                         <button type="button" onClick={() => abrirVincular(i)} disabled={salvando || !p.texto.trim()}
-                          title="Já existe uma tarefa para isso? Vincule em vez de criar outra"
+                          title="Já existe uma tarefa ou um orçamento para isso? Vincule em vez de criar outro"
                           className="press inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50">
                           <Link2 className="w-3.5 h-3.5" /> Vincular
                         </button>
@@ -377,8 +433,8 @@ export function ReuniaoEditor({
                           className="press inline-flex items-center gap-1 text-xs font-medium text-[#fff] bg-orange-600 hover:bg-orange-700 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50">
                           <ListPlus className="w-3.5 h-3.5" /> Criar tarefa
                         </button>
-                      </span>
-                    )
+                      </>)}
+                    </span>
                   )}
                   {p.responsavel === 'agencia' && (
                     <button type="button" title={aberto ? 'Esconder o rascunho do briefing' : 'Ver o rascunho do briefing'}
@@ -387,7 +443,7 @@ export function ReuniaoEditor({
                       <ChevronDown className={cn('w-4 h-4 transition-transform', aberto && 'rotate-180')} />
                     </button>
                   )}
-                  {podeEditar && !p.activityId && (
+                  {podeEditar && !passoResolvido(p) && (
                     <button type="button" title="Remover passo"
                       onClick={() => setAta(a => ({ ...a, passos: a.passos.filter((_, j) => j !== i) }))}
                       className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
@@ -396,7 +452,7 @@ export function ReuniaoEditor({
                   )}
                 </div>
                 {p.responsavel === 'agencia' && aberto && (
-                  <textarea value={p.rascunho} disabled={ro || !!p.activityId} rows={5}
+                  <textarea value={p.rascunho} disabled={ro || passoResolvido(p)} rows={5}
                     onChange={e => setPasso(i, { rascunho: e.target.value })}
                     placeholder="Tudo o que a reunião disse sobre este trabalho. Vai para o briefing da tarefa."
                     className={cn(inputCls, 'mt-2 resize-y leading-relaxed')} />
@@ -467,31 +523,41 @@ export function ReuniaoEditor({
         </div>
       </Modal>
 
-      <Modal open={vinculando !== null} onClose={() => setVinculando(null)} size="lg" label="Vincular tarefa" dismissable={!salvando}>
-        <ModalHeader title="Vincular a uma tarefa existente" onClose={() => setVinculando(null)} />
+      <Modal open={vinculando !== null} onClose={() => setVinculando(null)} size="lg" label="Vincular" dismissable={!salvando}>
+        <ModalHeader title="Vincular a algo que já existe" onClose={() => setVinculando(null)} />
         <div className="px-6 pt-4 pb-2">
           {vinculando !== null && (
-            <p className="text-xs text-gray-500 mb-2 truncate">Passo: <span className="text-gray-700">{ata.passos[vinculando]?.texto}</span></p>
+            <p className="text-xs text-gray-500 mb-3 truncate">Passo: <span className="text-gray-700">{ata.passos[vinculando.i]?.texto}</span></p>
           )}
+          <div className="inline-flex rounded-lg bg-gray-100 p-0.5 text-sm mb-3">
+            {(['tarefa', 'orcamento'] as const).map(aba => (
+              <button key={aba} type="button"
+                onClick={() => { if (vinculando) { setBusca(''); setVinculando({ ...vinculando, aba }) } }}
+                className={cn('px-3 py-1.5 rounded-md font-medium transition-colors',
+                  abaAberta === aba ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
+                {aba === 'tarefa' ? 'Tarefa' : 'Orçamento'}
+              </button>
+            ))}
+          </div>
           <div className="relative">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input autoFocus value={busca} onChange={e => setBusca(e.target.value)}
-              placeholder={`Buscar nas tarefas de ${clienteNome}`}
+              placeholder={abaAberta === 'orcamento' ? `Buscar orçamento de ${clienteNome} (título ou número)` : `Buscar nas tarefas de ${clienteNome}`}
               className={cn(inputCls, 'pl-10')} />
           </div>
         </div>
         <ul className="px-3 pb-4 max-h-[50vh] overflow-y-auto">
-          {buscando && achadas.length === 0 && (
-            <li className="flex items-center justify-center gap-2 py-8 text-sm text-gray-400"><Loader2 className="w-4 h-4 animate-spin" /> Buscando…</li>
-          )}
-          {!buscando && achadas.length === 0 && (
-            <li className="py-8 text-center text-sm text-gray-400">Nenhuma tarefa encontrada{busca.trim() ? ' com esse termo' : ''}.</li>
-          )}
-          {achadas.map(t => {
+          {(() => {
+            const vazio = abaAberta === 'tarefa' ? achadas.length === 0 : achados.length === 0
+            if (buscando && vazio) return <li className="flex items-center justify-center gap-2 py-8 text-sm text-gray-400"><Loader2 className="w-4 h-4 animate-spin" /> Buscando…</li>
+            if (!buscando && vazio) return <li className="py-8 text-center text-sm text-gray-400">Nada encontrado{busca.trim() ? ' com esse termo' : ''}.</li>
+            return null
+          })()}
+          {abaAberta === 'tarefa' && achadas.map(t => {
             const st = statusCfg.find(x => x.value === t.status)
             return (
               <li key={t.id}>
-                <button type="button" onClick={() => vincular(t)} disabled={salvando}
+                <button type="button" onClick={() => vincularTarefa(t)} disabled={salvando}
                   className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100 transition-colors disabled:opacity-50">
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm text-gray-900 truncate">{t.titulo}</span>
@@ -507,6 +573,19 @@ export function ReuniaoEditor({
               </li>
             )
           })}
+          {abaAberta === 'orcamento' && achados.map(o => (
+            <li key={o.id}>
+              <button type="button" onClick={() => vincularOrcamento(o)} disabled={salvando}
+                className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100 transition-colors disabled:opacity-50">
+                <span className="shrink-0 w-16 text-xs text-gray-500 tabular-nums">{o.numero}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm text-gray-900 truncate">{o.titulo}</span>
+                  <span className="block text-xs text-gray-500 truncate">{o.situacao}</span>
+                </span>
+                <span className="shrink-0 text-xs text-gray-600 tabular-nums">{brl(o.valor)}</span>
+              </button>
+            </li>
+          ))}
         </ul>
       </Modal>
 

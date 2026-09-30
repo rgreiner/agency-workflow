@@ -18,7 +18,7 @@ interface Linha {
   workspace_id: string
   workspaces: { name: string } | null
   campaigns: { name: string } | null
-  reuniao_passos: { responsavel: string; activity_id: string | null }[]
+  reuniao_passos: { responsavel: string; activity_id: string | null; producao_id: string | null; feito_em: string | null }[]
 }
 
 /**
@@ -42,7 +42,7 @@ export default async function ReunioesPage({ params, searchParams }: {
   if (!org) notFound()
 
   let q = sb.from('reunioes')
-    .select('id, titulo, realizada_em, publicada, workspace_id, workspaces(name), campaigns(name), reuniao_passos(responsavel, activity_id)')
+    .select('id, titulo, realizada_em, publicada, workspace_id, workspaces(name), campaigns(name), reuniao_passos(responsavel, activity_id, producao_id, feito_em)')
     .eq('org_id', org.id)
     .order('realizada_em', { ascending: false })
     .order('created_at', { ascending: false })
@@ -96,7 +96,8 @@ export default async function ReunioesPage({ params, searchParams }: {
         <ul className="space-y-2">
           {reunioes.map(r => {
             const daAgencia = r.reuniao_passos.filter(p => p.responsavel === 'agencia')
-            const pendentes = daAgencia.filter(p => !p.activity_id).length
+            // Resolvido = virou tarefa, orçamento ou foi marcado feito (mig. 307).
+            const pendentes = daAgencia.filter(p => !p.activity_id && !p.producao_id && !p.feito_em).length
             const sub = [ws ? null : r.workspaces?.name, r.campaigns?.name].filter(Boolean).join(' · ')
             return (
               <li key={r.id}>
@@ -112,7 +113,7 @@ export default async function ReunioesPage({ params, searchParams }: {
                   </div>
                   {daAgencia.length > 0 && (
                     <span className="hidden sm:inline-flex items-center gap-1 text-xs text-gray-500 tabular-nums"
-                      title={pendentes ? `${pendentes} passo(s) da agência ainda sem tarefa` : 'Todos os passos da agência viraram tarefa'}>
+                      title={pendentes ? `${pendentes} passo(s) da agência ainda sem desfecho` : 'Todos os passos da agência têm desfecho'}>
                       <ListChecks className={pendentes ? 'w-3.5 h-3.5 text-orange-600' : 'w-3.5 h-3.5 text-green-600'} />
                       {daAgencia.length - pendentes}/{daAgencia.length}
                     </span>

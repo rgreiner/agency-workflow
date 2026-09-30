@@ -24,6 +24,7 @@ export default async function NovaReuniaoPage({ params, searchParams }: {
       clienteNome={ctx.clienteNome}
       campanhas={ctx.campanhas}
       tarefas={{}}
+      orcamentos={{}}
       podeEditar
       inicial={{
         id: null, titulo: '', realizadaEm: hoje,

@@ -9,7 +9,18 @@ export interface PassoReuniao {
   responsavel: ResponsavelPasso
   rascunho: string
   activityId: string | null
+  /** Orçamento (producao tipo orcamento) ligado ao passo — mig. 307. */
+  producaoId: string | null
+  /** Consulta/combinado resolvido sem virar trabalho de pauta — mig. 307. */
+  feito: boolean
 }
+
+/** Link exibido no passo (tarefa ou orçamento). */
+export interface LinkPasso { titulo: string; href: string }
+
+/** O passo já tem desfecho: tarefa, orçamento ou marcado como feito. */
+export const passoResolvido = (p: { activityId?: string | null; producaoId?: string | null; feito?: boolean }) =>
+  !!(p.activityId || p.producaoId || p.feito)
 
 export interface Reuniao {
   id: string | null
@@ -32,6 +43,15 @@ export interface TarefaVinculavel {
   arquivada: boolean
   campaignId: string
   campanha: string
+}
+
+/** Orçamento do cliente candidato a vínculo com um passo. */
+export interface OrcamentoVinculavel {
+  id: string
+  numero: string
+  titulo: string
+  situacao: string
+  valor: number
 }
 
 /** 2026-09-29 → 29/09/2026 (sem fuso: é data civil). */

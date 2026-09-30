@@ -12,7 +12,9 @@ import { organizarAta, type AtaOrganizada } from '@/lib/ai/ata'
 import { iaDaOrg } from '@/lib/ai/provedor'
 import { mensagemErroRevisao } from '@/lib/ai/review'
 import { logSystemError } from '@/lib/system-error'
-import type { Reuniao, TarefaVinculavel } from '@/lib/reunioes'
+import type { Reuniao, TarefaVinculavel, OrcamentoVinculavel } from '@/lib/reunioes'
+import { ORCAMENTO_SITUACAO_LABELS } from '@/lib/midia'
+import { docNumero } from '@/lib/doc-series'
 
 type Resultado<T> = ({ ok: true } & T) | { ok: false; error: string }
 
@@ -174,19 +176,62 @@ export async function buscarTarefasCliente(
   }
 }
 
-/** Liga um passo salvo a uma tarefa que já existe (ou solta, com null). */
-export async function vincularPasso(
-  orgSlug: string, workspaceId: string, reuniaoId: string, passoId: string, activityId: string | null,
-): Promise<Resultado<object>> {
+/** Orçamentos do cliente pra vincular a um passo (título ou número). */
+export async function buscarOrcamentosCliente(
+  workspaceId: string, busca: string,
+): Promise<Resultado<{ orcamentos: OrcamentoVinculavel[] }>> {
   const user = await getUsuario()
   if (!user) return { ok: false, error: 'Sessão expirada. Entre de novo.' }
   const supabase = await createClient()
-  // A RLS (mig. 306) só aceita tarefa do MESMO cliente da ata e quem gerencia o portal.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let q = (supabase as any).from('producao')
+    .select('id, numero, serie, titulo, situacao, valor')
+    .eq('workspace_id', workspaceId).eq('tipo', 'orcamento')
+    .order('numero', { ascending: false })
+    .limit(20)
+  const termo = busca.trim()
+  if (/^\d+$/.test(termo)) q = q.eq('numero', Number(termo))
+  else for (const t of termo.split(/\s+/).filter(Boolean).slice(0, 5)) {
+    q = q.ilike('titulo', `%${t.replace(/[%_,()]/g, ' ')}%`)
+  }
+  const { data, error } = await q
+  if (error) return { ok: false, error: error.message }
+  const rotulo = Object.fromEntries(ORCAMENTO_SITUACAO_LABELS.map(o => [o.value, o.label]))
+  type Row = { id: string; numero: number | null; serie: string | null; titulo: string; situacao: string; valor: number | string }
+  return {
+    ok: true,
+    orcamentos: ((data ?? []) as Row[]).map(o => ({
+      id: o.id, numero: docNumero(o.serie, o.numero), titulo: o.titulo,
+      situacao: rotulo[o.situacao] ?? o.situacao, valor: Number(o.valor ?? 0),
+    })),
+  }
+}
+
+/**
+ * Desfecho de um passo salvo: tarefa existente, orçamento ou "feito" (consulta
+ * que não vai pra pauta). Só mexe nos campos passados; null solta o vínculo.
+ */
+export async function ajustarPasso(
+  orgSlug: string, workspaceId: string, reuniaoId: string, passoId: string,
+  patch: { activityId?: string | null; producaoId?: string | null; feito?: boolean },
+): Promise<Resultado<object>> {
+  const user = await getUsuario()
+  if (!user) return { ok: false, error: 'Sessão expirada. Entre de novo.' }
+  const campos: Record<string, unknown> = {}
+  if (patch.activityId !== undefined) campos.activity_id = patch.activityId
+  if (patch.producaoId !== undefined) campos.producao_id = patch.producaoId
+  if (patch.feito !== undefined) {
+    campos.feito_em = patch.feito ? new Date().toISOString() : null
+    campos.feito_por = patch.feito ? user.id : null
+  }
+  if (!Object.keys(campos).length) return { ok: true }
+  const supabase = await createClient()
+  // A RLS (mig. 306/307) só aceita tarefa/orçamento do MESMO cliente da ata.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any).from('reuniao_passos')
-    .update({ activity_id: activityId }).eq('id', passoId).eq('reuniao_id', reuniaoId).select('id')
-  if (error) return { ok: false, error: error.code === '42501' ? 'Essa tarefa não é deste cliente.' : error.message }
-  if (!data?.length) return { ok: false, error: 'Só o Atendimento (ou admin) vincula tarefas.' }
+    .update(campos).eq('id', passoId).eq('reuniao_id', reuniaoId).select('id')
+  if (error) return { ok: false, error: error.code === '42501' ? 'Isso não é deste cliente.' : error.message }
+  if (!data?.length) return { ok: false, error: 'Só o Atendimento (ou admin) altera os passos.' }
   rotas(orgSlug, workspaceId, reuniaoId)
   return { ok: true }
 }

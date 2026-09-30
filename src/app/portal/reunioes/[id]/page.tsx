@@ -13,7 +13,7 @@ interface AtaPortal {
   participantes: string | null
   resumo: string | null
   campanha: string | null
-  passos: { texto: string; responsavel: 'agencia' | 'cliente'; em_andamento: boolean }[]
+  passos: { texto: string; responsavel: 'agencia' | 'cliente'; em_andamento: boolean; feito?: boolean }[]
 }
 
 /**
@@ -52,8 +52,14 @@ export default async function PortalReuniaoPage({ params }: { params: Promise<{ 
           </h2>
           <ul className="space-y-2">
             {doCliente.map((p, i) => (
-              <li key={i} className="rounded-xl border border-gray-100 border-l-2 border-l-orange-500 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-800">
-                {p.texto}
+              <li key={i} className={`flex items-start gap-2 rounded-xl border border-gray-100 border-l-2 bg-gray-50 px-3.5 py-2.5 text-sm ${
+                p.feito ? 'border-l-green-500 text-gray-500' : 'border-l-orange-500 text-gray-800'}`}>
+                <span className={`flex-1 ${p.feito ? 'line-through' : ''}`}>{p.texto}</span>
+                {p.feito && (
+                  <span className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-green-600">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Feito
+                  </span>
+                )}
               </li>
             ))}
           </ul>
@@ -69,9 +75,13 @@ export default async function PortalReuniaoPage({ params }: { params: Promise<{ 
             {daAgencia.map((p, i) => (
               <li key={i} className="flex items-start gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-800">
                 <span className="flex-1">{p.texto}</span>
-                {p.em_andamento && (
-                  <span className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-green-700">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Em andamento
+                {p.feito ? (
+                  <span className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-green-600">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Feito
+                  </span>
+                ) : p.em_andamento && (
+                  <span className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-orange-600">
+                    <Clock className="w-3.5 h-3.5" /> Em andamento
                   </span>
                 )}
               </li>
