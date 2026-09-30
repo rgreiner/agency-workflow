@@ -71,7 +71,7 @@ export interface ConvitePublico {
   producao_id: string
   titulo: string
   agencia: string
-  cliente: string | null
+  org_slug: string
   responsavel: string | null
   responsavel_email: string | null
   mensagem: string | null
@@ -86,31 +86,21 @@ export interface ConvitePublico {
   respondido_em: string | null
   recusado_em: string | null
   aberto_em: string | null
+  /** Itens do orçamento como estão gravados (para aplicar a proposta e servir a imagem). */
+  detalhe_itens: ({ nome: string; imagem?: string } & Record<string, unknown>)[] | null
 }
 
 export interface DadosFornecedor { contato: string; cnpj: string; email: string; whatsapp: string }
 
-export async function convitePorToken(token: string): Promise<ConvitePublico | null> {
+/**
+ * Convite pelo token — função SECURITY DEFINER só executável pelo papel da conexão
+ * direta (mig. 311). `trava` bloqueia a linha do orçamento até o fim da transação:
+ * use dentro de `sql.begin` quando for gravar a resposta.
+ */
+export async function convitePorToken(token: string, trava = false, db: typeof sql = sql): Promise<ConvitePublico | null> {
   if (!tokenValido(token)) return null
-  const rows = await sql<ConvitePublico[]>`
-    select cv.id, cv.org_id, cv.cotacao_id, cv.fornecedor_id, c.producao_id,
-           p.titulo, o.name as agencia, w.name as cliente,
-           pr.full_name as responsavel, pr.email as responsavel_email,
-           c.mensagem, to_char(c.prazo_resposta, 'YYYY-MM-DD') as prazo_resposta, c.encerrada,
-           c.itens, c.anexos,
-           jsonb_build_object('nome', f.name, 'tax_id', f.tax_id, 'emails', f.emails, 'telefones', f.telefones) as fornecedor,
-           cv.resposta, cv.resposta_anexos, cv.dados_fornecedor,
-           cv.respondido_em, cv.recusado_em, cv.aberto_em
-      from public.cotacao_convites cv
-      join public.cotacoes c on c.id = cv.cotacao_id
-      join public.producao p on p.id = c.producao_id
-      join public.organizations o on o.id = cv.org_id
-      join public.fornecedores f on f.id = cv.fornecedor_id
-      left join public.workspaces w on w.id = p.workspace_id
-      left join public.profiles pr on pr.id = coalesce(p.responsavel_id, c.created_by)
-     where cv.token = ${token}
-     limit 1`
-  return rows[0] ?? null
+  const rows = await db<{ v: ConvitePublico | null }[]>`select cotacao_por_token(${token}, ${trava}) as v`
+  return rows[0]?.v ?? null
 }
 
 /** Prazo vencido = depois do fim do dia do prazo (horário de Brasília). */

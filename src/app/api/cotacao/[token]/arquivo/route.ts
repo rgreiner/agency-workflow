@@ -3,7 +3,6 @@
  * a imagem de referência de um item do orçamento (?item=idx) e os que ele mesmo
  * enviou (?r=idx). Tudo resolvido a partir do token.
  */
-import { sql } from '@/lib/db'
 import { bytesDeUpload, mimeDoArquivo } from '@/lib/uploads-volume'
 import { convitePorToken, responderArquivo } from '@/lib/cotacao-server'
 
@@ -27,9 +26,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     // Só itens que foram pedidos nesta cotação.
     const pedido = cv.itens.find(i => i.idx === item)
     if (!pedido) return new Response('Não encontrado', { status: 404 })
-    const rows = await sql<{ imagem: string | null }[]>`
-      select detalhe->'itens'->(${item}::int)->>'imagem' as imagem from public.producao where id = ${cv.producao_id}`
-    const url = rows[0]?.imagem
+    const url = cv.detalhe_itens?.[item]?.imagem
     const mime = url ? mimeDoArquivo(url) : null
     if (!url || !mime?.startsWith('image/')) return new Response('Não encontrado', { status: 404 })
     const buf = await bytesDeUpload(url)
