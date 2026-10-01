@@ -98,16 +98,18 @@ export interface DanfseDados {
   tpAmb: string
   tipoAmbiente: string
   ambienteGerador: string
+  /** Código cru do ambiente gerador — é o que o DANFSe oficial imprime. */
+  codAmbienteGerador: string
   municipioEmitente: string
   emitenteTipo: string
   situacao: string
   finalidade: string
   prestador: Parte & { simples: string; regimeSN: string }
   tomador: Parte | null
-  servico: { local: string; codigo: string; descricaoCodigo: string; descricao: string }
+  servico: { local: string; codigo: string; nbs: string; descricaoCodigo: string; descricao: string }
   issqn: {
     tipoTributacao: string; municipioIncidencia: string; regimeEspecial: string
-    bc: string; retencao: string; apurado: string
+    bc: string; aliquota: string; retencao: string; apurado: string
   } | null
   federal: { pis: string; cofins: string; irrf: string; csll: string; cp: string }
   /**
@@ -121,7 +123,16 @@ export interface DanfseDados {
     cbs: { perc: string; valor: string }
     total: string
   } | null
-  total: string
+  /** Bloco de totais, na divisão que a NT dá ao quadro final. */
+  totais: {
+    operacao: string
+    descontoIncondicionado: string
+    descontoCondicionado: string
+    retencoes: string
+    liquido: string
+    ibsCbs: string
+    liquidoComIbsCbs: string
+  }
   complementares: string
   cancelada: boolean
   motivoCancelamento: string
@@ -140,6 +151,14 @@ const moeda = (v: string) =>
   v ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : ''
 
 const cep = (v: string) => v.replace(/^(\d{5})(\d{3})$/, '$1-$2')
+
+const pct = (v: string) => (v ? `${Number(v).toFixed(2).replace('.', ',')}%` : '')
+
+/** Soma dos valores de IBS e CBS, para o quadro de totais. */
+function somaIbsCbs(ibs: NonNullable<DanfseDados['ibsCbs']>): string {
+  const n = (v: string) => Number(v.replace(/[^\d,-]/g, '').replace(',', '.')) || 0
+  return (n(ibs.ibsUf.valor) + n(ibs.ibsMun.valor) + n(ibs.cbs.valor)).toFixed(2)
+}
 
 export const formataDoc = (v: string) =>
   v.length === 14 ? v.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
@@ -185,7 +204,7 @@ export function lerDanfse(xml: string, extra: {
   const tribFed = bloco(trib, 'tribFed')
 
   const uf = tag(bloco(emit, 'enderNac'), 'UF')
-  const municipioEmi = [tag(inf, 'xLocEmi'), uf].filter(Boolean).join(' / ')
+  const municipioEmi = [tag(inf, 'xLocEmi'), uf].filter(Boolean).join(' - ')
 
   // O prestador vem dos DOIS lados: nome e endereço o Sistema Nacional devolve
   // em `emit` (cadastro oficial); regime tributário só existe na DPS.
@@ -200,15 +219,26 @@ export function lerDanfse(xml: string, extra: {
 
   const tomador = tomaDps ? leParte(tomaDps) : null
 
+  const valNfse = bloco(inf, 'valores')
+  const ibs = leIbsCbs(inf)
   const vServ = tag(bloco(valDps, 'vServPrest'), 'vServ')
   const perc = tag(bloco(trib, 'totTrib'), 'pTotTribSN')
   const tributos = vServ && perc ? moeda(String((Number(vServ) * Number(perc)) / 100)) : ''
 
+  // A nota traz os tributos de dois jeitos: o percentual do Simples
+  // (`pTotTribSN`) ou os valores por esfera (`vTotTribFed/Est/Mun`). O DANFSe do
+  // governo imprime por esfera quando existem — é mais informativo que o percentual.
+  const porEsfera = bloco(bloco(trib, 'totTrib'), 'vTotTrib')
+  const lei12741 = porEsfera
+    ? `Totais aproximados dos Tributos cfe. Lei nº 12.741/2012: Federais: ${moeda(tag(porEsfera, 'vTotTribFed'))};`
+      + ` Estaduais: ${moeda(tag(porEsfera, 'vTotTribEst'))}; Municipais: ${moeda(tag(porEsfera, 'vTotTribMun'))};`
+    : perc
+      ? `Totais aproximados dos Tributos cfe. Lei nº 12.741/2012: ${tributos} (${perc.replace('.', ',')}%).`
+      : ''
+
   const complementares = [
     tag(inf, 'nDFSe') ? `Documento municipal nº ${tag(inf, 'nDFSe')}.` : '',
-    perc
-      ? `Valor aproximado dos tributos: ${tributos} (${perc.replace('.', ',')}%), conforme Lei 12.741/2012.`
-      : '',
+    lei12741,
     tag(bloco(valDps, 'infoCompl'), 'xInfComp'),
   ].filter(Boolean).join(' ')
 
@@ -226,15 +256,17 @@ export function lerDanfse(xml: string, extra: {
     tpAmb: tag(dps, 'tpAmb') || tag(inf, 'ambGer'),
     tipoAmbiente: TP_AMB[tag(dps, 'tpAmb')] ?? '',
     ambienteGerador: AMB_GER[tag(inf, 'ambGer')] ?? '',
+    codAmbienteGerador: tag(inf, 'ambGer'),
     municipioEmitente: municipioEmi,
     emitenteTipo: TP_EMIT[tag(dps, 'tpEmit')] ?? '',
-    situacao: tag(inf, 'cStat') === '100' ? 'NFS-e gerada com sucesso' : tag(inf, 'cStat'),
+    situacao: tag(inf, 'cStat') === '100' ? 'NFS-e Gerada' : tag(inf, 'cStat'),
     finalidade: FIN_NFSE[tag(bloco(dps, 'IBSCBS'), 'finNFSe')] ?? '',
     prestador,
     tomador,
     servico: {
       local: [tag(inf, 'xLocPrestacao'), uf].filter(Boolean).join(' / '),
       codigo: tag(bloco(serv, 'cServ'), 'cTribNac'),
+      nbs: tag(bloco(serv, 'cServ'), 'cNBS'),
       descricaoCodigo: tag(inf, 'xTribNac'),
       descricao: corta(tag(bloco(serv, 'cServ'), 'xDescServ'), 1300),
     },
@@ -242,9 +274,12 @@ export function lerDanfse(xml: string, extra: {
       tipoTributacao: TRIB_ISSQN[tag(tribMun, 'tribISSQN')] ?? '',
       municipioIncidencia: [tag(inf, 'xLocIncid'), uf].filter(Boolean).join(' / '),
       regimeEspecial: REG_ESP[tag(bloco(prestDps, 'regTrib'), 'regEspTrib')] ?? '',
-      bc: moeda(tag(tribMun, 'vBC') || vServ),
+      // Base, alíquota e ISSQN apurado quem calcula é o sistema: estão em
+      // `infNFSe/valores`, não na DPS que mandamos.
+      bc: moeda(tag(valNfse, 'vBC') || vServ),
+      aliquota: pct(tag(valNfse, 'pAliqAplic') || tag(tribMun, 'pAliq')),
       retencao: RET_ISSQN[tag(tribMun, 'tpRetISSQN')] ?? '',
-      apurado: moeda(tag(tribMun, 'vISSQN')),
+      apurado: moeda(tag(valNfse, 'vISSQN')),
     } : null,
     federal: {
       pis: moeda(tag(tribFed, 'vPis')),
@@ -253,8 +288,16 @@ export function lerDanfse(xml: string, extra: {
       csll: moeda(tag(tribFed, 'vRetCSLL')),
       cp: moeda(tag(tribFed, 'vRetCP')),
     },
-    ibsCbs: leIbsCbs(inf),
-    total: moeda(tag(bloco(inf, 'valores'), 'vLiq') || vServ),
+    ibsCbs: ibs,
+    totais: {
+      operacao: moeda(vServ),
+      descontoIncondicionado: moeda(tag(valDps, 'vDescIncond')),
+      descontoCondicionado: moeda(tag(valDps, 'vDescCond')),
+      retencoes: moeda(tag(valNfse, 'vTotalRet')),
+      liquido: moeda(tag(valNfse, 'vLiq') || vServ),
+      ibsCbs: ibs ? moeda(String(somaIbsCbs(ibs))) : '',
+      liquidoComIbsCbs: ibs?.total || moeda(tag(valNfse, 'vLiq') || vServ),
+    },
     complementares,
     cancelada: !!extra.cancelada,
     motivoCancelamento: extra.motivoCancelamento ?? '',

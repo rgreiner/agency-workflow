@@ -140,8 +140,8 @@ export function DanfseDoc({ d, qrDataUrl }: { d: DanfseDados; qrDataUrl: string 
             </View>
             <View style={s.cabDir}>
               <Text style={s.cabMunicipio}>Município: {d.municipioEmitente}</Text>
-              <Text style={s.cabAmbiente}>{d.ambienteGerador}</Text>
-              <Text style={s.cabAmbiente}>{d.tipoAmbiente}</Text>
+              <Text style={s.cabAmbiente}>Ambiente Gerador: {d.codAmbienteGerador}</Text>
+              <Text style={s.cabAmbiente}>Tipo de Ambiente: {d.tpAmb}</Text>
             </View>
           </View>
 
@@ -227,12 +227,12 @@ export function DanfseDoc({ d, qrDataUrl }: { d: DanfseDados; qrDataUrl: string 
           {/* ── Serviço prestado ────────────────────────────────────────── */}
           <View style={s.linha}>
             <TituloBloco texto="SERVIÇO PRESTADO" />
-            <Campo rotulo="Local da Prestação / Sigla UF" valor={d.servico.local} w={5.09} />
-            <Campo
-              rotulo="Código de Tributação Nacional / Descrição"
-              valor={[d.servico.codigo, d.servico.descricaoCodigo].filter(Boolean).join(' — ')}
-              w={10.19} fim
-            />
+            <Campo rotulo="Código de Tributação Nacional" valor={d.servico.codigo} w={5.09} />
+            <Campo rotulo="Código da NBS" valor={d.servico.nbs} w={5.09} />
+            <Campo rotulo="Local da Prestação / Sigla UF" valor={d.servico.local} w={5.09} fim />
+          </View>
+          <View style={s.linha}>
+            <Campo rotulo="Descrição do Código de Tributação" valor={d.servico.descricaoCodigo} w={20.4} fim />
           </View>
           <View style={s.linha}>
             <Campo rotulo="Descrição do Serviço" valor={d.servico.descricao} w={20.4} fim />
@@ -248,9 +248,10 @@ export function DanfseDoc({ d, qrDataUrl }: { d: DanfseDados; qrDataUrl: string 
                 <Campo rotulo="Regime Especial de Tributação" valor={d.issqn.regimeEspecial} w={5.09} fim />
               </View>
               <View style={s.linha}>
-                <Campo rotulo="BC ISSQN" valor={d.issqn.bc} w={6.8} />
-                <Campo rotulo="Retenção do ISSQN" valor={d.issqn.retencao} w={6.8} />
-                <Campo rotulo="ISSQN Apurado" valor={d.issqn.apurado} w={6.8} fim />
+                <Campo rotulo="BC ISSQN" valor={d.issqn.bc} w={5.09} />
+                <Campo rotulo="Alíquota Aplicada" valor={d.issqn.aliquota} w={5.09} />
+                <Campo rotulo="Retenção do ISSQN" valor={d.issqn.retencao} w={5.09} />
+                <Campo rotulo="ISSQN Apurado" valor={d.issqn.apurado} w={5.13} fim />
               </View>
             </>
           ) : (
@@ -259,11 +260,11 @@ export function DanfseDoc({ d, qrDataUrl }: { d: DanfseDados; qrDataUrl: string 
 
           {/* ── Tributação federal ──────────────────────────────────────── */}
           <View style={s.linha}>
-            <TituloBloco texto="TRIBUTAÇÃO FEDERAL" />
-            <Campo rotulo="PIS" valor={d.federal.pis} w={3.82} />
-            <Campo rotulo="COFINS" valor={d.federal.cofins} w={3.82} />
+            <TituloBloco texto="TRIBUTAÇÃO FEDERAL (EXCETO CBS)" />
             <Campo rotulo="IRRF" valor={d.federal.irrf} w={3.82} />
-            <Campo rotulo="CSLL" valor={d.federal.csll} w={3.82} fim />
+            <Campo rotulo="Contribuição Previdenciária - Retida" valor={d.federal.cp} w={3.82} />
+            <Campo rotulo="PIS - Débito Apuração Própria" valor={d.federal.pis} w={3.82} />
+            <Campo rotulo="COFINS - Débito Apuração Própria" valor={d.federal.cofins} w={3.85} fim />
           </View>
 
           {/* ── IBS / CBS ─────────────────────────────────────────────────
@@ -292,11 +293,22 @@ export function DanfseDoc({ d, qrDataUrl }: { d: DanfseDados; qrDataUrl: string 
 
           {/* ── Valor total ─────────────────────────────────────────────── */}
           <View style={s.linha}>
-            <Campo rotulo="VALOR LÍQUIDO DA NFS-e + IBS/CBS" valor={d.ibsCbs?.total || d.total} w={20.4} fim sombreada />
+            <TituloBloco texto="VALOR TOTAL DA NFS-e" />
+            <Campo rotulo="Valor da Operação / Serviço" valor={d.totais.operacao} w={5.09} />
+            <Campo rotulo="Desconto Incondicionado" valor={d.totais.descontoIncondicionado} w={5.09} />
+            <Campo rotulo="Desconto Condicionado" valor={d.totais.descontoCondicionado} w={5.13} fim />
+          </View>
+          <View style={s.linha}>
+            <Campo rotulo="Total das Retenções (ISSQN / Federais)" valor={d.totais.retencoes} w={5.09} />
+            <Campo rotulo="VALOR LÍQUIDO DA NFS-e" valor={d.totais.liquido} w={5.09} sombreada />
+            <Campo rotulo="Total de IBS/CBS" valor={d.totais.ibsCbs} w={5.09} />
+            <Campo rotulo="VALOR LÍQUIDO DA NFS-e + IBS/CBS" valor={d.totais.liquidoComIbsCbs} w={5.13} fim sombreada />
           </View>
 
-          {/* ── Informações complementares ──────────────────────────────── */}
-          <View style={{ flexDirection: 'row', flexGrow: 1 }}>
+          {/* ── Informações complementares ────────────────────────────────
+              É o bloco que cresce ou encolhe: a NT manda compensar aqui as
+              supressões dos outros quadros (2.3) e a margem da impressora (2.5.3). */}
+          <View style={{ flexDirection: 'row', flexGrow: 1, borderBottomWidth: 0.5, borderBottomColor: LINHA }}>
             <View style={[s.celulaFim, { width: '100%', minHeight: cm(1.4) }]}>
               <Text style={s.rotulo}>INFORMAÇÕES COMPLEMENTARES</Text>
               <Text style={s.valor}>{d.complementares}</Text>
@@ -305,6 +317,23 @@ export function DanfseDoc({ d, qrDataUrl }: { d: DanfseDados; qrDataUrl: string 
                 : d.cancelada
                   ? <Text style={s.valor}>NFS-e cancelada. {d.motivoCancelamento}</Text>
                   : null}
+            </View>
+          </View>
+
+          {/* ── Canhoto (2.1.13) ──────────────────────────────────────────
+              Opcional pela NT, mas o DANFSe do próprio governo o imprime — é
+              onde se assina o recebimento. Sem ele o documento não parece o
+              mesmo papel para quem recebe. */}
+          <View style={{ flexDirection: 'row' }}>
+            <View style={[s.celula, { width: larg(5.09), minHeight: cm(1.1) }]}>
+              <Text style={s.rotulo}>DATA CIENTIFICAÇÃO</Text>
+            </View>
+            <View style={[s.celula, { width: larg(5.09) }]}>
+              <Text style={s.rotulo}>IDENTIFICAÇÃO E ASSINATURA</Text>
+            </View>
+            <View style={[s.celulaFim, { width: larg(10.22) }]}>
+              <Text style={s.rotulo}>Nº NFS-e / CHAVE NFS-e</Text>
+              <Text style={s.valor}>{d.numero} / {d.chave}</Text>
             </View>
           </View>
         </View>
