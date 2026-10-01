@@ -9,6 +9,7 @@ function readVeiculoData(formData: FormData) {
   const j = (k: string) => { try { return JSON.parse((formData.get(k) as string) || '[]') } catch { return [] } }
   return {
     name: get('name'),
+    legal_name: get('legal_name'),
     type: get('type'),
     tax_id: get('tax_id'),
     commission_pct: get('commission_pct'),

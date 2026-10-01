@@ -10,10 +10,14 @@ import { createVeiculo, updateVeiculo, setVeiculoArchived } from '@/app/actions/
 import { ContatoBlocks, type ContatoData } from '@/components/ui/ContatoBlocks'
 import { PdfField } from '@/components/ui/PdfField'
 import { ImportInventarioModal } from './ImportInventarioModal'
+import { buscarCnpj } from '@/app/actions/lookup'
+import { toast } from 'sonner'
 
 export interface Veiculo {
   id: string
   name: string
+  /** Razão social, como na Receita — é ela que vai na NFS-e (migs. 320/321). */
+  legal_name?: string | null
   type: string | null
   tax_id: string | null
   commission_pct: number | null
@@ -301,6 +305,7 @@ function VeiculoModal({ orgSlug, veiculo, onClose }: {
   const [error, setError] = useState('')
   const [form, setForm] = useState({
     name: veiculo?.name ?? '',
+    legal_name: veiculo?.legal_name ?? '',
     type: veiculo?.type ?? '',
     tax_id: veiculo?.tax_id ?? '',
     commission_pct: veiculo?.commission_pct != null ? String(veiculo.commission_pct).replace('.', ',') : '20',
@@ -312,12 +317,38 @@ function VeiculoModal({ orgSlug, veiculo, onClose }: {
     enderecos: veiculo?.enderecos ?? [], telefones: veiculo?.telefones ?? [], emails: veiculo?.emails ?? [], contas_bancarias: veiculo?.contas_bancarias ?? [],
   })
 
+  const [cnpjBusy, setCnpjBusy] = useState(false)
+
+  async function fetchCnpj() {
+    if (cnpjBusy) return
+    setCnpjBusy(true)
+    const r = await buscarCnpj(form.tax_id)
+    setCnpjBusy(false)
+    if (r.error || !r.data) { toast.error(r.error ?? 'CNPJ não encontrado'); return }
+    const d = r.data
+    setForm(f => ({
+      ...f,
+      name: f.name.trim() ? f.name : (d.nome_fantasia || d.razao_social),
+      legal_name: d.razao_social || f.legal_name,
+    }))
+    // Só preenche o que está vazio: o que a pessoa digitou manda.
+    setContato(c => {
+      const end = { tipo: 'Comercial', logradouro: d.logradouro, numero: d.numero, complemento: d.complemento, bairro: d.bairro, cidade: d.cidade, uf: d.uf, cep: d.cep }
+      const enderecos = c.enderecos.length ? c.enderecos.map((e, i) => (i === 0 ? { ...e, ...end } : e)) : [end]
+      const telefones = d.telefone && !c.telefones.some(t => t.numero.trim()) ? [{ tipo: 'Comercial', numero: d.telefone }, ...c.telefones] : c.telefones
+      const emails = d.email && !c.emails.some(e => e.email.trim()) ? [{ tipo: 'Financeiro', email: d.email }, ...c.emails] : c.emails
+      return { ...c, enderecos, telefones, emails }
+    })
+    toast.success('Dados do CNPJ preenchidos.')
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     if (!form.name.trim()) { setError('Nome obrigatório'); return }
     const fd = new FormData()
     fd.set('name', form.name)
+    fd.set('legal_name', form.legal_name)
     fd.set('type', form.type)
     fd.set('tax_id', form.tax_id)
     fd.set('commission_pct', form.commission_pct.replace(',', '.'))
@@ -370,8 +401,23 @@ function VeiculoModal({ orgSlug, veiculo, onClose }: {
 
           <div>
             <label className={labelCls}>CNPJ</label>
-            <input type="text" value={form.tax_id} onChange={e => setForm(f => ({ ...f, tax_id: e.target.value }))}
-              placeholder="00.000.000/0000-00" className={inputCls} />
+            <div className="flex gap-2">
+              <input type="text" value={form.tax_id} onChange={e => setForm(f => ({ ...f, tax_id: e.target.value }))}
+                placeholder="00.000.000/0000-00" className={inputCls} />
+              <button type="button" onClick={fetchCnpj} disabled={cnpjBusy} title="Buscar dados públicos do CNPJ"
+                className="press inline-flex items-center gap-1.5 px-3 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium hover:bg-gray-200 transition-colors disabled:opacity-50 shrink-0">
+                {cnpjBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* A NFS-e da comissão de mídia vai para o VEÍCULO, e leva a razão
+              social — não o nome pelo qual a casa conhece a emissora. */}
+          <div>
+            <label className={labelCls}>Razão social
+              <span className="text-gray-400 font-normal"> — é o nome que vai na nota fiscal</span></label>
+            <input type="text" value={form.legal_name} onChange={e => setForm(f => ({ ...f, legal_name: e.target.value }))}
+              placeholder="Buscar pelo CNPJ preenche" className={inputCls} />
           </div>
 
           <div>

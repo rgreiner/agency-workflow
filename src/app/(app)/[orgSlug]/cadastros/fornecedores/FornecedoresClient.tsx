@@ -16,6 +16,8 @@ import { TagInput } from '@/components/ui/TagInput'
 
 export interface Fornecedor {
   id: string; name: string; tipo: string | null; tax_id: string | null; notes: string | null; archived: boolean
+  /** Razão social, como na Receita — é ela que vai na NFS-e (migs. 320/321). */
+  legal_name?: string | null
   /** Serviços/especialidades (migration 235) — complementa o `tipo` único. */
   tags?: string[] | null
   enderecos?: ContatoData['enderecos']; telefones?: ContatoData['telefones']; emails?: ContatoData['emails']; contas_bancarias?: ContatoData['contas_bancarias']
@@ -343,7 +345,8 @@ function FornecedorModal({ orgSlug, fornecedor, tagsSugeridas, tiposSugeridos, o
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
   const [form, setForm] = useState({
-    name: fornecedor?.name ?? '', tipo: fornecedor?.tipo ?? '', tax_id: fornecedor?.tax_id ?? '', notes: fornecedor?.notes ?? '',
+    name: fornecedor?.name ?? '', legal_name: fornecedor?.legal_name ?? '',
+    tipo: fornecedor?.tipo ?? '', tax_id: fornecedor?.tax_id ?? '', notes: fornecedor?.notes ?? '',
   })
   const [tags, setTags] = useState<string[]>(fornecedor?.tags ?? [])
   const [contato, setContato] = useState<ContatoData>({
@@ -358,7 +361,12 @@ function FornecedorModal({ orgSlug, fornecedor, tagsSugeridas, tiposSugeridos, o
     setCnpjBusy(false)
     if (r.error || !r.data) { toast.error(r.error ?? 'CNPJ não encontrado'); return }
     const d = r.data
-    setForm(f => ({ ...f, name: f.name.trim() ? f.name : (d.nome_fantasia || d.razao_social) }))
+    setForm(f => ({
+      ...f,
+      name: f.name.trim() ? f.name : (d.nome_fantasia || d.razao_social),
+      // Razão social sempre do CNPJ: é dado da Receita, e é ela que vai na nota.
+      legal_name: d.razao_social || f.legal_name,
+    }))
     setContato(c => {
       const end = { tipo: 'Comercial', logradouro: d.logradouro, numero: d.numero, complemento: d.complemento, bairro: d.bairro, cidade: d.cidade, uf: d.uf, cep: d.cep }
       const enderecos = c.enderecos.length ? c.enderecos.map((e, i) => i === 0 ? { ...e, ...end } : e) : [end]
@@ -374,7 +382,8 @@ function FornecedorModal({ orgSlug, fornecedor, tagsSugeridas, tiposSugeridos, o
     setError('')
     if (!form.name.trim()) { setError('Nome obrigatório'); return }
     const fd = new FormData()
-    fd.set('name', form.name); fd.set('tipo', form.tipo); fd.set('tax_id', form.tax_id); fd.set('notes', form.notes)
+    fd.set('name', form.name); fd.set('legal_name', form.legal_name)
+    fd.set('tipo', form.tipo); fd.set('tax_id', form.tax_id); fd.set('notes', form.notes)
     fd.set('enderecos', JSON.stringify(contato.enderecos)); fd.set('telefones', JSON.stringify(contato.telefones))
     fd.set('emails', JSON.stringify(contato.emails)); fd.set('contas_bancarias', JSON.stringify(contato.contas_bancarias))
     fd.set('tags', JSON.stringify(tags))
@@ -394,8 +403,16 @@ function FornecedorModal({ orgSlug, fornecedor, tagsSugeridas, tiposSugeridos, o
         </div>
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
-          <div><label className={labelCls}>Nome <span className="text-red-500">*</span></label>
+          <div><label className={labelCls}>Nome <span className="text-red-500">*</span>
+            <span className="text-gray-400 font-normal"> — como a casa chama</span></label>
             <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={inputCls} required /></div>
+          {/* A NFS-e leva a razão social, não o apelido: "PROVIP COMUNICACAO
+              VISUAL LTDA" e não "Adesivos Vip Signs & Silk". O botão de buscar o
+              CNPJ preenche; emitir nota para quem está sem também. */}
+          <div><label className={labelCls}>Razão social
+            <span className="text-gray-400 font-normal"> — é o nome que vai na nota fiscal</span></label>
+            <input value={form.legal_name} onChange={e => setForm(f => ({ ...f, legal_name: e.target.value }))}
+              placeholder="Buscar pelo CNPJ preenche" className={inputCls} /></div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Tipo</label>
