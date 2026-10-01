@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, ChevronRight, FileText, Receipt, Check, RotateCcw, AlertTriangle, RefreshCw, Plus, X, Loader2, Pencil, Trash2, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -27,6 +27,8 @@ import { uploadFile } from '@/lib/storage/upload-client'
 import { Paperclip, ExternalLink, CalendarClock, Landmark } from 'lucide-react'
 import { GuiaImportModal } from './GuiaImportModal'
 import { ItensCompra, DetalharLote } from './ItensCompra'
+import { NotaCelula, NotaFiscalBloco } from './NotaFiscal'
+import { notasDosLancamentos, type NotaDoLancamento } from '@/app/actions/nfse'
 import { Modal } from '@/components/ui/Modal'
 
 export interface Lancamento {
@@ -117,7 +119,22 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
   const [tipoFilter, setTipoFilter] = useState<'todos' | 'entrada' | 'saida'>('todos')
   // Lançamento gerado pelo Faturamento nasce sem classificação (medido: 24 de 27).
   // Este filtro é o caminho pra achar e corrigir em lote, em vez de garimpar.
-  const [faltando, setFaltando] = useState<null | 'categoria' | 'centro' | 'conta'>(null)
+  const [faltando, setFaltando] = useState<null | 'categoria' | 'centro' | 'conta' | 'nota'>(null)
+  // Notas emitidas por lançamento. Uma chamada para a lista inteira — a coluna NF
+  // precisa saber de todas, e 50 consultas por linha seria absurdo.
+  const [notas, setNotas] = useState<Record<string, NotaDoLancamento>>({})
+  const idsEntrada = useMemo(
+    () => lancamentos.filter(l => l.tipo === 'entrada' && l.source !== 'importado').map(l => l.id),
+    [lancamentos])
+  useEffect(() => {
+    if (idsEntrada.length === 0) return
+    let vivo = true
+    notasDosLancamentos(orgSlug, idsEntrada).then(m => { if (vivo) setNotas(m) })
+    return () => { vivo = false }
+  }, [orgSlug, idsEntrada])
+  const registrarNota = useCallback((id: string, n: NotaDoLancamento) => {
+    setNotas(prev => ({ ...prev, [id]: n }))
+  }, [])
   const [query, setQuery] = useState('')
   // Recorte pelos cards de resumo (tipo + situação). null = tudo (card "Resultado").
   const [cardFilter, setCardFilter] = useState<null | 'rec_aberto' | 'rec_real' | 'desp_aberto' | 'desp_real'>(null)
@@ -149,6 +166,8 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       // read-only (só fica editável depois de promovida), então fica de fora do
       // filtro — e da contagem, que precisa bater com a lista.
       if (faltando && l.source === 'importado') return false
+      // Sem nota: só faz sentido no que a agência fatura (entrada, não importado).
+      if (faltando === 'nota' && (l.tipo !== 'entrada' || l.source === 'importado' || notas[l.id])) return false
       if (faltando === 'categoria' && (l.categoria ?? '').trim()) return false
       if (faltando === 'centro' && (l.centro_custo ?? '').trim()) return false
       if (faltando === 'conta' && l.conta_id) return false
@@ -157,7 +176,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       if (q && !`${l.contato_nome ?? ''} ${l.descricao ?? ''} ${l.categoria ?? ''} ${l.doc_serie ?? ''} ${l.doc_numero ?? ''} ${textoBuscavel(l.anexos)}`.toLowerCase().includes(q)) return false
       return true
     })
-  }, [merged, tipoFilter, contaFilter, query, faltando])
+  }, [merged, tipoFilter, contaFilter, query, faltando, notas])
 
   // Data efetiva: liquidação (se pago) ou vencimento (se em aberto).
   const effDate = (l: Lancamento) => (isPago(l.situacao) ? (l.data_liquidacao ?? l.vencimento) : l.vencimento)
@@ -270,12 +289,14 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       return { total: todos.length, fora: todos.length - dentro }
     }
     return {
+      // Sem nota é pendência só do que a agência fatura.
+      nota: conta(l => l.tipo === 'entrada' && !notas[l.id]),
       categoria: conta(l => !(l.categoria ?? '').trim()),
       centro: conta(l => !(l.centro_custo ?? '').trim()),
       conta: conta(l => !l.conta_id),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [merged, tipoFilter, contaFilter, perStart, perEnd])
+  }, [merged, tipoFilter, contaFilter, perStart, perEnd, notas])
 
   const contaFilterOptions = useMemo(() => [{ value: '', label: 'Todas as contas' }, ...contas.map(c => ({ value: c.id, label: c.nome }))], [contas])
   const hasFilters = tipoFilter !== 'todos' || !!contaFilter || !!query.trim() || !!cardFilter || !!faltando
@@ -336,10 +357,10 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
         {/* Pendências de classificação: o botão some só quando não existe NENHUMA em
             período algum. Ligado, ele mostra tudo — inclusive o que vence fora do
             período da tela (era o caso das parcelas de Fee de 2027). */}
-        {(['categoria', 'centro', 'conta'] as const).map(k => {
+        {(['nota', 'categoria', 'centro', 'conta'] as const).map(k => {
           const p = pendencias[k]
           if (!p.total && faltando !== k) return null
-          const rotulo = k === 'categoria' ? 'Sem categoria' : k === 'centro' ? 'Sem centro de custo' : 'Sem conta'
+          const rotulo = k === 'nota' ? 'Sem nota' : k === 'categoria' ? 'Sem categoria' : k === 'centro' ? 'Sem centro de custo' : 'Sem conta'
           return (
             <button key={k} onClick={() => setFaltando(f => (f === k ? null : k))} aria-pressed={faltando === k}
               title={p.fora > 0 ? `${p.total} no total — ${p.fora} vence(m) fora de ${periodoLabel(periodo)}` : `${p.total} em ${periodoLabel(periodo)}`}
@@ -417,7 +438,8 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
               {rows.map((l) => (
                 <Row key={l.id} l={l} orgSlug={orgSlug} today={today}
                   conta={l.conta_id ? contaMap[l.conta_id] : undefined} onEdit={(l, foco) => { setEditFoco(foco ?? null); setEditing(l) }} onBaixa={setBaixa}
-                  selecionado={selecionados.has(l.id)} onToggleSel={toggleUm} />
+                  selecionado={selecionados.has(l.id)} onToggleSel={toggleUm}
+                  nota={notas[l.id]} onNotaEmitida={registrarNota} />
               ))}
             </tbody>
           </table>
@@ -429,6 +451,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
 
       {(creating || editing) && (
         <LancamentoModal orgSlug={orgSlug} lancamento={editing} contas={contas} contaPadrao={contaPadrao} categorias={categorias} centros={centros}
+          nota={editing ? notas[editing.id] : undefined} onNotaEmitida={registrarNota}
           sugestoesContato={sugestoesContato} foco={editFoco}
           onClose={() => { setCreating(false); setEditing(null); setEditFoco(null) }} />
       )}
@@ -507,10 +530,11 @@ export function podeEditarEmLote(l: Lancamento): { ok: boolean; motivo?: string 
   return { ok: true }
 }
 
-function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleSel }: {
+function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleSel, nota, onNotaEmitida }: {
   l: Lancamento; orgSlug: string; today: string; conta?: ContaRef
   onEdit: (l: Lancamento, foco?: 'vencimento') => void; onBaixa: (l: Lancamento) => void
   selecionado: boolean; onToggleSel: (id: string) => void
+  nota?: NotaDoLancamento; onNotaEmitida: (id: string, n: NotaDoLancamento) => void
 }) {
   const sel = podeEditarEmLote(l)
   const router = useRouter()
@@ -706,9 +730,14 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
         )}
       </td>
       <td className="px-2 py-2.5 text-center">
+        {/* Importado da Conta Azul segue só com a marcação antiga: nota daquela
+            época não saiu daqui. O resto a receber ganha o botão de emitir. */}
         {imported
           ? (l.nf_emitida ? <FileText className="w-4 h-4 text-gray-300 inline" /> : <span className="text-gray-300">—</span>)
-          : <Flag on={l.nf_emitida || temAnexoNf} viaAnexo={temAnexoNf} onClick={toggleNf} label="NF" />}
+          : l.tipo === 'entrada'
+            ? <NotaCelula orgSlug={orgSlug} lancamentoId={l.id} nota={nota} podeEmitir
+                onEmitida={n => onNotaEmitida(l.id, n)} />
+            : <Flag on={l.nf_emitida || temAnexoNf} viaAnexo={temAnexoNf} onClick={toggleNf} label="NF" />}
       </td>
       <td className="px-2 py-2.5 text-center">
         {imported ? <span className="text-gray-300">—</span>
@@ -894,12 +923,14 @@ const FORMA_OPTIONS = [
   { value: 'dinheiro', label: 'Dinheiro' },
 ]
 
-function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', categorias, centros, sugestoesContato = [], foco, onClose }: {
+function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', categorias, centros, sugestoesContato = [], foco, onClose, nota, onNotaEmitida }: {
   orgSlug: string; lancamento: Lancamento | null; contas: ContaRef[]; contaPadrao?: string
   categorias: FinanceCategoriaGrupo[]; centros: FinanceCentro[]
   sugestoesContato?: string[]
   foco?: 'vencimento' | null; onClose: () => void
+  nota?: NotaDoLancamento; onNotaEmitida?: (id: string, n: NotaDoLancamento) => void
 }) {
+  const [notaDoLancamento, setNotaDoLancamento] = useState(nota)
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
@@ -1281,6 +1312,18 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
 
         {/* O que compõe a despesa (mig. 307). Só no lançamento já salvo: o item
             pende do id. Saída apenas — item de receita não existe. */}
+        {/* Entrada: a nota. Saída: os itens da compra. Mesmo lugar, papéis opostos. */}
+        {lancamento && !imported && form.tipo === 'entrada' && (
+          <NotaFiscalBloco
+            orgSlug={orgSlug}
+            lancamentoId={lancamento.id}
+            nota={notaDoLancamento}
+            valor={Number(lancamento.valor_realizado ?? lancamento.valor) || 0}
+            cliente={lancamento.contato_nome ?? null}
+            onEmitida={n => { setNotaDoLancamento(n); onNotaEmitida?.(lancamento.id, n) }}
+          />
+        )}
+
         {lancamento && !imported && form.tipo === 'saida' && (
           <ItensCompra
             orgSlug={orgSlug}
