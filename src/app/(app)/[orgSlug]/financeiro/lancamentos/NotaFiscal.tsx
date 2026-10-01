@@ -257,6 +257,7 @@ function DialogoEmitir({ orgSlug, lancamentoId, valor, cliente, substituir, onFe
   const [cMotivo, setCMotivo] = useState('99')
   const [xMotivo, setXMotivo] = useState('')
   const [cienteDaDuplicata, setCiente] = useState(false)
+  const [descricao, setDescricao] = useState('')
 
   useEffect(() => {
     let vivo = true
@@ -266,6 +267,7 @@ function DialogoEmitir({ orgSlug, lancamentoId, valor, cliente, substituir, onFe
       setDados(r.dados ?? null)
       const inicial = r.dados?.tomador ?? r.dados?.sugestao
       setEscolha(inicial ? `${inicial.tipo}:${inicial.id}` : '')
+      setDescricao(r.dados?.descricaoSugerida ?? '')
     })
     return () => { vivo = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -277,7 +279,8 @@ function DialogoEmitir({ orgSlug, lancamentoId, valor, cliente, substituir, onFe
   // Duplicata exige aceite explícito: o aviso sozinho vira paisagem, e nota em
   // duplicidade só se desfaz cancelando.
   const precisaAceite = !!dados?.nfAnexada && !substituir
-  const travado = !dados || !escolha || !!motivoCurto || (precisaAceite && !cienteDaDuplicata)
+  // Descrição vazia não emite: ela é o que o tomador lê na nota.
+  const travado = !dados || !escolha || !descricao.trim() || !!motivoCurto || (precisaAceite && !cienteDaDuplicata)
 
   return (
     <ConfirmDialog
@@ -298,6 +301,7 @@ function DialogoEmitir({ orgSlug, lancamentoId, valor, cliente, substituir, onFe
           const [tipo, id] = escolha.split(':')
           const r = await emitirNota(orgSlug, lancamentoId, {
             tomador: tipo && id ? { tipo: tipo as TipoTomador, id } : undefined,
+            descricao: descricao.trim(),
             confirmarNfAnexada: cienteDaDuplicata,
             substituir: substituir ? { notaId: substituir.id, cMotivo, xMotivo: xMotivo.trim() } : undefined,
           })
@@ -346,6 +350,23 @@ function DialogoEmitir({ orgSlug, lancamentoId, valor, cliente, substituir, onFe
               <p className="mt-1 text-[11px] text-amber-700">
                 Este lançamento não tem tomador vinculado. Fee e Job vão para o cliente;
                 comissão de mídia, para o veículo; comissão de produção, para o fornecedor.
+              </p>
+            )}
+          </div>
+
+          {/* A descrição vai IMPRESSA na nota, e é o que o cliente lê. A do
+              lançamento é rótulo do financeiro ("Venda", "Comissão") e já virou
+              descrição de uma nota de verdade — por isso aqui se confirma. */}
+          <div>
+            <label className="block text-[11px] font-medium text-gray-500 mb-1">Descrição do serviço (vai impressa na nota)</label>
+            <textarea
+              value={descricao} onChange={e => setDescricao(e.target.value)} rows={2} maxLength={2000}
+              placeholder="Ex.: PP 1911 | FC Cascavel"
+              className="w-full rounded-xl bg-gray-100 border-transparent px-3 py-2 text-sm placeholder:text-gray-400 focus:bg-white focus:border-gray-300 transition-colors"
+            />
+            {dados.descricao && dados.descricao.trim() !== descricao.trim() && (
+              <p className="mt-1 text-[11px] text-gray-400">
+                No lançamento está: <span className="text-gray-600">{dados.descricao}</span>
               </p>
             )}
           </div>

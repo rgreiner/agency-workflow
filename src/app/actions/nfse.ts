@@ -202,7 +202,10 @@ function mensagemDaReceita(corpo: string): string {
 
 export interface DadosParaEmitir {
   valor: number
+  /** O que está escrito no lançamento — rótulo do financeiro, não do cliente. */
   descricao: string
+  /** Sugestão para a nota, que a pessoa confirma ou reescreve antes de emitir. */
+  descricaoSugerida: string
   /** Tomador já vinculado ao lançamento (só existe no caso cliente). */
   tomador: Tomador | null
   /** Palpite por nome quando não há vínculo — a pessoa confirma, o Flow não decide. */
@@ -231,12 +234,15 @@ export async function dadosParaEmitir(orgSlug: string, lancamentoId: string): Pr
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any
 
-  const [{ data: lanc }, tomadores, cert] = await Promise.all([
+  const [{ data: lanc }, { data: doc }, tomadores, cert, cfg] = await Promise.all([
     sb.from('lancamentos')
       .select('valor, valor_realizado, descricao, workspace_id, contato_tipo, contato_id, centro_custo, contato_nome, anexos')
       .eq('id', lancamentoId).maybeSingle(),
+    // O documento de origem vem da view; é dele que sai a descrição boa.
+    sb.from('lancamentos_doc').select('doc_serie, doc_numero').eq('id', lancamentoId).maybeSingle(),
     tomadoresParaNota(orgSlug),
     certificadoPublico(orgId),
+    cfgDaOrg(supabase, orgId),
   ])
   if (!lanc) return { error: 'Lançamento não encontrado.' }
 
@@ -266,10 +272,30 @@ export async function dadosParaEmitir(orgSlug: string, lancamentoId: string): Pr
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const anexo = ((lanc.anexos ?? []) as any[]).find(a => a?.tipo === 'NF' && a?.emitente === 'agencia')
 
+  /**
+   * Descrição do SERVIÇO na nota — não é a descrição do lançamento.
+   *
+   * O financeiro escreve rótulo interno: "Venda", "Comissão", "Rendimento",
+   * "Desconto Padrão Agência". Isso foi parar numa nota de verdade. As notas que
+   * a prefeitura emitia usavam "PP 1914 | Comil" — documento e cliente —, que é
+   * o que o tomador reconhece quando recebe.
+   *
+   * Por isso aqui é SUGESTÃO: quem confirma é a pessoa, no diálogo, antes de
+   * disparar. Descrição errada em nota emitida só se conserta cancelando.
+   */
+  const docRef = doc?.doc_serie && doc?.doc_numero ? `${doc.doc_serie} ${doc.doc_numero}` : ''
+  const quem = sugestao?.nome ?? tomador?.nome ?? lanc.contato_nome ?? ''
+  const descricaoSugerida =
+    (docRef && quem ? `${docRef} | ${quem}` : docRef)
+    || cfg?.descricaoPadrao
+    || lanc.descricao
+    || ''
+
   return {
     dados: {
       valor: Number(lanc.valor_realizado ?? lanc.valor) || 0,
       descricao: lanc.descricao ?? '',
+      descricaoSugerida,
       tomador,
       sugestao,
       tomadores,
@@ -329,6 +355,12 @@ export interface OpcoesEmissao {
    * nada.
    */
   tomador?: { tipo: TipoTomador; id: string }
+  /**
+   * Descrição do serviço confirmada na tela. Sem ela a emissão cai na descrição
+   * do lançamento, que é rótulo do financeiro — foi assim que "Venda" virou a
+   * descrição de uma nota fiscal.
+   */
+  descricao?: string
   /** A pessoa viu que o lançamento já tem NF anexada e quer emitir assim mesmo. */
   confirmarNfAnexada?: boolean
   /**
@@ -583,7 +615,7 @@ export async function emitirNota(
       serie: cfg.serie,
       numero,
       valor,
-      descricao: lanc.descricao || cfg.descricaoPadrao || 'Prestação de serviços de publicidade',
+      descricao: opcoes.descricao?.trim() || lanc.descricao || cfg.descricaoPadrao || 'Prestação de serviços de publicidade',
       codigoServico: cfg.codigoServico!,
       percSimples: cfg.percSimples!,
       tribIssqn: cfg.tribIssqn,
