@@ -15,6 +15,13 @@ interface Props {
   onCancel: () => void
   /** Campo extra dentro do diálogo (ex.: escolher o destino antes de excluir). */
   children?: React.ReactNode
+  /**
+   * Largura do card. O padrão `sm` serve ao diálogo típico — uma pergunta e dois
+   * botões. Diálogos que carregam formulário ou tabela de conferência pedem mais:
+   * em `sm`, descontados o ícone e o padding, sobram ~280px, e um CNPJ quebra no
+   * meio do número, que é justamente o que não pode acontecer onde se confere.
+   */
+  size?: 'sm' | 'md' | 'lg'
 }
 
 /**
@@ -29,7 +36,7 @@ export function ConfirmDialog({
   open, title, description,
   confirmLabel = 'Excluir', cancelLabel = 'Cancelar',
   loading = false,
-  onConfirm, onCancel, children,
+  onConfirm, onCancel, children, size = 'sm',
 }: Props) {
   const cancelRef = useRef<HTMLButtonElement>(null)
 
@@ -43,7 +50,7 @@ export function ConfirmDialog({
     <Modal
       open={open}
       onClose={onCancel}
-      size="sm"
+      size={size}
       label={title}
       dismissable={!loading}
       className="p-6"

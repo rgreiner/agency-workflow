@@ -284,6 +284,7 @@ function DialogoEmitir({ orgSlug, lancamentoId, cliente, substituir, onFechar, o
   return (
     <ConfirmDialog
       open
+      size="lg"
       title={substituir ? 'Substituir a NFS-e?' : 'Emitir NFS-e?'}
       description={substituir
         ? `A nota ${substituir.numero ?? ''} é cancelada pela Receita e uma nova é emitida com os dados atuais deste lançamento.`
@@ -408,11 +409,11 @@ function DialogoEmitir({ orgSlug, lancamentoId, cliente, substituir, onFechar, o
               <Conferir linhas={[
                 { rotulo: 'Razão social', valor: escolhido.razao || escolhido.nome,
                   alerta: !escolhido.razao },
-                { rotulo: 'CNPJ', valor: formatarCnpj(escolhido.cnpj) },
+                { rotulo: 'CNPJ', valor: formatarCnpj(escolhido.cnpj), inteiro: true },
                 { rotulo: 'Competência', valor: formatarData(dados.competencia) || '—',
-                  alerta: !dados.competencia },
+                  inteiro: true, alerta: !dados.competencia },
                 { rotulo: 'Serviço', valor: descricao.trim() || '—', alerta: !descricao.trim() },
-                { rotulo: 'Valor total', valor: formatBRL(dados.valor), forte: true },
+                { rotulo: 'Valor total', valor: formatBRL(dados.valor), forte: true, inteiro: true },
               ]} />
               {!escolhido.razao && (
                 <p className="mt-1 text-[11px] text-amber-700">
@@ -509,14 +510,21 @@ const formatarData = (iso: string) =>
  * errado ou descrição errada só se resolvem cancelando a nota. Ler isto leva
  * cinco segundos; cancelar leva um evento registrado na Receita para sempre.
  */
-function Conferir({ linhas }: { linhas: { rotulo: string; valor: string; forte?: boolean; alerta?: boolean }[] }) {
+function Conferir({ linhas }: {
+  linhas: { rotulo: string; valor: string; forte?: boolean; alerta?: boolean; inteiro?: boolean }[]
+}) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white divide-y divide-gray-100">
       {linhas.map(l => (
-        <div key={l.rotulo} className="flex items-baseline gap-3 px-3 py-2">
-          <span className="w-28 shrink-0 text-[11px] text-gray-500">{l.rotulo}</span>
+        // Em tela estreita o rótulo sobe e o valor fica com a linha inteira:
+        // duas colunas espremidas quebram CNPJ e razão social no meio.
+        <div key={l.rotulo} className="flex flex-col gap-0.5 px-3 py-2 sm:flex-row sm:items-baseline sm:gap-3">
+          <span className="shrink-0 text-[11px] text-gray-500 sm:w-24">{l.rotulo}</span>
           <span className={cn(
-            'min-w-0 flex-1 text-sm break-words',
+            'min-w-0 flex-1 text-sm',
+            // `inteiro` protege o que não pode ser lido pela metade — CNPJ e
+            // valor. O resto pode quebrar, e é melhor quebrar que estourar.
+            l.inteiro ? 'whitespace-nowrap tabular-nums' : 'break-words',
             l.forte ? 'font-semibold text-gray-900 tabular-nums' : 'text-gray-800',
             l.alerta && 'text-amber-700',
           )}>
