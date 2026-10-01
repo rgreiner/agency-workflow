@@ -26,7 +26,7 @@ export interface NotaDoLancamento {
   chave: string
   numero: string | null
   serie: string | null
-  status: 'autorizada' | 'cancelada'
+  status: 'pendente' | 'autorizada' | 'cancelada'
   ambiente: 'restrita' | 'producao'
   valor: number | null
   emitidoEm: string
@@ -128,7 +128,9 @@ export async function notasDosLancamentos(orgSlug: string, ids: string[]): Promi
   for (const n of (data ?? []) as any[]) {
     if (!n.lancamento_id) continue
     const atual = mapa[n.lancamento_id]
-    if (atual && atual.status === 'autorizada' && n.status !== 'autorizada') continue
+    // Autorizada manda sobre pendente e cancelada; pendente manda sobre cancelada.
+    const peso = (st: string) => (st === 'autorizada' ? 2 : st === 'pendente' ? 1 : 0)
+    if (atual && peso(atual.status) > peso(n.status)) continue
     mapa[n.lancamento_id] = {
       id: n.id, chave: n.chave, numero: n.numero, serie: n.serie,
       status: n.status, ambiente: n.ambiente,
@@ -269,6 +271,43 @@ export async function dadosParaEmitir(orgSlug: string, lancamentoId: string): Pr
   }
 }
 
+/**
+ * A nota já estava autorizada na Receita e o Flow não sabia.
+ *
+ * Acontece quando a resposta do envio se perde: lá a nota existe, aqui ficou
+ * pendente. Adotar é buscar o XML pela chave e completar a linha que já existe —
+ * nunca criar outra, senão o lançamento fica com duas notas para uma cobrança só.
+ */
+async function adotarNotaJaAutorizada(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sb: any, orgId: string, linhaId: string, chave: string, lancamentoId: string, orgSlug: string,
+): Promise<NotaDoLancamento | null> {
+  const r = await chamarNfse(orgId, { caminho: `/sefinnacional/nfse/${chave}`, timeoutMs: 30_000 })
+  if ('erro' in r || r.erroRede || r.status !== 200) return null
+
+  let xmlGz: string | null = null
+  let numeroNfse: string | null = null
+  try {
+    const resp = JSON.parse(r.corpo) as RespostaOk
+    xmlGz = resp.nfseXmlGZipB64 ?? null
+    if (xmlGz) numeroNfse = (/<nNFSe>([^<]*)<\/nNFSe>/.exec(desempacotar(xmlGz)) || [])[1] ?? null
+  } catch { /* sem o número a nota ainda vale: a chave é a identidade */ }
+
+  const { data } = await sb.from('nota_fiscal').update({
+    status: 'autorizada', chave, numero: numeroNfse, xml_gz_b64: xmlGz,
+  }).eq('id', linhaId).select('id, chave, numero, serie, status, ambiente, valor, emitido_em').single()
+  if (!data) return null
+
+  await sb.from('lancamentos').update({ nf_emitida: true }).eq('id', lancamentoId)
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+  return {
+    id: data.id, chave: data.chave, numero: data.numero, serie: data.serie,
+    status: data.status, ambiente: data.ambiente,
+    valor: data.valor != null ? Number(data.valor) : null,
+    emitidoEm: data.emitido_em,
+  }
+}
+
 export interface OpcoesEmissao {
   /**
    * Quem recebe a nota, escolhido na hora de emitir. Existe porque 152 dos 293
@@ -369,14 +408,23 @@ export async function emitirNota(
   const { data: dest } = await sb.from(TABELA[escolha.tipo])
     .select(escolha.tipo === 'cliente'
       ? 'legal_name, name, tax_id, address_zip, address_street, address_number, address_complement, address_district'
-      : 'name, tax_id, enderecos')
+      : 'legal_name, name, tax_id, enderecos')
     .eq('id', escolha.id).maybeSingle()
   if (!dest) return { error: `${ROTULO_TOMADOR[escolha.tipo]} não encontrado.` }
   const cnpjTomador = String(dest.tax_id ?? '').replace(/\D/g, '')
   if (cnpjTomador.length !== 14) {
     return { error: `${ROTULO_TOMADOR[escolha.tipo]} ${dest.name ?? ''} sem CNPJ completo no cadastro.` }
   }
-  const nomeTomador: string = dest.legal_name || dest.name || lanc.contato_nome || 'Tomador'
+  /**
+   * Nome do tomador na nota é a RAZÃO SOCIAL, não o apelido do cadastro.
+   *
+   * Cliente já guarda `legal_name`. Fornecedor e veículo passaram a guardar
+   * (mig. 320) mas nascem vazios, então, faltando, busca-se na Receita pelo CNPJ
+   * e GRAVA-SE no cadastro: a próxima emissão não precisa perguntar, e a
+   * cobrança automática encontra o cadastro já completo.
+   */
+  let razaoSocial: string = String(dest.legal_name ?? '').trim()
+  let dadosReceita: Awaited<ReturnType<typeof buscarCnpj>>['data'] | undefined
 
   /**
    * Endereço do tomador — exigido pela Receita quando há IBS/CBS (E0234).
@@ -421,10 +469,11 @@ export async function emitirNota(
 
     if (!enderecoTomador) {
       const r = await buscarCnpj(cnpjTomador)
+      dadosReceita = r.data
       const e = r.data
       if (!e?.codigoIbge || !e.logradouro || !e.bairro || !e.cep) {
         return {
-          error: `Falta o endereço de ${nomeTomador} para emitir com IBS/CBS.`
+          error: `Falta o endereço de ${dest.name ?? 'tomador'} para emitir com IBS/CBS.`
             + ` Preencha no cadastro (o botão Buscar CNPJ preenche) — a consulta automática não resolveu`
             + ` (${r.error ?? 'cadastro incompleto na Receita'}).`,
         }
@@ -436,6 +485,19 @@ export async function emitirNota(
       }
     }
   }
+
+  if (!razaoSocial) {
+    if (!dadosReceita) dadosReceita = (await buscarCnpj(cnpjTomador)).data
+    razaoSocial = String(dadosReceita?.razao_social ?? '').trim()
+    // Grava no cadastro: o dado passa a existir para a próxima nota, para a
+    // cobrança e para quem abrir a ficha — em vez de viver só nesta chamada.
+    if (razaoSocial) {
+      await sb.from(TABELA[escolha.tipo]).update({ legal_name: razaoSocial }).eq('id', escolha.id)
+    }
+  }
+  // Sem razão social em lugar nenhum, o apelido do cadastro é melhor que nada —
+  // mas nunca o contato digitado no lançamento, que não é cadastro.
+  const nomeTomador: string = razaoSocial || String(dest.name ?? '').trim() || 'Tomador'
 
   const valor = Number(lanc.valor_realizado ?? lanc.valor) || 0
   if (valor <= 0) return { error: 'Lançamento sem valor.' }
@@ -453,13 +515,47 @@ export async function emitirNota(
     substituida = { id: velha.id, chave: velha.chave }
   }
 
-  // Número só é consumido depois de tudo validado: número queimado é buraco na
-  // sequência fiscal, e a Receita cobra explicação por buraco. O contador é POR
-  // AMBIENTE (mig. 316) — nota de teste não gasta número da sequência oficial.
-  const { data: numero, error: eNum } = await sb.rpc('proximo_numero_nfse', {
-    p_user_id: user.id, p_org_id: orgId, p_ambiente: cert.ambiente,
-  })
-  if (eNum) return { error: eNum.message }
+  /**
+   * Número da DPS: reaproveitado de uma tentativa anterior que não respondeu, ou
+   * consumido agora.
+   *
+   * A produção do Sistema Nacional é instável, e cada falha de rede queimava um
+   * número — buraco na sequência fiscal, que a Receita manda explicar. Pior: se
+   * ela autorizasse e a resposta se perdesse, a tentativa seguinte emitiria uma
+   * SEGUNDA nota para a mesma cobrança.
+   *
+   * Por isso, havendo pendência, o primeiro passo é perguntar à Receita o que
+   * houve com aquela DPS. Virou nota: adota. Não virou: reenvia com o mesmo
+   * número.
+   */
+  const { data: pendente } = await sb.from('nota_fiscal')
+    .select('id, n_dps, id_dps').eq('lancamento_id', lancamentoId).eq('status', 'pendente').maybeSingle()
+
+  if (pendente?.id_dps) {
+    const r = await chamarNfse(orgId, { caminho: `/sefinnacional/dps/${pendente.id_dps}`, timeoutMs: 30_000 })
+    if (!('erro' in r) && !r.erroRede && r.status === 200) {
+      try {
+        const resp = JSON.parse(r.corpo) as RespostaOk
+        if (resp.chaveAcesso) {
+          const adotada = await adotarNotaJaAutorizada(sb, orgId, pendente.id, resp.chaveAcesso, lancamentoId, orgSlug)
+          if (adotada) return { nota: adotada }
+        }
+      } catch { /* resposta ilegível: segue para o reenvio */ }
+    }
+  }
+
+  // O contador é POR AMBIENTE (mig. 316) — nota de teste não gasta número da
+  // sequência oficial.
+  let numero: number
+  if (pendente?.n_dps != null) {
+    numero = Number(pendente.n_dps)
+  } else {
+    const { data: n, error: eNum } = await sb.rpc('proximo_numero_nfse', {
+      p_user_id: user.id, p_org_id: orgId, p_ambiente: cert.ambiente,
+    })
+    if (eNum) return { error: eNum.message }
+    numero = Number(n)
+  }
 
   try {
     const { xml, id } = montarDps({
@@ -468,7 +564,7 @@ export async function emitirNota(
       nomeTomador,
       codMunicipio: cfg.codMunicipio!,
       serie: cfg.serie,
-      numero: Number(numero),
+      numero,
       valor,
       descricao: lanc.descricao || cfg.descricaoPadrao || 'Prestação de serviços de publicidade',
       codigoServico: cfg.codigoServico!,
@@ -493,6 +589,17 @@ export async function emitirNota(
     const { key, certB64 } = await chavesDoPfx(cert.pfx, cert.senha)
     const assinado = assinarDps(xml, id, key, certB64)
 
+    // A pendência é gravada ANTES do envio: é ela que segura o número e o id da
+    // DPS. Se a resposta não voltar, é por aqui que se descobre o que houve.
+    const linhaId: string = pendente?.id ?? (await sb.from('nota_fiscal').insert({
+      org_id: orgId, lancamento_id: lancamentoId, ambiente: cert.ambiente,
+      status: 'pendente', numero: null, serie: cfg.serie, n_dps: numero,
+      valor, competencia: lanc.competencia || lanc.vencimento || null,
+      tomador_nome: nomeTomador, tomador_cnpj: cnpjTomador, tomador_tipo: escolha.tipo,
+      emitido_por: user.id,
+    }).select('id').single()).data?.id
+    await sb.from('nota_fiscal').update({ id_dps: id, dps_gz_b64: empacotar(assinado) }).eq('id', linhaId)
+
     const r = await chamarNfse(orgId, {
       caminho: '/sefinnacional/nfse',
       metodo: 'POST',
@@ -500,9 +607,20 @@ export async function emitirNota(
       timeoutMs: 60_000,
     })
     if ('erro' in r) return { error: 'Certificado indisponível.' }
-    if (r.erroRede) return { error: `Não foi possível falar com a Receita (${r.erroRede}).` }
+    if (r.erroRede) {
+      // Pode ter chegado lá. A nota fica pendente com o número guardado, e a
+      // próxima tentativa pergunta à Receita antes de reenviar.
+      return {
+        error: `A Receita não respondeu (${r.erroRede}). A nota ficou pendente com o número ${numero} reservado —`
+          + ' tente de novo: o Flow confere lá antes de reenviar, para não emitir em duplicidade.',
+      }
+    }
     // 201 é o único que emite; qualquer outro devolve o motivo em português.
-    if (r.status !== 201) return { error: mensagemDaReceita(r.corpo) }
+    if (r.status !== 201) {
+      // Recusa é resposta: a DPS não virou nota, e o número segue reservado para
+      // a próxima tentativa — corrigido o motivo, sai com o mesmo número.
+      return { error: mensagemDaReceita(r.corpo) }
+    }
 
     const resp = JSON.parse(r.corpo) as RespostaOk
     if (!resp.chaveAcesso) return { error: 'A Receita respondeu sem a chave de acesso.' }
@@ -514,26 +632,20 @@ export async function emitirNota(
       numeroNfse = (/<nNFSe>([^<]*)<\/nNFSe>/.exec(xmlNota) || [])[1] ?? null
     } catch { /* sem o número a nota ainda vale: a chave é a identidade */ }
 
-    const { data: nova, error: eIns } = await sb.from('nota_fiscal').insert({
-      org_id: orgId,
-      lancamento_id: lancamentoId,
-      ambiente: cert.ambiente,
+    const { data: nova, error: eIns } = await sb.from('nota_fiscal').update({
       status: 'autorizada',
       chave: resp.chaveAcesso,
       numero: numeroNfse,
-      serie: cfg.serie,
-      n_dps: Number(numero),
-      valor,
-      competencia: lanc.competencia || lanc.vencimento || null,
-      tomador_nome: nomeTomador,
-      tomador_cnpj: cnpjTomador,
-      tomador_tipo: escolha.tipo,
       xml_gz_b64: resp.nfseXmlGZipB64 ?? null,
-      dps_gz_b64: empacotar(assinado),
       substitui_chave: substituida?.chave ?? null,
-      emitido_por: user.id,
-    }).select('id, chave, numero, serie, status, ambiente, valor, emitido_em').single()
-    if (eIns) return { error: `Nota emitida na Receita, mas falhou ao gravar no Flow: ${eIns.message}. Chave ${resp.chaveAcesso}` }
+      emitido_em: new Date().toISOString(),
+    }).eq('id', linhaId).select('id, chave, numero, serie, status, ambiente, valor, emitido_em').single()
+    if (eIns) {
+      return {
+        error: `Nota emitida na Receita, mas falhou ao gravar no Flow: ${eIns.message}.`
+          + ` Chave ${resp.chaveAcesso} — ela segue pendente aqui e a próxima tentativa a adota.`,
+      }
+    }
 
     // A antiga já foi cancelada pela Receita no ato da autorização desta. Aqui só
     // se registra o fato — e com a chave da substituta, que é o que responde
@@ -661,9 +773,16 @@ export interface LinhaConferencia {
   nota?: string
 }
 
+// Mesma régua do DANFSe: o XML guarda `&amp;`, e comparar sem desfazer faria a
+// conferência acusar divergência entre o que mandamos e o que voltou — idêntico.
+const desescapa = (t: string) => t
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+  .replace(/&amp;/g, '&')
+
 const tag = (xml: string, t: string): string => {
   const m = new RegExp(`<${t}>([^<]*)</${t}>`).exec(xml)
-  return m ? m[1].trim() : ''
+  return m ? desescapa(m[1].trim()) : ''
 }
 const dinheiro = (v: string) => (v ? Number(v).toFixed(2) : '')
 

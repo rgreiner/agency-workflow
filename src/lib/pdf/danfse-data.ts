@@ -19,9 +19,19 @@ import 'server-only'
  * número, e paráfrase nossa não é descrição oficial.
  */
 
+/**
+ * Desfaz as entidades XML. Sem isto, "ADESIVOS VIP SIGNS & SILK" — que vai para
+ * a Receita como `&amp;`, corretamente — volta impresso no DANFSe como
+ * "SIGNS &amp;amp; SILK", na cara do cliente.
+ */
+const desescapa = (t: string) => t
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+  .replace(/&amp;/g, '&')   // por último: senão desfaz as outras duas vezes
+
 const tag = (xml: string, t: string): string => {
   const m = new RegExp(`<${t}>([^<]*)</${t}>`).exec(xml)
-  return m ? m[1].trim() : ''
+  return m ? desescapa(m[1].trim()) : ''
 }
 
 /**
