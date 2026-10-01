@@ -233,16 +233,24 @@ export async function dadosParaEmitir(orgSlug: string, lancamentoId: string): Pr
 
   const [{ data: lanc }, tomadores, cert] = await Promise.all([
     sb.from('lancamentos')
-      .select('valor, valor_realizado, descricao, workspace_id, centro_custo, contato_nome, anexos')
+      .select('valor, valor_realizado, descricao, workspace_id, contato_tipo, contato_id, centro_custo, contato_nome, anexos')
       .eq('id', lancamentoId).maybeSingle(),
     tomadoresParaNota(orgSlug),
     certificadoPublico(orgId),
   ])
   if (!lanc) return { error: 'Lançamento não encontrado.' }
 
-  const tomador = lanc.workspace_id
-    ? tomadores.find(t => t.tipo === 'cliente' && t.id === lanc.workspace_id) ?? null
-    : null
+  // O vínculo do contato manda: ele veio do documento que gerou o lançamento
+  // (mig. 322) e não depende de grafia. Só na falta dele é que se procura o
+  // cliente do lançamento e, por último, se adivinha pelo nome.
+  const tomador =
+    (lanc.contato_id && lanc.contato_tipo
+      ? tomadores.find(t => t.tipo === lanc.contato_tipo && t.id === lanc.contato_id)
+      : null)
+    ?? (lanc.workspace_id
+      ? tomadores.find(t => t.tipo === 'cliente' && t.id === lanc.workspace_id)
+      : null)
+    ?? null
 
   // Casa pela mesma régua do cubo (sem caixa, sem acento): "É o Amor" do cadastro
   // e "É O Amor" do import são o mesmo nome. Homônimo entre cadastros resolve
@@ -374,7 +382,7 @@ export async function emitirNota(
   }
 
   const { data: lanc } = await sb.from('lancamentos')
-    .select('id, tipo, valor, valor_realizado, descricao, competencia, vencimento, workspace_id, contato_nome, anexos')
+    .select('id, tipo, valor, valor_realizado, descricao, competencia, vencimento, workspace_id, contato_tipo, contato_id, contato_nome, anexos')
     .eq('id', lancamentoId).maybeSingle()
   if (!lanc) return { error: 'Lançamento não encontrado.' }
   if (lanc.tipo !== 'entrada') return { error: 'Nota fiscal sai de lançamento a receber, não de despesa.' }
@@ -399,7 +407,11 @@ export async function emitirNota(
 
   // Quem recebe a nota: o escolhido agora ou, na falta, o cliente já vinculado.
   const escolha: { tipo: TipoTomador; id: string } | null =
-    opcoes.tomador ?? (lanc.workspace_id ? { tipo: 'cliente', id: lanc.workspace_id } : null)
+    opcoes.tomador
+    ?? (lanc.contato_id && lanc.contato_tipo
+      ? { tipo: lanc.contato_tipo as TipoTomador, id: lanc.contato_id as string }
+      : null)
+    ?? (lanc.workspace_id ? { tipo: 'cliente', id: lanc.workspace_id } : null)
   if (!escolha) return { error: 'Escolha para quem a nota é emitida — sem tomador não há nota.' }
 
   const TABELA: Record<TipoTomador, string> = {
@@ -663,6 +675,9 @@ export async function emitirNota(
     // O vínculo fica gravado SÓ quando o tomador é cliente: escolher uma vez
     // resolve esse lançamento para sempre e alimenta margem e centro de custo.
     const patch: Record<string, unknown> = { nf_emitida: true }
+    // Escolher o tomador uma vez deixa o lançamento rastreável para sempre —
+    // para a próxima nota, para a margem e para a cobrança automática.
+    if (!lanc.contato_id) { patch.contato_tipo = escolha.tipo; patch.contato_id = escolha.id }
     if (!lanc.workspace_id && escolha.tipo === 'cliente') patch.workspace_id = escolha.id
     await sb.from('lancamentos').update(patch).eq('id', lancamentoId)
     revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
