@@ -229,6 +229,7 @@ function DadosDaNota({ orgSlug, inicial }: { orgSlug: string; inicial: ConfigNfs
     tribIssqn: String(inicial?.tribIssqn ?? 1),
     tpRetIssqn: String(inicial?.tpRetIssqn ?? 1),
     descricaoPadrao: inicial?.descricaoPadrao ?? '',
+    aliqIssqn: inicial?.aliqIssqn != null ? String(inicial.aliqIssqn).replace('.', ',') : '',
     codNbs: inicial?.codNbs ?? '',
     ibsCbsAtivo: !!inicial?.ibsCbsAtivo,
     ibsCbsCIndOp: inicial?.ibsCbsCIndOp ?? '',
@@ -250,6 +251,7 @@ function DadosDaNota({ orgSlug, inicial }: { orgSlug: string; inicial: ConfigNfs
         tribIssqn: Number(f.tribIssqn) || 1,
         tpRetIssqn: Number(f.tpRetIssqn) || 1,
         descricaoPadrao: f.descricaoPadrao.trim() || null,
+        aliqIssqn: f.aliqIssqn.trim() ? num(f.aliqIssqn) : null,
         codNbs: f.codNbs.trim() || null,
         ibsCbsAtivo: f.ibsCbsAtivo,
         ibsCbsCIndOp: f.ibsCbsCIndOp.trim() || null,
@@ -283,6 +285,10 @@ function DadosDaNota({ orgSlug, inicial }: { orgSlug: string; inicial: ConfigNfs
           dica="13,45% federais + 4,64% municipais = 18,09%, igual nas NFs 2193 e 2205 — conferido pelo fiscal da contabilidade em 01/10/2026.">
           <input id="nf-perc" value={f.percSimples} onChange={e => setF({ ...f, percSimples: e.target.value })} inputMode="decimal" placeholder="ex.: 18,09"
             className={cn(campo, faltaPerc && 'bg-amber-50 border-amber-200')} />
+        </Campo>
+        <Campo id="nf-aliq" rotulo="Alíquota do ISSQN (%)"
+          dica="Vazio = não informar, e a nota sai com ISSQN zerado. A Receita só fornece a alíquota sozinha quando o município está parametrizado no Sistema Nacional; Cascavel manteve emissor próprio e devolveu zero. As notas da prefeitura usavam 4,31%. Preencher muda o que é declarado ao fisco municipal — peça orientação à contabilidade.">
+          <input id="nf-aliq" value={f.aliqIssqn} onChange={e => setF({ ...f, aliqIssqn: e.target.value })} inputMode="decimal" placeholder="ex.: 4,31" className={campo} />
         </Campo>
         <Campo id="nf-desc" rotulo="Descrição padrão" dica="Usada quando o lançamento não tem descrição">
           <input id="nf-desc" value={f.descricaoPadrao} onChange={e => setF({ ...f, descricaoPadrao: e.target.value })} placeholder="Prestação de serviços de publicidade" className={campo} />

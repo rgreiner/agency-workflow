@@ -45,6 +45,8 @@ export interface ConfigNfse {
   percSimples: number | null
   tribIssqn: number
   tpRetIssqn: number
+  /** pAliq — vazio não informa, que é o padrão. */
+  aliqIssqn: number | null
   descricaoPadrao: string | null
   /** Código NBS do serviço (9 dígitos) — campo da Reforma. */
   codNbs: string | null
@@ -67,6 +69,7 @@ async function cfgDaOrg(supabase: Awaited<ReturnType<typeof createClient>>, orgI
     percSimples: data.perc_simples != null ? Number(data.perc_simples) : null,
     tribIssqn: Number(data.trib_issqn ?? 1),
     tpRetIssqn: Number(data.tp_ret_issqn ?? 1),
+    aliqIssqn: data.aliq_issqn != null ? Number(data.aliq_issqn) : null,
     descricaoPadrao: data.descricao_padrao ?? null,
     codNbs: data.cod_nbs ?? null,
     ibsCbsAtivo: !!data.ibs_cbs_ativo,
@@ -93,6 +96,7 @@ export async function salvarConfigNfse(orgSlug: string, dados: Partial<ConfigNfs
     perc_simples: dados.percSimples ?? null,
     trib_issqn: dados.tribIssqn ?? 1,
     tp_ret_issqn: dados.tpRetIssqn ?? 1,
+    aliq_issqn: dados.aliqIssqn ?? null,
     descricao_padrao: dados.descricaoPadrao ?? null,
     cod_nbs: dados.codNbs ?? null,
     ibs_cbs_ativo: dados.ibsCbsAtivo ?? false,
@@ -627,6 +631,7 @@ export async function emitirNota(
       percSimples: cfg.percSimples!,
       tribIssqn: cfg.tribIssqn,
       tpRetIssqn: cfg.tpRetIssqn,
+      aliqIssqn: cfg.aliqIssqn ?? undefined,
       ambiente: cert.ambiente === 'producao' ? 1 : 2,
       competencia: (lanc.competencia || lanc.vencimento || undefined) as string | undefined,
       nbs: cfg.codNbs || undefined,

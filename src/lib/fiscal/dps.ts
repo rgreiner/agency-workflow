@@ -34,6 +34,13 @@ export interface DadosDps {
   percSimples: number
   tribIssqn: number
   tpRetIssqn: number
+  /**
+   * Alíquota do ISSQN (%). Opcional: a Receita só fornece a alíquota sozinha
+   * quando o município de incidência está parametrizado no Sistema Nacional —
+   * Cascavel, que manteve emissor próprio, não está, e por isso a nota sai com
+   * ISSQN zerado quando não informamos.
+   */
+  aliqIssqn?: number
   /** 1 = produção, 2 = produção restrita. */
   ambiente: 1 | 2
   competencia?: string
@@ -122,7 +129,9 @@ export function montarDps(d: DadosDps): { xml: string; id: string } {
     + (d.nbs ? `<cNBS>${esc(d.nbs)}</cNBS>` : '')
     + '</cServ></serv>'
     + `<valores><vServPrest><vServ>${valor}</vServ></vServPrest>`
-    + `<trib><tribMun><tribISSQN>${d.tribIssqn}</tribISSQN><tpRetISSQN>${d.tpRetIssqn}</tpRetISSQN></tribMun>`
+    + `<trib><tribMun><tribISSQN>${d.tribIssqn}</tribISSQN><tpRetISSQN>${d.tpRetIssqn}</tpRetISSQN>`
+    + (d.aliqIssqn != null ? `<pAliq>${d.aliqIssqn.toFixed(2)}</pAliq>` : '')
+    + '</tribMun>'
     + `<totTrib><pTotTribSN>${d.percSimples.toFixed(2)}</pTotTribSN></totTrib></trib></valores>`
     // IBSCBS é o ÚLTIMO elemento do infDPS, depois de `valores`.
     + (d.ibsCbs
