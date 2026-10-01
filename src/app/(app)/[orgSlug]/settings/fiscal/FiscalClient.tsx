@@ -268,7 +268,8 @@ function DadosDaNota({ orgSlug, inicial }: { orgSlug: string; inicial: ConfigNfs
         <Campo id="nf-serv" rotulo="Código do serviço" dica="Propaganda e publicidade (LC 116 item 17.06)">
           <input id="nf-serv" value={f.codigoServico} onChange={e => setF({ ...f, codigoServico: e.target.value })} inputMode="numeric" className={campo} />
         </Campo>
-        <Campo id="nf-perc" rotulo="Percentual total de tributos (%)" dica="Pergunta para a contabilidade — a nota 2205 mostrou 13,45% federais + 4,64% municipais">
+        <Campo id="nf-perc" rotulo="Percentual total de tributos (%)"
+          dica="As NFs 2193 e 2205 trazem 13,45% federais + 4,64% municipais = 18,09%, igual nas duas. Confirme com a contabilidade e digite — fica em branco de propósito.">
           <input id="nf-perc" value={f.percSimples} onChange={e => setF({ ...f, percSimples: e.target.value })} inputMode="decimal" placeholder="ex.: 18,09"
             className={cn(campo, faltaPerc && 'bg-amber-50 border-amber-200')} />
         </Campo>
@@ -285,8 +286,8 @@ function DadosDaNota({ orgSlug, inicial }: { orgSlug: string; inicial: ConfigNfs
 
       <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
         <p className="text-[11px] text-gray-400 max-w-md">
-          ISSQN fica como tributável e não retido (o Simples recolhe), que é o que a última nota mostra.
-          Mudou o enquadramento? Avise antes de emitir.
+          ISSQN fica como tributável e não retido (o Simples recolhe), que é o que as notas mostram.
+          IBS e CBS não entram em 2026 para optante do Simples — passam a valer em 01/2027 (Nota Técnica 004/005).
         </p>
         <button type="button" onClick={salvar} disabled={salvando}
           className="press inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition-colors">
