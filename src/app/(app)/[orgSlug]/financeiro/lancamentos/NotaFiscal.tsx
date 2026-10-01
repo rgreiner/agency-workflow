@@ -15,6 +15,7 @@ import {
   emitirNota, conferirNota, cancelarNota, dadosParaEmitir,
   type NotaDoLancamento, type LinhaConferencia, type DadosParaEmitir,
 } from '@/app/actions/nfse'
+import { ROTULO_TOMADOR, type TipoTomador } from '@/lib/fiscal/tomador'
 
 /**
  * Emissão de NFS-e a partir do lançamento a receber (migs. 309/313/315).
@@ -250,7 +251,9 @@ function DialogoEmitir({ orgSlug, lancamentoId, valor, cliente, substituir, onFe
   const router = useRouter()
   const [emitindo, start] = useTransition()
   const [dados, setDados] = useState<DadosParaEmitir | null>(null)
-  const [tomadorId, setTomadorId] = useState('')
+  // "tipo:id" — o id sozinho não identifica: cliente, veículo e fornecedor são
+  // tabelas diferentes e nada impede dois cadastros com o mesmo uuid de origem.
+  const [escolha, setEscolha] = useState('')
   const [cMotivo, setCMotivo] = useState('99')
   const [xMotivo, setXMotivo] = useState('')
   const [cienteDaDuplicata, setCiente] = useState(false)
@@ -261,19 +264,20 @@ function DialogoEmitir({ orgSlug, lancamentoId, valor, cliente, substituir, onFe
       if (!vivo) return
       if (r.error) { toast.error(r.error); onFechar(); return }
       setDados(r.dados ?? null)
-      setTomadorId(r.dados?.tomador?.id ?? r.dados?.sugestao?.id ?? '')
+      const inicial = r.dados?.tomador ?? r.dados?.sugestao
+      setEscolha(inicial ? `${inicial.tipo}:${inicial.id}` : '')
     })
     return () => { vivo = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgSlug, lancamentoId])
 
-  const escolhido = dados?.clientes.find(c => c.id === tomadorId) ?? null
+  const escolhido = dados?.tomadores.find(t => `${t.tipo}:${t.id}` === escolha) ?? null
   const vinculado = !!dados?.tomador
   const motivoCurto = substituir && xMotivo.trim().length < MOTIVO_MIN
   // Duplicata exige aceite explícito: o aviso sozinho vira paisagem, e nota em
   // duplicidade só se desfaz cancelando.
   const precisaAceite = !!dados?.nfAnexada && !substituir
-  const travado = !dados || !tomadorId || !!motivoCurto || (precisaAceite && !cienteDaDuplicata)
+  const travado = !dados || !escolha || !!motivoCurto || (precisaAceite && !cienteDaDuplicata)
 
   return (
     <ConfirmDialog
@@ -291,8 +295,9 @@ function DialogoEmitir({ orgSlug, lancamentoId, valor, cliente, substituir, onFe
       onConfirm={() => {
         if (travado) return
         start(async () => {
+          const [tipo, id] = escolha.split(':')
           const r = await emitirNota(orgSlug, lancamentoId, {
-            workspaceId: tomadorId || undefined,
+            tomador: tipo && id ? { tipo: tipo as TipoTomador, id } : undefined,
             confirmarNfAnexada: cienteDaDuplicata,
             substituir: substituir ? { notaId: substituir.id, cMotivo, xMotivo: xMotivo.trim() } : undefined,
           })
@@ -313,26 +318,34 @@ function DialogoEmitir({ orgSlug, lancamentoId, valor, cliente, substituir, onFe
           <div>
             <label className="block text-[11px] font-medium text-gray-500 mb-1">Tomador (quem recebe a nota)</label>
             <Select
-              value={tomadorId}
-              onChange={setTomadorId}
-              options={dados.clientes.map(c => ({ value: c.id, label: c.nome }))}
-              placeholder="Escolher o cliente"
+              value={escolha}
+              onChange={setEscolha}
+              options={dados.tomadores.map(t => ({
+                value: `${t.tipo}:${t.id}`,
+                // O tipo entra no rótulo porque a lista mistura os três cadastros
+                // e há nome parecido entre eles — "quem é este Rede Outdoor?"
+                // precisa de resposta sem abrir outra tela.
+                label: `${t.nome} · ${ROTULO_TOMADOR[t.tipo].toLowerCase()}`,
+              }))}
+              placeholder="Escolher quem recebe a nota"
             />
             {escolhido && (
               <p className="mt-1 text-[11px] text-gray-500 tabular-nums">
                 {escolhido.razao || escolhido.nome} · CNPJ {formatarCnpj(escolhido.cnpj)}
               </p>
             )}
-            {/* O vínculo que falta é a causa real de "não consigo emitir". Dizer
-                de onde veio o palpite evita aceitar o cliente errado no automático. */}
-            {!vinculado && dados.sugestao && tomadorId === dados.sugestao.id && (
+            {/* Dizer de onde veio o palpite evita aceitar o tomador errado no
+                automático — e numa nota fiscal isso só se conserta cancelando. */}
+            {!vinculado && dados.sugestao && escolha === `${dados.sugestao.tipo}:${dados.sugestao.id}` && (
               <p className="mt-1 text-[11px] text-gray-500">
-                Sugerido pelo centro de custo do lançamento. Confira antes de emitir — o vínculo fica salvo.
+                Sugerido pelo contato do lançamento. Confira antes de emitir.
+                {dados.sugestao.tipo === 'cliente' && ' Sendo cliente, o vínculo fica salvo.'}
               </p>
             )}
             {!vinculado && !dados.sugestao && (
               <p className="mt-1 text-[11px] text-amber-700">
-                Este lançamento não tem cliente vinculado. Escolha o tomador: o vínculo fica salvo no lançamento.
+                Este lançamento não tem tomador vinculado. Fee e Job vão para o cliente;
+                comissão de mídia, para o veículo; comissão de produção, para o fornecedor.
               </p>
             )}
           </div>

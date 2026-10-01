@@ -10,6 +10,7 @@ import { montarDps, assinarDps, assinarXml, chavesDoPfx, empacotar, desempacotar
 import { montarCancelamento, MOTIVO_MIN } from '@/lib/fiscal/evento'
 import { logSystemError } from '@/lib/system-error'
 import { chaveNome } from '@/lib/nomes'
+import { ROTULO_TOMADOR, type TipoTomador, type Tomador } from '@/lib/fiscal/tomador'
 
 /**
  * Emissão de NFS-e pelo Emissor Nacional, a partir de um lançamento a receber.
@@ -33,13 +34,7 @@ export interface NotaDoLancamento {
   motivoCancelamento?: string | null
 }
 
-/** Cliente que pode ser tomador: só entra na lista quem tem CNPJ no cadastro. */
-export interface ClienteTomador {
-  id: string
-  nome: string
-  razao: string | null
-  cnpj: string
-}
+export type { TipoTomador, Tomador } from '@/lib/fiscal/tomador'
 
 export interface ConfigNfse {
   serie: string
@@ -129,19 +124,36 @@ export async function notasDosLancamentos(orgSlug: string, ids: string[]): Promi
 }
 
 /**
- * Clientes que servem de tomador. Sem CNPJ no cadastro não há nota, então quem
- * não tem fica de fora da lista em vez de aparecer e falhar no envio.
+ * Todos os cadastros que podem receber nota: clientes, fornecedores e veículos.
+ *
+ * Sem CNPJ completo o cadastro fica de fora da lista, em vez de aparecer e
+ * falhar no envio. Hoje são 14 clientes, 152 veículos e 259 fornecedores com
+ * CNPJ — por isso o Select entra em modo de busca sozinho.
  */
-export async function clientesParaNota(orgSlug: string): Promise<ClienteTomador[]> {
+export async function tomadoresParaNota(orgSlug: string): Promise<Tomador[]> {
   const { supabase, orgId } = await assertFinanceAccess(orgSlug)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = await (supabase as any).from('workspaces')
-    .select('id, name, legal_name, tax_id')
-    .eq('org_id', orgId).eq('archived', false).order('name')
+  const sb = supabase as any
+  const [cli, veic, forn] = await Promise.all([
+    sb.from('workspaces').select('id, name, legal_name, tax_id').eq('org_id', orgId).eq('archived', false),
+    sb.from('veiculos').select('id, name, tax_id').eq('org_id', orgId).eq('archived', false),
+    sb.from('fornecedores').select('id, name, tax_id').eq('org_id', orgId).eq('archived', false),
+  ])
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return ((data ?? []) as any[])
-    .map(w => ({ id: w.id, nome: w.name, razao: w.legal_name ?? null, cnpj: String(w.tax_id ?? '').replace(/\D/g, '') }))
-    .filter(c => c.cnpj.length === 14)
+  const monta = (linhas: any[] | null, tipo: TipoTomador): Tomador[] =>
+    (linhas ?? []).map(r => ({
+      tipo, id: r.id as string, nome: r.name as string, razao: (r.legal_name ?? null) as string | null,
+      cnpj: String(r.tax_id ?? '').replace(/\D/g, ''),
+    })).filter(t => t.cnpj.length === 14)
+
+  // Cliente antes de veículo, veículo antes de fornecedor: é a ordem em que o
+  // nome repetido deve ser resolvido, e também a que a lista exibe.
+  return [
+    ...monta(cli.data, 'cliente'),
+    ...monta(veic.data, 'veiculo'),
+    ...monta(forn.data, 'fornecedor'),
+  ]
 }
 
 /** O XML autorizado, para baixar/arquivar. */
@@ -171,11 +183,11 @@ function mensagemDaReceita(corpo: string): string {
 export interface DadosParaEmitir {
   valor: number
   descricao: string
-  /** Cliente já vinculado ao lançamento. */
-  tomador: ClienteTomador | null
+  /** Tomador já vinculado ao lançamento (só existe no caso cliente). */
+  tomador: Tomador | null
   /** Palpite por nome quando não há vínculo — a pessoa confirma, o Flow não decide. */
-  sugestao: ClienteTomador | null
-  clientes: ClienteTomador[]
+  sugestao: Tomador | null
+  tomadores: Tomador[]
   /** NF da agência já anexada ao lançamento (emitida fora do Flow). */
   nfAnexada: { numero: string; nome: string } | null
   ambiente: 'restrita' | 'producao'
@@ -185,30 +197,43 @@ export interface DadosParaEmitir {
  * Tudo que o diálogo de emissão precisa, numa chamada só.
  *
  * O tomador é a parte delicada: a maioria dos lançamentos a receber veio do
- * import e não tem cliente vinculado, mas quase todos trazem o nome do cliente
- * no centro de custo. O Flow SUGERE a partir desse nome e deixa a confirmação
- * com a pessoa — tomador errado numa nota fiscal só se conserta cancelando.
+ * import sem vínculo, e quem recebe a nota pode ser cliente, veículo ou
+ * fornecedor. O Flow SUGERE e deixa a confirmação com a pessoa — tomador errado
+ * numa nota fiscal só se conserta cancelando.
+ *
+ * ⚠️ A sugestão olha o CONTATO antes do centro de custo. Centro de custo é
+ * fonte de receita: numa comissão de mídia ele guarda o CLIENTE que originou o
+ * dinheiro, enquanto a nota vai para o VEÍCULO. Olhar o centro primeiro
+ * sugeriria o tomador errado em toda comissão — que é a maioria das notas.
  */
 export async function dadosParaEmitir(orgSlug: string, lancamentoId: string): Promise<{ dados?: DadosParaEmitir; error?: string }> {
   const { supabase, orgId } = await assertFinanceAccess(orgSlug)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any
 
-  const [{ data: lanc }, clientes, cert] = await Promise.all([
+  const [{ data: lanc }, tomadores, cert] = await Promise.all([
     sb.from('lancamentos')
       .select('valor, valor_realizado, descricao, workspace_id, centro_custo, contato_nome, anexos')
       .eq('id', lancamentoId).maybeSingle(),
-    clientesParaNota(orgSlug),
+    tomadoresParaNota(orgSlug),
     certificadoPublico(orgId),
   ])
   if (!lanc) return { error: 'Lançamento não encontrado.' }
 
-  const tomador = lanc.workspace_id ? clientes.find(c => c.id === lanc.workspace_id) ?? null : null
+  const tomador = lanc.workspace_id
+    ? tomadores.find(t => t.tipo === 'cliente' && t.id === lanc.workspace_id) ?? null
+    : null
+
   // Casa pela mesma régua do cubo (sem caixa, sem acento): "É o Amor" do cadastro
-  // e "É O Amor" do import são o mesmo cliente.
-  const porChave = new Map(clientes.map(c => [chaveNome(c.nome), c]))
+  // e "É O Amor" do import são o mesmo nome. Homônimo entre cadastros resolve
+  // pela ordem da lista — cliente ganha de veículo, que ganha de fornecedor.
+  const porChave = new Map<string, Tomador>()
+  for (const t of tomadores) {
+    const k = chaveNome(t.nome)
+    if (!porChave.has(k)) porChave.set(k, t)
+  }
   const sugestao = tomador ? null
-    : porChave.get(chaveNome(lanc.centro_custo ?? '')) ?? porChave.get(chaveNome(lanc.contato_nome ?? '')) ?? null
+    : porChave.get(chaveNome(lanc.contato_nome ?? '')) ?? porChave.get(chaveNome(lanc.centro_custo ?? '')) ?? null
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const anexo = ((lanc.anexos ?? []) as any[]).find(a => a?.tipo === 'NF' && a?.emitente === 'agencia')
@@ -219,7 +244,7 @@ export async function dadosParaEmitir(orgSlug: string, lancamentoId: string): Pr
       descricao: lanc.descricao ?? '',
       tomador,
       sugestao,
-      clientes,
+      tomadores,
       nfAnexada: anexo ? { numero: String(anexo.numero ?? ''), nome: String(anexo.nome ?? '') } : null,
       ambiente: cert?.ambiente ?? 'restrita',
     },
@@ -228,12 +253,17 @@ export async function dadosParaEmitir(orgSlug: string, lancamentoId: string): Pr
 
 export interface OpcoesEmissao {
   /**
-   * Cliente escolhido na hora de emitir. Existe porque 152 dos 293 lançamentos
-   * a receber vieram do import e não têm vínculo com cliente — e sem tomador não
-   * há nota. Escolhido aqui, o vínculo FICA no lançamento: a próxima emissão não
-   * pergunta de novo.
+   * Quem recebe a nota, escolhido na hora de emitir. Existe porque 152 dos 293
+   * lançamentos a receber vieram do import sem vínculo — e sem tomador não há
+   * nota. Pode ser cliente, veículo ou fornecedor: Fee e Job vão para o cliente,
+   * comissão de mídia para o veículo e comissão de produção para o fornecedor.
+   *
+   * Sendo cliente, o vínculo FICA gravado no lançamento e a próxima emissão não
+   * pergunta de novo. Veículo e fornecedor não têm onde ficar: `workspace_id`
+   * referencia `workspaces`, e gravar ali o id de outra tabela apontaria para o
+   * nada.
    */
-  workspaceId?: string
+  tomador?: { tipo: TipoTomador; id: string }
   /** A pessoa viu que o lançamento já tem NF anexada e quer emitir assim mesmo. */
   confirmarNfAnexada?: boolean
   /**
@@ -298,12 +328,23 @@ export async function emitirNota(
     return { error: `Este lançamento já tem a ${nfAnexada.numero ? `NF ${nfAnexada.numero}` : 'NF'} da agência anexada, emitida fora do Flow. Confirme que quer emitir outra.` }
   }
 
-  const workspaceId = opcoes.workspaceId || lanc.workspace_id
-  if (!workspaceId) return { error: 'O lançamento não está vinculado a um cliente — sem tomador não há nota.' }
-  const { data: cli } = await sb.from('workspaces').select('legal_name, name, tax_id').eq('id', workspaceId).maybeSingle()
-  if (!cli) return { error: 'Cliente não encontrado.' }
-  const cnpjTomador = String(cli.tax_id ?? '').replace(/\D/g, '')
-  if (cnpjTomador.length !== 14) return { error: `Cliente ${cli.name ?? ''} sem CNPJ completo no cadastro.` }
+  // Quem recebe a nota: o escolhido agora ou, na falta, o cliente já vinculado.
+  const escolha: { tipo: TipoTomador; id: string } | null =
+    opcoes.tomador ?? (lanc.workspace_id ? { tipo: 'cliente', id: lanc.workspace_id } : null)
+  if (!escolha) return { error: 'Escolha para quem a nota é emitida — sem tomador não há nota.' }
+
+  const TABELA: Record<TipoTomador, string> = {
+    cliente: 'workspaces', fornecedor: 'fornecedores', veiculo: 'veiculos',
+  }
+  const { data: dest } = await sb.from(TABELA[escolha.tipo])
+    .select(escolha.tipo === 'cliente' ? 'legal_name, name, tax_id' : 'name, tax_id')
+    .eq('id', escolha.id).maybeSingle()
+  if (!dest) return { error: `${ROTULO_TOMADOR[escolha.tipo]} não encontrado.` }
+  const cnpjTomador = String(dest.tax_id ?? '').replace(/\D/g, '')
+  if (cnpjTomador.length !== 14) {
+    return { error: `${ROTULO_TOMADOR[escolha.tipo]} ${dest.name ?? ''} sem CNPJ completo no cadastro.` }
+  }
+  const nomeTomador: string = dest.legal_name || dest.name || lanc.contato_nome || 'Tomador'
 
   const valor = Number(lanc.valor_realizado ?? lanc.valor) || 0
   if (valor <= 0) return { error: 'Lançamento sem valor.' }
@@ -333,7 +374,7 @@ export async function emitirNota(
     const { xml, id } = montarDps({
       cnpjPrestador: cnpjPrestador,
       cnpjTomador,
-      nomeTomador: cli.legal_name || cli.name || lanc.contato_nome || 'Tomador',
+      nomeTomador,
       codMunicipio: cfg.codMunicipio!,
       serie: cfg.serie,
       numero: Number(numero),
@@ -385,8 +426,9 @@ export async function emitirNota(
       n_dps: Number(numero),
       valor,
       competencia: lanc.competencia || lanc.vencimento || null,
-      tomador_nome: cli.legal_name || cli.name || null,
+      tomador_nome: nomeTomador,
       tomador_cnpj: cnpjTomador,
+      tomador_tipo: escolha.tipo,
       xml_gz_b64: resp.nfseXmlGZipB64 ?? null,
       dps_gz_b64: empacotar(assinado),
       substitui_chave: substituida?.chave ?? null,
@@ -407,10 +449,10 @@ export async function emitirNota(
       }).eq('id', substituida.id)
     }
 
-    // O vínculo com o cliente fica gravado: escolher o tomador uma vez resolve
-    // esse lançamento para sempre, e alimenta centro de custo e margem.
+    // O vínculo fica gravado SÓ quando o tomador é cliente: escolher uma vez
+    // resolve esse lançamento para sempre e alimenta margem e centro de custo.
     const patch: Record<string, unknown> = { nf_emitida: true }
-    if (!lanc.workspace_id && opcoes.workspaceId) patch.workspace_id = opcoes.workspaceId
+    if (!lanc.workspace_id && escolha.tipo === 'cliente') patch.workspace_id = escolha.id
     await sb.from('lancamentos').update(patch).eq('id', lancamentoId)
     revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
 
