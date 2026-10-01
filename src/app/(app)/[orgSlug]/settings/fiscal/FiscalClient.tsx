@@ -214,9 +214,10 @@ export function FiscalClient({ orgSlug, inicial, cfgInicial }: { orgSlug: string
  * Os números fiscais da nota. São CADASTRO, não constante no código: valor errado
  * aqui só se conserta cancelando a nota emitida.
  *
- * Os sugeridos vêm da última NFS-e real da casa (nº 2205, 10/09/2026, emitida no
- * sistema da prefeitura) — menos o percentual, que é a única pergunta que sobra
- * para a contabilidade.
+ * Os valores vieram das últimas NFS-e reais da casa (2193 e 2205, emitidas no
+ * sistema da prefeitura) e foram CONFERIDOS PELO FISCAL DA CONTABILIDADE em
+ * 01/10/2026 — código do serviço, percentual e os códigos da Reforma. Não são
+ * mais palpite; mudar qualquer um aqui pede a mesma conferência de novo.
  */
 function DadosDaNota({ orgSlug, inicial }: { orgSlug: string; inicial: ConfigNfse | null }) {
   const [f, setF] = useState({
@@ -279,7 +280,7 @@ function DadosDaNota({ orgSlug, inicial }: { orgSlug: string; inicial: ConfigNfs
           <input id="nf-serv" value={f.codigoServico} onChange={e => setF({ ...f, codigoServico: e.target.value })} inputMode="numeric" className={campo} />
         </Campo>
         <Campo id="nf-perc" rotulo="Percentual total de tributos (%)"
-          dica="As NFs 2193 e 2205 trazem 13,45% federais + 4,64% municipais = 18,09%, igual nas duas. Confirme com a contabilidade e digite — fica em branco de propósito.">
+          dica="13,45% federais + 4,64% municipais = 18,09%, igual nas NFs 2193 e 2205 — conferido pelo fiscal da contabilidade em 01/10/2026.">
           <input id="nf-perc" value={f.percSimples} onChange={e => setF({ ...f, percSimples: e.target.value })} inputMode="decimal" placeholder="ex.: 18,09"
             className={cn(campo, faltaPerc && 'bg-amber-50 border-amber-200')} />
         </Campo>
@@ -307,7 +308,7 @@ function DadosDaNota({ orgSlug, inicial }: { orgSlug: string; inicial: ConfigNfs
             <p className="text-xs text-gray-500 mt-0.5 max-w-xl">
               Para optante do Simples, obrigatório a partir de 01/2027 — mas a Receita já aceita hoje.
               Não se digita alíquota: os 0,9% de CBS e 0,1% de IBS de 2026 são calculados por ela a partir
-              da classificação abaixo.
+              da classificação abaixo. Os códigos foram conferidos pelo fiscal da contabilidade em 01/10/2026.
             </p>
           </div>
           <label className="shrink-0 inline-flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer select-none">
