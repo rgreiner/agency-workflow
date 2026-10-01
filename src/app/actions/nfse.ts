@@ -11,7 +11,7 @@ import { montarCancelamento, MOTIVO_MIN } from '@/lib/fiscal/evento'
 import { logSystemError } from '@/lib/system-error'
 import { chaveNome } from '@/lib/nomes'
 import { buscarCep, buscarCnpj } from '@/app/actions/lookup'
-import { ROTULO_TOMADOR, type TipoTomador, type Tomador } from '@/lib/fiscal/tomador'
+import { ROTULO_TOMADOR, cnpjValido, type TipoTomador, type Tomador } from '@/lib/fiscal/tomador'
 
 /**
  * Emissão de NFS-e pelo Emissor Nacional, a partir de um lançamento a receber.
@@ -426,6 +426,11 @@ export async function emitirNota(
   const cnpjTomador = String(dest.tax_id ?? '').replace(/\D/g, '')
   if (cnpjTomador.length !== 14) {
     return { error: `${ROTULO_TOMADOR[escolha.tipo]} ${dest.name ?? ''} sem CNPJ completo no cadastro.` }
+  }
+  // 14 dígitos não bastam: oito cadastros tinham CNPJ com dígito verificador
+  // errado. Recusar aqui diz ONDE está o problema; recusar na Receita, não.
+  if (!cnpjValido(cnpjTomador)) {
+    return { error: `O CNPJ de ${dest.name ?? 'tomador'} está inválido no cadastro (dígito verificador não confere). Corrija antes de emitir.` }
   }
   /**
    * Nome do tomador na nota é a RAZÃO SOCIAL, não o apelido do cadastro.
