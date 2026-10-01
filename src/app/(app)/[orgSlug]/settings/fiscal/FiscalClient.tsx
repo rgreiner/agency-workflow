@@ -7,6 +7,7 @@ import { cn, formatDate } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { enviarCertificado, excluirCertificado, trocarAmbienteFiscal, testarReceita } from '@/app/actions/fiscal'
+import { salvarConfigNfse, type ConfigNfse } from '@/app/actions/nfse'
 import type { CertificadoPublico } from '@/lib/fiscal/certificado'
 
 /**
@@ -16,7 +17,7 @@ import type { CertificadoPublico } from '@/lib/fiscal/certificado'
  * Ele VENCE (A1 dura um ano), e certificado vencido é nota parada: por isso a
  * validade fica na cara da tela e a troca é um upload, sem passar por ninguém.
  */
-export function FiscalClient({ orgSlug, inicial }: { orgSlug: string; inicial: CertificadoPublico | null }) {
+export function FiscalClient({ orgSlug, inicial, cfgInicial }: { orgSlug: string; inicial: CertificadoPublico | null; cfgInicial: ConfigNfse | null }) {
   const [cert, setCert] = useState(inicial)
   const [senha, setSenha] = useState('')
   const [arquivo, setArquivo] = useState<File | null>(null)
@@ -190,6 +191,8 @@ export function FiscalClient({ orgSlug, inicial }: { orgSlug: string; inicial: C
         </p>
       </section>
 
+      <DadosDaNota orgSlug={orgSlug} inicial={cfgInicial} />
+
       <ConfirmDialog
         open={excluir}
         title="Remover o certificado?"
@@ -203,6 +206,104 @@ export function FiscalClient({ orgSlug, inicial }: { orgSlug: string; inicial: C
           toast.success('Certificado removido.')
         })}
       />
+    </div>
+  )
+}
+
+/**
+ * Os números fiscais da nota. São CADASTRO, não constante no código: valor errado
+ * aqui só se conserta cancelando a nota emitida.
+ *
+ * Os sugeridos vêm da última NFS-e real da casa (nº 2205, 10/09/2026, emitida no
+ * sistema da prefeitura) — menos o percentual, que é a única pergunta que sobra
+ * para a contabilidade.
+ */
+function DadosDaNota({ orgSlug, inicial }: { orgSlug: string; inicial: ConfigNfse | null }) {
+  const [f, setF] = useState({
+    serie: inicial?.serie ?? '00001',
+    proximoNumero: String(inicial?.proximoNumero ?? 1),
+    codMunicipio: inicial?.codMunicipio ?? '4104808',
+    codigoServico: inicial?.codigoServico ?? '170601',
+    percSimples: inicial?.percSimples != null ? String(inicial.percSimples).replace('.', ',') : '',
+    tribIssqn: String(inicial?.tribIssqn ?? 1),
+    tpRetIssqn: String(inicial?.tpRetIssqn ?? 1),
+    descricaoPadrao: inicial?.descricaoPadrao ?? '',
+  })
+  const [salvando, start] = useTransition()
+  const num = (v: string) => Number(v.replace(',', '.'))
+  const faltaPerc = !f.percSimples.trim()
+
+  function salvar() {
+    start(async () => {
+      const r = await salvarConfigNfse(orgSlug, {
+        serie: f.serie.trim() || '00001',
+        proximoNumero: Math.max(1, Math.floor(num(f.proximoNumero)) || 1),
+        codMunicipio: f.codMunicipio.trim() || null,
+        codigoServico: f.codigoServico.trim() || null,
+        percSimples: faltaPerc ? null : num(f.percSimples),
+        tribIssqn: Number(f.tribIssqn) || 1,
+        tpRetIssqn: Number(f.tpRetIssqn) || 1,
+        descricaoPadrao: f.descricaoPadrao.trim() || null,
+      })
+      if (r?.error) { toast.error(r.error); return }
+      toast.success('Dados da nota salvos.')
+    })
+  }
+
+  const campo = 'w-full px-3 py-2 text-sm bg-gray-100 border border-transparent rounded-xl focus:bg-white focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none'
+
+  return (
+    <section className="rounded-2xl border border-gray-200 bg-white p-5 space-y-4">
+      <div>
+        <h2 className="text-sm font-medium text-gray-900">Dados da nota</h2>
+        <p className="text-xs text-gray-500 mt-0.5">
+          O que a Receita exige em toda NFS-e. Sem isso o Flow recusa emitir, de propósito.
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Campo id="nf-mun" rotulo="Município de emissão (IBGE)" dica="Cascavel = 4104808">
+          <input id="nf-mun" value={f.codMunicipio} onChange={e => setF({ ...f, codMunicipio: e.target.value })} inputMode="numeric" className={campo} />
+        </Campo>
+        <Campo id="nf-serv" rotulo="Código do serviço" dica="Propaganda e publicidade (LC 116 item 17.06)">
+          <input id="nf-serv" value={f.codigoServico} onChange={e => setF({ ...f, codigoServico: e.target.value })} inputMode="numeric" className={campo} />
+        </Campo>
+        <Campo id="nf-perc" rotulo="Percentual total de tributos (%)" dica="Pergunta para a contabilidade — a nota 2205 mostrou 13,45% federais + 4,64% municipais">
+          <input id="nf-perc" value={f.percSimples} onChange={e => setF({ ...f, percSimples: e.target.value })} inputMode="decimal" placeholder="ex.: 18,09"
+            className={cn(campo, faltaPerc && 'bg-amber-50 border-amber-200')} />
+        </Campo>
+        <Campo id="nf-desc" rotulo="Descrição padrão" dica="Usada quando o lançamento não tem descrição">
+          <input id="nf-desc" value={f.descricaoPadrao} onChange={e => setF({ ...f, descricaoPadrao: e.target.value })} placeholder="Prestação de serviços de publicidade" className={campo} />
+        </Campo>
+        <Campo id="nf-serie" rotulo="Série" dica="Numeração da DPS é nossa; o número da NFS-e quem dá é a Receita">
+          <input id="nf-serie" value={f.serie} onChange={e => setF({ ...f, serie: e.target.value })} className={campo} />
+        </Campo>
+        <Campo id="nf-num" rotulo="Próximo número da DPS">
+          <input id="nf-num" value={f.proximoNumero} onChange={e => setF({ ...f, proximoNumero: e.target.value })} inputMode="numeric" className={campo} />
+        </Campo>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+        <p className="text-[11px] text-gray-400 max-w-md">
+          ISSQN fica como tributável e não retido (o Simples recolhe), que é o que a última nota mostra.
+          Mudou o enquadramento? Avise antes de emitir.
+        </p>
+        <button type="button" onClick={salvar} disabled={salvando}
+          className="press inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition-colors">
+          {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+          Salvar dados da nota
+        </button>
+      </div>
+    </section>
+  )
+}
+
+function Campo({ id, rotulo, dica, children }: { id: string; rotulo: string; dica?: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <label htmlFor={id} className="block text-xs font-medium text-gray-600 mb-1">{rotulo}</label>
+      {children}
+      {dica && <p className="text-[11px] text-gray-400 mt-1">{dica}</p>}
     </div>
   )
 }

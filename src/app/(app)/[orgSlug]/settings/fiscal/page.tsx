@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { certificadoPublico } from '@/lib/fiscal/certificado'
+import { lerConfigNfse } from '@/app/actions/nfse'
 import { FiscalClient } from './FiscalClient'
 
 export const metadata = { title: 'Configurações — Nota fiscal' }
@@ -22,5 +23,6 @@ export default async function FiscalPage({ params }: { params: Promise<{ orgSlug
     .from('organization_members').select('role').eq('org_id', org.id).eq('user_id', user.id).single() as { data: { role: string } | null }
   if (!m || !['owner', 'admin'].includes(m.role)) redirect(`/${orgSlug}/settings/membros`)
 
-  return <FiscalClient orgSlug={orgSlug} inicial={await certificadoPublico(org.id)} />
+  const [cert, { cfg }] = await Promise.all([certificadoPublico(org.id), lerConfigNfse(orgSlug)])
+  return <FiscalClient orgSlug={orgSlug} inicial={cert} cfgInicial={cfg} />
 }
