@@ -266,19 +266,33 @@ export function DanfseDoc({ d, qrDataUrl }: { d: DanfseDados; qrDataUrl: string 
             <Campo rotulo="CSLL" valor={d.federal.csll} w={3.82} fim />
           </View>
 
-          {/* ── IBS / CBS ───────────────────────────────────────────────── */}
-          <View style={s.linha}>
-            <TituloBloco texto="TRIBUTAÇÃO IBS / CBS" />
-            <Campo
-              rotulo="Situação"
-              valor={d.ibsCbs || 'Não informado — optante do Simples Nacional (exigível a partir de 01/2027)'}
-              w={15.31} fim
-            />
-          </View>
+          {/* ── IBS / CBS ─────────────────────────────────────────────────
+              Os percentuais vêm CALCULADOS pela Receita; o emitente só classifica
+              a operação. Em 2026 são informativos (0,10% IBS / 0,90% CBS). */}
+          {d.ibsCbs ? (
+            <>
+              <View style={s.linha}>
+                <TituloBloco texto="TRIBUTAÇÃO IBS / CBS" />
+                <Campo rotulo="Base de Cálculo" valor={d.ibsCbs.bc} w={5.09} />
+                <Campo rotulo="IBS Estadual" valor={[d.ibsCbs.ibsUf.perc, d.ibsCbs.ibsUf.valor].filter(Boolean).join(' · ')} w={5.09} />
+                <Campo rotulo="IBS Municipal" valor={[d.ibsCbs.ibsMun.perc, d.ibsCbs.ibsMun.valor].filter(Boolean).join(' · ')} w={5.09} fim />
+              </View>
+              <View style={s.linha}>
+                <Campo rotulo="CBS" valor={[d.ibsCbs.cbs.perc, d.ibsCbs.cbs.valor].filter(Boolean).join(' · ')} w={6.8} />
+                <Campo rotulo="Total da NFS-e com IBS/CBS" valor={d.ibsCbs.total} w={6.8} />
+                <Campo rotulo="Observação" valor="Alíquotas de transição — informativas em 2026" w={6.8} fim />
+              </View>
+            </>
+          ) : (
+            <View style={s.linha}>
+              <TituloBloco texto="TRIBUTAÇÃO IBS / CBS" />
+              <Campo rotulo="Situação" valor="Não informado na NFS-e" w={15.31} fim />
+            </View>
+          )}
 
           {/* ── Valor total ─────────────────────────────────────────────── */}
           <View style={s.linha}>
-            <Campo rotulo="VALOR LÍQUIDO DA NFS-e + IBS/CBS" valor={d.total} w={20.4} fim sombreada />
+            <Campo rotulo="VALOR LÍQUIDO DA NFS-e + IBS/CBS" valor={d.ibsCbs?.total || d.total} w={20.4} fim sombreada />
           </View>
 
           {/* ── Informações complementares ──────────────────────────────── */}

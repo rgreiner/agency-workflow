@@ -6,10 +6,11 @@ import { getUsuario } from '@/lib/auth/server'
 import { assertFinanceAccess } from '@/lib/finance'
 import { certificadoParaUso, certificadoPublico } from '@/lib/fiscal/certificado'
 import { chamarNfse } from '@/lib/fiscal/nfse-conexao'
-import { montarDps, assinarDps, assinarXml, chavesDoPfx, empacotar, desempacotar } from '@/lib/fiscal/dps'
+import { montarDps, assinarDps, assinarXml, chavesDoPfx, empacotar, desempacotar, type DadosDps } from '@/lib/fiscal/dps'
 import { montarCancelamento, MOTIVO_MIN } from '@/lib/fiscal/evento'
 import { logSystemError } from '@/lib/system-error'
 import { chaveNome } from '@/lib/nomes'
+import { buscarCep, buscarCnpj } from '@/app/actions/lookup'
 import { ROTULO_TOMADOR, type TipoTomador, type Tomador } from '@/lib/fiscal/tomador'
 
 /**
@@ -366,7 +367,9 @@ export async function emitirNota(
     cliente: 'workspaces', fornecedor: 'fornecedores', veiculo: 'veiculos',
   }
   const { data: dest } = await sb.from(TABELA[escolha.tipo])
-    .select(escolha.tipo === 'cliente' ? 'legal_name, name, tax_id' : 'name, tax_id')
+    .select(escolha.tipo === 'cliente'
+      ? 'legal_name, name, tax_id, address_zip, address_street, address_number, address_complement, address_district'
+      : 'name, tax_id, enderecos')
     .eq('id', escolha.id).maybeSingle()
   if (!dest) return { error: `${ROTULO_TOMADOR[escolha.tipo]} não encontrado.` }
   const cnpjTomador = String(dest.tax_id ?? '').replace(/\D/g, '')
@@ -374,6 +377,65 @@ export async function emitirNota(
     return { error: `${ROTULO_TOMADOR[escolha.tipo]} ${dest.name ?? ''} sem CNPJ completo no cadastro.` }
   }
   const nomeTomador: string = dest.legal_name || dest.name || lanc.contato_nome || 'Tomador'
+
+  /**
+   * Endereço do tomador — exigido pela Receita quando há IBS/CBS (E0234).
+   *
+   * Vem do NOSSO cadastro, que é onde a pessoa mantém o dado: cliente guarda em
+   * colunas planas (13 dos 16 preenchidos), fornecedor e veículo guardam no
+   * jsonb `enderecos`. O que falta nos dois é o `cMun`, código IBGE do
+   * município, que o cadastro não tem — esse vem do CEP, pelo ViaCEP.
+   *
+   * Sem endereço no cadastro, cai para o registro da Receita pelo CNPJ: é
+   * público, tem tudo e é contra ele que a nota é validada. Falhando as duas
+   * fontes, recusa dizendo o que preencher — nunca emite sem.
+   */
+  let enderecoTomador: DadosDps['enderecoTomador']
+  if (cfg.ibsCbsAtivo) {
+    const doCadastro = escolha.tipo === 'cliente'
+      ? {
+          cep: dest.address_zip, xLgr: dest.address_street, nro: dest.address_number,
+          xCpl: dest.address_complement, xBairro: dest.address_district,
+        }
+      : (() => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const e = ((dest.enderecos ?? []) as any[])[0]
+          return e ? { cep: e.cep, xLgr: e.logradouro, nro: e.numero, xCpl: e.complemento, xBairro: e.bairro } : null
+        })()
+
+    const texto = (v: unknown) => String(v ?? '').trim()
+    const completo = doCadastro
+      && texto(doCadastro.xLgr) && texto(doCadastro.xBairro) && texto(doCadastro.cep).replace(/\D/g, '').length === 8
+
+    if (completo) {
+      const cepLimpo = texto(doCadastro!.cep).replace(/\D/g, '')
+      const r = await buscarCep(cepLimpo)
+      if (r.data?.ibge) {
+        enderecoTomador = {
+          cMun: r.data.ibge, cep: cepLimpo,
+          xLgr: texto(doCadastro!.xLgr), nro: texto(doCadastro!.nro) || 'S/N',
+          xCpl: texto(doCadastro!.xCpl) || undefined, xBairro: texto(doCadastro!.xBairro),
+        }
+      }
+    }
+
+    if (!enderecoTomador) {
+      const r = await buscarCnpj(cnpjTomador)
+      const e = r.data
+      if (!e?.codigoIbge || !e.logradouro || !e.bairro || !e.cep) {
+        return {
+          error: `Falta o endereço de ${nomeTomador} para emitir com IBS/CBS.`
+            + ` Preencha no cadastro (o botão Buscar CNPJ preenche) — a consulta automática não resolveu`
+            + ` (${r.error ?? 'cadastro incompleto na Receita'}).`,
+        }
+      }
+      enderecoTomador = {
+        cMun: e.codigoIbge, cep: e.cep.replace(/\D/g, ''),
+        xLgr: e.logradouro, nro: e.numero || 'S/N',
+        xCpl: e.complemento || undefined, xBairro: e.bairro,
+      }
+    }
+  }
 
   const valor = Number(lanc.valor_realizado ?? lanc.valor) || 0
   if (valor <= 0) return { error: 'Lançamento sem valor.' }
@@ -416,6 +478,7 @@ export async function emitirNota(
       ambiente: cert.ambiente === 'producao' ? 1 : 2,
       competencia: (lanc.competencia || lanc.vencimento || undefined) as string | undefined,
       nbs: cfg.codNbs || undefined,
+      enderecoTomador,
       // Só vai o grupo quando a chave está ligada E os três códigos existem:
       // grupo pela metade é recusa certa, e a recusa vem depois de consumir o
       // número da DPS.

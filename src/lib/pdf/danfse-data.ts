@@ -64,6 +64,8 @@ const TRIB_ISSQN: Record<string, string> = {
 const RET_ISSQN: Record<string, string> = {
   '1': 'Não Retido', '2': 'Retido pelo Tomador', '3': 'Retido pelo Intermediário',
 }
+/** Finalidade só existe dentro do grupo IBSCBS; sem o grupo, o campo fica vazio. */
+const FIN_NFSE: Record<string, string> = { '0': 'NFS-e regular' }
 const REG_ESP: Record<string, string> = {
   '0': 'Nenhum', '1': 'Ato Cooperado (Cooperativa)', '2': 'Estimativa', '3': 'Microempresa Municipal',
   '4': 'Notário ou Registrador', '5': 'Profissional Autônomo', '6': 'Sociedade de Profissionais', '9': 'Outros',
@@ -108,8 +110,17 @@ export interface DanfseDados {
     bc: string; retencao: string; apurado: string
   } | null
   federal: { pis: string; cofins: string; irrf: string; csll: string; cp: string }
-  /** Vazio enquanto o grupo IBSCBS não é exigido (optante do Simples, até 2027). */
-  ibsCbs: string
+  /**
+   * Valores de IBS e CBS calculados PELA RECEITA e devolvidos na nota. Null
+   * quando o grupo não foi enviado — que é o caso até a org ligar a Reforma.
+   */
+  ibsCbs: {
+    bc: string
+    ibsUf: { perc: string; valor: string }
+    ibsMun: { perc: string; valor: string }
+    cbs: { perc: string; valor: string }
+    total: string
+  } | null
   total: string
   complementares: string
   cancelada: boolean
@@ -218,7 +229,7 @@ export function lerDanfse(xml: string, extra: {
     municipioEmitente: municipioEmi,
     emitenteTipo: TP_EMIT[tag(dps, 'tpEmit')] ?? '',
     situacao: tag(inf, 'cStat') === '100' ? 'NFS-e gerada com sucesso' : tag(inf, 'cStat'),
-    finalidade: tag(bloco(dps, 'IBSCBS'), 'finNFSe') ? '' : 'NFS-e regular',
+    finalidade: FIN_NFSE[tag(bloco(dps, 'IBSCBS'), 'finNFSe')] ?? '',
     prestador,
     tomador,
     servico: {
@@ -242,12 +253,35 @@ export function lerDanfse(xml: string, extra: {
       csll: moeda(tag(tribFed, 'vRetCSLL')),
       cp: moeda(tag(tribFed, 'vRetCP')),
     },
-    ibsCbs: bloco(dps, 'IBSCBS') ? 'Informado no XML' : '',
+    ibsCbs: leIbsCbs(inf),
     total: moeda(tag(bloco(inf, 'valores'), 'vLiq') || vServ),
     complementares,
     cancelada: !!extra.cancelada,
     motivoCancelamento: extra.motivoCancelamento ?? '',
     substituidaPor: extra.substituidaPor ?? '',
+  }
+}
+
+/**
+ * Grupo IBS/CBS da NFS-e autorizada.
+ *
+ * Lido de `infNFSe`, não da DPS: as alíquotas e os valores são CALCULADOS pela
+ * Receita a partir da classificação que enviamos — o emitente nunca manda
+ * percentual. Em 2026 voltam 0,10% de IBS estadual e 0,90% de CBS, informativos.
+ */
+function leIbsCbs(inf: string): DanfseDados['ibsCbs'] {
+  const g = bloco(inf, 'IBSCBS')
+  if (!g) return null
+  const val = bloco(g, 'valores')
+  const tot = bloco(g, 'totCIBS')
+  const gIBS = bloco(tot, 'gIBS')
+  const pct = (v: string) => (v ? `${Number(v).toFixed(2).replace('.', ',')}%` : '')
+  return {
+    bc: moeda(tag(val, 'vBC')),
+    ibsUf: { perc: pct(tag(bloco(val, 'uf'), 'pIBSUF')), valor: moeda(tag(bloco(gIBS, 'gIBSUFTot'), 'vIBSUF')) },
+    ibsMun: { perc: pct(tag(bloco(val, 'mun'), 'pIBSMun')), valor: moeda(tag(bloco(gIBS, 'gIBSMunTot'), 'vIBSMun')) },
+    cbs: { perc: pct(tag(bloco(val, 'fed'), 'pCBS')), valor: moeda(tag(bloco(tot, 'gCBS'), 'vCBS')) },
+    total: moeda(tag(tot, 'vTotNF')),
   }
 }
 

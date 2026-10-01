@@ -51,6 +51,11 @@ export interface DadosDps {
    * DPS para a versão 1.01 — abaixo disso ela é recusada com E0854.
    */
   ibsCbs?: { cIndOp: string; cst: string; classTrib: string }
+  /**
+   * Endereço do tomador. Opcional no schema, mas a Receita passa a EXIGIR
+   * quando há IBS/CBS ou quando o ISSQN incide no domicílio do tomador (E0234).
+   */
+  enderecoTomador?: { cMun: string; cep: string; xLgr: string; nro: string; xCpl?: string; xBairro: string }
 }
 
 const so = (t: string) => String(t ?? '').replace(/\D/g, '')
@@ -103,7 +108,15 @@ export function montarDps(d: DadosDps): { xml: string; id: string } {
       : '')
     + `<prest><CNPJ>${so(d.cnpjPrestador)}</CNPJ>`
     + '<regTrib><opSimpNac>3</opSimpNac><regApTribSN>1</regApTribSN><regEspTrib>0</regEspTrib></regTrib></prest>'
-    + `<toma><CNPJ>${so(d.cnpjTomador)}</CNPJ><xNome>${esc(d.nomeTomador).slice(0, 150)}</xNome></toma>`
+    // Ordem do schema dentro de `toma`: documento · IM · xNome · end · fone · email.
+    + `<toma><CNPJ>${so(d.cnpjTomador)}</CNPJ><xNome>${esc(d.nomeTomador).slice(0, 150)}</xNome>`
+    + (d.enderecoTomador
+      ? `<end><endNac><cMun>${so(d.enderecoTomador.cMun)}</cMun><CEP>${so(d.enderecoTomador.cep)}</CEP></endNac>`
+        + `<xLgr>${esc(d.enderecoTomador.xLgr).slice(0, 255)}</xLgr><nro>${esc(d.enderecoTomador.nro).slice(0, 60)}</nro>`
+        + (d.enderecoTomador.xCpl ? `<xCpl>${esc(d.enderecoTomador.xCpl).slice(0, 156)}</xCpl>` : '')
+        + `<xBairro>${esc(d.enderecoTomador.xBairro).slice(0, 60)}</xBairro></end>`
+      : '')
+    + '</toma>'
     + `<serv><locPrest><cLocPrestacao>${d.codMunicipio}</cLocPrestacao></locPrest>`
     + `<cServ><cTribNac>${esc(d.codigoServico)}</cTribNac><xDescServ>${esc(d.descricao).slice(0, 2000)}</xDescServ>`
     + (d.nbs ? `<cNBS>${esc(d.nbs)}</cNBS>` : '')

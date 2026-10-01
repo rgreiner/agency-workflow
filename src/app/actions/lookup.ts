@@ -11,7 +11,11 @@ const fmtCep = (c: string) => { const d = digits(c); return d.length === 8 ? `${
 // de navegador. Mandamos um UA em todas as chamadas.
 const UA = { 'User-Agent': 'Mozilla/5.0 (compatible; Flow/1.0; +https://flow.oneaone.com.br)' }
 
-export interface CepResult { logradouro: string; bairro: string; cidade: string; uf: string }
+export interface CepResult {
+  logradouro: string; bairro: string; cidade: string; uf: string
+  /** Código IBGE do município — o `cMun` que a NFS-e exige e o cadastro não guarda. */
+  ibge: string
+}
 
 export async function buscarCep(cep: string): Promise<{ data?: CepResult; error?: string }> {
   const d = digits(cep)
@@ -21,13 +25,20 @@ export async function buscarCep(cep: string): Promise<{ data?: CepResult; error?
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const j: any = await r.json().catch(() => null)
     if (!r.ok || !j || j.erro) return { error: 'CEP não encontrado' }
-    return { data: { logradouro: j.logradouro ?? '', bairro: j.bairro ?? '', cidade: j.localidade ?? '', uf: j.uf ?? '' } }
+    return {
+      data: {
+        logradouro: j.logradouro ?? '', bairro: j.bairro ?? '',
+        cidade: j.localidade ?? '', uf: j.uf ?? '', ibge: j.ibge ? String(j.ibge) : '',
+      },
+    }
   } catch { return { error: 'Não foi possível buscar o CEP agora' } }
 }
 
 export interface CnpjResult {
   razao_social: string; nome_fantasia: string; cep: string; logradouro: string; numero: string
   complemento: string; bairro: string; cidade: string; uf: string; telefone: string; email: string; atividade: string
+  /** Código IBGE do município (7 dígitos) — o `cMun` que a NFS-e exige. */
+  codigoIbge: string
 }
 
 /**
@@ -59,6 +70,7 @@ const PROVEDORES: { nome: string; url: (d: string) => string; mapeia: (j: Unknow
       telefone: texto(j.ddd_telefone_1),
       email: texto(j.email),
       atividade: texto(j.cnae_fiscal_descricao),
+      codigoIbge: texto(j.codigo_municipio_ibge),
     }),
   },
   {
@@ -81,6 +93,7 @@ const PROVEDORES: { nome: string; url: (d: string) => string; mapeia: (j: Unknow
         telefone: ddd && tel ? `${ddd}${tel}` : tel,
         email: texto(e.email),
         atividade: texto((e.atividade_principal as UnknownRecord | undefined)?.descricao),
+        codigoIbge: texto((e.cidade as UnknownRecord | undefined)?.ibge_id),
       }
     },
   },
@@ -105,6 +118,7 @@ const PROVEDORES: { nome: string; url: (d: string) => string; mapeia: (j: Unknow
         telefone: fone ? `${texto(fone.area)}${texto(fone.number)}` : '',
         email: texto(((j.emails ?? []) as UnknownRecord[])[0]?.address),
         atividade: texto((j.mainActivity as UnknownRecord | undefined)?.text),
+        codigoIbge: texto(end.municipality),
       }
     },
   },
