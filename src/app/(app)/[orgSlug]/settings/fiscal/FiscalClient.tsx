@@ -228,6 +228,11 @@ function DadosDaNota({ orgSlug, inicial }: { orgSlug: string; inicial: ConfigNfs
     tribIssqn: String(inicial?.tribIssqn ?? 1),
     tpRetIssqn: String(inicial?.tpRetIssqn ?? 1),
     descricaoPadrao: inicial?.descricaoPadrao ?? '',
+    codNbs: inicial?.codNbs ?? '',
+    ibsCbsAtivo: !!inicial?.ibsCbsAtivo,
+    ibsCbsCIndOp: inicial?.ibsCbsCIndOp ?? '',
+    ibsCbsCst: inicial?.ibsCbsCst ?? '',
+    ibsCbsClassTrib: inicial?.ibsCbsClassTrib ?? '',
   })
   const [salvando, start] = useTransition()
   const num = (v: string) => Number(v.replace(',', '.'))
@@ -244,6 +249,11 @@ function DadosDaNota({ orgSlug, inicial }: { orgSlug: string; inicial: ConfigNfs
         tribIssqn: Number(f.tribIssqn) || 1,
         tpRetIssqn: Number(f.tpRetIssqn) || 1,
         descricaoPadrao: f.descricaoPadrao.trim() || null,
+        codNbs: f.codNbs.trim() || null,
+        ibsCbsAtivo: f.ibsCbsAtivo,
+        ibsCbsCIndOp: f.ibsCbsCIndOp.trim() || null,
+        ibsCbsCst: f.ibsCbsCst.trim() || null,
+        ibsCbsClassTrib: f.ibsCbsClassTrib.trim() || null,
       })
       if (r?.error) { toast.error(r.error); return }
       toast.success('Dados da nota salvos.')
@@ -284,10 +294,56 @@ function DadosDaNota({ orgSlug, inicial }: { orgSlug: string; inicial: ConfigNfs
         </Campo>
       </div>
 
+      {/* ── Reforma tributária ────────────────────────────────────────────
+          Sondado contra a produção restrita em 01/10: o grupo IBS/CBS É aceito
+          do nosso CNPJ do Simples, desde que a DPS vá na versão 1.01 (E0854),
+          com código NBS junto (E0322) e com códigos de tabela que existam
+          (E0901). Nada disso é alíquota: quem calcula o IBS e a CBS é a Receita;
+          o emitente classifica a operação. */}
+      <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-medium text-gray-900">Reforma tributária (IBS/CBS)</h3>
+            <p className="text-xs text-gray-500 mt-0.5 max-w-xl">
+              Para optante do Simples, obrigatório a partir de 01/2027 — mas a Receita já aceita hoje.
+              Não se digita alíquota: os 0,9% de CBS e 0,1% de IBS de 2026 são calculados por ela a partir
+              da classificação abaixo.
+            </p>
+          </div>
+          <label className="shrink-0 inline-flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer select-none">
+            <input type="checkbox" checked={f.ibsCbsAtivo} onChange={e => setF({ ...f, ibsCbsAtivo: e.target.checked })}
+              className="w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
+            Enviar na nota
+          </label>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Campo id="nf-nbs" rotulo="Código NBS (9 dígitos)" dica="Nomenclatura Brasileira de Serviços. Em 2026 é o campo da Reforma que o Simples informa — e é obrigatório junto com IBS/CBS.">
+            <input id="nf-nbs" value={f.codNbs} onChange={e => setF({ ...f, codNbs: e.target.value })} inputMode="numeric" placeholder="ex.: 115011000" className={campo} />
+          </Campo>
+          <Campo id="nf-cindop" rotulo="Código indicador da operação (6 dígitos)" dica="Tabela da Reforma. Valor inventado é recusado com E0901.">
+            <input id="nf-cindop" value={f.ibsCbsCIndOp} onChange={e => setF({ ...f, ibsCbsCIndOp: e.target.value })} inputMode="numeric" className={campo} />
+          </Campo>
+          <Campo id="nf-cst" rotulo="CST (3 dígitos)" dica="Código de situação tributária do IBS/CBS.">
+            <input id="nf-cst" value={f.ibsCbsCst} onChange={e => setF({ ...f, ibsCbsCst: e.target.value })} inputMode="numeric" className={campo} />
+          </Campo>
+          <Campo id="nf-classtrib" rotulo="Classificação tributária (6 dígitos)" dica="cClassTrib — combina com o CST.">
+            <input id="nf-classtrib" value={f.ibsCbsClassTrib} onChange={e => setF({ ...f, ibsCbsClassTrib: e.target.value })} inputMode="numeric" className={campo} />
+          </Campo>
+        </div>
+
+        {f.ibsCbsAtivo && !(f.codNbs.trim() && f.ibsCbsCIndOp.trim() && f.ibsCbsCst.trim() && f.ibsCbsClassTrib.trim()) && (
+          <p className="text-[11px] text-amber-700">
+            Com os quatro campos preenchidos a DPS passa a sair na versão 1.01 com o grupo IBS/CBS.
+            Faltando qualquer um, o Flow recusa emitir — grupo pela metade é recusa certa, e a recusa
+            vem depois de consumir o número da DPS.
+          </p>
+        )}
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
         <p className="text-[11px] text-gray-400 max-w-md">
           ISSQN fica como tributável e não retido (o Simples recolhe), que é o que as notas mostram.
-          IBS e CBS não entram em 2026 para optante do Simples — passam a valer em 01/2027 (Nota Técnica 004/005).
         </p>
         <button type="button" onClick={salvar} disabled={salvando}
           className="press inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition-colors">

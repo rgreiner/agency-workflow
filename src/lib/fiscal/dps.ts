@@ -43,6 +43,14 @@ export interface DadosDps {
    * cancelamento junto, e mandar os dois cancela duas vezes.
    */
   subst?: { chave: string; cMotivo: string; xMotivo?: string }
+  /** Código NBS do serviço (9 dígitos). Obrigatório junto com IBS/CBS. */
+  nbs?: string
+  /**
+   * Grupo da Reforma. Repare que NÃO há alíquota aqui: o emitente classifica a
+   * operação e quem calcula o IBS e a CBS é a Receita. Informar o grupo sobe a
+   * DPS para a versão 1.01 — abaixo disso ela é recusada com E0854.
+   */
+  ibsCbs?: { cIndOp: string; cst: string; classTrib: string }
 }
 
 const so = (t: string) => String(t ?? '').replace(/\D/g, '')
@@ -76,8 +84,12 @@ export function montarDps(d: DadosDps): { xml: string; id: string } {
   // A ordem dos elementos é a do schema: trocar a ordem derruba com E1235.
   // Para ME/EPP: opSimpNac=3, regApTribSN obrigatório (E0166) e o grupo totTrib
   // leva pTotTribSN — indTotTrib é proibido (E0712).
+  // A versão acompanha o conteúdo: 1.01 só quando há IBS/CBS, porque é o que a
+  // Receita exige para aceitar o grupo (E0854) — e manter 1.00 no resto deixa
+  // intocado o caminho que já emite hoje.
+  const versao = d.ibsCbs ? '1.01' : '1.00'
   const xml = '<?xml version="1.0" encoding="UTF-8"?>'
-    + '<DPS xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.00">'
+    + `<DPS xmlns="http://www.sped.fazenda.gov.br/nfse" versao="${versao}">`
     + `<infDPS Id="${id}">`
     + `<tpAmb>${d.ambiente}</tpAmb><dhEmi>${dhEmi}</dhEmi><verAplic>Flow-1.0</verAplic>`
     + `<serie>${esc(d.serie)}</serie><nDPS>${d.numero}</nDPS><dCompet>${competencia}</dCompet>`
@@ -93,10 +105,19 @@ export function montarDps(d: DadosDps): { xml: string; id: string } {
     + '<regTrib><opSimpNac>3</opSimpNac><regApTribSN>1</regApTribSN><regEspTrib>0</regEspTrib></regTrib></prest>'
     + `<toma><CNPJ>${so(d.cnpjTomador)}</CNPJ><xNome>${esc(d.nomeTomador).slice(0, 150)}</xNome></toma>`
     + `<serv><locPrest><cLocPrestacao>${d.codMunicipio}</cLocPrestacao></locPrest>`
-    + `<cServ><cTribNac>${esc(d.codigoServico)}</cTribNac><xDescServ>${esc(d.descricao).slice(0, 2000)}</xDescServ></cServ></serv>`
+    + `<cServ><cTribNac>${esc(d.codigoServico)}</cTribNac><xDescServ>${esc(d.descricao).slice(0, 2000)}</xDescServ>`
+    + (d.nbs ? `<cNBS>${esc(d.nbs)}</cNBS>` : '')
+    + '</cServ></serv>'
     + `<valores><vServPrest><vServ>${valor}</vServ></vServPrest>`
     + `<trib><tribMun><tribISSQN>${d.tribIssqn}</tribISSQN><tpRetISSQN>${d.tpRetIssqn}</tpRetISSQN></tribMun>`
     + `<totTrib><pTotTribSN>${d.percSimples.toFixed(2)}</pTotTribSN></totTrib></trib></valores>`
+    // IBSCBS é o ÚLTIMO elemento do infDPS, depois de `valores`.
+    + (d.ibsCbs
+      ? '<IBSCBS><finNFSe>0</finNFSe><indFinal>0</indFinal>'
+        + `<cIndOp>${esc(d.ibsCbs.cIndOp)}</cIndOp><indDest>0</indDest>`
+        + `<valores><trib><gIBSCBS><CST>${esc(d.ibsCbs.cst)}</CST>`
+        + `<cClassTrib>${esc(d.ibsCbs.classTrib)}</cClassTrib></gIBSCBS></trib></valores></IBSCBS>`
+      : '')
     + '</infDPS></DPS>'
 
   return { xml, id }

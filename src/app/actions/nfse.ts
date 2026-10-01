@@ -45,6 +45,13 @@ export interface ConfigNfse {
   tribIssqn: number
   tpRetIssqn: number
   descricaoPadrao: string | null
+  /** Código NBS do serviço (9 dígitos) — campo da Reforma. */
+  codNbs: string | null
+  /** Liga o grupo IBS/CBS e sobe a DPS para a versão 1.01. */
+  ibsCbsAtivo: boolean
+  ibsCbsCIndOp: string | null
+  ibsCbsCst: string | null
+  ibsCbsClassTrib: string | null
 }
 
 async function cfgDaOrg(supabase: Awaited<ReturnType<typeof createClient>>, orgId: string): Promise<ConfigNfse | null> {
@@ -60,6 +67,11 @@ async function cfgDaOrg(supabase: Awaited<ReturnType<typeof createClient>>, orgI
     tribIssqn: Number(data.trib_issqn ?? 1),
     tpRetIssqn: Number(data.tp_ret_issqn ?? 1),
     descricaoPadrao: data.descricao_padrao ?? null,
+    codNbs: data.cod_nbs ?? null,
+    ibsCbsAtivo: !!data.ibs_cbs_ativo,
+    ibsCbsCIndOp: data.ibs_cbs_cind_op ?? null,
+    ibsCbsCst: data.ibs_cbs_cst ?? null,
+    ibsCbsClassTrib: data.ibs_cbs_classtrib ?? null,
   }
 }
 
@@ -81,6 +93,11 @@ export async function salvarConfigNfse(orgSlug: string, dados: Partial<ConfigNfs
     trib_issqn: dados.tribIssqn ?? 1,
     tp_ret_issqn: dados.tpRetIssqn ?? 1,
     descricao_padrao: dados.descricaoPadrao ?? null,
+    cod_nbs: dados.codNbs ?? null,
+    ibs_cbs_ativo: dados.ibsCbsAtivo ?? false,
+    ibs_cbs_cind_op: dados.ibsCbsCIndOp ?? null,
+    ibs_cbs_cst: dados.ibsCbsCst ?? null,
+    ibs_cbs_classtrib: dados.ibsCbsClassTrib ?? null,
     updated_at: new Date().toISOString(),
     updated_by: userId,
   }, { onConflict: 'org_id' })
@@ -304,6 +321,18 @@ export async function emitirNota(
   // Valor fiscal errado só se conserta cancelando a nota: melhor recusar aqui.
   if (faltando.length) return { error: `Falta configurar: ${faltando.join(', ')} (Configurações → Nota fiscal).` }
 
+  if (cfg.ibsCbsAtivo) {
+    const faltaReforma = [
+      !cfg.codNbs && 'código NBS',
+      !cfg.ibsCbsCIndOp && 'código indicador da operação',
+      !cfg.ibsCbsCst && 'CST',
+      !cfg.ibsCbsClassTrib && 'classificação tributária',
+    ].filter(Boolean)
+    if (faltaReforma.length) {
+      return { error: `IBS/CBS está ligado mas falta: ${faltaReforma.join(', ')} (Configurações → Nota fiscal).` }
+    }
+  }
+
   const { data: lanc } = await sb.from('lancamentos')
     .select('id, tipo, valor, valor_realizado, descricao, competencia, vencimento, workspace_id, contato_nome, anexos')
     .eq('id', lancamentoId).maybeSingle()
@@ -386,6 +415,13 @@ export async function emitirNota(
       tpRetIssqn: cfg.tpRetIssqn,
       ambiente: cert.ambiente === 'producao' ? 1 : 2,
       competencia: (lanc.competencia || lanc.vencimento || undefined) as string | undefined,
+      nbs: cfg.codNbs || undefined,
+      // Só vai o grupo quando a chave está ligada E os três códigos existem:
+      // grupo pela metade é recusa certa, e a recusa vem depois de consumir o
+      // número da DPS.
+      ibsCbs: cfg.ibsCbsAtivo && cfg.codNbs && cfg.ibsCbsCIndOp && cfg.ibsCbsCst && cfg.ibsCbsClassTrib
+        ? { cIndOp: cfg.ibsCbsCIndOp, cst: cfg.ibsCbsCst, classTrib: cfg.ibsCbsClassTrib }
+        : undefined,
       subst: substituida
         ? { chave: substituida.chave, cMotivo: opcoes.substituir!.cMotivo, xMotivo: opcoes.substituir!.xMotivo.trim() }
         : undefined,
