@@ -279,7 +279,7 @@ function DadosDaNota({ orgSlug, inicial }: { orgSlug: string; inicial: ConfigNfs
         <Campo id="nf-serie" rotulo="Série" dica="Numeração da DPS é nossa; o número da NFS-e quem dá é a Receita">
           <input id="nf-serie" value={f.serie} onChange={e => setF({ ...f, serie: e.target.value })} className={campo} />
         </Campo>
-        <Campo id="nf-num" rotulo="Próximo número da DPS">
+        <Campo id="nf-num" rotulo="Próximo número da DPS" dica="Da sequência OFICIAL. O ambiente de teste tem contador próprio, para não abrir buraco nesta.">
           <input id="nf-num" value={f.proximoNumero} onChange={e => setF({ ...f, proximoNumero: e.target.value })} inputMode="numeric" className={campo} />
         </Campo>
       </div>

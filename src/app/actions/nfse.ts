@@ -322,8 +322,11 @@ export async function emitirNota(
   }
 
   // Número só é consumido depois de tudo validado: número queimado é buraco na
-  // sequência fiscal, e a Receita cobra explicação por buraco.
-  const { data: numero, error: eNum } = await sb.rpc('proximo_numero_nfse', { p_user_id: user.id, p_org_id: orgId })
+  // sequência fiscal, e a Receita cobra explicação por buraco. O contador é POR
+  // AMBIENTE (mig. 316) — nota de teste não gasta número da sequência oficial.
+  const { data: numero, error: eNum } = await sb.rpc('proximo_numero_nfse', {
+    p_user_id: user.id, p_org_id: orgId, p_ambiente: cert.ambiente,
+  })
   if (eNum) return { error: eNum.message }
 
   try {
