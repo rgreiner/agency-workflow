@@ -206,6 +206,12 @@ export interface DadosParaEmitir {
   descricao: string
   /** Sugestão para a nota, que a pessoa confirma ou reescreve antes de emitir. */
   descricaoSugerida: string
+  /**
+   * Competência que a nota vai levar (AAAA-MM-DD). É a do lançamento, caindo
+   * para o vencimento — a mesma regra que a emissão usa, para a tela não
+   * mostrar uma data e a nota sair com outra.
+   */
+  competencia: string
   /** Tomador já vinculado ao lançamento (só existe no caso cliente). */
   tomador: Tomador | null
   /** Palpite por nome quando não há vínculo — a pessoa confirma, o Flow não decide. */
@@ -236,7 +242,7 @@ export async function dadosParaEmitir(orgSlug: string, lancamentoId: string): Pr
 
   const [{ data: lanc }, { data: doc }, tomadores, cert, cfg] = await Promise.all([
     sb.from('lancamentos')
-      .select('valor, valor_realizado, descricao, workspace_id, contato_tipo, contato_id, centro_custo, contato_nome, anexos')
+      .select('valor, valor_realizado, descricao, competencia, vencimento, workspace_id, contato_tipo, contato_id, centro_custo, contato_nome, anexos')
       .eq('id', lancamentoId).maybeSingle(),
     // O documento de origem vem da view; é dele que sai a descrição boa.
     sb.from('lancamentos_doc').select('doc_serie, doc_numero').eq('id', lancamentoId).maybeSingle(),
@@ -296,6 +302,7 @@ export async function dadosParaEmitir(orgSlug: string, lancamentoId: string): Pr
       valor: Number(lanc.valor_realizado ?? lanc.valor) || 0,
       descricao: lanc.descricao ?? '',
       descricaoSugerida,
+      competencia: String(lanc.competencia || lanc.vencimento || ''),
       tomador,
       sugestao,
       tomadores,

@@ -1323,7 +1323,6 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
             orgSlug={orgSlug}
             lancamentoId={lancamento.id}
             nota={notaDoLancamento}
-            valor={Number(lancamento.valor_realizado ?? lancamento.valor) || 0}
             cliente={lancamento.contato_nome ?? null}
             nfAnexada={anexos.find(x => x.tipo === 'NF' && x.emitente === 'agencia') ?? null}
             onEmitida={n => { setNotaDoLancamento(n); onNotaEmitida?.(lancamento.id, n) }}

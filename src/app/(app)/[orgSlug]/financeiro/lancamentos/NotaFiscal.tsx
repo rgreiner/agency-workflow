@@ -93,11 +93,10 @@ export function NotaCelula({ orgSlug, lancamentoId, nota, podeEmitir, onEmitida 
 }
 
 /** Bloco dentro do lançamento aberto — o lugar com espaço para o detalhe. */
-export function NotaFiscalBloco({ orgSlug, lancamentoId, nota, valor, cliente, nfAnexada, onEmitida }: {
+export function NotaFiscalBloco({ orgSlug, lancamentoId, nota, cliente, nfAnexada, onEmitida }: {
   orgSlug: string
   lancamentoId: string
   nota?: NotaDoLancamento
-  valor: number
   cliente: string | null
   /** NF da agência anexada ao lançamento — emitida FORA do Flow (prefeitura). */
   nfAnexada?: { nome?: string; numero?: string } | null
@@ -212,7 +211,7 @@ export function NotaFiscalBloco({ orgSlug, lancamentoId, nota, valor, cliente, n
       )}
 
       {confirmar && (
-        <DialogoEmitir orgSlug={orgSlug} lancamentoId={lancamentoId} valor={valor} cliente={cliente}
+        <DialogoEmitir orgSlug={orgSlug} lancamentoId={lancamentoId} cliente={cliente}
           onFechar={() => setConfirmar(false)} onEmitida={n => { setConfirmar(false); onEmitida(n) }} />
       )}
       {cancelar && nota && (
@@ -221,7 +220,7 @@ export function NotaFiscalBloco({ orgSlug, lancamentoId, nota, valor, cliente, n
           onPronto={() => { setCancelar(false); router.refresh() }} />
       )}
       {substituir && nota && (
-        <DialogoEmitir orgSlug={orgSlug} lancamentoId={lancamentoId} valor={valor} cliente={cliente}
+        <DialogoEmitir orgSlug={orgSlug} lancamentoId={lancamentoId} cliente={cliente}
           substituir={nota}
           onFechar={() => setSubstituir(false)} onEmitida={n => { setSubstituir(false); onEmitida(n) }} />
       )}
@@ -238,10 +237,10 @@ export function NotaFiscalBloco({ orgSlug, lancamentoId, nota, valor, cliente, n
  * sem tomador não há nota. O Flow sugere pelo nome do centro de custo; quem
  * confirma é a pessoa.
  */
-function DialogoEmitir({ orgSlug, lancamentoId, valor, cliente, substituir, onFechar, onEmitida }: {
+function DialogoEmitir({ orgSlug, lancamentoId, cliente, substituir, onFechar, onEmitida }: {
   orgSlug: string
   lancamentoId: string
-  valor?: number
+  /** Só para contexto na tela; o valor da nota vem do servidor, nunca da tabela. */
   cliente?: string | null
   /** Quando presente, esta emissão SUBSTITUI a nota indicada. */
   substituir?: NotaDoLancamento
@@ -288,10 +287,7 @@ function DialogoEmitir({ orgSlug, lancamentoId, valor, cliente, substituir, onFe
       title={substituir ? 'Substituir a NFS-e?' : 'Emitir NFS-e?'}
       description={substituir
         ? `A nota ${substituir.numero ?? ''} é cancelada pela Receita e uma nova é emitida com os dados atuais deste lançamento.`
-        : [
-          valor != null ? `Valor: ${formatBRL(valor)}.` : '',
-          'A nota é enviada à Receita no ambiente configurado. Nota emitida tem prazo curto para cancelar.',
-        ].filter(Boolean).join(' ')}
+        : 'A nota é enviada à Receita no ambiente configurado. Nota emitida tem prazo curto para cancelar.'}
       confirmLabel={substituir ? 'Substituir' : 'Emitir'}
       loading={emitindo}
       onCancel={onFechar}
@@ -333,11 +329,6 @@ function DialogoEmitir({ orgSlug, lancamentoId, valor, cliente, substituir, onFe
               }))}
               placeholder="Escolher quem recebe a nota"
             />
-            {escolhido && (
-              <p className="mt-1 text-[11px] text-gray-500 tabular-nums">
-                {escolhido.razao || escolhido.nome} · CNPJ {formatarCnpj(escolhido.cnpj)}
-              </p>
-            )}
             {/* Dizer de onde veio o palpite evita aceitar o tomador errado no
                 automático — e numa nota fiscal isso só se conserta cancelando. */}
             {!vinculado && dados.sugestao && escolha === `${dados.sugestao.tipo}:${dados.sugestao.id}` && (
@@ -407,6 +398,28 @@ function DialogoEmitir({ orgSlug, lancamentoId, valor, cliente, substituir, onFe
                   className="w-3.5 h-3.5 rounded border-amber-400 text-amber-600 focus:ring-amber-500" />
                 <span>Sei que já existe nota e quero emitir outra.</span>
               </label>
+            </div>
+          )}
+
+          {/* Conferência final: o que a Receita vai registrar. */}
+          {escolhido && (
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-gray-500">Confira antes de emitir</p>
+              <Conferir linhas={[
+                { rotulo: 'Razão social', valor: escolhido.razao || escolhido.nome,
+                  alerta: !escolhido.razao },
+                { rotulo: 'CNPJ', valor: formatarCnpj(escolhido.cnpj) },
+                { rotulo: 'Competência', valor: formatarData(dados.competencia) || '—',
+                  alerta: !dados.competencia },
+                { rotulo: 'Serviço', valor: descricao.trim() || '—', alerta: !descricao.trim() },
+                { rotulo: 'Valor total', valor: formatBRL(dados.valor), forte: true },
+              ]} />
+              {!escolhido.razao && (
+                <p className="mt-1 text-[11px] text-amber-700">
+                  Este cadastro não tem razão social — a nota sairá com o nome acima.
+                  O botão de buscar o CNPJ no cadastro preenche.
+                </p>
+              )}
             </div>
           )}
 
@@ -484,6 +497,36 @@ export function NotaCarregando() {
 
 const formatarCnpj = (v: string) =>
   v.length === 14 ? v.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : v
+
+const formatarData = (iso: string) =>
+  /^\d{4}-\d{2}-\d{2}/.test(iso) ? iso.slice(0, 10).split('-').reverse().join('/') : ''
+
+/**
+ * O que vai na nota, lado a lado, antes de disparar.
+ *
+ * Emitir é ato público com prazo curto para cancelar, e os cinco campos abaixo
+ * são os que não têm conserto depois: tomador errado, competência errada, valor
+ * errado ou descrição errada só se resolvem cancelando a nota. Ler isto leva
+ * cinco segundos; cancelar leva um evento registrado na Receita para sempre.
+ */
+function Conferir({ linhas }: { linhas: { rotulo: string; valor: string; forte?: boolean; alerta?: boolean }[] }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white divide-y divide-gray-100">
+      {linhas.map(l => (
+        <div key={l.rotulo} className="flex items-baseline gap-3 px-3 py-2">
+          <span className="w-28 shrink-0 text-[11px] text-gray-500">{l.rotulo}</span>
+          <span className={cn(
+            'min-w-0 flex-1 text-sm break-words',
+            l.forte ? 'font-semibold text-gray-900 tabular-nums' : 'text-gray-800',
+            l.alerta && 'text-amber-700',
+          )}>
+            {l.valor}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 /**
  * Conferência campo a campo: o que o Flow PEDIU na DPS × o que a Receita
