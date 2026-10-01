@@ -37,6 +37,12 @@ export interface DadosDps {
   /** 1 = produção, 2 = produção restrita. */
   ambiente: 1 | 2
   competencia?: string
+  /**
+   * Substituição: esta DPS entra NO LUGAR de uma NFS-e já autorizada. A Receita
+   * cancela a antiga sozinha ao autorizar esta (evento e105102) — não se manda
+   * cancelamento junto, e mandar os dois cancela duas vezes.
+   */
+  subst?: { chave: string; cMotivo: string; xMotivo?: string }
 }
 
 const so = (t: string) => String(t ?? '').replace(/\D/g, '')
@@ -76,6 +82,13 @@ export function montarDps(d: DadosDps): { xml: string; id: string } {
     + `<tpAmb>${d.ambiente}</tpAmb><dhEmi>${dhEmi}</dhEmi><verAplic>Flow-1.0</verAplic>`
     + `<serie>${esc(d.serie)}</serie><nDPS>${d.numero}</nDPS><dCompet>${competencia}</dCompet>`
     + `<tpEmit>1</tpEmit><cLocEmi>${d.codMunicipio}</cLocEmi>`
+    // `subst` é posicional: o schema o coloca entre cLocEmi e prest, e fora de
+    // lugar derruba com E1235 como qualquer outro elemento trocado de ordem.
+    + (d.subst
+      ? `<subst><chSubstda>${esc(d.subst.chave)}</chSubstda><cMotivo>${esc(d.subst.cMotivo)}</cMotivo>`
+        + (d.subst.xMotivo ? `<xMotivo>${esc(d.subst.xMotivo).slice(0, 255)}</xMotivo>` : '')
+        + '</subst>'
+      : '')
     + `<prest><CNPJ>${so(d.cnpjPrestador)}</CNPJ>`
     + '<regTrib><opSimpNac>3</opSimpNac><regApTribSN>1</regApTribSN><regEspTrib>0</regEspTrib></regTrib></prest>'
     + `<toma><CNPJ>${so(d.cnpjTomador)}</CNPJ><xNome>${esc(d.nomeTomador).slice(0, 150)}</xNome></toma>`
@@ -108,10 +121,11 @@ export async function chavesDoPfx(pfx: Buffer, senha: string): Promise<{ key: st
 }
 
 /**
- * Assinatura XMLDSIG enveloped sobre infDPS. Duas armadilhas, as duas fatais e as
+ * Assinatura XMLDSIG enveloped — serve à DPS (infDPS) e ao pedido de evento
+ * (infPedReg), que seguem a mesma regra. Duas armadilhas, as duas fatais e as
  * duas invisíveis — o erro é sempre o mesmo E0714 genérico:
  *
- *  1. O digest é calculado sobre infDPS COM o xmlns herdado do pai. O C14N
+ *  1. O digest é calculado sobre o nó interno COM o xmlns herdado do pai. O C14N
  *     materializa o namespace no nó assinado; assinar `<infDPS Id=...>` enquanto
  *     a Receita confere `<infDPS xmlns=... Id=...>` nunca bate.
  *  2. Nada de tag vazia auto-fechada dentro do SignedInfo: o C14N expande
@@ -121,29 +135,36 @@ export async function chavesDoPfx(pfx: Buffer, senha: string): Promise<{ key: st
  * Por isso este XML é montado à mão, com as tags já expandidas: o que é assinado
  * é byte a byte o que vai no arquivo.
  */
-export function assinarDps(xml: string, id: string, key: string, certB64: string): string {
+export function assinarXml(xml: string, o: { interna: string; raiz: string; id: string; key: string; certB64: string }): string {
   const NS = 'http://www.sped.fazenda.gov.br/nfse'
-  const ini = xml.indexOf('<infDPS ')
-  const fim = xml.indexOf('</infDPS>') + '</infDPS>'.length
-  if (ini < 0 || fim < ini) throw new Error('XML da DPS sem infDPS.')
-  const canon = xml.slice(ini, fim).replace('<infDPS ', `<infDPS xmlns="${NS}" `)
+  const abre = `<${o.interna} `
+  const fecha = `</${o.interna}>`
+  const ini = xml.indexOf(abre)
+  const fim = xml.indexOf(fecha) + fecha.length
+  if (ini < 0 || fim < ini) throw new Error(`XML sem ${o.interna}.`)
+  const canon = xml.slice(ini, fim).replace(abre, `<${o.interna} xmlns="${NS}" `)
   const digest = crypto.createHash('sha1').update(canon, 'utf8').digest('base64')
 
   const signedInfo = '<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#">'
     + '<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"></CanonicalizationMethod>'
     + '<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"></SignatureMethod>'
-    + `<Reference URI="#${id}"><Transforms>`
+    + `<Reference URI="#${o.id}"><Transforms>`
     + '<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"></Transform>'
     + '<Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"></Transform>'
     + '</Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"></DigestMethod>'
     + `<DigestValue>${digest}</DigestValue></Reference></SignedInfo>`
 
-  const valor = crypto.createSign('RSA-SHA1').update(signedInfo, 'utf8').sign(key, 'base64')
+  const valor = crypto.createSign('RSA-SHA1').update(signedInfo, 'utf8').sign(o.key, 'base64')
   const assinatura = '<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">' + signedInfo
     + `<SignatureValue>${valor}</SignatureValue>`
-    + `<KeyInfo><X509Data><X509Certificate>${certB64}</X509Certificate></X509Data></KeyInfo></Signature>`
+    + `<KeyInfo><X509Data><X509Certificate>${o.certB64}</X509Certificate></X509Data></KeyInfo></Signature>`
 
-  return xml.replace('</DPS>', assinatura + '</DPS>')
+  return xml.replace(`</${o.raiz}>`, assinatura + `</${o.raiz}>`)
+}
+
+/** A assinatura da DPS — o caso provado em produção restrita. */
+export function assinarDps(xml: string, id: string, key: string, certB64: string): string {
+  return assinarXml(xml, { interna: 'infDPS', raiz: 'DPS', id, key, certB64 })
 }
 
 export const empacotar = (xml: string) => zlib.gzipSync(Buffer.from(xml, 'utf8')).toString('base64')

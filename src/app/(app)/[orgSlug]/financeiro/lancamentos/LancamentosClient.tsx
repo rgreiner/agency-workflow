@@ -72,6 +72,11 @@ export interface Lancamento {
 
 export interface ContaRef { id: string; nome: string; tipo?: string | null; cor: string | null; ativo: boolean; favorita?: boolean }
 
+// Nota cancelada não cobre o lançamento: ele volta para a fila do "sem nota".
+// Sem isto, cancelar uma nota escondia o lançamento do próprio filtro que serve
+// para achá-lo.
+const temNotaValida = (n?: NotaDoLancamento) => !!n && n.status === 'autorizada'
+
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
 // Período da tela: mês, ano ou intervalo personalizado. A lista mostra SÓ o que cai no período.
@@ -167,7 +172,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       // filtro — e da contagem, que precisa bater com a lista.
       if (faltando && l.source === 'importado') return false
       // Sem nota: só faz sentido no que a agência fatura (entrada, não importado).
-      if (faltando === 'nota' && (l.tipo !== 'entrada' || l.source === 'importado' || notas[l.id])) return false
+      if (faltando === 'nota' && (l.tipo !== 'entrada' || l.source === 'importado' || temNotaValida(notas[l.id]))) return false
       if (faltando === 'categoria' && (l.categoria ?? '').trim()) return false
       if (faltando === 'centro' && (l.centro_custo ?? '').trim()) return false
       if (faltando === 'conta' && l.conta_id) return false
@@ -290,7 +295,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
     }
     return {
       // Sem nota é pendência só do que a agência fatura.
-      nota: conta(l => l.tipo === 'entrada' && !notas[l.id]),
+      nota: conta(l => l.tipo === 'entrada' && !temNotaValida(notas[l.id])),
       categoria: conta(l => !(l.categoria ?? '').trim()),
       centro: conta(l => !(l.centro_custo ?? '').trim()),
       conta: conta(l => !l.conta_id),
@@ -1320,6 +1325,7 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
             nota={notaDoLancamento}
             valor={Number(lancamento.valor_realizado ?? lancamento.valor) || 0}
             cliente={lancamento.contato_nome ?? null}
+            nfAnexada={anexos.find(x => x.tipo === 'NF' && x.emitente === 'agencia') ?? null}
             onEmitida={n => { setNotaDoLancamento(n); onNotaEmitida?.(lancamento.id, n) }}
           />
         )}

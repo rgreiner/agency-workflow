@@ -1,21 +1,50 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, FileText, ReceiptText, AlertTriangle, Copy, Check, X, Minus, ClipboardCheck } from 'lucide-react'
+import {
+  Loader2, FileText, ReceiptText, AlertTriangle, Copy, Check, X, Minus,
+  ClipboardCheck, Download, FileCode2, Ban, RefreshCw,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { formatBRL } from '@/lib/midia'
+import { Select } from '@/components/ui/Select'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { emitirNota, conferirNota, type NotaDoLancamento, type LinhaConferencia } from '@/app/actions/nfse'
+import {
+  emitirNota, conferirNota, cancelarNota, dadosParaEmitir,
+  type NotaDoLancamento, type LinhaConferencia, type DadosParaEmitir,
+} from '@/app/actions/nfse'
 
 /**
- * Emissão de NFS-e a partir do lançamento a receber (migs. 309/313).
+ * Emissão de NFS-e a partir do lançamento a receber (migs. 309/313/315).
  *
  * Emitir é ato público com prazo curto para cancelar: por isso UMA por vez e
  * sempre com diálogo que diz o valor, o tomador e — em letras grandes — se a
  * nota é de teste ou oficial. Nada de lote.
+ *
+ * Emitida, a nota não se edita: ou se CANCELA (não devia existir) ou se
+ * SUBSTITUI (devia existir com outro conteúdo). Os dois caminhos estão aqui,
+ * separados de propósito, porque a escolha entre eles é da pessoa.
  */
+
+// A Receita exige motivo com no mínimo 15 caracteres (TSMotivo no schema).
+const MOTIVO_MIN = 15
+
+const MOTIVOS_CANCELAMENTO = [
+  { value: '1', label: 'Erro na emissão' },
+  { value: '2', label: 'Serviço não prestado' },
+  { value: '9', label: 'Outros' },
+]
+
+const MOTIVOS_SUBSTITUICAO = [
+  { value: '99', label: 'Outros' },
+  { value: '01', label: 'Desenquadramento do Simples Nacional' },
+  { value: '02', label: 'Enquadramento no Simples Nacional' },
+  { value: '03', label: 'Inclusão retroativa de imunidade/isenção' },
+  { value: '04', label: 'Exclusão retroativa de imunidade/isenção' },
+  { value: '05', label: 'Rejeição da NFS-e pelo tomador' },
+]
 
 /** Pílula da coluna NF: emite quando não há nota, mostra o número quando há. */
 export function NotaCelula({ orgSlug, lancamentoId, nota, podeEmitir, onEmitida }: {
@@ -29,10 +58,19 @@ export function NotaCelula({ orgSlug, lancamentoId, nota, podeEmitir, onEmitida 
   const [confirmar, setConfirmar] = useState(false)
 
   if (nota) {
+    const cancelada = nota.status === 'cancelada'
     return (
-      <span className="inline-flex items-center gap-1" title={`Chave ${nota.chave}`}>
-        <FileText className={cn('w-3.5 h-3.5', nota.ambiente === 'producao' ? 'text-emerald-600' : 'text-sky-500')} />
-        <span className="text-[11px] font-medium tabular-nums text-gray-700">{nota.numero ?? 'NF'}</span>
+      <span className="inline-flex items-center gap-1"
+        title={cancelada
+          ? `${nota.substituidaPor ? 'Substituída' : 'Cancelada'} · chave ${nota.chave}`
+          : `Chave ${nota.chave}`}>
+        {cancelada
+          ? <Ban className="w-3.5 h-3.5 text-gray-400" />
+          : <FileText className={cn('w-3.5 h-3.5', nota.ambiente === 'producao' ? 'text-emerald-600' : 'text-sky-500')} />}
+        <span className={cn('text-[11px] font-medium tabular-nums',
+          cancelada ? 'text-gray-400 line-through' : 'text-gray-700')}>
+          {nota.numero ?? 'NF'}
+        </span>
       </span>
     )
   }
@@ -54,16 +92,23 @@ export function NotaCelula({ orgSlug, lancamentoId, nota, podeEmitir, onEmitida 
 }
 
 /** Bloco dentro do lançamento aberto — o lugar com espaço para o detalhe. */
-export function NotaFiscalBloco({ orgSlug, lancamentoId, nota, valor, cliente, onEmitida }: {
+export function NotaFiscalBloco({ orgSlug, lancamentoId, nota, valor, cliente, nfAnexada, onEmitida }: {
   orgSlug: string
   lancamentoId: string
   nota?: NotaDoLancamento
   valor: number
   cliente: string | null
+  /** NF da agência anexada ao lançamento — emitida FORA do Flow (prefeitura). */
+  nfAnexada?: { nome?: string; numero?: string } | null
   onEmitida: (n: NotaDoLancamento) => void
 }) {
+  const router = useRouter()
   const [confirmar, setConfirmar] = useState(false)
+  const [cancelar, setCancelar] = useState(false)
+  const [substituir, setSubstituir] = useState(false)
   const [copiado, setCopiado] = useState(false)
+
+  const cancelada = nota?.status === 'cancelada'
 
   async function copiarChave() {
     if (!nota) return
@@ -79,32 +124,85 @@ export function NotaFiscalBloco({ orgSlug, lancamentoId, nota, valor, cliente, o
         <label className="text-xs font-medium text-gray-600 inline-flex items-center gap-1.5">
           <ReceiptText className="w-3.5 h-3.5" /> Nota fiscal
         </label>
-        {!nota && (
+        {(!nota || cancelada) && (
           <button type="button" onClick={() => setConfirmar(true)}
             className="press inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 transition-colors">
-            <ReceiptText className="w-3.5 h-3.5" /> Emitir NFS-e
+            <ReceiptText className="w-3.5 h-3.5" /> {cancelada ? 'Emitir outra' : 'Emitir NFS-e'}
           </button>
         )}
       </div>
 
       {nota ? (
-        <div className="rounded-xl bg-gray-50 px-3 py-2.5 space-y-1.5">
+        <div className={cn('rounded-xl px-3 py-2.5 space-y-2', cancelada ? 'bg-gray-100' : 'bg-gray-50')}>
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="font-medium text-gray-900 tabular-nums">
+            <span className={cn('font-medium tabular-nums', cancelada ? 'text-gray-500 line-through' : 'text-gray-900')}>
               NFS-e {nota.numero ?? '—'}{nota.serie ? ` · série ${nota.serie}` : ''}
             </span>
             <span className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
               nota.ambiente === 'producao' ? 'bg-emerald-50 text-emerald-700' : 'bg-sky-50 text-sky-700')}>
               {nota.ambiente === 'producao' ? 'oficial' : 'teste'}
             </span>
+            {cancelada && (
+              <span className="rounded-md bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+                {nota.substituidaPor ? 'substituída' : 'cancelada'}
+              </span>
+            )}
           </div>
+
           {/* A chave é o que se procura em conferência — clicar copia. */}
           <button type="button" onClick={copiarChave}
             className="no-press group flex items-center gap-1.5 text-left text-[11px] font-mono text-gray-500 hover:text-gray-800 transition-colors break-all">
             {copiado ? <Check className="w-3 h-3 shrink-0 text-emerald-600" /> : <Copy className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />}
             {nota.chave}
           </button>
+
+          {cancelada && nota.motivoCancelamento && (
+            <p className="text-[11px] text-gray-500">
+              {nota.substituidaPor ? 'Substituída: ' : 'Cancelada: '}{nota.motivoCancelamento}
+            </p>
+          )}
+
+          {/* O que vai para o cliente junto do boleto — e o XML, que é o
+              documento fiscal de verdade, para a contabilidade arquivar. */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <a href={`/api/fiscal/nota/${nota.id}`} download
+              className="press inline-flex items-center gap-1.5 rounded-lg bg-white border border-gray-200 px-2.5 py-1.5 text-[11px] font-medium text-gray-700 hover:border-gray-300 hover:text-gray-900 transition-colors">
+              <Download className="w-3.5 h-3.5" /> Baixar DANFSe (PDF)
+            </a>
+            <a href={`/api/fiscal/nota/${nota.id}?xml=1`} download
+              className="press inline-flex items-center gap-1.5 rounded-lg bg-white border border-gray-200 px-2.5 py-1.5 text-[11px] font-medium text-gray-700 hover:border-gray-300 hover:text-gray-900 transition-colors">
+              <FileCode2 className="w-3.5 h-3.5" /> XML
+            </a>
+            {!cancelada && (
+              <>
+                <button type="button" onClick={() => setSubstituir(true)}
+                  className="press inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors">
+                  <RefreshCw className="w-3.5 h-3.5" /> Substituir
+                </button>
+                <button type="button" onClick={() => setCancelar(true)}
+                  className="press inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-gray-500 hover:text-red-700 hover:bg-red-50 transition-colors">
+                  <Ban className="w-3.5 h-3.5" /> Cancelar nota
+                </button>
+              </>
+            )}
+          </div>
+
           <Conferencia orgSlug={orgSlug} notaId={nota.id} />
+        </div>
+      ) : nfAnexada ? (
+        /* "Sem nota" era falso aqui: a NF existe, foi emitida no sistema da
+           prefeitura e está anexada logo acima. Dizer o que o Flow sabe evita
+           emitir a segunda sem perceber. */
+        <div className="rounded-xl bg-gray-50 px-3 py-2.5 text-xs text-gray-600">
+          <p>
+            <strong className="font-medium text-gray-800">
+              {nfAnexada.numero ? `NF ${nfAnexada.numero}` : 'NF'}
+            </strong>{' '}
+            anexada, emitida fora do Flow (sistema da prefeitura).
+          </p>
+          <p className="mt-0.5 text-gray-500">
+            O Flow não controla essa nota: não há XML nem cancelamento por aqui. Emitir agora criaria uma segunda nota.
+          </p>
         </div>
       ) : (
         <p className="text-xs text-gray-500 py-1">
@@ -116,46 +214,231 @@ export function NotaFiscalBloco({ orgSlug, lancamentoId, nota, valor, cliente, o
         <DialogoEmitir orgSlug={orgSlug} lancamentoId={lancamentoId} valor={valor} cliente={cliente}
           onFechar={() => setConfirmar(false)} onEmitida={n => { setConfirmar(false); onEmitida(n) }} />
       )}
+      {cancelar && nota && (
+        <DialogoCancelar orgSlug={orgSlug} nota={nota}
+          onFechar={() => setCancelar(false)}
+          onPronto={() => { setCancelar(false); router.refresh() }} />
+      )}
+      {substituir && nota && (
+        <DialogoEmitir orgSlug={orgSlug} lancamentoId={lancamentoId} valor={valor} cliente={cliente}
+          substituir={nota}
+          onFechar={() => setSubstituir(false)} onEmitida={n => { setSubstituir(false); onEmitida(n) }} />
+      )}
     </div>
   )
 }
 
-function DialogoEmitir({ orgSlug, lancamentoId, valor, cliente, onFechar, onEmitida }: {
+/**
+ * Diálogo de emissão — e de substituição, que é a mesma emissão carregando a
+ * chave da nota velha.
+ *
+ * Carrega os dados do lançamento ao abrir porque o tomador é o ponto delicado:
+ * a maioria dos lançamentos a receber veio do import sem cliente vinculado, e
+ * sem tomador não há nota. O Flow sugere pelo nome do centro de custo; quem
+ * confirma é a pessoa.
+ */
+function DialogoEmitir({ orgSlug, lancamentoId, valor, cliente, substituir, onFechar, onEmitida }: {
   orgSlug: string
   lancamentoId: string
   valor?: number
   cliente?: string | null
+  /** Quando presente, esta emissão SUBSTITUI a nota indicada. */
+  substituir?: NotaDoLancamento
   onFechar: () => void
   onEmitida: (n: NotaDoLancamento) => void
 }) {
   const router = useRouter()
   const [emitindo, start] = useTransition()
+  const [dados, setDados] = useState<DadosParaEmitir | null>(null)
+  const [tomadorId, setTomadorId] = useState('')
+  const [cMotivo, setCMotivo] = useState('99')
+  const [xMotivo, setXMotivo] = useState('')
+  const [cienteDaDuplicata, setCiente] = useState(false)
+
+  useEffect(() => {
+    let vivo = true
+    dadosParaEmitir(orgSlug, lancamentoId).then(r => {
+      if (!vivo) return
+      if (r.error) { toast.error(r.error); onFechar(); return }
+      setDados(r.dados ?? null)
+      setTomadorId(r.dados?.tomador?.id ?? r.dados?.sugestao?.id ?? '')
+    })
+    return () => { vivo = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgSlug, lancamentoId])
+
+  const escolhido = dados?.clientes.find(c => c.id === tomadorId) ?? null
+  const vinculado = !!dados?.tomador
+  const motivoCurto = substituir && xMotivo.trim().length < MOTIVO_MIN
+  // Duplicata exige aceite explícito: o aviso sozinho vira paisagem, e nota em
+  // duplicidade só se desfaz cancelando.
+  const precisaAceite = !!dados?.nfAnexada && !substituir
+  const travado = !dados || !tomadorId || !!motivoCurto || (precisaAceite && !cienteDaDuplicata)
 
   return (
     <ConfirmDialog
       open
-      title="Emitir NFS-e?"
-      description={[
-        cliente ? `Tomador: ${cliente}.` : '',
-        valor != null ? `Valor: ${formatBRL(valor)}.` : '',
-        'A nota é enviada à Receita no ambiente configurado. Nota emitida tem prazo curto para cancelar.',
-      ].filter(Boolean).join(' ')}
-      confirmLabel="Emitir"
+      title={substituir ? 'Substituir a NFS-e?' : 'Emitir NFS-e?'}
+      description={substituir
+        ? `A nota ${substituir.numero ?? ''} é cancelada pela Receita e uma nova é emitida com os dados atuais deste lançamento.`
+        : [
+          valor != null ? `Valor: ${formatBRL(valor)}.` : '',
+          'A nota é enviada à Receita no ambiente configurado. Nota emitida tem prazo curto para cancelar.',
+        ].filter(Boolean).join(' ')}
+      confirmLabel={substituir ? 'Substituir' : 'Emitir'}
       loading={emitindo}
       onCancel={onFechar}
-      onConfirm={() => start(async () => {
-        const r = await emitirNota(orgSlug, lancamentoId)
-        if (r.error) { toast.error(r.error, { duration: 10000 }); return }
-        if (!r.nota) { toast.error('A Receita não devolveu a nota.'); return }
-        toast.success(`NFS-e ${r.nota.numero ?? ''} emitida${r.nota.ambiente === 'restrita' ? ' (teste)' : ''}.`)
-        onEmitida(r.nota)
-        router.refresh()
-      })}
+      onConfirm={() => {
+        if (travado) return
+        start(async () => {
+          const r = await emitirNota(orgSlug, lancamentoId, {
+            workspaceId: tomadorId || undefined,
+            confirmarNfAnexada: cienteDaDuplicata,
+            substituir: substituir ? { notaId: substituir.id, cMotivo, xMotivo: xMotivo.trim() } : undefined,
+          })
+          if (r.error) { toast.error(r.error, { duration: 10000 }); return }
+          if (!r.nota) { toast.error('A Receita não devolveu a nota.'); return }
+          toast.success(`NFS-e ${r.nota.numero ?? ''} emitida${r.nota.ambiente === 'restrita' ? ' (teste)' : ''}.`)
+          onEmitida(r.nota)
+          router.refresh()
+        })
+      }}
     >
-      <p className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
-        <AlertTriangle className="w-4 h-4 shrink-0 mt-px text-amber-600" />
-        Confira o valor e o tomador antes. Código do serviço e tributação vêm do cadastro fiscal — se estiverem errados, a correção é cancelar a nota.
-      </p>
+      {!dados ? (
+        <p className="flex items-center gap-2 py-2 text-xs text-gray-500">
+          <Loader2 className="w-4 h-4 animate-spin" /> Conferindo o cadastro…
+        </p>
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <label className="block text-[11px] font-medium text-gray-500 mb-1">Tomador (quem recebe a nota)</label>
+            <Select
+              value={tomadorId}
+              onChange={setTomadorId}
+              options={dados.clientes.map(c => ({ value: c.id, label: c.nome }))}
+              placeholder="Escolher o cliente"
+            />
+            {escolhido && (
+              <p className="mt-1 text-[11px] text-gray-500 tabular-nums">
+                {escolhido.razao || escolhido.nome} · CNPJ {formatarCnpj(escolhido.cnpj)}
+              </p>
+            )}
+            {/* O vínculo que falta é a causa real de "não consigo emitir". Dizer
+                de onde veio o palpite evita aceitar o cliente errado no automático. */}
+            {!vinculado && dados.sugestao && tomadorId === dados.sugestao.id && (
+              <p className="mt-1 text-[11px] text-gray-500">
+                Sugerido pelo centro de custo do lançamento. Confira antes de emitir — o vínculo fica salvo.
+              </p>
+            )}
+            {!vinculado && !dados.sugestao && (
+              <p className="mt-1 text-[11px] text-amber-700">
+                Este lançamento não tem cliente vinculado. Escolha o tomador: o vínculo fica salvo no lançamento.
+              </p>
+            )}
+          </div>
+
+          {substituir && (
+            <>
+              <div>
+                <label className="block text-[11px] font-medium text-gray-500 mb-1">Motivo da substituição</label>
+                <Select value={cMotivo} onChange={setCMotivo} options={MOTIVOS_SUBSTITUICAO} />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-gray-500 mb-1">Explicação (vai no evento, na Receita)</label>
+                <textarea
+                  value={xMotivo} onChange={e => setXMotivo(e.target.value)} rows={2} maxLength={255}
+                  placeholder="Ex.: valor do serviço corrigido conforme contrato"
+                  className="w-full rounded-xl bg-gray-100 border-transparent px-3 py-2 text-sm placeholder:text-gray-400 focus:bg-white focus:border-gray-300 transition-colors"
+                />
+                <p className={cn('mt-1 text-[11px] tabular-nums', motivoCurto ? 'text-amber-700' : 'text-gray-400')}>
+                  {xMotivo.trim().length}/{MOTIVO_MIN} mínimo — a Receita recusa texto curto.
+                </p>
+              </div>
+            </>
+          )}
+
+          {/* Já existe NF da agência anexada: emitir por cima é nota em
+              duplicidade, e duplicidade só se desfaz cancelando. */}
+          {precisaAceite && (
+            <div className="rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
+              <p className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-px text-amber-600" />
+                <span>
+                  Este lançamento já tem a <strong>{dados.nfAnexada!.numero ? `NF ${dados.nfAnexada!.numero}` : 'NF'}</strong> da
+                  agência anexada, emitida fora do Flow. Emitir agora cria uma <strong>segunda</strong> nota para o mesmo serviço.
+                </span>
+              </p>
+              <label className="mt-2 flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={cienteDaDuplicata} onChange={e => setCiente(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded border-amber-400 text-amber-600 focus:ring-amber-500" />
+                <span>Sei que já existe nota e quero emitir outra.</span>
+              </label>
+            </div>
+          )}
+
+          <p className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-px text-amber-600" />
+            {dados.ambiente === 'producao'
+              ? 'Ambiente OFICIAL: esta nota vale e vai para a Receita. Código do serviço e tributação vêm do cadastro fiscal — se estiverem errados, a correção é cancelar.'
+              : 'Ambiente de TESTE (produção restrita): a nota não tem valor fiscal e não serve para cobrança.'}
+          </p>
+          {cliente && !vinculado && (
+            <p className="text-[11px] text-gray-400">Contato do lançamento: {cliente}</p>
+          )}
+        </div>
+      )}
+    </ConfirmDialog>
+  )
+}
+
+/** Cancelamento: a nota não devia existir. */
+function DialogoCancelar({ orgSlug, nota, onFechar, onPronto }: {
+  orgSlug: string
+  nota: NotaDoLancamento
+  onFechar: () => void
+  onPronto: () => void
+}) {
+  const [indo, start] = useTransition()
+  const [cMotivo, setCMotivo] = useState('1')
+  const [xMotivo, setXMotivo] = useState('')
+  const curto = xMotivo.trim().length < MOTIVO_MIN
+
+  return (
+    <ConfirmDialog
+      open
+      title={`Cancelar a NFS-e ${nota.numero ?? ''}?`}
+      description="O cancelamento é registrado na Receita e não se desfaz. Se a nota precisa existir com outro conteúdo, use Substituir."
+      confirmLabel="Cancelar a nota"
+      cancelLabel="Voltar"
+      loading={indo}
+      onCancel={onFechar}
+      onConfirm={() => {
+        if (curto) return
+        start(async () => {
+          const r = await cancelarNota(orgSlug, nota.id, { cMotivo, xMotivo: xMotivo.trim() })
+          if (r.error) { toast.error(r.error, { duration: 10000 }); return }
+          toast.success('Nota cancelada na Receita.')
+          onPronto()
+        })
+      }}
+    >
+      <div className="space-y-3">
+        <div>
+          <label className="block text-[11px] font-medium text-gray-500 mb-1">Motivo</label>
+          <Select value={cMotivo} onChange={setCMotivo} options={MOTIVOS_CANCELAMENTO} />
+        </div>
+        <div>
+          <label className="block text-[11px] font-medium text-gray-500 mb-1">Explicação (vai no evento, na Receita)</label>
+          <textarea
+            value={xMotivo} onChange={e => setXMotivo(e.target.value)} rows={2} maxLength={255}
+            placeholder="Ex.: nota emitida para o cliente errado"
+            className="w-full rounded-xl bg-gray-100 border-transparent px-3 py-2 text-sm placeholder:text-gray-400 focus:bg-white focus:border-gray-300 transition-colors"
+          />
+          <p className={cn('mt-1 text-[11px] tabular-nums', curto ? 'text-amber-700' : 'text-gray-400')}>
+            {xMotivo.trim().length}/{MOTIVO_MIN} mínimo — a Receita recusa texto curto.
+          </p>
+        </div>
+      </div>
     </ConfirmDialog>
   )
 }
@@ -164,6 +447,9 @@ function DialogoEmitir({ orgSlug, lancamentoId, valor, cliente, onFechar, onEmit
 export function NotaCarregando() {
   return <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-300 inline" />
 }
+
+const formatarCnpj = (v: string) =>
+  v.length === 14 ? v.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : v
 
 /**
  * Conferência campo a campo: o que o Flow PEDIU na DPS × o que a Receita
