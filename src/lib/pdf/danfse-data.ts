@@ -1,36 +1,37 @@
 import 'server-only'
 
 /**
- * Leitura do XML autorizado da NFS-e para montar o DANFSe.
+ * Leitura do XML autorizado da NFS-e para montar o DANFSe, no padrão da
+ * **NT 008/2026 v1.02** (14/07/2026).
  *
  * Por que o Flow gera o PDF: a API de geração do DANFSe da Receita foi
- * SOBRESTADA em 03/08/2026 pela NT 008/2026, que passou a responsabilidade (e um
- * layout padronizado) para o sistema emissor. Medido em 01/10/2026: `sefin`
+ * SOBRESTADA em 03/08/2026 pela própria NT, que passou a responsabilidade — e um
+ * layout obrigatório — para o sistema emissor. Medido em 01/10/2026: `sefin`
  * responde 501 e `adn` responde 404 em todos os caminhos de danfse. Não é
- * configuração nossa, é a API desligada — não adianta procurar endpoint.
+ * configuração nossa, é a API desligada.
  *
- * O DANFSe NÃO é o documento fiscal: o documento é o XML, que fica guardado em
- * `nota_fiscal.xml_gz_b64`. Este PDF é a representação gráfica que se envia ao
+ * O DANFSe NÃO é o documento fiscal: o documento é o XML, guardado em
+ * `nota_fiscal.xml_gz_b64`. Este PDF é a representação gráfica que vai ao
  * cliente junto do boleto.
+ *
+ * As descrições dos códigos (tpEmit, opSimpNac, tribISSQN…) são as do leiaute
+ * oficial, copiadas dos XSD v1.01 — a NT manda imprimir a descrição, não o
+ * número, e paráfrase nossa não é descrição oficial.
  */
 
-/** O conteúdo de uma tag, dentro de um trecho. */
 const tag = (xml: string, t: string): string => {
   const m = new RegExp(`<${t}>([^<]*)</${t}>`).exec(xml)
   return m ? m[1].trim() : ''
 }
 
 /**
- * Recorta o conteúdo de um bloco pelo nome. Indispensável aqui: o XML da NFS-e
- * repete `CNPJ` e `xNome` no emitente e no tomador, e `valores` aparece duas
- * vezes (NFS-e e DPS). Ler a tag solta devolve a primeira ocorrência, que quase
- * nunca é a que se quer.
+ * Recorta o conteúdo de um bloco pelo nome.
  *
  * ⚠️ A abertura casa COM ATRIBUTOS. Procurar `<infDPS>` literal não acha nada:
- * no documento real a tag é `<infDPS Id="DPS4104...">`, e o mesmo vale para
- * `<DPS versao="1.00">`. Esse detalhe esvaziou tomador, serviço, série e
- * competência no primeiro DANFSe gerado — o PDF saía inteiro, só que com meia
- * nota dentro. Por isso o render é testado contra o XML autorizado de verdade.
+ * no documento real a tag é `<infDPS Id="DPS4104...">`. Esse detalhe gerou um
+ * DANFSe inteiro com tomador, série e valores VAZIOS — o PDF saía bonito, só
+ * que com meia nota dentro. Por isso o render é testado contra XML autorizado
+ * de verdade, nunca contra exemplo escrito à mão.
  *
  * Fecha no primeiro `</nome>`: serve porque nenhum bloco deste schema aninha
  * outro de mesmo nome.
@@ -43,38 +44,118 @@ function bloco(xml: string, nome: string): string {
   return f < 0 ? '' : xml.slice(i, f)
 }
 
+// ── Descrições do leiaute (XSD v1.01) ───────────────────────────────────────
+const TP_EMIT: Record<string, string> = { '1': 'Prestador', '2': 'Tomador', '3': 'Intermediário' }
+const TP_AMB: Record<string, string> = { '1': 'Produção', '2': 'Homologação' }
+const AMB_GER: Record<string, string> = { '1': 'Prefeitura', '2': 'Sistema Nacional da NFS-e' }
+const OP_SIMPLES: Record<string, string> = {
+  '1': 'Não Optante',
+  '2': 'Optante - Microempreendedor Individual (MEI)',
+  '3': 'Optante - Microempresa ou Empresa de Pequeno Porte (ME/EPP)',
+}
+const REG_SN: Record<string, string> = {
+  '1': 'Regime de apuração dos tributos federais e municipal pelo SN',
+  '2': 'Regime de apuração dos tributos federais pelo SN e ISSQN por fora do SN',
+  '3': 'Regime de apuração dos tributos federais e municipal por fora do SN',
+}
+const TRIB_ISSQN: Record<string, string> = {
+  '1': 'Operação tributável', '2': 'Imunidade', '3': 'Exportação de serviço', '4': 'Não Incidência',
+}
+const RET_ISSQN: Record<string, string> = {
+  '1': 'Não Retido', '2': 'Retido pelo Tomador', '3': 'Retido pelo Intermediário',
+}
+const REG_ESP: Record<string, string> = {
+  '0': 'Nenhum', '1': 'Ato Cooperado (Cooperativa)', '2': 'Estimativa', '3': 'Microempresa Municipal',
+  '4': 'Notário ou Registrador', '5': 'Profissional Autônomo', '6': 'Sociedade de Profissionais', '9': 'Outros',
+}
+
+/** A NT manda cortar com reticências; o campo tem largura fixa no formulário. */
+const corta = (t: string, max: number) => (t.length > max ? t.slice(0, max - 3).trimEnd() + '...' : t)
+
+export interface Parte {
+  nome: string
+  documento: string
+  inscricaoMunicipal: string
+  fone: string
+  email: string
+  endereco: string
+  municipio: string
+  ibgeCep: string
+}
+
 export interface DanfseDados {
   chave: string
   numero: string
   serie: string
   nDps: string
-  /** Número do documento na numeração do município. */
   nDfse: string
-  emitidoEm: string
+  emissaoNfse: string
+  emissaoDps: string
   competencia: string
-  /** 1 = produção, 2 = produção restrita (nota de teste). */
-  ambiente: string
-  prestador: { nome: string; cnpj: string; endereco: string; municipio: string; fone: string }
-  tomador: { nome: string; cnpj: string }
-  servico: { codigo: string; descricaoNacional: string; descricao: string; municipio: string }
-  valores: { servico: string; liquido: string; percTributos: string; tributos: string }
-  issqn: { tributacao: string; retencao: string }
+  /** 1 = produção, 2 = homologação (produção restrita). */
+  tpAmb: string
+  tipoAmbiente: string
+  ambienteGerador: string
+  municipioEmitente: string
+  emitenteTipo: string
+  situacao: string
+  finalidade: string
+  prestador: Parte & { simples: string; regimeSN: string }
+  tomador: Parte | null
+  servico: { local: string; codigo: string; descricaoCodigo: string; descricao: string }
+  issqn: {
+    tipoTributacao: string; municipioIncidencia: string; regimeEspecial: string
+    bc: string; retencao: string; apurado: string
+  } | null
+  federal: { pis: string; cofins: string; irrf: string; csll: string; cp: string }
   /** Vazio enquanto o grupo IBSCBS não é exigido (optante do Simples, até 2027). */
   ibsCbs: string
+  total: string
+  complementares: string
   cancelada: boolean
   motivoCancelamento: string
   substituidaPor: string
 }
 
-const data = (iso: string) => {
+const dataHora = (iso: string) => {
   if (!iso) return ''
   const [d, h] = iso.split('T')
   const [a, m, dia] = d.split('-')
-  return h ? `${dia}/${m}/${a} ${h.slice(0, 5)}` : `${dia}/${m}/${a}`
+  return h ? `${dia}/${m}/${a} ${h.slice(0, 8)}` : `${dia}/${m}/${a}`
 }
+const dataCurta = (iso: string) => (iso ? iso.slice(0, 10).split('-').reverse().join('/') : '')
 
 const moeda = (v: string) =>
   v ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : ''
+
+const cep = (v: string) => v.replace(/^(\d{5})(\d{3})$/, '$1-$2')
+
+export const formataDoc = (v: string) =>
+  v.length === 14 ? v.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+  : v.length === 11 ? v.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')
+  : v
+
+export const formataFone = (v: string) =>
+  v.length >= 10 ? v.replace(/^(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3') : v
+
+/** Nome e documento de prestador/tomador, que têm a MESMA estrutura no XML. */
+function leParte(bl: string, municipioFallback = ''): Parte {
+  const end = bloco(bl, 'end') || bloco(bl, 'enderNac')
+  const nac = bloco(end, 'endNac') || end
+  const rua = [tag(end, 'xLgr'), tag(end, 'nro'), tag(end, 'xCpl'), tag(end, 'xBairro')]
+    .filter(Boolean).join(', ')
+  const cMun = tag(nac, 'cMun')
+  return {
+    nome: corta(tag(bl, 'xNome'), 80),
+    documento: formataDoc(tag(bl, 'CNPJ') || tag(bl, 'CPF') || tag(bl, 'NIF')),
+    inscricaoMunicipal: tag(bl, 'IM'),
+    fone: formataFone(tag(bl, 'fone')),
+    email: tag(bl, 'email'),
+    endereco: corta(rua, 80),
+    municipio: tag(bl, 'xMun') || municipioFallback,
+    ibgeCep: [cMun, cep(tag(nac, 'CEP'))].filter(Boolean).join(' / '),
+  }
+}
 
 export function lerDanfse(xml: string, extra: {
   cancelada?: boolean
@@ -83,68 +164,94 @@ export function lerDanfse(xml: string, extra: {
 }): DanfseDados {
   const inf = bloco(xml, 'infNFSe') || xml
   const emit = bloco(inf, 'emit')
-  const ender = bloco(emit, 'enderNac')
   const dps = bloco(inf, 'infDPS')
-  const toma = bloco(dps, 'toma')
+  const prestDps = bloco(dps, 'prest')
+  const tomaDps = bloco(dps, 'toma')
   const serv = bloco(dps, 'serv')
   const valDps = bloco(dps, 'valores')
   const trib = bloco(valDps, 'trib')
+  const tribMun = bloco(trib, 'tribMun')
+  const tribFed = bloco(trib, 'tribFed')
+
+  const uf = tag(bloco(emit, 'enderNac'), 'UF')
+  const municipioEmi = [tag(inf, 'xLocEmi'), uf].filter(Boolean).join(' / ')
+
+  // O prestador vem dos DOIS lados: nome e endereço o Sistema Nacional devolve
+  // em `emit` (cadastro oficial); regime tributário só existe na DPS.
+  const prestador = {
+    ...leParte(emit, tag(inf, 'xLocEmi')),
+    municipio: municipioEmi,
+    inscricaoMunicipal: tag(prestDps, 'IM') || tag(emit, 'IM'),
+    simples: OP_SIMPLES[tag(bloco(prestDps, 'regTrib'), 'opSimpNac')] ?? '',
+    regimeSN: REG_SN[tag(bloco(prestDps, 'regTrib'), 'regApTribSN')] ?? '',
+  }
+  if (!prestador.documento) prestador.documento = formataDoc(tag(emit, 'CNPJ'))
+
+  const tomador = tomaDps ? leParte(tomaDps) : null
 
   const vServ = tag(bloco(valDps, 'vServPrest'), 'vServ')
   const perc = tag(bloco(trib, 'totTrib'), 'pTotTribSN')
   const tributos = vServ && perc ? moeda(String((Number(vServ) * Number(perc)) / 100)) : ''
 
-  const rua = [tag(ender, 'xLgr'), tag(ender, 'nro')].filter(Boolean).join(', ')
-  const bairro = tag(ender, 'xBairro')
-  const cep = tag(ender, 'CEP').replace(/^(\d{5})(\d{3})$/, '$1-$2')
+  const complementares = [
+    tag(inf, 'nDFSe') ? `Documento municipal nº ${tag(inf, 'nDFSe')}.` : '',
+    perc
+      ? `Valor aproximado dos tributos: ${tributos} (${perc.replace('.', ',')}%), conforme Lei 12.741/2012.`
+      : '',
+    tag(bloco(valDps, 'infoCompl'), 'xInfComp'),
+  ].filter(Boolean).join(' ')
 
   return {
     // Do XML inteiro: `inf` já é o CONTEÚDO de infNFSe, sem o atributo Id.
+    // A NT manda imprimir a chave SEM o prefixo "NFS".
     chave: /<infNFSe[^>]*Id="NFS(\d+)"/.exec(xml)?.[1] ?? '',
     numero: tag(inf, 'nNFSe'),
     serie: tag(dps, 'serie'),
     nDps: tag(dps, 'nDPS'),
     nDfse: tag(inf, 'nDFSe'),
-    emitidoEm: data(tag(dps, 'dhEmi') || tag(inf, 'dhProc')),
-    competencia: data(tag(dps, 'dCompet')),
-    ambiente: tag(inf, 'ambGer') || tag(dps, 'tpAmb'),
-    prestador: {
-      nome: tag(emit, 'xNome'),
-      cnpj: tag(emit, 'CNPJ'),
-      endereco: [rua, bairro, cep].filter(Boolean).join(' · '),
-      municipio: [tag(inf, 'xLocEmi'), tag(ender, 'UF')].filter(Boolean).join('/'),
-      fone: tag(emit, 'fone'),
-    },
-    tomador: { nome: tag(toma, 'xNome'), cnpj: tag(toma, 'CNPJ') },
+    emissaoNfse: dataHora(tag(inf, 'dhProc')),
+    emissaoDps: dataHora(tag(dps, 'dhEmi')),
+    competencia: dataCurta(tag(dps, 'dCompet')),
+    tpAmb: tag(dps, 'tpAmb') || tag(inf, 'ambGer'),
+    tipoAmbiente: TP_AMB[tag(dps, 'tpAmb')] ?? '',
+    ambienteGerador: AMB_GER[tag(inf, 'ambGer')] ?? '',
+    municipioEmitente: municipioEmi,
+    emitenteTipo: TP_EMIT[tag(dps, 'tpEmit')] ?? '',
+    situacao: tag(inf, 'cStat') === '100' ? 'NFS-e gerada com sucesso' : tag(inf, 'cStat'),
+    finalidade: tag(bloco(dps, 'IBSCBS'), 'finNFSe') ? '' : 'NFS-e regular',
+    prestador,
+    tomador,
     servico: {
+      local: [tag(inf, 'xLocPrestacao'), uf].filter(Boolean).join(' / '),
       codigo: tag(bloco(serv, 'cServ'), 'cTribNac'),
-      descricaoNacional: tag(inf, 'xTribNac'),
-      descricao: tag(bloco(serv, 'cServ'), 'xDescServ'),
-      municipio: tag(inf, 'xLocPrestacao') || tag(inf, 'xLocIncid'),
+      descricaoCodigo: tag(inf, 'xTribNac'),
+      descricao: corta(tag(bloco(serv, 'cServ'), 'xDescServ'), 1300),
     },
-    valores: {
-      servico: moeda(vServ),
-      liquido: moeda(tag(bloco(inf, 'valores'), 'vLiq') || vServ),
-      percTributos: perc,
-      tributos,
-    },
-    issqn: {
-      tributacao: tag(bloco(trib, 'tribMun'), 'tribISSQN') === '1' ? 'Operação tributável' : 'Ver XML',
-      retencao: tag(bloco(trib, 'tribMun'), 'tpRetISSQN') === '1' ? 'Não retido' : 'Retido pelo tomador',
+    issqn: tribMun ? {
+      tipoTributacao: TRIB_ISSQN[tag(tribMun, 'tribISSQN')] ?? '',
+      municipioIncidencia: [tag(inf, 'xLocIncid'), uf].filter(Boolean).join(' / '),
+      regimeEspecial: REG_ESP[tag(bloco(prestDps, 'regTrib'), 'regEspTrib')] ?? '',
+      bc: moeda(tag(tribMun, 'vBC') || vServ),
+      retencao: RET_ISSQN[tag(tribMun, 'tpRetISSQN')] ?? '',
+      apurado: moeda(tag(tribMun, 'vISSQN')),
+    } : null,
+    federal: {
+      pis: moeda(tag(tribFed, 'vPis')),
+      cofins: moeda(tag(tribFed, 'vCofins')),
+      irrf: moeda(tag(tribFed, 'vRetIRRF')),
+      csll: moeda(tag(tribFed, 'vRetCSLL')),
+      cp: moeda(tag(tribFed, 'vRetCP')),
     },
     ibsCbs: bloco(dps, 'IBSCBS') ? 'Informado no XML' : '',
+    total: moeda(tag(bloco(inf, 'valores'), 'vLiq') || vServ),
+    complementares,
     cancelada: !!extra.cancelada,
     motivoCancelamento: extra.motivoCancelamento ?? '',
     substituidaPor: extra.substituidaPor ?? '',
   }
 }
 
-/** Link da consulta pública nacional — é para ele que o QR Code aponta (NT 008). */
+/** Link da consulta pública — é para ele que o QR Code aponta (NT 008, item 2.4.3). */
 export function linkConsulta(chave: string): string {
   return `https://www.nfse.gov.br/ConsultaPublica/?tpc=1&chave=${chave}`
-}
-
-/** A chave em blocos de 4, como a NT 008 manda imprimir. */
-export function chaveFormatada(chave: string): string {
-  return (chave.match(/.{1,4}/g) ?? []).join(' ')
 }

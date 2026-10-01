@@ -1,90 +1,128 @@
 /* eslint-disable jsx-a11y/alt-text */
-// DANFSe — Documento Auxiliar da NFS-e, no padrão da NT 008/2026.
+// DANFSe v2.0 — Documento Auxiliar da NFS-e, padrão da NT 008/2026 v1.02.
 //
-// A Receita desligou a API que gerava este PDF (03/08/2026) e passou o encargo
-// ao sistema emissor, junto com um layout padronizado: A4 retrato em página
-// única, blocos na ordem (identificação, prestador, tomador, serviço, tributos,
-// IBS/CBS, complementares), QR Code de no mínimo 1,52 cm apontando para a
-// consulta pública nacional, chave em bloco único e marca d'água em nota
-// cancelada, substituída ou de homologação.
+// A Receita desligou a API que gerava este PDF em 03/08/2026 e passou o encargo
+// ao sistema emissor, junto com um layout OBRIGATÓRIO (item 2.2.4: "devendo a
+// disposição de campos obrigatoriamente obedecer ao disposto no respectivo
+// anexo"). A lista de alterações permitidas é fechada (item 2.3) e **não inclui
+// logotipo do emitente**: o logo do cabeçalho é o da NFS-e, e o canto direito é
+// do município. Por isso este documento não leva a marca da agência — ela vive
+// no e-mail que o acompanha, não aqui.
 //
-// Fonte: Helvetica (embutida no react-pdf), metricamente compatível com a Arial
-// que a NT cita — registrar arquivo de fonte só para isso pesaria o build.
+// O que a NT fixa e está implementado:
+//  · retrato, A4, PÁGINA ÚNICA, margem lateral de 0,15–0,20 cm (2.2.1/2.2.2);
+//  · cabeçalho: logomarca da NFS-e à esquerda, "DANFSe v2.0" ao centro,
+//    município/ambiente à direita (2.4.3);
+//  · QR Code ≥ 1,52 cm apontando para a consulta pública, com a legenda de três
+//    linhas abaixo (2.4.3);
+//  · homologação: "NFS-e SEM VALIDADE JURÍDICA" em vermelho no cabeçalho — NÃO
+//    é marca d'água (observação do 2.4.3);
+//  · cancelada/substituída: marca d'água diagonal, mínimo 50 pt, cinza K35 (2.5);
+//  · títulos de bloco 7 pt negrito caixa alta; rótulos de campo 6 pt negrito;
+//    conteúdo 7 pt; linhas de 0,5 pt e borda de página de 1 pt (2.2.3/2.4);
+//  · sombreamento cinza 5% no cabeçalho, nos títulos de bloco e nos campos
+//    "Emitente da NFS-e" e "Valor Líquido" (2.2.3).
 //
-// Este documento não é a nota: o documento fiscal é o XML. O rodapé diz isso
-// porque quem recebe precisa saber o que guardar.
+// Onde há desvio consciente: a NT pede Arial (títulos) e Microsoft Sans Serif
+// (conteúdo). Nenhuma das duas é redistribuível; o react-pdf traz Helvetica,
+// metricamente compatível com Arial, que é o substituto usual. O bloco
+// "Canhoto" é opcional e foi suprimido (2.3.3).
 
 import { Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer'
 import type { DanfseDados } from './danfse-data'
-import { chaveFormatada } from './danfse-data'
+import { LOGO_NFSE } from './logo-nfse'
 
-const PRETO = '#111827'
-const CINZA = '#6b7280'
-const LINHA = '#9ca3af'
+const PRETO = '#000000'
+const LINHA = '#000000'
+const SOMBRA = '#f2f2f2'   // cinza 5%
+const CINZA_K35 = '#a6a6a6'
+const VERMELHO = '#e3000f' // M100/Y100
+
+// 1 cm = 28,3465 pt. A margem é 0,15 cm e o corpo começa 0,30 cm dentro dela.
+const cm = (v: number) => v * 28.3465
 
 const s = StyleSheet.create({
-  page: { paddingTop: 28, paddingBottom: 36, paddingHorizontal: 28, fontSize: 8, color: PRETO, fontFamily: 'Helvetica' },
+  page: {
+    paddingHorizontal: cm(0.15) + cm(0.3),
+    paddingTop: cm(0.3),
+    paddingBottom: cm(0.3),
+    fontSize: 7,
+    color: PRETO,
+    fontFamily: 'Helvetica',
+  },
+  // Borda de 1 pt em volta de todo o corpo impresso.
+  moldura: { borderWidth: 1, borderColor: LINHA, flexGrow: 1 },
 
-  moldura: { borderWidth: 1, borderColor: LINHA },
-  topo: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: LINHA },
-  topoQr: { width: 76, padding: 6, alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, borderRightColor: LINHA },
-  qr: { width: 62, height: 62 },
-  topoMeio: { flex: 1, padding: 8, justifyContent: 'center' },
-  topoTitulo: { fontSize: 13, fontFamily: 'Helvetica-Bold' },
-  topoSub: { fontSize: 7.5, color: CINZA, marginTop: 2 },
-  topoDir: { width: 150, padding: 8, borderLeftWidth: 1, borderLeftColor: LINHA },
+  cabecalho: { flexDirection: 'row', alignItems: 'center', backgroundColor: SOMBRA,
+               borderBottomWidth: 0.5, borderBottomColor: LINHA, minHeight: cm(1.16) },
+  cabLogo: { width: cm(4.6), paddingLeft: cm(0.19), justifyContent: 'center' },
+  logo: { width: cm(4.0) },
+  cabCentro: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 2 },
+  cabTitulo: { fontSize: 9, fontFamily: 'Helvetica-Bold' },
+  cabSemValidade: { fontSize: 9, fontFamily: 'Helvetica-Bold', color: VERMELHO, marginTop: 1 },
+  cabDir: { width: cm(5.09), paddingRight: cm(0.19), alignItems: 'flex-end', justifyContent: 'center' },
+  cabMunicipio: { fontSize: 8 },
+  cabAmbiente: { fontSize: 6 },
 
-  faixa: { backgroundColor: '#f3f4f6', paddingVertical: 2.5, paddingHorizontal: 6, borderBottomWidth: 1, borderBottomColor: LINHA, borderTopWidth: 1, borderTopColor: LINHA },
-  faixaTexto: { fontSize: 7, fontFamily: 'Helvetica-Bold', letterSpacing: 0.6, color: '#374151' },
+  // Grade: cada linha é uma faixa com divisória de 0,5 pt.
+  linha: { flexDirection: 'row', borderBottomWidth: 0.5, borderBottomColor: LINHA },
+  celula: { paddingHorizontal: 3, paddingVertical: 2, borderRightWidth: 0.5, borderRightColor: LINHA, minWidth: 0 },
+  celulaFim: { paddingHorizontal: 3, paddingVertical: 2, minWidth: 0 },
+  sombreada: { backgroundColor: SOMBRA },
 
-  corpo: { paddingHorizontal: 6, paddingVertical: 5 },
-  grade: { flexDirection: 'row', flexWrap: 'wrap' },
-  campo: { marginBottom: 4, paddingRight: 8 },
-  rotulo: { fontSize: 6.2, color: CINZA, letterSpacing: 0.4, marginBottom: 1 },
-  valor: { fontSize: 8.5 },
-  valorForte: { fontSize: 9, fontFamily: 'Helvetica-Bold' },
+  rotuloBloco: { fontSize: 7, fontFamily: 'Helvetica-Bold' },
+  rotulo: { fontSize: 6, fontFamily: 'Helvetica-Bold' },
+  valor: { fontSize: 7 },
 
-  chaveCaixa: { paddingHorizontal: 6, paddingVertical: 4, borderTopWidth: 1, borderTopColor: LINHA },
-  chave: { fontSize: 8.5, fontFamily: 'Helvetica-Bold', letterSpacing: 0.5 },
-
-  total: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 7, borderTopWidth: 1, borderTopColor: LINHA, backgroundColor: '#f9fafb' },
-  totalRotulo: { fontSize: 8.5, fontFamily: 'Helvetica-Bold' },
-  totalValor: { fontSize: 14, fontFamily: 'Helvetica-Bold' },
-
-  aviso: { marginTop: 10, borderWidth: 1, borderColor: '#b45309', backgroundColor: '#fffbeb', padding: 6 },
-  avisoTitulo: { fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#92400e' },
-  avisoTexto: { fontSize: 7.5, color: '#92400e', marginTop: 2 },
-
-  rodape: { position: 'absolute', bottom: 16, left: 28, right: 28, fontSize: 6.5, color: CINZA, textAlign: 'center', lineHeight: 1.4 },
+  qr: { width: cm(1.62), height: cm(1.62) },
+  qrLegenda: { fontSize: 6, textAlign: 'center', lineHeight: 1.15, paddingHorizontal: 2, paddingTop: 2 },
 
   marca: {
-    position: 'absolute', top: 300, left: 0, right: 0, textAlign: 'center',
-    fontSize: 42, fontFamily: 'Helvetica-Bold', color: '#dc2626', opacity: 0.16,
-    transform: 'rotate(-24deg)',
+    position: 'absolute', top: cm(12), left: 0, right: 0, textAlign: 'center',
+    fontSize: 54, fontFamily: 'Helvetica-Bold', color: CINZA_K35,
+    transform: 'rotate(-30deg)',
   },
 })
 
-function Campo({ rotulo, valor, largura = '100%' }: { rotulo: string; valor: string; largura?: string }) {
+/** Largura em fração do corpo de 20,40 cm, como a NT tabela os campos. */
+const larg = (cmLargura: number) => `${(cmLargura / 20.4) * 100}%`
+
+function Campo({ rotulo, valor, w, fim, sombreada }: {
+  rotulo: string; valor: string; w: number; fim?: boolean; sombreada?: boolean
+}) {
   return (
-    <View style={[s.campo, { width: largura }]}>
-      <Text style={s.rotulo}>{rotulo.toUpperCase()}</Text>
-      <Text style={s.valor}>{valor || '—'}</Text>
+    <View style={[fim ? s.celulaFim : s.celula, { width: larg(w) }, sombreada ? s.sombreada : {}]}>
+      <Text style={s.rotulo}>{rotulo}</Text>
+      <Text style={s.valor}>{valor || ' '}</Text>
     </View>
   )
 }
 
-function Secao({ titulo }: { titulo: string }) {
-  return <View style={s.faixa}><Text style={s.faixaTexto}>{titulo.toUpperCase()}</Text></View>
+/** Título do bloco: ocupa a primeira célula da linha, como no Anexo I. */
+function TituloBloco({ texto, w = 5.09 }: { texto: string; w?: number }) {
+  return (
+    <View style={[s.celula, s.sombreada, { width: larg(w), justifyContent: 'center' }]}>
+      <Text style={s.rotuloBloco}>{texto}</Text>
+    </View>
+  )
+}
+
+/** Bloco suprimido, com a frase exata que a NT manda imprimir no lugar (2.3). */
+function BlocoSuprimido({ texto }: { texto: string }) {
+  return (
+    <View style={s.linha}>
+      <View style={[s.celulaFim, s.sombreada, { width: '100%' }]}>
+        <Text style={s.rotuloBloco}>{texto}</Text>
+      </View>
+    </View>
+  )
 }
 
 export function DanfseDoc({ d, qrDataUrl }: { d: DanfseDados; qrDataUrl: string }) {
-  const teste = d.ambiente === '2'
-  // Uma marca d'água só, na ordem em que o fato manda: substituída diz mais que
-  // cancelada (a substituída foi cancelada POR outra nota), e teste manda em tudo.
-  const marca = teste ? 'SEM VALOR FISCAL'
-    : d.substituidaPor ? 'SUBSTITUÍDA'
-    : d.cancelada ? 'CANCELADA'
-    : ''
+  const homologacao = d.tpAmb === '2'
+  // Uma marca d'água só: substituída diz mais que cancelada, porque a
+  // substituída foi cancelada POR outra nota.
+  const marca = d.substituidaPor ? 'SUBSTITUÍDA' : d.cancelada ? 'CANCELADA' : ''
 
   return (
     <Document title={`DANFSe ${d.numero}`} author={d.prestador.nome}>
@@ -92,125 +130,171 @@ export function DanfseDoc({ d, qrDataUrl }: { d: DanfseDados; qrDataUrl: string 
         {marca ? <Text style={s.marca} fixed>{marca}</Text> : null}
 
         <View style={s.moldura}>
-          <View style={s.topo}>
-            <View style={s.topoQr}>
-              {/* NT 008: mínimo 1,52 cm (≈43pt). 62pt dá folga para leitura em papel. */}
+          {/* ── Cabeçalho (2.4.3) ───────────────────────────────────────── */}
+          <View style={s.cabecalho}>
+            <View style={s.cabLogo}><Image src={LOGO_NFSE} style={s.logo} /></View>
+            <View style={s.cabCentro}>
+              <Text style={s.cabTitulo}>DANFSe v2.0</Text>
+              <Text style={s.cabTitulo}>Documento Auxiliar da NFS-e</Text>
+              {homologacao && <Text style={s.cabSemValidade}>NFS-e SEM VALIDADE JURÍDICA</Text>}
+            </View>
+            <View style={s.cabDir}>
+              <Text style={s.cabMunicipio}>Município: {d.municipioEmitente}</Text>
+              <Text style={s.cabAmbiente}>{d.ambienteGerador}</Text>
+              <Text style={s.cabAmbiente}>{d.tipoAmbiente}</Text>
+            </View>
+          </View>
+
+          {/* ── Dados da NFS-e, com o QR Code à direita ──────────────────── */}
+          <View style={{ flexDirection: 'row', borderBottomWidth: 0.5, borderBottomColor: LINHA }}>
+            <View style={{ width: larg(15.3), borderRightWidth: 0.5, borderRightColor: LINHA }}>
+              <View style={s.linha}>
+                <Campo rotulo="CHAVE DE ACESSO DA NFS-e" valor={d.chave} w={15.3} fim />
+              </View>
+              <View style={s.linha}>
+                <Campo rotulo="NÚMERO DA NFS-e" valor={d.numero} w={5.09} />
+                <Campo rotulo="COMPETÊNCIA DA NFS-e" valor={d.competencia} w={5.09} />
+                <Campo rotulo="DATA E HORA DA EMISSÃO DA NFS-e" valor={d.emissaoNfse} w={5.09} fim />
+              </View>
+              <View style={s.linha}>
+                <Campo rotulo="NÚMERO DA DPS" valor={d.nDps} w={5.09} />
+                <Campo rotulo="SÉRIE DA DPS" valor={d.serie} w={5.09} />
+                <Campo rotulo="DATA E HORA DA EMISSÃO DA DPS" valor={d.emissaoDps} w={5.09} fim />
+              </View>
+              <View style={{ flexDirection: 'row' }}>
+                <Campo rotulo="EMITENTE DA NFS-e" valor={d.emitenteTipo} w={5.09} sombreada />
+                <Campo rotulo="SITUAÇÃO DA NFS-e" valor={d.situacao} w={5.09} />
+                <Campo rotulo="FINALIDADE" valor={d.finalidade} w={5.09} fim />
+              </View>
+            </View>
+            <View style={{ width: larg(5.09), alignItems: 'center', paddingVertical: 3 }}>
               <Image src={qrDataUrl} style={s.qr} />
-            </View>
-            <View style={s.topoMeio}>
-              <Text style={s.topoTitulo}>DANFSe</Text>
-              <Text style={s.topoSub}>Documento Auxiliar da Nota Fiscal de Serviço eletrônica</Text>
-              <Text style={s.topoSub}>Padrão Nacional · {d.servico.municipio}</Text>
-            </View>
-            <View style={s.topoDir}>
-              <Campo rotulo="NFS-e nº" valor={d.numero} />
-              <Campo rotulo="Emitida em" valor={d.emitidoEm} />
-              <Campo rotulo="Competência" valor={d.competencia} />
+              <Text style={s.qrLegenda}>
+                A autenticidade desta NFS-e pode ser verificada pela leitura deste código QR
+                ou pela consulta da chave de acesso no portal nacional da NFS-e
+              </Text>
             </View>
           </View>
 
-          <View style={s.chaveCaixa}>
-            <Text style={s.rotulo}>CHAVE DE ACESSO</Text>
-            <Text style={s.chave}>{chaveFormatada(d.chave)}</Text>
+          {/* ── Prestador ───────────────────────────────────────────────── */}
+          <View style={s.linha}>
+            <TituloBloco texto="PRESTADOR / FORNECEDOR" />
+            <Campo rotulo="CNPJ / CPF / NIF" valor={d.prestador.documento} w={5.09} />
+            <Campo rotulo="Indicador Municipal (Inscrição)" valor={d.prestador.inscricaoMunicipal} w={5.09} />
+            <Campo rotulo="Telefone" valor={d.prestador.fone} w={5.09} fim />
+          </View>
+          <View style={s.linha}>
+            <Campo rotulo="Nome / Nome Empresarial" valor={d.prestador.nome} w={10.19} />
+            <Campo rotulo="Município / Sigla UF" valor={d.prestador.municipio} w={5.09} />
+            <Campo rotulo="Código IBGE / CEP" valor={d.prestador.ibgeCep} w={5.09} fim />
+          </View>
+          <View style={s.linha}>
+            <Campo rotulo="Endereço" valor={d.prestador.endereco} w={10.19} />
+            <Campo rotulo="E-mail" valor={d.prestador.email} w={10.19} fim />
+          </View>
+          <View style={s.linha}>
+            <Campo rotulo="Simples Nacional na Data de Competência" valor={d.prestador.simples} w={10.19} />
+            <Campo rotulo="Regime de Apuração Tributária pelo SN" valor={d.prestador.regimeSN} w={10.19} fim />
           </View>
 
-          <Secao titulo="Prestador de serviços" />
-          <View style={s.corpo}>
-            <View style={s.grade}>
-              <Campo rotulo="Razão social" valor={d.prestador.nome} largura="64%" />
-              <Campo rotulo="CNPJ" valor={cnpj(d.prestador.cnpj)} largura="36%" />
-              <Campo rotulo="Endereço" valor={d.prestador.endereco} largura="64%" />
-              <Campo rotulo="Município" valor={d.prestador.municipio} largura="22%" />
-              <Campo rotulo="Telefone" valor={fone(d.prestador.fone)} largura="14%" />
+          {/* ── Tomador ─────────────────────────────────────────────────── */}
+          {d.tomador ? (
+            <>
+              <View style={s.linha}>
+                <TituloBloco texto="TOMADOR / ADQUIRENTE" />
+                <Campo rotulo="CNPJ / CPF / NIF" valor={d.tomador.documento} w={5.09} />
+                <Campo rotulo="Indicador Municipal (Inscrição)" valor={d.tomador.inscricaoMunicipal} w={5.09} />
+                <Campo rotulo="Telefone" valor={d.tomador.fone} w={5.09} fim />
+              </View>
+              <View style={s.linha}>
+                <Campo rotulo="Nome / Nome Empresarial" valor={d.tomador.nome} w={10.19} />
+                <Campo rotulo="Município / Sigla UF" valor={d.tomador.municipio} w={5.09} />
+                <Campo rotulo="Código IBGE / CEP" valor={d.tomador.ibgeCep} w={5.09} fim />
+              </View>
+              <View style={s.linha}>
+                <Campo rotulo="Endereço" valor={d.tomador.endereco} w={10.19} />
+                <Campo rotulo="E-mail" valor={d.tomador.email} w={10.19} fim />
+              </View>
+            </>
+          ) : (
+            <BlocoSuprimido texto="TOMADOR/ADQUIRENTE DA OPERAÇÃO NÃO IDENTIFICADO NA NFS-e" />
+          )}
+
+          {/* Suprimidos conforme 2.3.1 e 2.3.2, com a frase exata da NT. */}
+          <BlocoSuprimido texto="O DESTINATÁRIO É O PRÓPRIO TOMADOR/ADQUIRENTE DA OPERAÇÃO" />
+          <BlocoSuprimido texto="INTERMEDIÁRIO DA OPERAÇÃO NÃO IDENTIFICADO NA NFS-e" />
+
+          {/* ── Serviço prestado ────────────────────────────────────────── */}
+          <View style={s.linha}>
+            <TituloBloco texto="SERVIÇO PRESTADO" />
+            <Campo rotulo="Local da Prestação / Sigla UF" valor={d.servico.local} w={5.09} />
+            <Campo
+              rotulo="Código de Tributação Nacional / Descrição"
+              valor={[d.servico.codigo, d.servico.descricaoCodigo].filter(Boolean).join(' — ')}
+              w={10.19} fim
+            />
+          </View>
+          <View style={s.linha}>
+            <Campo rotulo="Descrição do Serviço" valor={d.servico.descricao} w={20.4} fim />
+          </View>
+
+          {/* ── Tributação municipal (ISSQN) ────────────────────────────── */}
+          {d.issqn ? (
+            <>
+              <View style={s.linha}>
+                <TituloBloco texto="TRIBUTAÇÃO MUNICIPAL (ISSQN)" />
+                <Campo rotulo="Tipo de Tributação do ISSQN" valor={d.issqn.tipoTributacao} w={5.09} />
+                <Campo rotulo="Município de Incidência do ISSQN" valor={d.issqn.municipioIncidencia} w={5.09} />
+                <Campo rotulo="Regime Especial de Tributação" valor={d.issqn.regimeEspecial} w={5.09} fim />
+              </View>
+              <View style={s.linha}>
+                <Campo rotulo="BC ISSQN" valor={d.issqn.bc} w={6.8} />
+                <Campo rotulo="Retenção do ISSQN" valor={d.issqn.retencao} w={6.8} />
+                <Campo rotulo="ISSQN Apurado" valor={d.issqn.apurado} w={6.8} fim />
+              </View>
+            </>
+          ) : (
+            <BlocoSuprimido texto="TRIBUTAÇÃO MUNICIPAL (ISSQN) - OPERAÇÃO NÃO SUJEITA AO ISSQN" />
+          )}
+
+          {/* ── Tributação federal ──────────────────────────────────────── */}
+          <View style={s.linha}>
+            <TituloBloco texto="TRIBUTAÇÃO FEDERAL" />
+            <Campo rotulo="PIS" valor={d.federal.pis} w={3.82} />
+            <Campo rotulo="COFINS" valor={d.federal.cofins} w={3.82} />
+            <Campo rotulo="IRRF" valor={d.federal.irrf} w={3.82} />
+            <Campo rotulo="CSLL" valor={d.federal.csll} w={3.82} fim />
+          </View>
+
+          {/* ── IBS / CBS ───────────────────────────────────────────────── */}
+          <View style={s.linha}>
+            <TituloBloco texto="TRIBUTAÇÃO IBS / CBS" />
+            <Campo
+              rotulo="Situação"
+              valor={d.ibsCbs || 'Não informado — optante do Simples Nacional (exigível a partir de 01/2027)'}
+              w={15.31} fim
+            />
+          </View>
+
+          {/* ── Valor total ─────────────────────────────────────────────── */}
+          <View style={s.linha}>
+            <Campo rotulo="VALOR LÍQUIDO DA NFS-e + IBS/CBS" valor={d.total} w={20.4} fim sombreada />
+          </View>
+
+          {/* ── Informações complementares ──────────────────────────────── */}
+          <View style={{ flexDirection: 'row', flexGrow: 1 }}>
+            <View style={[s.celulaFim, { width: '100%', minHeight: cm(1.4) }]}>
+              <Text style={s.rotulo}>INFORMAÇÕES COMPLEMENTARES</Text>
+              <Text style={s.valor}>{d.complementares}</Text>
+              {d.substituidaPor
+                ? <Text style={s.valor}>NFS-e substituída pela chave {d.substituidaPor}.</Text>
+                : d.cancelada
+                  ? <Text style={s.valor}>NFS-e cancelada. {d.motivoCancelamento}</Text>
+                  : null}
             </View>
-          </View>
-
-          <Secao titulo="Tomador de serviços" />
-          <View style={s.corpo}>
-            <View style={s.grade}>
-              <Campo rotulo="Razão social" valor={d.tomador.nome} largura="64%" />
-              <Campo rotulo="CNPJ" valor={cnpj(d.tomador.cnpj)} largura="36%" />
-            </View>
-          </View>
-
-          <Secao titulo="Serviço prestado" />
-          <View style={s.corpo}>
-            <View style={s.grade}>
-              <Campo rotulo="Cód. tributação nacional" valor={d.servico.codigo} largura="26%" />
-              <Campo rotulo="Descrição do código" valor={d.servico.descricaoNacional} largura="74%" />
-            </View>
-            <View style={s.campo}>
-              <Text style={s.rotulo}>DISCRIMINAÇÃO DO SERVIÇO</Text>
-              <Text style={s.valor}>{d.servico.descricao || '—'}</Text>
-            </View>
-            <Campo rotulo="Município de incidência do ISSQN" valor={d.servico.municipio} largura="50%" />
-          </View>
-
-          <Secao titulo="Tributos" />
-          <View style={s.corpo}>
-            <View style={s.grade}>
-              <Campo rotulo="ISSQN" valor={d.issqn.tributacao} largura="28%" />
-              <Campo rotulo="Retenção do ISSQN" valor={d.issqn.retencao} largura="28%" />
-              <Campo rotulo="Tributos (Simples Nacional)" valor={d.valores.percTributos ? `${d.valores.percTributos.replace('.', ',')}%` : '—'} largura="22%" />
-              <Campo rotulo="Valor aproximado" valor={d.valores.tributos} largura="22%" />
-              {/* A NT 008 criou bloco próprio para IBS e CBS. Optante do Simples
-                  só informa o grupo a partir de 01/2027 — dizer isso é melhor que
-                  deixar o quadro mudo e parecer esquecimento. */}
-              <Campo
-                rotulo="IBS / CBS"
-                valor={d.ibsCbs || 'Não aplicável — optante do Simples Nacional'}
-                largura="100%"
-              />
-            </View>
-          </View>
-
-          <View style={s.total}>
-            <Text style={s.totalRotulo}>VALOR TOTAL DA NFS-e</Text>
-            <Text style={s.totalValor}>{d.valores.liquido || d.valores.servico}</Text>
-          </View>
-
-          <Secao titulo="Informações complementares" />
-          <View style={s.corpo}>
-            <Text style={{ fontSize: 7.2, color: CINZA, lineHeight: 1.45 }}>
-              Série {d.serie} · DPS nº {d.nDps}{d.nDfse ? ` · Documento municipal nº ${d.nDfse}` : ''}.
-              {d.valores.percTributos
-                ? ` Valor aproximado dos tributos: ${d.valores.tributos} (${d.valores.percTributos.replace('.', ',')}%), conforme Lei 12.741/2012.`
-                : ''}
-            </Text>
           </View>
         </View>
-
-        {teste && (
-          <View style={s.aviso}>
-            <Text style={s.avisoTitulo}>Nota emitida em ambiente de teste</Text>
-            <Text style={s.avisoTexto}>
-              Documento gerado na produção restrita da Receita. Não tem valor fiscal e não serve para cobrança.
-            </Text>
-          </View>
-        )}
-        {!teste && d.substituidaPor && (
-          <View style={s.aviso}>
-            <Text style={s.avisoTitulo}>Nota substituída</Text>
-            <Text style={s.avisoTexto}>Substituída pela NFS-e de chave {chaveFormatada(d.substituidaPor)}.</Text>
-          </View>
-        )}
-        {!teste && !d.substituidaPor && d.cancelada && (
-          <View style={s.aviso}>
-            <Text style={s.avisoTitulo}>Nota cancelada</Text>
-            <Text style={s.avisoTexto}>{d.motivoCancelamento || 'Cancelada junto à Receita.'}</Text>
-          </View>
-        )}
-
-        <Text style={s.rodape} fixed>
-          Documento auxiliar, sem valor fiscal. O documento fiscal é o XML da NFS-e, guardado pelo emitente.{'\n'}
-          Confira a autenticidade em nfse.gov.br/consultapublica com a chave de acesso acima.
-        </Text>
       </Page>
     </Document>
   )
 }
-
-const cnpj = (v: string) =>
-  v && v.length === 14 ? v.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : v
-const fone = (v: string) =>
-  v && v.length >= 10 ? v.replace(/^(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3') : v
