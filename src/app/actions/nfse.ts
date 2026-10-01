@@ -233,6 +233,7 @@ export async function emitirNota(orgSlug: string, lancamentoId: string): Promise
       tomador_nome: cli?.legal_name || cli?.name || null,
       tomador_cnpj: cnpjTomador,
       xml_gz_b64: resp.nfseXmlGZipB64 ?? null,
+      dps_gz_b64: empacotar(assinado),
       emitido_por: user.id,
     }).select('id, chave, numero, serie, status, ambiente, valor, emitido_em').single()
     if (eIns) return { error: `Nota emitida na Receita, mas falhou ao gravar no Flow: ${eIns.message}. Chave ${resp.chaveAcesso}` }
@@ -253,4 +254,81 @@ export async function emitirNota(orgSlug: string, lancamentoId: string): Promise
     try { await logSystemError(supabase, { userId: user.id, context: 'fiscal:nfse', error }) } catch { /* best-effort */ }
     return { error: 'Falha ao emitir a nota. O time técnico foi avisado.' }
   }
+}
+
+export interface LinhaConferencia {
+  campo: string
+  /** O que o Flow pediu (DPS). */
+  pedido: string
+  /** O que a Receita registrou (NFS-e autorizada). */
+  registrado: string
+  /** false = pedido e registrado divergem; null = não dá para comparar. */
+  bate: boolean | null
+  /** Explica o que a divergência significa. */
+  nota?: string
+}
+
+const tag = (xml: string, t: string): string => {
+  const m = new RegExp(`<${t}>([^<]*)</${t}>`).exec(xml)
+  return m ? m[1].trim() : ''
+}
+const dinheiro = (v: string) => (v ? Number(v).toFixed(2) : '')
+
+/**
+ * Conferência da nota campo a campo: o que o Flow PEDIU × o que a Receita
+ * REGISTROU. Divergência entre os dois é bug do gerador — e numa nota fiscal
+ * "deu 201" não é prova de que saiu certo, só de que foi aceita.
+ */
+export async function conferirNota(orgSlug: string, notaId: string): Promise<{ linhas?: LinhaConferencia[]; error?: string }> {
+  const { supabase } = await assertFinanceAccess(orgSlug)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (supabase as any).from('nota_fiscal')
+    .select('chave, numero, serie, valor, tomador_cnpj, tomador_nome, xml_gz_b64, dps_gz_b64, ambiente')
+    .eq('id', notaId).maybeSingle()
+  if (!data) return { error: 'Nota não encontrada.' }
+
+  let nfse = '', dps = ''
+  try { nfse = data.xml_gz_b64 ? desempacotar(data.xml_gz_b64) : '' } catch { /* segue sem */ }
+  try { dps = data.dps_gz_b64 ? desempacotar(data.dps_gz_b64) : '' } catch { /* segue sem */ }
+  if (!nfse) return { error: 'O XML autorizado não foi guardado para esta nota.' }
+
+  // O XML da NFS-e repete tags do prestador e do tomador; o recorte evita
+  // comparar o CNPJ do tomador com o do prestador e dizer que "não bate".
+  const trecho = (xml: string, abre: string) => {
+    const i = xml.indexOf(`<${abre}>`)
+    if (i < 0) return ''
+    const f = xml.indexOf(`</${abre}>`, i)
+    return f < 0 ? '' : xml.slice(i, f)
+  }
+  const dpsToma = trecho(dps, 'toma'), nfseToma = trecho(nfse, 'toma')
+  const dpsServ = trecho(dps, 'serv'), nfseServ = trecho(nfse, 'serv')
+
+  const linha = (campo: string, pedido: string, registrado: string, nota?: string): LinhaConferencia => ({
+    campo, pedido, registrado,
+    bate: !pedido && !registrado ? null : pedido === registrado,
+    nota,
+  })
+
+  const linhas: LinhaConferencia[] = [
+    linha('Chave de acesso', '', data.chave || '', 'A Receita é quem gera — não há o que comparar.'),
+    linha('Número da NFS-e', '', tag(nfse, 'nNFSe'), 'Numeração é da Receita; a nossa é a da DPS.'),
+    linha('Número da DPS', tag(dps, 'nDPS'), tag(nfse, 'nDPS')),
+    linha('Série', tag(dps, 'serie'), tag(nfse, 'serie')),
+    linha('CNPJ do tomador', tag(dpsToma, 'CNPJ'), tag(nfseToma, 'CNPJ')),
+    linha('Nome do tomador', tag(dpsToma, 'xNome'), tag(nfseToma, 'xNome')),
+    linha('Código do serviço', tag(dpsServ, 'cTribNac'), tag(nfseServ, 'cTribNac')),
+    linha('Descrição', tag(dpsServ, 'xDescServ'), tag(nfseServ, 'xDescServ')),
+    linha('Valor do serviço', dinheiro(tag(dps, 'vServ')), dinheiro(tag(nfse, 'vServ'))),
+    linha('Competência', tag(dps, 'dCompet'), tag(nfse, 'dCompet')),
+    linha('Município de prestação', tag(dps, 'cLocPrestacao'), tag(nfse, 'cLocPrestacao')),
+    linha('Opção Simples', tag(dps, 'opSimpNac'), tag(nfse, 'opSimpNac'), '3 = ME/EPP optante.'),
+    linha('% total de tributos', tag(dps, 'pTotTribSN'), tag(nfse, 'pTotTribSN')),
+    linha('Ambiente', data.ambiente === 'producao' ? 'produção' : 'produção restrita',
+          tag(nfse, 'tpAmb') === '1' ? 'produção' : tag(nfse, 'tpAmb') === '2' ? 'produção restrita' : '',
+          'Restrita = nota de teste, sem valor fiscal.'),
+  ]
+  if (!dps) {
+    return { linhas: linhas.map(l => ({ ...l, pedido: '', bate: null, nota: l.nota ?? 'DPS não guardada (nota emitida antes desta tela).' })) }
+  }
+  return { linhas }
 }

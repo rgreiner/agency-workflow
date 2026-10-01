@@ -2,12 +2,12 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, FileText, ReceiptText, AlertTriangle, Copy, Check } from 'lucide-react'
+import { Loader2, FileText, ReceiptText, AlertTriangle, Copy, Check, X, Minus, ClipboardCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { formatBRL } from '@/lib/midia'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { emitirNota, type NotaDoLancamento } from '@/app/actions/nfse'
+import { emitirNota, conferirNota, type NotaDoLancamento, type LinhaConferencia } from '@/app/actions/nfse'
 
 /**
  * Emissão de NFS-e a partir do lançamento a receber (migs. 309/313).
@@ -104,6 +104,7 @@ export function NotaFiscalBloco({ orgSlug, lancamentoId, nota, valor, cliente, o
             {copiado ? <Check className="w-3 h-3 shrink-0 text-emerald-600" /> : <Copy className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />}
             {nota.chave}
           </button>
+          <Conferencia orgSlug={orgSlug} notaId={nota.id} />
         </div>
       ) : (
         <p className="text-xs text-gray-500 py-1">
@@ -162,4 +163,82 @@ function DialogoEmitir({ orgSlug, lancamentoId, valor, cliente, onFechar, onEmit
 /** Indicador de carregamento das notas, usado enquanto o mapa não chegou. */
 export function NotaCarregando() {
   return <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-300 inline" />
+}
+
+/**
+ * Conferência campo a campo: o que o Flow PEDIU na DPS × o que a Receita
+ * REGISTROU na nota autorizada.
+ *
+ * "Deu 201" prova que a nota foi aceita, não que saiu certa. Na primeira emissão
+ * real é isto que se olha — e depois, sempre que algo cheirar errado.
+ */
+function Conferencia({ orgSlug, notaId }: { orgSlug: string; notaId: string }) {
+  const [aberto, setAberto] = useState(false)
+  const [linhas, setLinhas] = useState<LinhaConferencia[] | null>(null)
+  const [carregando, setCarregando] = useState(false)
+
+  async function abrir() {
+    setAberto(a => !a)
+    if (linhas || carregando) return
+    setCarregando(true)
+    try {
+      const r = await conferirNota(orgSlug, notaId)
+      if (r.error) { toast.error(r.error); setAberto(false); return }
+      setLinhas(r.linhas ?? [])
+    } finally {
+      setCarregando(false)
+    }
+  }
+
+  const divergem = (linhas ?? []).filter(l => l.bate === false).length
+
+  return (
+    <div className="pt-1">
+      <button type="button" onClick={abrir}
+        className="press inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-500 hover:text-gray-800 transition-colors">
+        {carregando ? <Loader2 className="w-3 h-3 animate-spin" /> : <ClipboardCheck className="w-3 h-3" />}
+        {aberto ? 'Fechar conferência' : 'Conferir campo a campo'}
+        {linhas && divergem > 0 && (
+          <span className="rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-800">{divergem}</span>
+        )}
+      </button>
+
+      {aberto && linhas && (
+        <div className="mt-2 overflow-x-auto rounded-lg border border-gray-200 bg-white">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50 text-gray-500">
+                <th className="text-left font-medium px-2.5 py-1.5">Campo</th>
+                <th className="text-left font-medium px-2.5 py-1.5">Flow pediu</th>
+                <th className="text-left font-medium px-2.5 py-1.5">Receita registrou</th>
+                <th className="w-8" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {linhas.map(l => (
+                <tr key={l.campo} className={cn(l.bate === false && 'bg-amber-50')}>
+                  <td className="px-2.5 py-1.5 text-gray-600 align-top whitespace-nowrap">
+                    {l.campo}
+                    {l.nota && <span className="block text-[10px] text-gray-400 font-normal">{l.nota}</span>}
+                  </td>
+                  <td className="px-2.5 py-1.5 text-gray-700 align-top break-all">{l.pedido || <span className="text-gray-300">—</span>}</td>
+                  <td className="px-2.5 py-1.5 text-gray-900 align-top break-all">{l.registrado || <span className="text-gray-300">—</span>}</td>
+                  <td className="px-2.5 py-1.5 align-top">
+                    {l.bate === true ? <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      : l.bate === false ? <X className="w-3.5 h-3.5 text-amber-600" />
+                      : <Minus className="w-3.5 h-3.5 text-gray-300" />}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="px-2.5 py-2 text-[10px] text-gray-500 border-t border-gray-100">
+            {divergem === 0
+              ? 'Tudo que o Flow pediu foi registrado igual.'
+              : `${divergem} campo(s) divergem — a Receita registrou diferente do que foi enviado. Confira antes de emitir a próxima.`}
+          </p>
+        </div>
+      )}
+    </div>
+  )
 }
