@@ -287,7 +287,7 @@ function DadosDaNota({ orgSlug, inicial }: { orgSlug: string; inicial: ConfigNfs
             className={cn(campo, faltaPerc && 'bg-amber-50 border-amber-200')} />
         </Campo>
         <Campo id="nf-aliq" rotulo="Alíquota do ISSQN (%)"
-          dica="Vazio = não informar, e a nota sai com ISSQN zerado. A Receita só fornece a alíquota sozinha quando o município está parametrizado no Sistema Nacional; Cascavel manteve emissor próprio e devolveu zero. As notas da prefeitura usavam 4,31%. Preencher muda o que é declarado ao fisco municipal — peça orientação à contabilidade.">
+          dica="DEIXAR VAZIO. A contabilidade confirmou em 01/10/2026 que o ISS da casa é recolhido dentro do DAS — é o que `regApTribSN = 1` declara na nota. Destacar ISSQN apurado contradiria esse regime e sugeriria um débito municipal que não existe. Só preencher se o enquadramento mudar, e com orientação da contabilidade.">
           <input id="nf-aliq" value={f.aliqIssqn} onChange={e => setF({ ...f, aliqIssqn: e.target.value })} inputMode="decimal" placeholder="ex.: 4,31" className={campo} />
         </Campo>
         <Campo id="nf-desc" rotulo="Descrição padrão" dica="Usada quando o lançamento não tem descrição">
