@@ -1,5 +1,5 @@
 import 'server-only'
-import type { DriveAsset } from '@/lib/google-drive'
+import type { PecasParaRevisao, PecaRevisao } from '@/lib/google-drive'
 import type { IAPart } from './gemini'
 import { iaDisponivel, iaJson } from './provedor'
 import type { RevisaoConfig } from './revisao-config'
@@ -25,6 +25,10 @@ export interface ReviewResult {
   errors: ReviewError[]
   /** Entrada foi cortada por exceder o limite enviado ao modelo. */
   truncated: boolean
+  /** Peças que ficaram de fora (nome + motivo) — a tela avisa. */
+  naoLidas?: string[]
+  /** Em quantas partes as peças foram revisadas (1 = de uma vez). */
+  partes?: number
 }
 
 /** O que a tarefa pediu: briefing + comentários recentes (texto puro). */
@@ -188,18 +192,92 @@ export async function reviewTextAlteracoes(
   return { model, errors, truncated, parcial: true }
 }
 
+// ── Peças em lotes ──────────────────────────────────────────────────────────
+
+// Um lote cabe com folga no pedido do Gemini (~20 MB) e do Claude (32 MB), já com
+// o base64 (+33%). Peças em ordem de nome: Carrossel 1, 2… tendem a cair juntas.
+const LOTE_MAX_PECAS = 10
+const LOTE_MAX_BYTES = 12 * 1024 * 1024
+// Lotes simultâneos: rápido sem estourar memória (cada lote baixa só as suas peças).
+const LOTES_EM_PARALELO = 2
+
+function montarLotes(pecas: PecaRevisao[]): PecaRevisao[][] {
+  const lotes: PecaRevisao[][] = []
+  let atual: PecaRevisao[] = []
+  let bytes = 0
+  for (const p of pecas) {
+    if (atual.length && (atual.length >= LOTE_MAX_PECAS || bytes + p.bytes > LOTE_MAX_BYTES)) {
+      lotes.push(atual); atual = []; bytes = 0
+    }
+    atual.push(p); bytes += p.bytes
+  }
+  if (atual.length) lotes.push(atual)
+  return lotes
+}
+
+const AVISO_PARTE = (k: number, n: number, nomes: string[]) => `PARTE ${k} DE ${n} DAS PEÇAS. O material tem ${nomes.length} peças (lista abaixo); você recebe só as desta parte — as outras são revisadas em separado.
+- Revise apenas as peças desta parte.
+- NÃO aponte peça faltando nem trecho do texto aprovado ausente: pode estar em outra parte (isso é conferido no conjunto).
+- Pendência só se dá para verificar NAS PEÇAS DESTA PARTE.
+Peças do material: ${nomes.join(' · ')}`
+
+// Conferência do CONJUNTO (só texto): com o material em partes, nenhuma parte vê
+// tudo — "peça prevista que não veio" é decidido aqui, pela lista de arquivos.
+const SYSTEM_CONJUNTO = `Você confere se as peças PREVISTAS no texto aprovado pela Redação existem no material.
+Você recebe o texto aprovado e a LISTA DE ARQUIVOS da pasta de peças (não as imagens).
+Aponte em "erros" SÓ a peça/página prevista que claramente NÃO tem nenhum arquivo correspondente
+na lista: "trecho" = a peça prevista, "correcao" = "Não há arquivo desta peça na pasta.".
+Nomes de arquivo variam ("Card 1", "Carrossel 1 - Card 1", "post1"): na dúvida, NÃO aponte.
+"pendencias" sempre vazia.`
+
 /**
- * Revisão das peças (Design/Finalização). Com o texto aprovado da Redação, a
- * mesma chamada também confere se a peça usou o texto certo.
+ * Revisão das peças (Design/Finalização), em PARTES quando o material é grande
+ * (pedido do Rafael, 02/10/2026: revisar tudo, 1/3, 2/3, 3/3 — e nunca reduzir a
+ * imagem). Com o texto aprovado da Redação, cada parte confere o texto das suas
+ * peças e uma conferência final de conjunto aponta peça prevista que não veio.
  */
-export async function reviewArtwork(cfg: RevisaoConfig, assets: DriveAsset[], textoAprovado?: string, ctx?: ContextoRevisao | null): Promise<ReviewResult> {
+export async function reviewArtwork(cfg: RevisaoConfig, material: PecasParaRevisao, textoAprovado?: string, ctx?: ContextoRevisao | null): Promise<ReviewResult> {
   const { texto, truncated } = cortar(textoAprovado ?? '')
-  const parts: IAPart[] = [...blocoContexto(ctx)]
-  if (texto) parts.push({ kind: 'text', text: `TEXTO APROVADO PELA REDAÇÃO:\n--- INÍCIO ---\n${texto}\n--- FIM ---` })
-  parts.push({ kind: 'text', text: 'MATERIAL A REVISAR (peças):' })
-  for (const a of assets) parts.push({ kind: 'media', mimeType: a.mimeType, base64: a.base64 })
-  const { model, list } = await run(cfg, texto ? SYSTEM_PECAS_COM_TEXTO : SYSTEM_PECAS, parts)
-  return { model, errors: list, truncated }
+  const nomes = material.pecas.map(p => p.name)
+  const lotes = montarLotes(material.pecas)
+  const n = lotes.length
+  const system = texto ? SYSTEM_PECAS_COM_TEXTO : SYSTEM_PECAS
+
+  const revisarLote = async (lote: PecaRevisao[], k: number) => {
+    const parts: IAPart[] = [...blocoContexto(ctx)]
+    if (texto) parts.push({ kind: 'text', text: `TEXTO APROVADO PELA REDAÇÃO:\n--- INÍCIO ---\n${texto}\n--- FIM ---` })
+    if (n > 1) parts.push({ kind: 'text', text: AVISO_PARTE(k, n, nomes) })
+    parts.push({ kind: 'text', text: `MATERIAL A REVISAR (peças${n > 1 ? ` da parte ${k}` : ''}):` })
+    for (const p of lote) {
+      parts.push({ kind: 'text', text: `Peça: ${p.name}` })
+      parts.push({ kind: 'media', mimeType: p.mimeType, base64: await p.carregar() })
+    }
+    return run(cfg, system, parts)
+  }
+
+  const resultados: { model: string; list: ReviewError[] }[] = new Array(n)
+  for (let i = 0; i < n; i += LOTES_EM_PARALELO) {
+    const fatia = lotes.slice(i, i + LOTES_EM_PARALELO)
+    const r = await Promise.all(fatia.map((lote, j) => revisarLote(lote, i + j + 1)))
+    r.forEach((x, j) => { resultados[i + j] = x })
+  }
+
+  let lista = resultados.flatMap(r => r.list)
+  if (n > 1 && texto) {
+    const conj = await run(cfg, SYSTEM_CONJUNTO, [
+      { kind: 'text', text: `TEXTO APROVADO PELA REDAÇÃO:\n--- INÍCIO ---\n${texto}\n--- FIM ---` },
+      { kind: 'text', text: `ARQUIVOS NA PASTA DE PEÇAS:\n${nomes.join('\n')}` },
+    ])
+    lista = [...lista, ...conj.list.filter(e => e.tipo !== 'pendencia')]
+  }
+  // Partes diferentes podem achar o mesmo erro (texto repetido em peças de lotes distintos).
+  const vistos = new Set<string>()
+  const errors = lista.filter(e => {
+    const chave = `${e.tipo ?? ''}|${e.trecho.toLowerCase()}|${e.correcao.toLowerCase()}`
+    if (vistos.has(chave)) return false
+    vistos.add(chave); return true
+  })
+  return { model: resultados[0]?.model ?? '—', errors, truncated, naoLidas: material.naoLidas, partes: n }
 }
 
 // ── Execução ────────────────────────────────────────────────────────────────

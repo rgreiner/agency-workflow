@@ -8,7 +8,7 @@ import { after } from 'next/server'
 import { dispatchPushNotificacoes } from '@/lib/push'
 import { provisionActivitiesDrive, moveActivityDrive, regenerateActivityDrive, renameActivityDrive, relinkActivityDrive, syncFolderNameAfterTitleChange } from '@/lib/drive-provision'
 import { ultimoSegmento, isSubpastaTarefa } from '@/lib/task-folder-names'
-import { revisarAtividade, checarAvanco, revisoesDaTarefa, salvarRevisao, etapasComMudanca, posicaoNaOrg } from '@/lib/review-gate'
+import { revisarAtividade, checarAvanco, revisoesDaTarefa, salvarRevisao, etapasComMudanca, posicaoNaOrg, registrarHistorico } from '@/lib/review-gate'
 import { etapaRevisavel, type RevisaoEtapa } from '@/lib/ai/revisao-modelos'
 import { lerRevisaoConfig } from '@/lib/ai/revisao-config'
 import { mensagemErroRevisao } from '@/lib/ai/review'
@@ -636,7 +636,7 @@ export async function toggleCommentReaction(path: string, commentId: string, emo
  * com a impressão digital do material — sem comentário, o painel já mostra.
  */
 export async function revisarTarefa(path: string, activityId: string, etapaAlvo?: RevisaoEtapa): Promise<
-  | { ok: true; errors: { trecho: string; correcao: string; tipo?: string }[]; model: string; truncated: boolean; parcial: boolean }
+  | { ok: true; errors: { trecho: string; correcao: string; tipo?: string }[]; model: string; truncated: boolean; parcial: boolean; naoLidas: string[]; partes: number }
   | { ok: false; aviso: string }
   | { error: string }
 > {
@@ -664,6 +664,7 @@ export async function revisarTarefa(path: string, activityId: string, etapaAlvo?
     // Sem material para revisar (pasta vazia, Doc vazio) conta como revisado.
     if (!out.ok) {
       await salvarRevisao(supabase, activityId, user.id, etapa, { status: 'vazio', apontamentos: null, fonte: out.fonte, texto: null })
+      await registrarHistorico(supabase, activityId, user.id, etapa, { evento: 'revisao', status: 'vazio' })
       revalidatePath(path)
       return { ok: false, aviso: out.vazio }
     }
@@ -671,14 +672,19 @@ export async function revisarTarefa(path: string, activityId: string, etapaAlvo?
       status: out.errors.length ? 'errors' : 'clean', apontamentos: out.errors.length ? out.errors : null,
       fonte: out.fonte, texto: out.texto,
     })
+    await registrarHistorico(supabase, activityId, user.id, etapa, {
+      evento: 'revisao', status: out.errors.length ? 'errors' : 'clean', apontamentos: out.errors,
+      modelo: out.model, parcial: out.parcial, partes: out.partes ?? null, naoLidas: out.naoLidas ?? null,
+    })
     revalidatePath(path)
-    return { ok: true, errors: out.errors, model: out.model, truncated: out.truncated, parcial: out.parcial }
+    return { ok: true, errors: out.errors, model: out.model, truncated: out.truncated, parcial: out.parcial, naoLidas: out.naoLidas ?? [], partes: out.partes ?? 1 }
   } catch (e) {
     console.error('[revisao] falhou', e)
     await logSystemError(supabase, { userId: user.id, context: `review:${etapa}`, error: e, activityId })
     // Falha da IA não prende a tarefa: para avançar, a pessoa confirma que segue sem.
     // Mantém a impressão digital/texto anteriores (a próxima tentativa compara com eles).
     await salvarRevisao(supabase, activityId, user.id, etapa, { status: 'failed', apontamentos: null }).catch(() => {})
+    await registrarHistorico(supabase, activityId, user.id, etapa, { evento: 'revisao', status: 'failed' }).catch(() => {})
     revalidatePath(path)
     return { error: mensagemErroRevisao(e, cfg.provider) }
   }

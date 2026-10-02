@@ -1,9 +1,9 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
-import { driveConfigured, readRedacaoText, readReviewAssets, versoesRedacao, versoesPecas, type VersaoArquivo } from '@/lib/google-drive'
+import { driveConfigured, readRedacaoText, listarPecasRevisao, versoesRedacao, versoesPecas, type VersaoArquivo } from '@/lib/google-drive'
 import { backendForRef } from '@/lib/task-folders'
-import { readReviewAssetsS3, versoesPecasS3 } from '@/lib/s3-folders'
+import { listarPecasRevisaoS3, versoesPecasS3 } from '@/lib/s3-folders'
 import { reviewText, reviewTextAlteracoes, reviewArtwork, type ReviewError, type ContextoRevisao } from '@/lib/ai/review'
 import type { RevisaoConfig } from '@/lib/ai/revisao-config'
 import { etapaRevisavel, ETAPAS, type RevisaoEtapa } from '@/lib/ai/revisao-modelos'
@@ -44,7 +44,7 @@ export interface RevisaoSalva {
 }
 
 export type RevisaoOutcome =
-  | { ok: true; errors: ReviewError[]; model: string; truncated: boolean; fonte: FonteRevisao | null; texto: string | null; parcial: boolean }
+  | { ok: true; errors: ReviewError[]; model: string; truncated: boolean; fonte: FonteRevisao | null; texto: string | null; parcial: boolean; naoLidas?: string[]; partes?: number }
   | { ok: false; vazio: string; fonte: FonteRevisao | null }
 
 const hashTexto = (t: string) => createHash('sha256').update(t.replace(/\s+/g, ' ').trim()).digest('hex')
@@ -143,20 +143,24 @@ export async function revisarAtividade(
   }
 
   const sub = subpasta(etapa)
-  let assets
+  let pecasLidas
   if (isS3) {
-    assets = (await readReviewAssetsS3(`${(act?.drive_folder_id ?? '').trim()}/${sub}`)).assets
+    pecasLidas = await listarPecasRevisaoS3(`${(act?.drive_folder_id ?? '').trim()}/${sub}`)
   } else {
     const link = (etapa === 'design' ? act?.preview_url : act?.finalizacao_url) ?? ''
     if (!link || !driveConfigured()) return { ok: false, vazio: `Sem pasta de ${sub} nesta tarefa.`, fonte: null }
-    assets = (await readReviewAssets(link)).assets
+    pecasLidas = await listarPecasRevisao(link)
   }
   const fonte = versoes ? { arquivos: versoes } : null
-  if (!assets.length) return { ok: false, vazio: `Nenhuma peça (imagem/PDF) na pasta ${sub}.`, fonte }
+  if (!pecasLidas.pecas.length) {
+    return { ok: false, vazio: pecasLidas.naoLidas.length
+      ? `Nenhuma peça pôde ser lida na pasta ${sub}: ${pecasLidas.naoLidas.join('; ')}.`
+      : `Nenhuma peça (imagem/PDF) na pasta ${sub}.`, fonte }
+  }
 
-  // Design confere também contra o texto aprovado da Redação (mesma chamada).
+  // Design confere também contra o texto aprovado da Redação (em cada parte).
   const aprovado = etapa === 'design' ? await lerRedacao('review:design') : ''
-  const r = await reviewArtwork(cfg, assets, aprovado, await contextoDaTarefa(supabase, activityId))
+  const r = await reviewArtwork(cfg, pecasLidas, aprovado, await contextoDaTarefa(supabase, activityId))
   return { ok: true, ...r, fonte, texto: null, parcial: false }
 }
 
@@ -181,6 +185,31 @@ export async function salvarRevisao(supabase: SB, activityId: string, userId: st
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any).from('activity_revisao').upsert(row, { onConflict: 'activity_id,etapa' })
   if (error) throw new Error(`activity_revisao: ${error.message}`)
+}
+
+/**
+ * Histórico (activity_revisao_log, mig. 327): cada revisão e cada "seguiu com
+ * apontamentos" vira uma linha que nunca é apagada. activity_revisao guarda só a
+ * vigente; sem o histórico, revisar de novo apagava o que a IA tinha apontado e a
+ * comparação com a Revisão Interna ficava cega. Falha aqui não derruba a revisão.
+ */
+export async function registrarHistorico(supabase: SB, activityId: string, userId: string, etapa: RevisaoEtapa, dados: {
+  evento: 'revisao' | 'seguiu'
+  status: string
+  apontamentos?: ReviewError[] | null
+  modelo?: string | null
+  parcial?: boolean
+  partes?: number | null
+  naoLidas?: string[] | null
+}): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).from('activity_revisao_log').insert({
+    activity_id: activityId, etapa, evento: dados.evento, status: dados.status,
+    apontamentos: dados.apontamentos?.length ? dados.apontamentos : null,
+    modelo: dados.modelo ?? null, parcial: dados.parcial ?? false, partes: dados.partes ?? null,
+    nao_lidas: dados.naoLidas?.length ? dados.naoLidas : null, por: userId,
+  })
+  if (error) console.error('[revisao] histórico falhou', error.message)
 }
 
 /** Etapas cujo material mudou depois da revisão (para o aviso na tarefa). */
@@ -303,6 +332,9 @@ export async function checarAvanco(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase as any).from('activity_revisao').update({ status: 'overridden' })
       .eq('activity_id', activityId).eq('etapa', c.etapa)
+    await registrarHistorico(supabase, activityId, userId, c.etapa, {
+      evento: 'seguiu', status: c.rev.status, apontamentos: c.rev.status === 'failed' ? null : c.rev.apontamentos,
+    })
   }
   return {
     ok: true,

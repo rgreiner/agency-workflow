@@ -41,6 +41,7 @@ interface Props {
 export function RevisaoIA({ activityId, path, etapa, etapaLabel, ultima, anterior }: Props) {
   const [res, setRes] = useState<ResultadoRevisao | null>(ultima)
   const [mudou, setMudou] = useState(false)
+  const [naoLidas, setNaoLidas] = useState<string[]>([])
   const [pending, start] = useTransition()
 
   // Confere no Drive/S3 se o material mudou desde a revisão (sem baixar arquivo).
@@ -58,7 +59,9 @@ export function RevisaoIA({ activityId, path, etapa, etapaLabel, ultima, anterio
       setMudou(false)
       if (!r.ok) { setRes({ tipo: 'aviso', texto: r.aviso }); return }
       setRes(r.errors.length ? { tipo: 'erros', errors: r.errors } : { tipo: 'limpo' })
+      setNaoLidas(r.naoLidas)
       if (r.parcial) toast.message('Revisado só o que mudou desde a última revisão.')
+      if (r.partes > 1) toast.message(`Peças revisadas em ${r.partes} partes.`)
       if (r.truncated) toast.message('O material é longo: só o começo foi revisado.')
     })
   }
@@ -67,7 +70,7 @@ export function RevisaoIA({ activityId, path, etapa, etapaLabel, ultima, anterio
   if (anterior && !mudou && !pending && res === ultima) return null
 
   const cabecalho = pending
-    ? `Revisando ${etapaLabel}… pode levar até um minuto.`
+    ? `Revisando ${etapaLabel}… ${etapa === 'redacao' ? 'pode levar até um minuto' : 'com muitas peças, revisa em partes e pode levar 1–2 minutos'}.`
     : mudou
       ? `${MATERIAL[etapa]} mudou depois da revisão — revise de novo antes de avançar.`
       : res ? `Revisão de ${etapaLabel}.` : `Revise ${etapaLabel} antes de avançar a tarefa — é obrigatório.`
@@ -104,6 +107,11 @@ export function RevisaoIA({ activityId, path, etapa, etapaLabel, ultima, anterio
       {!pending && !mudou && res?.tipo === 'limpo' && (
         <p className="mt-3 border-t border-gray-100 pt-3 text-sm text-gray-600 inline-flex items-center gap-1.5 w-full">
           <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Revisão solicitada: nenhum erro encontrado.
+        </p>
+      )}
+      {!pending && naoLidas.length > 0 && (
+        <p className="mt-2 text-xs text-amber-700">
+          Ficaram fora da revisão (confira à mão): {naoLidas.join('; ')}.
         </p>
       )}
       {!pending && !mudou && res?.tipo === 'aviso' && (

@@ -4,7 +4,8 @@ import {
   S3Client, PutObjectCommand, ListObjectsV2Command, CopyObjectCommand, DeleteObjectsCommand,
   GetObjectCommand,
 } from '@aws-sdk/client-s3'
-import type { TaskFoldersResult, FolderFile, DriveAsset, CreateTaskFoldersOpts } from '@/lib/google-drive'
+import type { TaskFoldersResult, FolderFile, CreateTaskFoldersOpts, PecaRevisao, PecasParaRevisao } from '@/lib/google-drive'
+import { ehMockup, REVIEW_MAX_PECAS, REVIEW_MAX_BYTES_PECA } from '@/lib/google-drive'
 
 /**
  * Pastas de tarefa no bucket S3 (Cloudflare R2) — o disco que o time monta como F:.
@@ -189,41 +190,28 @@ export async function readFolderFileRangeS3(
   }
 }
 
-// Leitura de peças pra revisão por visão. Espelha os tetos da versão Drive
-// (readReviewAssets em google-drive.ts) pra manter custo/latência iguais.
-const REVIEW_MAX_ASSETS      = 12
-const REVIEW_MAX_FILE_BYTES  = 6  * 1024 * 1024
-const REVIEW_MAX_TOTAL_BYTES = 12 * 1024 * 1024
+// Leitura de peças pra revisão por visão — mesmas regras da versão Drive
+// (listarPecasRevisao em google-drive.ts): até 40, sem Mockup, 7 MB por peça.
 const REVIEW_IMAGE_RE = /^image\/(png|jpe?g|webp|gif)$/i
 const isReviewableMime = (m: string) => REVIEW_IMAGE_RE.test(m) || m === 'application/pdf'
 
 /** Versões (ETag) das peças revisáveis de uma subpasta — sem baixar nada. */
 export async function versoesPecasS3(folderPath: string): Promise<{ id: string; v: string }[]> {
-  return (await listFolderFilesS3(folderPath)).filter(f => isReviewableMime(f.mime))
+  return (await listFolderFilesS3(folderPath)).filter(f => isReviewableMime(f.mime) && !ehMockup(f.name))
     .map(f => ({ id: f.ref, v: f.versao ?? String(f.size) }))
 }
 
-/**
- * Peças de uma subpasta (Preview/Final) em base64 p/ revisão por IA — só imagem/PDF,
- * o resto (vídeo/psd) é ignorado. Equivalente S3 de `readReviewAssets` do Drive.
- */
-export async function readReviewAssetsS3(folderPath: string): Promise<{ assets: DriveAsset[]; truncated: boolean }> {
-  const files = (await listFolderFilesS3(folderPath)).filter(f => isReviewableMime(f.mime))
-  let truncated = files.length > REVIEW_MAX_ASSETS
-  const assets: DriveAsset[] = []
-  let total = 0
-  for (const f of files.slice(0, REVIEW_MAX_ASSETS)) {
-    try {
-      const { buffer, mime } = await readFolderFileS3(f.ref)
-      if (buffer.length > REVIEW_MAX_FILE_BYTES) { truncated = true; continue }
-      if (total + buffer.length > REVIEW_MAX_TOTAL_BYTES) { truncated = true; break }
-      total += buffer.length
-      assets.push({ name: f.name, mimeType: mime, base64: buffer.toString('base64') })
-    } catch (e) {
-      console.error('[s3] download de peça falhou:', f.name, e)
-    }
+/** Peças de uma subpasta (Preview/Final) para revisão — baixadas só no lote delas. */
+export async function listarPecasRevisaoS3(folderPath: string): Promise<PecasParaRevisao> {
+  const files = (await listFolderFilesS3(folderPath)).filter(f => isReviewableMime(f.mime) && !ehMockup(f.name))
+  const naoLidas: string[] = []
+  const pecas: PecaRevisao[] = []
+  for (const f of files) {
+    if (pecas.length >= REVIEW_MAX_PECAS) { naoLidas.push(`${f.name} (passou de ${REVIEW_MAX_PECAS} peças)`); continue }
+    if (f.size > REVIEW_MAX_BYTES_PECA) { naoLidas.push(`${f.name} (arquivo acima de 7 MB)`); continue }
+    pecas.push({ name: f.name, mimeType: f.mime, bytes: f.size, carregar: async () => (await readFolderFileS3(f.ref)).buffer.toString('base64') })
   }
-  return { assets, truncated }
+  return { pecas, naoLidas }
 }
 
 /** Cria as subpastas padrão que faltarem numa pasta de tarefa existente. */

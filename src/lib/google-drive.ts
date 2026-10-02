@@ -279,18 +279,29 @@ const PDF_MIME    = 'application/pdf'
 const SLIDES_MIME = 'application/vnd.google-apps.presentation'
 const IMAGE_MIME_RE = /^image\/(png|jpe?g|webp|gif)$/i
 
-// Limites p/ controlar custo/latência e ficar abaixo dos tetos das APIs de visão.
-// base64 infla ~33%, então 12MB de binário ≈ 16MB no corpo do request (Gemini
-// inline aceita ~20MB de request total).
-const MAX_ASSETS      = 12
-const MAX_FILE_BYTES  = 6  * 1024 * 1024
-const MAX_TOTAL_BYTES = 12 * 1024 * 1024
+// Revisão por visão (02/10/2026): até 40 peças, cada uma no tamanho ORIGINAL (letra
+// miúda precisa chegar legível), e quem chama revisa em LOTES (lib/ai/review.ts).
+// Antes o teto era 12 arquivos / 12 MB no total: em jobs de 20–30 PNGs a IA lia
+// 6 ou 7 e acusava "Carrossel 2 faltando" de peças que estavam na pasta.
+// 7 MB por peça = teto de imagem do Claude (10 MB em base64); acima disso a peça
+// fica de fora e a tela avisa o nome. Mockup repete as peças — fica de fora.
+export const REVIEW_MAX_PECAS = 40
+export const REVIEW_MAX_BYTES_PECA = 7 * 1024 * 1024
 
-export interface DriveAsset {
+/** "Mockup …" é a montagem das peças para apresentar — não entra na revisão. */
+export const ehMockup = (nome: string) => /mock-?up/i.test(nome)
+
+/** Peça a revisar: metadados já conhecidos; o conteúdo é baixado só no lote dela. */
+export interface PecaRevisao {
   name: string
-  mimeType: string   // image/png | image/jpeg | application/pdf
-  base64: string
+  mimeType: string
+  /** Tamanho conhecido antes de baixar (estimado em Slides exportado). */
+  bytes: number
+  carregar: () => Promise<string>
 }
+
+/** Resultado da leitura: peças a revisar + as que ficaram de fora (nome e motivo). */
+export interface PecasParaRevisao { pecas: PecaRevisao[]; naoLidas: string[] }
 
 function isReviewable(mime: string): boolean {
   return IMAGE_MIME_RE.test(mime) || mime === PDF_MIME || mime === SLIDES_MIME
@@ -314,56 +325,53 @@ async function exportBase64(fileId: string, mimeType: string): Promise<{ base64:
 }
 
 /**
- * Baixa as peças (imagens / PDF; Google Slides é exportado como PDF) de um link
- * do Drive — arquivo único OU pasta — em base64, p/ revisão por visão. Ignora o
- * que não for imagem/PDF/apresentação. Respeita limites de quantidade/tamanho.
+ * Peças de um link do Drive (arquivo único OU pasta) para a revisão por visão:
+ * imagem/PDF (Slides exportado como PDF), sem Mockup, até REVIEW_MAX_PECAS. Não
+ * baixa nada — cada peça traz `carregar()`, chamado no lote dela.
  */
-export async function readReviewAssets(link: string): Promise<{ assets: DriveAsset[]; truncated: boolean }> {
+export async function listarPecasRevisao(link: string): Promise<PecasParaRevisao> {
   const id = extractFolderId(link)
-  if (!id) return { assets: [], truncated: false }
+  if (!id) return { pecas: [], naoLidas: [] }
   const drive = getDrive()
 
   const meta = (await drive.files.get({
-    fileId: id, fields: 'id, name, mimeType', supportsAllDrives: true,
+    fileId: id, fields: 'id, name, mimeType, size', supportsAllDrives: true,
   })).data
 
-  const candidates: { id: string; name: string; mimeType: string }[] = []
+  const candidates: { id: string; name: string; mimeType: string; size: number }[] = []
+  const pega = (f: drive_v3.Schema$File) => {
+    if (f.id && f.mimeType && isReviewable(f.mimeType) && !ehMockup(f.name ?? '')) {
+      candidates.push({ id: f.id, name: f.name ?? '', mimeType: f.mimeType, size: Number(f.size ?? 0) })
+    }
+  }
   if (meta.mimeType === FOLDER_MIME) {
     let pageToken: string | undefined
     do {
       const r: drive_v3.Schema$FileList = (await drive.files.list({
         q: `'${id}' in parents and trashed = false`,
-        fields: 'nextPageToken, files(id, name, mimeType)',
+        fields: 'nextPageToken, files(id, name, mimeType, size)',
         pageSize: 200, orderBy: 'name',
         supportsAllDrives: true, includeItemsFromAllDrives: true, pageToken,
       })).data
-      for (const f of r.files ?? []) {
-        if (f.id && f.mimeType && isReviewable(f.mimeType)) candidates.push({ id: f.id, name: f.name ?? '', mimeType: f.mimeType })
-      }
+      for (const f of r.files ?? []) pega(f)
       pageToken = r.nextPageToken ?? undefined
     } while (pageToken)
-  } else if (meta.id && meta.mimeType && isReviewable(meta.mimeType)) {
-    candidates.push({ id: meta.id, name: meta.name ?? '', mimeType: meta.mimeType })
-  }
+  } else pega(meta)
 
-  let truncated = candidates.length > MAX_ASSETS
-  const limited = candidates.slice(0, MAX_ASSETS)
-
-  const assets: DriveAsset[] = []
-  let total = 0
-  for (const c of limited) {
-    try {
-      const isSlides = c.mimeType === SLIDES_MIME
-      const data = isSlides ? await exportBase64(c.id, PDF_MIME) : await downloadBase64(c.id)
-      if (data.bytes > MAX_FILE_BYTES) { truncated = true; continue }
-      if (total + data.bytes > MAX_TOTAL_BYTES) { truncated = true; break }
-      total += data.bytes
-      assets.push({ name: c.name, mimeType: isSlides ? PDF_MIME : c.mimeType, base64: data.base64 })
-    } catch (e) {
-      console.error('[drive] download de peça falhou:', c.name, e)
-    }
+  const naoLidas: string[] = []
+  const pecas: PecaRevisao[] = []
+  for (const c of candidates) {
+    if (pecas.length >= REVIEW_MAX_PECAS) { naoLidas.push(`${c.name} (passou de ${REVIEW_MAX_PECAS} peças)`); continue }
+    if (c.size > REVIEW_MAX_BYTES_PECA) { naoLidas.push(`${c.name} (arquivo acima de 7 MB)`); continue }
+    const isSlides = c.mimeType === SLIDES_MIME
+    pecas.push({
+      name: c.name,
+      mimeType: isSlides ? PDF_MIME : c.mimeType,
+      bytes: isSlides ? 2 * 1024 * 1024 : c.size,
+      carregar: async () => (isSlides ? await exportBase64(c.id, PDF_MIME) : await downloadBase64(c.id)).base64,
+    })
   }
-  return { assets, truncated }
+  return { pecas, naoLidas }
 }
 
 // ── Versões (revisão: "o material mudou desde a revisão?") ─────────────────
@@ -403,10 +411,10 @@ export async function versoesPecas(link: string): Promise<VersaoArquivo[]> {
   do {
     const r: drive_v3.Schema$FileList = (await drive.files.list({
       q: `'${id}' in parents and trashed = false`,
-      fields: 'nextPageToken, files(id, mimeType, md5Checksum, version)',
+      fields: 'nextPageToken, files(id, name, mimeType, md5Checksum, version)',
       pageSize: 200, orderBy: 'name', supportsAllDrives: true, includeItemsFromAllDrives: true, pageToken,
     })).data
-    for (const f of r.files ?? []) if (f.id && f.mimeType && isReviewable(f.mimeType)) out.push({ id: f.id, v: ver(f) })
+    for (const f of r.files ?? []) if (f.id && f.mimeType && isReviewable(f.mimeType) && !ehMockup(f.name ?? '')) out.push({ id: f.id, v: ver(f) })
     pageToken = r.nextPageToken ?? undefined
   } while (pageToken)
   return out
