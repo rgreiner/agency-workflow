@@ -160,8 +160,12 @@ export async function tomadoresParaNota(orgSlug: string): Promise<Tomador[]> {
   const sb = supabase as any
   const [cli, veic, forn] = await Promise.all([
     sb.from('workspaces').select('id, name, legal_name, tax_id').eq('org_id', orgId).eq('archived', false),
-    sb.from('veiculos').select('id, name, tax_id').eq('org_id', orgId).eq('archived', false),
-    sb.from('fornecedores').select('id, name, tax_id').eq('org_id', orgId).eq('archived', false),
+    // `legal_name` nos três: quando esta lista foi escrita, só `workspaces`
+    // tinha a coluna (ela chegou a fornecedor e veículo na mig. 320) e o select
+    // não foi atualizado junto. O resultado era a tela acusar "cadastro sem
+    // razão social" para quem tinha — alarme falso numa tela de conferência.
+    sb.from('veiculos').select('id, name, legal_name, tax_id').eq('org_id', orgId).eq('archived', false),
+    sb.from('fornecedores').select('id, name, legal_name, tax_id').eq('org_id', orgId).eq('archived', false),
   ])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
