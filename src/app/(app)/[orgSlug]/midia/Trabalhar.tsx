@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
   AlertTriangle, ArrowRight, Check, CheckCircle2, ExternalLink, Flag, Link2, ListChecks, Loader2,
-  PartyPopper, Repeat, Send, Truck,
+  PartyPopper, Send,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity } from '@/types'
@@ -129,14 +129,27 @@ const CHIP = 'text-[11px] font-medium px-2 py-0.5 rounded-full'
 /**
  * A fila da mídia em quatro regiões (Rafael, 04/09 a 10/09): em cima, **Para
  * implantar** e **Em trabalho** — os solicitados, por etapa; embaixo, **Entregas
- * ao veículo** à esquerda e **Rotinas** à direita, em linhas compactas. Post
- * datado segue a região da tarefa-mãe. Dentro de cada região a ordem é a
- * data. Todo item mostra os links de trabalho (Redação, Preview, Final, pasta);
- * cada pessoa esconde os que não usa. O painel (Visão geral) continua existindo
- * para o retrato da operação; aqui não entra KPI nem radar.
+ * ao veículo** à esquerda e **Rotinas** à direita. Post datado segue a região da
+ * tarefa-mãe; dentro de cada região a ordem é a data. O painel (Visão geral)
+ * continua existindo para o retrato da operação; aqui não entra KPI nem radar.
  *
  * Uma linha por trabalho: entrega vinculada a uma tarefa que já está na fila
  * aparece só como entrega — o prazo do veículo é o que manda.
+ *
+ * ## A régua do que aparece (distill de 02/10, medido em produção)
+ * Eram 50 linhas, cada uma um cartão branco com pílula de prazo, ícone, chip de
+ * status, chips de sinal e uma faixa de links. O que o dado mostrou:
+ *  · **32 das 50 são rotina** — zero bandeira, zero complexidade, zero checklist
+ *    e 0,1 link em média. Carregavam o aparato de uma linha rica sem usar nada:
+ *    viram lista densa (data · nome · cliente · Feito).
+ *  · **O chip de status repetia o título da coluna em 100% dos casos** (as três
+ *    regiões tinham UM status distinto cada). Agora só aparece quando a região
+ *    de fato mistura status — `statusVariado`.
+ *  · **Bandeira em 1 de 50, complexidade em 0.** Ficam: justamente por serem
+ *    raros é que valem quando aparecem.
+ * Regra que fica: a linha mostra o que MUDA entre uma linha e outra. O que é
+ * igual para a região inteira pertence ao título da região, não à linha.
+ * Cartão por item virou lista com divisória — 50 bordas não são hierarquia.
  */
 export function Trabalhar({ orgSlug, itens, statusCfg, meuId }: {
   orgSlug: string
@@ -171,14 +184,16 @@ export function Trabalhar({ orgSlug, itens, statusCfg, meuId }: {
 
   const concluir = (chave: string) => setFeitos(prev => new Set([...prev, chave]))
   const comum = { orgSlug, cfg, links, onFeito: concluir }
+  // O chip de status só informa quando a região mistura status; se todos são
+  // iguais, ele repete o título da coluna em cada linha (medido: era sempre).
+  const variado = (l: ItemFila[]) => new Set(l.map(i => i.status)).size > 1
 
   return (
     <div className="p-6">
       <Cabecalho orgSlug={orgSlug} atrasados={atrasados} hoje={hojeCount} total={lista.length}
         soEu={soEu} onEu={() => prefEu.set(!soEu)}
-        links={links} onLinks={prefLinks.set} />
-
-      <FiltroPrazo valor={prazoFiltro} onChange={prefPrazo.set} />
+        links={links} onLinks={prefLinks.set}
+        prazo={prazoFiltro} onPrazo={prefPrazo.set} />
 
       {lista.length === 0 ? (
         <div className="text-center py-20 bg-white border border-gray-200 rounded-2xl mt-6">
@@ -193,22 +208,22 @@ export function Trabalhar({ orgSlug, itens, statusCfg, meuId }: {
           <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-6">
             <Regiao className="lg:col-span-7" titulo="Para implantar" contagem={implantar.length}
               vazio={filtrando ? 'Nada para implantar neste filtro.' : 'Nada para implantar.'}>
-              {implantar.map(i => <Linha key={i.chave} item={i} variante="linha" {...comum} />)}
+              {implantar.map(i => <Linha key={i.chave} item={i} mostrarStatus={variado(implantar)} {...comum} />)}
             </Regiao>
             <Regiao className="lg:col-span-5" titulo="Em trabalho" contagem={trabalho.length}
               vazio={filtrando ? 'Nada em trabalho neste filtro.' : 'Nada em trabalho.'}>
-              {trabalho.map(i => <Linha key={i.chave} item={i} variante="linha" {...comum} />)}
+              {trabalho.map(i => <Linha key={i.chave} item={i} mostrarStatus={variado(trabalho)} {...comum} />)}
             </Regiao>
           </div>
 
           <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-6">
             <Regiao className="lg:col-span-7" titulo="Entregas ao veículo" contagem={pecas.length}
               vazio={filtrando ? 'Nenhuma entrega neste filtro.' : 'Nenhuma entrega ao veículo pendente.'}>
-              {pecas.map(i => <Linha key={i.chave} item={i} variante="linha" {...comum} />)}
+              {pecas.map(i => <Linha key={i.chave} item={i} mostrarStatus {...comum} />)}
             </Regiao>
             <Regiao className="lg:col-span-5" titulo="Rotinas" contagem={rotinas.length}
               vazio={filtrando ? 'Nenhuma rotina neste filtro.' : 'Nenhuma rotina em aberto.'}>
-              {rotinas.map(i => <Linha key={i.chave} item={i} variante="compacta" {...comum} />)}
+              {rotinas.map(i => <Linha key={i.chave} item={i} densa {...comum} />)}
             </Regiao>
           </div>
         </>
@@ -220,7 +235,7 @@ export function Trabalhar({ orgSlug, itens, statusCfg, meuId }: {
 /** Pílulas de prazo — o mesmo conjunto da Lista, guardado por pessoa no navegador. */
 function FiltroPrazo({ valor, onChange }: { valor: string; onChange: (v: string) => void }) {
   return (
-    <div className="mt-4 inline-flex flex-wrap bg-gray-100 rounded-xl p-0.5" role="group" aria-label="Filtro de prazo">
+    <div className="mt-3 inline-flex flex-wrap bg-gray-100 rounded-xl p-0.5" role="group" aria-label="Filtro de prazo">
       {DATE_FILTERS.map(f => (
         <button key={f.value} type="button" onClick={() => onChange(f.value)} aria-pressed={valor === f.value}
           className={cn('px-3 py-1.5 text-xs font-medium rounded-[10px] transition-colors', FOCO,
@@ -237,22 +252,26 @@ function Regiao({ titulo, contagem, vazio, className, children }: {
 }) {
   return (
     <section className={cn('min-w-0', className)} aria-label={titulo}>
-      <h2 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
-        {titulo} <span className="text-gray-500 font-normal">· {contagem}</span>
+      <h2 className="flex items-baseline gap-2 px-1 mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600">
+        {titulo}
+        <span className="font-normal tabular-nums text-gray-400">{contagem}</span>
       </h2>
       {contagem === 0 ? (
-        <p className="text-sm text-gray-400 text-center border border-dashed border-gray-200 rounded-xl px-4 py-6">{vazio}</p>
+        <p className="px-1 text-xs text-gray-400">{vazio}</p>
       ) : (
-        <ul className="space-y-1.5">{children}</ul>
+        <ul className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100 overflow-hidden">
+          {children}
+        </ul>
       )}
     </section>
   )
 }
 
-function Cabecalho({ orgSlug, atrasados, hoje, total, soEu, onEu, links, onLinks }: {
+function Cabecalho({ orgSlug, atrasados, hoje, total, soEu, onEu, links, onLinks, prazo, onPrazo }: {
   orgSlug: string; atrasados: number; hoje: number; total: number
   soEu: boolean; onEu: () => void
   links: LinksVisiveis; onLinks: (v: LinksVisiveis) => void
+  prazo: string; onPrazo: (v: string) => void
 }) {
   const partes = [
     atrasados > 0 ? `${atrasados} atrasado${atrasados > 1 ? 's' : ''}` : null,
@@ -276,6 +295,11 @@ function Cabecalho({ orgSlug, atrasados, hoje, total, soEu, onEu, links, onLinks
           className={cn('inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors', FOCO)}>
           Visão geral <ArrowRight className="w-4 h-4" />
         </Link>
+      </div>
+
+      {/* O filtro é controle da fila: mora na faixa do cabeçalho, com ela. */}
+      <div className="w-full order-last">
+        <FiltroPrazo valor={prazo} onChange={onPrazo} />
       </div>
     </div>
   )
@@ -330,12 +354,15 @@ function MenuLinks({ links, onChange }: { links: LinksVisiveis; onChange: (v: Li
   )
 }
 
-function Linha({ orgSlug, item, cfg, links, variante, onFeito }: {
+function Linha({ orgSlug, item, cfg, links, densa = false, mostrarStatus = false, onFeito }: {
   orgSlug: string
   item: ItemFila
   cfg: Map<string, StatusCfg>
   links: LinksVisiveis
-  variante: 'card' | 'linha' | 'compacta'
+  /** Rotina: repetitiva por natureza, lida como agenda — sem links nem status. */
+  densa?: boolean
+  /** Só quando a região mistura status; senão o chip repete o título da coluna. */
+  mostrarStatus?: boolean
   onFeito: (chave: string) => void
 }) {
   const router = useRouter()
@@ -346,7 +373,6 @@ function Linha({ orgSlug, item, cfg, links, variante, onFeito }: {
   const st = item.status ? cfg.get(item.status) : null
   const prio = PRIORITY_CONFIG[item.prioridade as ActivityPriority]
   const compl = COMPLEXITY_CONFIG[item.complexidade as ActivityComplexity]
-  const compacta = variante === 'compacta'
 
   const linkTarefa = item.activityId && item.workspaceId && item.campaignId
     ? `/${orgSlug}/workspaces/${item.workspaceId}/campaigns/${item.campaignId}/activities/${item.activityId}?from=${encodeURIComponent(`/${orgSlug}/midia`)}`
@@ -405,24 +431,34 @@ function Linha({ orgSlug, item, cfg, links, variante, onFeito }: {
   // dentro dela) e o contato do veículo, que só serve na hora de enviar e por isso
   // aparece apenas quando a peça já está pronta para ir.
   const prontaParaEnviar = item.tipo === 'entrega' && !!item.entregaId && !item.esperandoCriacao
+  // Veículo e formato saem quando o título já os diz — é o caso comum
+  // ("Anúncio Página Dupla - Revista Dife" repetia os dois logo abaixo).
+  const noTitulo = (v: string | null) =>
+    !!v && item.titulo.toLowerCase().includes(v.toLowerCase())
   const meta = [
     item.cliente,
-    item.veiculo,
-    item.formato,
+    noTitulo(item.veiculo) ? null : item.veiculo,
+    noTitulo(item.formato) ? null : item.formato,
     prontaParaEnviar ? item.veiculoContato : null,
     item.frequencia ? (FREQ[item.frequencia] ?? item.frequencia) : null,
     origem || null,
   ].filter(Boolean).join(' · ')
 
-  const Icone = item.tipo === 'entrega' ? Truck : item.item ? ListChecks : item.tipo === 'rotina' ? Repeat : null
+  // Só o ícone que DISTINGUE dentro da região: o post datado, que mora junto dos
+  // pedidos. Caminhão em "Entregas" e seta em "Rotinas" só repetiam o título.
+  const Icone = item.item ? ListChecks : null
+  const urgente = p.tom === 'atraso' || p.tom === 'hoje'
 
   return (
-    <li className={cn('bg-white border rounded-xl',
-      variante === 'card' ? 'rounded-2xl p-4' : compacta ? 'px-3 py-2.5' : 'px-4 py-3',
-      item.conflito ? 'border-red-200' : 'border-gray-200')}>
+    <li className={cn('px-3 transition-colors hover:bg-gray-50/70', densa ? 'py-2' : 'py-2.5')}>
       <div className="flex items-start gap-3">
-        <span className={cn('shrink-0 inline-flex items-center justify-center rounded-lg text-[11px] font-medium tabular-nums px-2 py-1',
-          compacta ? 'w-[6rem]' : 'w-[6.75rem]', TOM[p.tom])}>
+        {/* Pílula colorida só quando é agora: atrasado ou hoje. O resto é data —
+            40 pílulas coloridas não hierarquizam nada. A caixa tem largura fixa
+            nos dois casos, para as datas alinharem na coluna. */}
+        <span className={cn('shrink-0 w-[5.75rem] text-[11px] tabular-nums',
+          urgente
+            ? cn('inline-flex items-center justify-center rounded-md px-1.5 py-0.5 font-medium', TOM[p.tom])
+            : 'pt-0.5 text-gray-500')}>
           {p.texto}
         </span>
 
@@ -431,14 +467,11 @@ function Linha({ orgSlug, item, cfg, links, variante, onFeito }: {
             {Icone && <Icone className="w-3.5 h-3.5 text-gray-400 shrink-0" aria-hidden />}
             {linkTarefa ? (
               <Link href={linkTarefa}
-                className={cn('font-medium text-gray-900 hover:text-orange-600 transition-colors rounded', FOCO,
-                  variante === 'card' ? 'text-base' : 'text-sm')}>
+                className={cn('text-sm font-medium text-gray-900 hover:text-orange-600 transition-colors rounded', FOCO)}>
                 {item.titulo}
               </Link>
             ) : (
-              <span className={cn('font-medium text-gray-900', variante === 'card' ? 'text-base' : 'text-sm')}>
-                {item.titulo}
-              </span>
+              <span className="text-sm font-medium text-gray-900">{item.titulo}</span>
             )}
             {item.item && (
               <>
@@ -454,7 +487,7 @@ function Linha({ orgSlug, item, cfg, links, variante, onFeito }: {
             )}
             {/* Na entrega, o status da tarefa só interessa enquanto a peça está com
                 a criação; depois, o que a mídia precisa saber é que está pronta. */}
-            {st && !compacta && !(item.tipo === 'entrega' && !item.esperandoCriacao) && (
+            {st && mostrarStatus && !(item.tipo === 'entrega' && !item.esperandoCriacao) && (
               <span className={CHIP} style={{ backgroundColor: st.bg, color: st.txt }}>{st.label}</span>
             )}
             {item.tipo === 'entrega' && item.activityId && !item.esperandoCriacao && (
@@ -479,7 +512,7 @@ function Linha({ orgSlug, item, cfg, links, variante, onFeito }: {
             )}
           </div>
 
-          <p className="text-[11px] text-gray-500 mt-0.5 truncate" title={meta}>{meta}</p>
+          {meta && <p className="text-[11px] text-gray-500 mt-0.5 truncate" title={meta}>{meta}</p>}
 
           {item.conflito && (
             <p className="text-[11px] text-red-700 mt-1 inline-flex items-center gap-1">
@@ -487,7 +520,9 @@ function Linha({ orgSlug, item, cfg, links, variante, onFeito }: {
             </p>
           )}
 
-          <Links item={item} links={links} compacta={compacta} />
+          {/* Rotina não tem links na prática (0,1 por item, medido) — o bloco só
+              ocupava altura em 32 linhas. */}
+          {!densa && <Links item={item} links={links} />}
         </div>
 
         <div className="shrink-0">
@@ -664,7 +699,7 @@ function ModalDesdobrar({ orgSlug, item, onClose }: { orgSlug: string; item: Ite
 }
 
 /** Os links de trabalho da linha: só os que existem E que a pessoa quer ver. */
-function Links({ item, links, compacta }: { item: ItemFila; links: LinksVisiveis; compacta: boolean }) {
+function Links({ item, links }: { item: ItemFila; links: LinksVisiveis }) {
   const externos = [
     links.redacao && item.redacaoUrl ? { url: item.redacaoUrl, label: 'Redação' } : null,
     links.preview && item.previewUrl ? { url: item.previewUrl, label: 'Preview' } : null,
@@ -673,23 +708,23 @@ function Links({ item, links, compacta }: { item: ItemFila; links: LinksVisiveis
   const pasta = links.pasta ? (item.pastaPath ? 'caminho' : item.pastaUrl ? 'drive' : null) : null
   if (externos.length === 0 && !pasta) return null
 
+  // Texto, não pílula: com até 4 por linha a faixa de chips competia com o
+  // título. Link é destino, não ação — a ação é o botão à direita.
+  const cls = cn('inline-flex items-center gap-1 text-[11px] text-gray-500 hover:text-orange-600 underline-offset-2 hover:underline transition-colors rounded', FOCO)
+
   return (
-    <div className={cn('flex items-center gap-1.5 flex-wrap', compacta ? 'mt-1.5' : 'mt-2')}>
+    <div className="flex items-center gap-3 flex-wrap mt-1">
       {externos.map(l => (
-        <a key={l.label} href={l.url} target="_blank" rel="noopener noreferrer"
-          className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-gray-50 text-[11px] font-medium text-gray-600 hover:bg-orange-500/10 hover:text-orange-700 transition-colors', FOCO)}>
-          <ExternalLink className="w-3 h-3" aria-hidden /> {l.label}
+        <a key={l.label} href={l.url} target="_blank" rel="noopener noreferrer" className={cls}>
+          <ExternalLink className="w-3 h-3 shrink-0" aria-hidden /> {l.label}
         </a>
       ))}
-      {/* Chip, não o caminho inteiro: o caminho ocupava a linha toda e não é
+      {/* Rótulo, não o caminho inteiro: o caminho ocupava a linha toda e não é
           informação de decisão — clicar copia, e o caminho fica no tooltip. */}
-      {pasta === 'caminho' && (
-        <MachinePath winPath={item.pastaPath!} compact rotulo="Pasta" />
-      )}
+      {pasta === 'caminho' && <MachinePath winPath={item.pastaPath!} compact rotulo="Pasta" />}
       {pasta === 'drive' && (
-        <a href={item.pastaUrl!} target="_blank" rel="noopener noreferrer"
-          className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-gray-50 text-[11px] font-medium text-gray-600 hover:bg-orange-500/10 hover:text-orange-700 transition-colors', FOCO)}>
-          <ExternalLink className="w-3 h-3" aria-hidden /> Pasta
+        <a href={item.pastaUrl!} target="_blank" rel="noopener noreferrer" className={cls}>
+          <ExternalLink className="w-3 h-3 shrink-0" aria-hidden /> Pasta
         </a>
       )}
     </div>
