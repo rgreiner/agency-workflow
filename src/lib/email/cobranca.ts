@@ -37,8 +37,11 @@ export function assuntoCobranca(tom: TomCobranca, dias: number): string {
   switch (tom) {
     case 'previa': return `Vencimento em ${Math.abs(dias)} dia${Math.abs(dias) > 1 ? 's' : ''}`
     case 'hoje': return 'Vence hoje'
-    case 'atraso': return 'Pagamento em atraso'
-    case 'atraso_longo': return `Pagamento em atraso há ${dias} dias`
+    // "Pagamento em atraso" afirma que o cliente falhou. "Não identificamos o
+    // pagamento" diz o que a agência sabe — e cobre o caso comum de já ter sido
+    // pago sem a baixa chegar aqui. Decisão do Rafael em 01/10/2026.
+    case 'atraso': return 'Não identificamos o pagamento'
+    case 'atraso_longo': return `Não identificamos o pagamento — ${dias} dias`
     case 'formal': return 'Pendência financeira em aberto'
   }
 }
@@ -51,9 +54,9 @@ function intro(tom: TomCobranca, dias: number, varios: boolean): string {
     case 'hoje':
       return `${isto} vence${varios ? 'm' : ''} hoje.`
     case 'atraso':
-      return `identificamos que ${isto} está${varios ? 'ão' : ''} em atraso.`
+      return `até agora não identificamos o pagamento d${varios ? 'as cobranças abaixo' : 'a cobrança abaixo'}.`
     case 'atraso_longo':
-      return `${isto} segue${varios ? 'm' : ''} em aberto — ${varios ? 'o mais antigo está' : 'já são'} ${dias} dias após o vencimento.`
+      return `seguimos sem identificar o pagamento d${varios ? 'as cobranças abaixo' : 'a cobrança abaixo'} — ${varios ? 'a mais antiga venceu há' : 'já são'} ${dias} dias.`
     case 'formal':
       return `${isto} permanece${varios ? 'm' : ''} sem baixa no nosso financeiro, ${varios ? 'a mais antiga' : ''} com ${dias} dias de atraso. Se houver alguma divergência no documento, responda este e-mail que ajustamos.`
   }

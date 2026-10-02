@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { unwrap } from '@/lib/supabase/unwrap'
 import { sendMail, remetenteDominio } from '@/lib/email/send'
+import { boletosDosLancamentos } from '@/lib/email/cobranca-anexos'
 import { htmlCobranca, assuntoCobranca, tomPorDias, type TituloCobranca } from '@/lib/email/cobranca'
 
 /**
@@ -81,12 +82,16 @@ export async function cobrarAgora(orgSlug: string, workspaceId: string, lancamen
   const dias = titulos[0].dias
   const tom = tomPorDias(dias)
   const dominio = remetenteDominio()
+  // O boleto vai junto: quem recebe a cobrança não deveria ter de procurar o
+  // documento de pagar num e-mail antigo.
+  const anexos = await boletosDosLancamentos(sb, org.id, lancs.map(l => l.id))
   const { error: erroEnvio } = await sendMail({
     to: dest,
     from: dominio ? `${org.name} Financeiro <financeiro@${dominio}>` : undefined,
     replyTo: user.email || undefined,
     subject: `${assuntoCobranca(tom, dias)} — ${org.name}`,
     html: htmlCobranca({ orgName: org.name, cliente: ws.name, titulos, paymentInfo, tom }),
+    attachments: anexos.length ? anexos : undefined,
   })
   if (erroEnvio) return { error: `Não enviou: ${erroEnvio}` }
 

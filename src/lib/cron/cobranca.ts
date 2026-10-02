@@ -1,10 +1,11 @@
 import 'server-only'
-import { sendMail } from '@/lib/email/send'
+import { sendMail, remetenteDominio } from '@/lib/email/send'
+import { boletosDosLancamentos } from '@/lib/email/cobranca-anexos'
 import { htmlCobranca, assuntoCobranca, tomPorDias } from '@/lib/email/cobranca'
 import type { CronJob } from './jobs'
 
 interface Aviso {
-  lancamento_id: string; bucket: string
+  lancamento_id: string; bucket: string; org_id: string
   org_slug: string; org_name: string; cliente: string; email: string
   descricao: string; valor: number; vencimento: string; dias: number; payment_info: string
 }
@@ -36,6 +37,11 @@ export const cobrancaJob: CronJob = {
       return `${avisos.length} cobrança(s): ${avisos.map(a => `${a.cliente}/${a.bucket}`).join(', ') || '—'}`
     }
 
+    // O remetente é o financeiro da agência, não o `nao-responder` padrão: o
+    // texto da cobrança convida a responder, e a resposta tem que chegar a
+    // alguém. É o mesmo endereço que o "Cobrar agora" da tela já usava.
+    const dominio = remetenteDominio()
+
     let sent = 0, failed = 0
     for (const a of avisos) {
       if (!a.email) continue
@@ -44,10 +50,15 @@ export const cobrancaJob: CronJob = {
         orgName: a.org_name, cliente: a.cliente, paymentInfo: a.payment_info, tom,
         titulos: [{ descricao: a.descricao, valor: a.valor, vencimento: a.vencimento, dias: a.dias }],
       })
+      const anexos = a.org_id
+        ? await boletosDosLancamentos(supabase, a.org_id, [a.lancamento_id])
+        : []
       const r = await sendMail({
         to: a.email,
+        from: dominio ? `${a.org_name} Financeiro <financeiro@${dominio}>` : undefined,
         subject: `${assuntoCobranca(tom, a.dias)} — ${a.org_name}`,
         html,
+        attachments: anexos.length ? anexos : undefined,
       })
       if (r.error) { failed++; continue }
       sent++
