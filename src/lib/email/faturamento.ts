@@ -4,6 +4,8 @@ import path from 'node:path'
 import { emailLayout } from './layout'
 import type { MailAttachment } from './send'
 import type { Anexo } from '@/app/actions/financeiro'
+import { notaIdDoAnexo } from '@/lib/fiscal/anexo'
+import { lerNotaParaPdf, danfsePdf } from '@/lib/pdf/danfse-render'
 
 function uploadRoot(): string {
   return process.env.UPLOAD_DIR || '/app/uploads'
@@ -11,14 +13,32 @@ function uploadRoot(): string {
 
 /**
  * Lê os anexos da conferência (NF/Boleto/comprovantes) pra mandar junto no e-mail.
- * O `Anexo` guarda a URL pública (…/uploads/<bucket>/<rel>); derivamos o caminho
- * no volume e lemos o arquivo. Ignora anexo que não resolve (não derruba o envio)
- * e barra traversal / prefixo privado.
+ *
+ * Dois tipos de anexo chegam aqui:
+ *  • arquivo no volume — o `Anexo` guarda a URL pública (…/uploads/<bucket>/<rel>),
+ *    derivamos o caminho e lemos o arquivo;
+ *  • NFS-e emitida pelo Flow — a URL aponta para a rota que desenha o DANFSe, e
+ *    o PDF é gerado aqui na hora. Sem este ramo a nota recém-emitida seria
+ *    ignorada em silêncio (o `continue` abaixo) e o cliente receberia o e-mail
+ *    sem a NF, sem ninguém perceber.
+ *
+ * Ignora anexo que não resolve (não derruba o envio) e barra traversal /
+ * prefixo privado.
  */
 export async function lerAnexosFaturamento(anexos: Anexo[]): Promise<MailAttachment[]> {
   const root = path.resolve(uploadRoot())
   const out: MailAttachment[] = []
   for (const a of anexos ?? []) {
+    const notaId = notaIdDoAnexo(a.url ?? '')
+    if (notaId) {
+      try {
+        const nota = await lerNotaParaPdf(notaId)
+        if (nota) out.push({ filename: a.nome || `${nota.baseNome}.pdf`, content: await danfsePdf(nota) })
+      } catch {
+        /* nota ilegível — segue sem ela, como qualquer outro anexo que não resolve */
+      }
+      continue
+    }
     const i = a.url?.indexOf('/uploads/')
     if (i === undefined || i < 0) continue
     const rel = a.url.slice(i + '/uploads/'.length)

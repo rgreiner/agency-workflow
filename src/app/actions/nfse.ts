@@ -912,3 +912,65 @@ export async function conferirNota(orgSlug: string, notaId: string): Promise<{ l
   }
   return { linhas }
 }
+
+/**
+ * Qual lançamento recebe a nota quando a emissão parte do Faturamento.
+ *
+ * Na tela de Faturamento ainda NÃO existe lançamento: ele nasce no "Faturar".
+ * A nota, porém, é emitida contra um lançamento (mig. 313) — então a emissão
+ * que começa ali só pode acontecer DEPOIS de faturar, e precisa descobrir qual
+ * das parcelas recém-criadas vai receber a nota.
+ *
+ * A resposta é sempre a PRIMEIRA parcela, e só ela. Um fee 12x gera 12
+ * lançamentos de uma vez, cada um com a sua competência mensal — emitir as 12
+ * no ato do faturamento seria emitir nota de serviço que ainda não foi
+ * prestado, antecipando imposto que só se desfaz cancelando. Medido em
+ * produção (02/10/2026): dos 27 documentos já faturados, 18 têm 1 parcela e
+ * 3 têm 12; no fee 12x que existe hoje, exatamente 1 das 12 parcelas tem nota —
+ * a do mês corrente. A régua da casa já é uma nota por competência, e esta
+ * função só a repete.
+ */
+export async function primeiraParcelaDoDocumento(
+  orgSlug: string,
+  origemTipo: 'producao' | 'midia',
+  origemId: string,
+): Promise<{ lancamentoId?: string; parcelas?: number; competencia?: string | null; error?: string }> {
+  const { supabase } = await assertFinanceAccess(orgSlug)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any
+
+  const { data, error } = await sb.from('lancamentos')
+    .select('id, competencia, vencimento')
+    .eq('origem_tipo', origemTipo)
+    .eq('origem_id', origemId)
+    .eq('tipo', 'entrada')
+    .order('vencimento', { ascending: true })
+  if (error) return { error: error.message }
+
+  const linhas = (data ?? []) as { id: string; competencia: string | null; vencimento: string | null }[]
+  if (linhas.length === 0) {
+    // Documento sem comissão (o cliente paga o veículo direto) não gera
+    // lançamento — e sem lançamento não há nota a emitir.
+    return { error: 'Este faturamento não gerou lançamento a receber, então não há nota a emitir.' }
+  }
+  return { lancamentoId: linhas[0].id, parcelas: linhas.length, competencia: linhas[0].competencia }
+}
+
+/**
+ * A org consegue emitir NFS-e agora? (certificado + configuração mínima)
+ *
+ * Serve para a tela de Faturamento decidir se mostra "e emitir NF". O botão ali
+ * fatura ANTES de emitir, então descobrir que falta certificado só no diálogo
+ * deixaria o documento faturado e a nota não emitida — o pior dos dois mundos.
+ * Repete as guardas de `emitirNota`, que continua sendo quem recusa de verdade.
+ */
+export async function nfseDisponivel(orgSlug: string): Promise<boolean> {
+  try {
+    const { supabase, orgId } = await assertFinanceAccess(orgSlug)
+    const [info, cfg] = await Promise.all([certificadoPublico(orgId), cfgDaOrg(supabase, orgId)])
+    if (!info || !cfg) return false
+    return !!cfg.codMunicipio && !!cfg.codigoServico && cfg.percSimples != null
+  } catch {
+    return false
+  }
+}

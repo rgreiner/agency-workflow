@@ -6,6 +6,7 @@ import { FaturamentoMidiaTable, type MidiaView } from './FaturamentoMidiaTable'
 import type { ContatoCard } from './ContatosButton'
 import type { ContaRef } from './ClassificacaoFields'
 import type { Anexo, FinanceCentro, FinanceCategoriaGrupo } from '@/app/actions/financeiro'
+import { nfseDisponivel } from '@/app/actions/nfse'
 import { Receipt } from 'lucide-react'
 
 // Sempre dinâmica, como as outras telas do módulo. Sem isto a fila servia uma
@@ -135,7 +136,11 @@ export default async function FaturamentoPage({
   // Conta a receber padrão = a FAVORITA da org (estrela em Contas); fallback: 1ª ativa.
   // Nada de nome de banco hard-coded — a org define a favorita.
   const defaultConta = (contasAtivas.find(c => c.favorita) ?? contasAtivas[0])?.id ?? ''
-  const cat = { contas, categorias, centros, defaultConta }
+  // Sem certificado/configuração fiscal o "e emitir NF" não aparece: ele fatura
+  // antes de emitir, e descobrir a falta só no diálogo deixaria o documento
+  // faturado com a nota por emitir.
+  const nfseAtiva = await nfseDisponivel(orgSlug)
+  const cat = { contas, categorias, centros, defaultConta, nfseAtiva }
 
   /**
    * Sai da fila quem já foi lançado — e também quem foi faturado SEM comissão

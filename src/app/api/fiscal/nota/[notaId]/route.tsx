@@ -4,18 +4,13 @@
 // contabilidade arquiva. Sem parâmetro devolve o DANFSe em PDF, que é o que vai
 // para o cliente junto do boleto.
 //
-// Gerado a cada chamada de propósito: a nota pode ter sido cancelada ou
-// substituída depois de emitida, e o PDF precisa sair com a marca d'água certa.
-// PDF congelado em arquivo mentiria sobre o estado atual da nota.
+// A renderização mora em lib/pdf/danfse-render, compartilhada com o anexo do
+// e-mail de faturamento: o cliente tem que receber exatamente o mesmo PDF que
+// aparece aqui.
 
 import { NextRequest } from 'next/server'
-import { renderToBuffer } from '@react-pdf/renderer'
-import QRCode from 'qrcode'
-import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
-import { desempacotar } from '@/lib/fiscal/dps'
-import { lerDanfse, linkConsulta } from '@/lib/pdf/danfse-data'
-import { DanfseDoc } from '@/lib/pdf/DanfseDoc'
+import { lerNotaParaPdf, danfsePdf } from '@/lib/pdf/danfse-render'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,41 +19,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ nota
   const user = await getUsuario()
   if (!user) return new Response('Não autenticado', { status: 401 })
 
-  const supabase = await createClient()
-  // Lido com o token do usuário: quem não enxerga a org pela RLS (fin_can) não
-  // baixa a nota.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: nota } = await (supabase as any).from('nota_fiscal')
-    .select('numero, chave, status, xml_gz_b64, cancel_motivo, substituida_por')
-    .eq('id', notaId).maybeSingle()
-  if (!nota) return new Response('Nota não encontrada', { status: 404 })
-  if (!nota.xml_gz_b64) return new Response('XML não guardado para esta nota', { status: 404 })
-
-  let xml: string
-  try { xml = desempacotar(nota.xml_gz_b64) } catch { return new Response('XML ilegível', { status: 500 }) }
-
-  const baseNome = `NFS-e ${nota.numero ?? nota.chave}`.replace(/[/\\]/g, '-')
+  const nota = await lerNotaParaPdf(notaId)
+  if (!nota) return new Response('Nota não encontrada ou sem XML guardado', { status: 404 })
 
   if (req.nextUrl.searchParams.has('xml')) {
-    return new Response(xml, {
+    return new Response(nota.xml, {
       headers: {
         'Content-Type': 'application/xml; charset=utf-8',
-        'Content-Disposition': `attachment; filename="${ascii(baseNome)}.xml"`,
+        'Content-Disposition': `attachment; filename="${ascii(nota.baseNome)}.xml"`,
         'Cache-Control': 'no-store',
       },
     })
   }
 
-  const d = lerDanfse(xml, {
-    cancelada: nota.status === 'cancelada',
-    motivoCancelamento: nota.cancel_motivo,
-    substituidaPor: nota.substituida_por,
-  })
-  const qr = await QRCode.toDataURL(linkConsulta(d.chave || nota.chave), { margin: 0, width: 240 })
-  const pdf = await renderToBuffer(<DanfseDoc d={d} qrDataUrl={qr} />)
-
+  const pdf = await danfsePdf(nota)
   const inline = req.nextUrl.searchParams.has('inline')
-  const nome = `${baseNome}.pdf`
+  const nome = `${nota.baseNome}.pdf`
   return new Response(new Uint8Array(pdf), {
     headers: {
       'Content-Type': 'application/pdf',

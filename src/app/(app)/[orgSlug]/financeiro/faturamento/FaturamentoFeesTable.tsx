@@ -2,6 +2,7 @@
 
 import { Fragment, useState, useTransition } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { ChevronRight, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
@@ -14,6 +15,9 @@ import { FaturarButton } from './FaturarButton'
 import { ClassificacaoFields, type Classificacao } from './ClassificacaoFields'
 import { type CatalogosProps } from './FaturamentoMidiaTable'
 import { ContatosButton, type ContatoCard } from './ContatosButton'
+import { DialogoEmitir } from '../lancamentos/NotaFiscal'
+import { primeiraParcelaDoDocumento, type NotaDoLancamento } from '@/app/actions/nfse'
+import { anexoDaNota } from '@/lib/fiscal/anexo'
 
 export interface ParcelaView { vencimento: string; previstoAgencia: string; comissao: boolean; valor: number }
 export interface FeeView {
@@ -67,7 +71,9 @@ function FeeRow({ orgSlug, fee, cat }: { orgSlug: string; fee: FeeView; cat: Cat
   // Já nasce expandido — a conferência (datas + documentos) fica clara de cara.
   const [open, setOpen] = useState(true)
   const [anexos, setAnexos] = useState<Anexo[]>(fee.anexos)
+  const [emitir, setEmitir] = useState<{ lancamentoId: string; parcelas: number } | null>(null)
   const [, startTransition] = useTransition()
+  const router = useRouter()
   // Pré-preenchido: centro = cliente (na grafia do cadastro de centros), categoria
   // pelo tipo (Fee/Job), conta = padrão.
   const [cls, setCls] = useState<Classificacao>({
@@ -83,6 +89,25 @@ function FeeRow({ orgSlug, fee, cat }: { orgSlug: string; fee: FeeView; cat: Cat
   function persist(next: Anexo[]) {
     setAnexos(next)
     startTransition(async () => { await setProducaoAnexos(orgSlug, fee.id, next) })
+  }
+
+  /**
+   * Emissão a partir daqui: o documento já foi faturado pelo botão, então as
+   * parcelas existem e a primeira delas recebe a nota. Enquanto o diálogo está
+   * aberto a linha continua na tela — o refresh é o último passo.
+   */
+  async function abrirEmissao(): Promise<{ error?: string } | void> {
+    const r = await primeiraParcelaDoDocumento(orgSlug, 'producao', fee.id)
+    if (r.error || !r.lancamentoId) return { error: r.error ?? 'Lançamento da primeira parcela não encontrado.' }
+    setEmitir({ lancamentoId: r.lancamentoId, parcelas: r.parcelas ?? 1 })
+  }
+
+  function notaEmitida(n: NotaDoLancamento) {
+    // Anexar aqui é o que faz a nota chegar ao cliente: o "e enviar" manda os
+    // anexos do documento, e sem isto a NF recém-emitida ficaria de fora.
+    persist([...anexos, anexoDaNota(n)])
+    setEmitir(null)
+    router.refresh()
   }
 
   return (
@@ -136,6 +161,7 @@ function FeeRow({ orgSlug, fee, cat }: { orgSlug: string; fee: FeeView; cat: Cat
               })}
               destinatarioPadrao={fee.contatos.find(c => c.papel === 'Cliente')?.emailNf}
               enviar={(dest) => enviarFaturamentoEmail(orgSlug, 'producao', fee.id, dest)}
+              emitirNf={cat.nfseAtiva && !anexos.some(a => a.tipo === 'NF') ? abrirEmissao : undefined}
             />
           </div>
         </td>
@@ -176,6 +202,15 @@ function FeeRow({ orgSlug, fee, cat }: { orgSlug: string; fee: FeeView; cat: Cat
             </div>
           </td>
         </tr>
+      )}
+      {emitir && (
+        <DialogoEmitir
+          orgSlug={orgSlug}
+          lancamentoId={emitir.lancamentoId}
+          cliente={fee.cliente}
+          onFechar={() => { setEmitir(null); router.refresh() }}
+          onEmitida={notaEmitida}
+        />
       )}
     </Fragment>
   )

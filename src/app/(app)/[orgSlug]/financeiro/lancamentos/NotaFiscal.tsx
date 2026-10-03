@@ -237,7 +237,7 @@ export function NotaFiscalBloco({ orgSlug, lancamentoId, nota, cliente, nfAnexad
  * sem tomador não há nota. O Flow sugere pelo nome do centro de custo; quem
  * confirma é a pessoa.
  */
-function DialogoEmitir({ orgSlug, lancamentoId, cliente, substituir, onFechar, onEmitida }: {
+export function DialogoEmitir({ orgSlug, lancamentoId, cliente, substituir, onFechar, onEmitida }: {
   orgSlug: string
   lancamentoId: string
   /** Só para contexto na tela; o valor da nota vem do servidor, nunca da tabela. */

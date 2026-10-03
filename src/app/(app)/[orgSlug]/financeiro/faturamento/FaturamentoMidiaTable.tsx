@@ -2,6 +2,7 @@
 
 import { Fragment, useState, useTransition } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { AlertTriangle, ChevronRight, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
@@ -12,12 +13,17 @@ import { DocsBox, faltando } from './DocsBox'
 import { FaturarButton } from './FaturarButton'
 import { ClassificacaoFields, type ContaRef, type Classificacao } from './ClassificacaoFields'
 import { ContatosButton, type ContatoCard } from './ContatosButton'
+import { DialogoEmitir } from '../lancamentos/NotaFiscal'
+import { primeiraParcelaDoDocumento, type NotaDoLancamento } from '@/app/actions/nfse'
+import { anexoDaNota } from '@/lib/fiscal/anexo'
 
 export interface CatalogosProps {
   contas: ContaRef[]
   categorias: FinanceCategoriaGrupo[]
   centros: FinanceCentro[]
   defaultConta: string
+  /** Org com certificado e configuração fiscal — libera o "e emitir NF". */
+  nfseAtiva: boolean
 }
 
 export interface MidiaView {
@@ -69,7 +75,9 @@ export function FaturamentoMidiaTable({ orgSlug, midias, ...cat }: { orgSlug: st
 function MidiaRow({ orgSlug, midia, cat }: { orgSlug: string; midia: MidiaView; cat: CatalogosProps }) {
   const [open, setOpen] = useState(true)
   const [anexos, setAnexos] = useState<Anexo[]>(midia.anexos)
+  const [emitir, setEmitir] = useState<string | null>(null)
   const [, startTransition] = useTransition()
+  const router = useRouter()
   // Pré-preenchido: centro = cliente (na GRAFIA do cadastro de centros — "É O
   // Amor" do cliente vira "É o Amor" do cadastro), categoria = Comissão, conta = padrão da org.
   const [cls, setCls] = useState<Classificacao>({
@@ -82,6 +90,19 @@ function MidiaRow({ orgSlug, midia, cat }: { orgSlug: string; midia: MidiaView; 
   function persist(next: Anexo[]) {
     setAnexos(next)
     startTransition(async () => { await setMidiaAnexos(orgSlug, midia.id, next) })
+  }
+
+  /** Mesma régua do fee: fatura primeiro, a comissão vira lançamento, a nota sai dele. */
+  async function abrirEmissao(): Promise<{ error?: string } | void> {
+    const r = await primeiraParcelaDoDocumento(orgSlug, 'midia', midia.id)
+    if (r.error || !r.lancamentoId) return { error: r.error ?? 'Lançamento da comissão não encontrado.' }
+    setEmitir(r.lancamentoId)
+  }
+
+  function notaEmitida(n: NotaDoLancamento) {
+    persist([...anexos, anexoDaNota(n)])
+    setEmitir(null)
+    router.refresh()
   }
 
   return (
@@ -135,6 +156,8 @@ function MidiaRow({ orgSlug, midia, cat }: { orgSlug: string; midia: MidiaView; 
               }, semComissao)}
               destinatarioPadrao={midia.contatos.find(c => c.papel === 'Cliente')?.emailNf}
               enviar={(dest) => enviarFaturamentoEmail(orgSlug, 'midia', midia.id, dest)}
+              emitirNf={cat.nfseAtiva && !semComissao && !midia.semVeiculo && !anexos.some(a => a.tipo === 'NF')
+                ? abrirEmissao : undefined}
             />
           </div>
         </td>
@@ -156,6 +179,15 @@ function MidiaRow({ orgSlug, midia, cat }: { orgSlug: string; midia: MidiaView; 
             </div>
           </td>
         </tr>
+      )}
+      {emitir && (
+        <DialogoEmitir
+          orgSlug={orgSlug}
+          lancamentoId={emitir}
+          cliente={midia.cliente}
+          onFechar={() => { setEmitir(null); router.refresh() }}
+          onEmitida={notaEmitida}
+        />
       )}
     </Fragment>
   )
