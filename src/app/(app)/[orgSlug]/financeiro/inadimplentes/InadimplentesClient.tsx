@@ -192,7 +192,7 @@ export function InadimplentesClient({ orgSlug, itens, today, clientes, regua }: 
         )}
       </div>
 
-      {configOpen && <ConfigReguaModal orgSlug={orgSlug} regua={regua} onClose={() => setConfigOpen(false)} />}
+      {configOpen && <ConfigReguaModal orgSlug={orgSlug} regua={regua} clientes={clientes} onClose={() => setConfigOpen(false)} />}
       {cobrando && <CobrarModal orgSlug={orgSlug} g={cobrando} today={today} onClose={() => setCobrando(null)} />}
       {promessaDe && <PromessaModal orgSlug={orgSlug} item={promessaDe} onClose={() => setPromessaDe(null)} />}
       {vinculando && <VincularModal orgSlug={orgSlug} g={vinculando} clientes={clientes} onClose={() => setVinculando(null)} />}
@@ -235,7 +235,73 @@ function ReguaBanner({ regua, onConfig }: { regua: ReguaInfo; onConfig: () => vo
   )
 }
 
-function ConfigReguaModal({ orgSlug, regua, onClose }: { orgSlug: string; regua: ReguaInfo; onClose: () => void }) {
+/**
+ * Opt-in por cliente, dentro do modal que liga a régua.
+ *
+ * O toggle já existia na lista de inadimplentes, mas aquela lista só mostra quem
+ * ESTÁ devendo — então o cliente em dia, que é justamente quem se quer avisar
+ * antes do vencimento, só podia ser ligado abrindo o cadastro um por um. Aqui
+ * aparecem todos, porque a decisão de quem entra na régua é tomada neste modal.
+ *
+ * Grava na hora (não espera o Salvar): é um toggle por cliente, e enfileirar
+ * tudo num botão só faria perder o que já foi marcado se algo falhasse no meio.
+ */
+function ClientesDaRegua({ orgSlug, clientes }: { orgSlug: string; clientes: ClienteInfo[] }) {
+  const router = useRouter()
+  const [salvando, setSalvando] = useState<string | null>(null)
+  // Sem e-mail financeiro ninguém é cobrado — esses vão para o fim, explicados.
+  const ordenados = useMemo(() => [...clientes].sort((a, b) => {
+    const ea = (a.financeEmail ?? '').trim() ? 0 : 1
+    const eb = (b.financeEmail ?? '').trim() ? 0 : 1
+    return ea - eb || a.nome.localeCompare(b.nome, 'pt-BR')
+  }), [clientes])
+
+  async function alternar(c: ClienteInfo) {
+    setSalvando(c.id)
+    const r = await setClienteCobrancaAuto(orgSlug, c.id, !c.cobrancaAuto)
+    setSalvando(null)
+    if (r?.error) { toast.error(r.error); return }
+    toast.success(c.cobrancaAuto ? `${c.nome} sai da régua.` : `${c.nome} entra na régua.`)
+    router.refresh()
+  }
+
+  const ligados = clientes.filter(c => c.cobrancaAuto && (c.financeEmail ?? '').trim()).length
+
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-600 mb-1">
+        Clientes na régua <span className="text-gray-400 font-normal">({ligados} de {clientes.length})</span>
+      </label>
+      <div className="max-h-56 overflow-y-auto rounded-xl border border-gray-100 divide-y divide-gray-50">
+        {ordenados.map(c => {
+          const semEmail = !(c.financeEmail ?? '').trim()
+          return (
+            <button key={c.id} type="button" onClick={() => !semEmail && alternar(c)} disabled={semEmail || salvando === c.id}
+              className={cn('w-full flex items-center gap-3 px-3 py-2 text-left transition-colors',
+                semEmail ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50 active:scale-[0.99]')}>
+              <input type="checkbox" readOnly checked={c.cobrancaAuto && !semEmail} disabled={semEmail}
+                className="w-4 h-4 accent-orange-600 shrink-0 pointer-events-none" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm text-gray-900 truncate">{c.nome}</span>
+                <span className="block text-[11px] text-gray-400 truncate">
+                  {semEmail ? 'sem e-mail financeiro — cadastre na ficha do cliente' : c.financeEmail}
+                </span>
+              </span>
+              {salvando === c.id && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400 shrink-0" />}
+            </button>
+          )
+        })}
+      </div>
+      <p className="text-[11px] text-gray-400 mt-1.5">
+        Vale a pena deixar de fora quem está em negociação por fora do sistema: a régua não sabe de acordo combinado no telefone.
+      </p>
+    </div>
+  )
+}
+
+function ConfigReguaModal({ orgSlug, regua, clientes, onClose }: {
+  orgSlug: string; regua: ReguaInfo; clientes: ClienteInfo[]; onClose: () => void
+}) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [ativa, setAtiva] = useState(regua.ativa)
@@ -280,6 +346,8 @@ function ConfigReguaModal({ orgSlug, regua, onClose }: { orgSlug: string; regua:
             Negativo = antes do vencimento. Cada título recebe no máximo um e-mail por degrau, e sempre o degrau mais alto já alcançado — título que entra com 90 dias de atraso recebe um aviso, não a escada inteira.
           </p>
         </div>
+
+        <ClientesDaRegua orgSlug={orgSlug} clientes={clientes} />
 
         {!regua.temPaymentInfo && (
           <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
