@@ -6,23 +6,43 @@ import { Check, Loader2, Plus, Trash2, ArrowUp, ArrowDown, Highlighter } from 'l
 import { cn } from '@/lib/utils'
 import { setOrgDocs, setOrgPaymentInfo } from '@/app/actions/org-settings'
 import type { OrgDocs, DocNote, AgencyInfo } from '@/lib/agency'
+import { brCode, normalizarChavePix } from '@/lib/pix/brcode'
 
 const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 
-export function DocumentosClient({ orgSlug, orgId, initial, initialPaymentInfo = '' }: { orgSlug: string; orgId: string; initial: OrgDocs; initialPaymentInfo?: string }) {
+export interface PixOrg { chave: string; nome: string; cidade: string }
+
+export function DocumentosClient({ orgSlug, orgId, initial, initialPaymentInfo = '', initialPix, cnpjSugerido = '' }: {
+  orgSlug: string; orgId: string; initial: OrgDocs; initialPaymentInfo?: string; initialPix?: PixOrg
+  /** CNPJ lido do certificado digital — sugestão de chave, não é gravado sozinho. */
+  cnpjSugerido?: string
+}) {
   const [agency, setAgency] = useState<AgencyInfo>(initial.agency)
   const [nf, setNf] = useState<DocNote[]>(initial.nfNotes)
   const [midia, setMidia] = useState<DocNote[]>(initial.midiaNotes)
   const [paymentInfo, setPaymentInfo] = useState(initialPaymentInfo)
+  const [pix, setPix] = useState<PixOrg>(initialPix ?? { chave: '', nome: '', cidade: '' })
   const [saving, start] = useTransition()
+
+  // Prévia do que o cliente vai receber. Chave Pix errada só aparece quando o
+  // cliente tenta pagar e o app recusa — e aí a cobrança já saiu.
+  const setP = (k: keyof PixOrg, v: string) => setPix(p => ({ ...p, [k]: v }))
+  let previa = '', previaErro = ''
+  try {
+    previa = pix.chave.trim()
+      ? brCode({ chave: pix.chave, nome: pix.nome || initial.agency.nome, cidade: pix.cidade || initial.agency.cidade, valor: 1234.56, txid: 'EXEMPLO' })
+      : ''
+  } catch (e) { previaErro = e instanceof Error ? e.message : 'Chave inválida' }
 
   const setA = (k: keyof AgencyInfo, v: string) => setAgency(a => ({ ...a, [k]: v }))
 
   function save() {
     start(async () => {
       const r = await setOrgDocs(orgSlug, orgId, agency, nf.filter(n => n.text.trim()), midia.filter(n => n.text.trim()))
-      const r2 = await setOrgPaymentInfo(orgSlug, orgId, paymentInfo.trim())
+      const r2 = await setOrgPaymentInfo(orgSlug, orgId, paymentInfo.trim(), {
+        chave: pix.chave.trim(), nome: pix.nome.trim(), cidade: pix.cidade.trim(),
+      })
       if (r?.error || r2?.error) toast.error(r?.error || r2?.error)
       else toast.success('Documentos atualizados.')
     })
@@ -60,6 +80,52 @@ export function DocumentosClient({ orgSlug, orgId, initial, initialPaymentInfo =
         <textarea value={paymentInfo} onChange={e => setPaymentInfo(e.target.value)} rows={4}
           placeholder={'Pix: financeiro@oneaone.com.br\nBanco 000 · Ag 0000 · CC 00000-0 · Amexcom Publicidade Ltda'}
           className={cn(inputCls, 'resize-y min-h-[80px]')} />
+      </section>
+
+      {/* Pix copia-e-cola — gerado com o valor de cada título */}
+      <section className="bg-white border border-gray-200 rounded-2xl p-5 mb-4">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Pix copia-e-cola (cobrança)</h3>
+        <p className="text-[11px] text-gray-400 mb-3">
+          Com a chave preenchida, cada e-mail de cobrança leva um código Pix <strong>já com o valor do título</strong> —
+          o cliente cola no app e paga, sem digitar nada. Deixe vazio para mandar só o texto acima.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="sm:col-span-3">
+            <label className={labelCls}>Chave Pix</label>
+            <input value={pix.chave} onChange={e => setP('chave', e.target.value)}
+              placeholder="CNPJ, e-mail, telefone ou chave aleatória" className={inputCls} />
+            {pix.chave.trim() ? (
+              <p className="text-[11px] text-gray-400 mt-1">
+                Vai no código como <span className="font-mono text-gray-600">{normalizarChavePix(pix.chave)}</span>
+                {cnpjSugerido && normalizarChavePix(pix.chave) !== cnpjSugerido && (
+                  <span className="text-amber-600"> · diferente do CNPJ do certificado ({cnpjSugerido})</span>
+                )}
+              </p>
+            ) : cnpjSugerido ? (
+              <button type="button" onClick={() => setP('chave', cnpjSugerido)}
+                className="text-[11px] text-orange-600 hover:text-orange-700 mt-1 transition-colors">
+                Usar o CNPJ do certificado ({cnpjSugerido})
+              </button>
+            ) : null}
+          </div>
+          <div className="sm:col-span-2">
+            <label className={labelCls}>Nome do recebedor <span className="text-gray-400 font-normal">(até 25)</span></label>
+            <input value={pix.nome} onChange={e => setP('nome', e.target.value)}
+              placeholder={initial.agency.nome} className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>Cidade <span className="text-gray-400 font-normal">(até 15)</span></label>
+            <input value={pix.cidade} onChange={e => setP('cidade', e.target.value)}
+              placeholder={initial.agency.cidade} className={inputCls} />
+          </div>
+        </div>
+        {previaErro && <p className="text-xs text-red-600 mt-3">{previaErro}</p>}
+        {previa && (
+          <div className="mt-3">
+            <p className="text-[11px] text-gray-400 mb-1">Prévia para um título de R$ 1.234,56 — teste no app do seu banco antes de ligar a régua:</p>
+            <p className="font-mono text-[11px] leading-relaxed text-gray-600 bg-gray-50 border border-gray-100 rounded-xl p-3 break-all select-all">{previa}</p>
+          </div>
+        )}
       </section>
 
       <NotesEditor

@@ -46,12 +46,18 @@ export async function setOrgDocs(orgSlug: string, orgId: string, agency: AgencyI
 }
 
 /** Dados bancários da org (usados na cobrança automática). owner/admin/can_finance. */
-export async function setOrgPaymentInfo(orgSlug: string, orgId: string, info: string) {
+export async function setOrgPaymentInfo(
+  orgSlug: string, orgId: string, info: string,
+  pix?: { chave: string; nome: string; cidade: string },
+) {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any).rpc('set_org_payment_info', { p_user_id: user.id, p_org_id: orgId, p_info: info })
+  const { error } = await (supabase as any).rpc('set_org_payment_info', {
+    p_user_id: user.id, p_org_id: orgId, p_info: info,
+    p_pix_chave: pix?.chave ?? null, p_pix_nome: pix?.nome ?? null, p_pix_cidade: pix?.cidade ?? null,
+  })
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/settings/documentos`)
   return {}

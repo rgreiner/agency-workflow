@@ -2,6 +2,7 @@ import 'server-only'
 import { sendMail, remetenteDominio } from '@/lib/email/send'
 import { boletosDosLancamentos } from '@/lib/email/cobranca-anexos'
 import { htmlCobranca, assuntoCobranca, tomPorDias } from '@/lib/email/cobranca'
+import { criarBuscadorPix, pixDoTitulo } from '@/lib/pix/cobranca'
 import type { CronJob } from './jobs'
 
 interface Aviso {
@@ -42,12 +43,17 @@ export const cobrancaJob: CronJob = {
     // alguém. É o mesmo endereço que o "Cobrar agora" da tela já usava.
     const dominio = remetenteDominio()
 
+    const buscarPix = criarBuscadorPix(supabase)
+
     let sent = 0, failed = 0
     for (const a of avisos) {
       if (!a.email) continue
       const tom = tomPorDias(a.dias)
+      // Código já com o valor do título: o cliente cola e paga, sem digitar.
+      const pix = a.org_id ? await buscarPix(a.org_id) : null
       const html = htmlCobranca({
         orgName: a.org_name, cliente: a.cliente, paymentInfo: a.payment_info, tom,
+        pixCopiaECola: pixDoTitulo(pix, Number(a.valor), a.lancamento_id.replace(/-/g, '').slice(0, 25)),
         titulos: [{ descricao: a.descricao, valor: a.valor, vencimento: a.vencimento, dias: a.dias }],
       })
       const anexos = a.org_id

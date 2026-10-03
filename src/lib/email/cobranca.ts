@@ -67,6 +67,11 @@ export function htmlCobranca(o: {
   cliente: string
   titulos: TituloCobranca[]
   paymentInfo: string
+  /**
+   * Pix copia-e-cola já com o valor devido. Vem pronto de quem monta o e-mail
+   * (o valor muda a cada título, então não dá para guardar um código só).
+   */
+  pixCopiaECola?: string
   /** Sem tom explícito, deduz do título mais atrasado. */
   tom?: TomCobranca
 }): string {
@@ -94,6 +99,15 @@ export function htmlCobranca(o: {
     `</table>` +
     (o.paymentInfo
       ? `<p style="font-size:13px;color:#374151;white-space:pre-line;background:#f6f6f4;border-radius:10px;padding:12px 14px;margin:0 0 4px;">${esc(o.paymentInfo)}</p>`
+      : '') +
+    // O código vai como texto selecionável, não como imagem de QR: cliente de
+    // e-mail bloqueia imagem por padrão, e um QR que não carrega é uma cobrança
+    // sem como pagar. Colar o código funciona em todo app de banco.
+    (o.pixCopiaECola
+      ? `<div style="background:#f6f6f4;border-radius:10px;padding:12px 14px;margin:0 0 4px;">` +
+        `<p style="font-size:12px;color:#6b7280;margin:0 0 6px;font-weight:600;">Pix copia e cola — ${brl(total)}</p>` +
+        `<p style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;line-height:1.5;color:#374151;word-break:break-all;margin:0;">${esc(o.pixCopiaECola)}</p>` +
+        `</div>`
       : '') +
     `<p style="margin:14px 0 0;color:#6b7280;font-size:13px;">Se o pagamento já foi feito, desconsidere este aviso. Atenciosamente,<br><strong style="color:#111827;">${esc(o.orgName)}</strong></p>`
 

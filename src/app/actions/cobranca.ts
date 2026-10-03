@@ -7,6 +7,7 @@ import { unwrap } from '@/lib/supabase/unwrap'
 import { sendMail, remetenteDominio } from '@/lib/email/send'
 import { boletosDosLancamentos } from '@/lib/email/cobranca-anexos'
 import { htmlCobranca, assuntoCobranca, tomPorDias, type TituloCobranca } from '@/lib/email/cobranca'
+import { pixDoTitulo } from '@/lib/pix/cobranca'
 
 /**
  * Ações da cobrança (tela de Inadimplentes). A régua automática vive no cron;
@@ -50,7 +51,8 @@ export async function cobrarAgora(orgSlug: string, workspaceId: string, lancamen
     return { error: `${ws.name} não tem e-mail financeiro cadastrado — informe na ficha do cliente.` }
   }
 
-  const { data: cfg } = await sb.from('org_settings').select('payment_info').eq('org_id', org.id).maybeSingle()
+  const { data: cfg } = await sb.from('org_settings')
+    .select('payment_info, pix_chave, pix_nome, pix_cidade').eq('org_id', org.id).maybeSingle()
   const paymentInfo = (cfg?.payment_info ?? '').trim()
   if (!paymentInfo) {
     return { error: 'Cadastre os dados de pagamento (Configurações → Documentos) antes de cobrar — sem eles o cliente não sabe como pagar.' }
@@ -90,7 +92,16 @@ export async function cobrarAgora(orgSlug: string, workspaceId: string, lancamen
     from: dominio ? `${org.name} Financeiro <financeiro@${dominio}>` : undefined,
     replyTo: user.email || undefined,
     subject: `${assuntoCobranca(tom, dias)} — ${org.name}`,
-    html: htmlCobranca({ orgName: org.name, cliente: ws.name, titulos, paymentInfo, tom }),
+    // Aqui o e-mail é UM por cliente com todos os títulos, então o Pix é do
+    // TOTAL — um código por título faria o cliente pagar em várias colagens.
+    html: htmlCobranca({
+      orgName: org.name, cliente: ws.name, titulos, paymentInfo, tom,
+      pixCopiaECola: pixDoTitulo(
+        cfg?.pix_chave ? { chave: cfg.pix_chave, nome: cfg.pix_nome ?? '', cidade: cfg.pix_cidade ?? '' } : null,
+        titulos.reduce((soma, t) => soma + Number(t.valor || 0), 0),
+        String(ws.id ?? '').replace(/-/g, '').slice(0, 25),
+      ),
+    }),
     attachments: anexos.length ? anexos : undefined,
   })
   if (erroEnvio) return { error: `Não enviou: ${erroEnvio}` }
