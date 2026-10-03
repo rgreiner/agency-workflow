@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Receipt, Send, Loader2, AlertTriangle, FileText, Check } from 'lucide-react'
 import { toast } from 'sonner'
+import { formatDateBR } from '@/lib/midia'
 
 /**
  * Botões da conferência de Faturamento:
@@ -24,7 +25,7 @@ import { toast } from 'sonner'
  * mídia sem veículo. Aí o botão some e fica o motivo no lugar dele, porque deixar
  * clicar só pra receber erro do banco é pior do que não deixar clicar.
  */
-export function FaturarButton({ action, missing, okToast, enviar, destinatarioPadrao, blocked, semComissao, emitirNf, jaFaturado }: {
+export function FaturarButton({ action, missing, okToast, enviar, destinatarioPadrao, blocked, semComissao, emitirNf, jaFaturado, parcelas }: {
   action: () => Promise<{ error?: string } | void>
   missing: string[]
   okToast: string
@@ -52,6 +53,15 @@ export function FaturarButton({ action, missing, okToast, enviar, destinatarioPa
    * envio NÃO refatura — chamar `action()` de novo geraria as parcelas outra vez.
    */
   jaFaturado?: boolean
+  /**
+   * Quantas parcelas o documento tem e quando vence a primeira.
+   *
+   * Serve para a confirmação dizer que a nota é SÓ da primeira — num fee 12x a
+   * pergunta "emite uma ou doze?" é legítima e a tela não respondia. Emitir as
+   * doze seria nota de serviço não prestado; as outras saem mês a mês, cada uma
+   * na sua competência.
+   */
+  parcelas?: { total: number; primeiroVencimento?: string | null }
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -120,7 +130,13 @@ export function FaturarButton({ action, missing, okToast, enviar, destinatarioPa
     return (
       <span className="inline-flex items-center gap-2 text-xs">
         {avisoEmissao}
-        <span className="text-gray-500">Emite a NFS-e e fatura o documento. Seguir?</span>
+        <span className="text-gray-500">
+          {parcelas && parcelas.total > 1
+            ? <>Emite a NFS-e <strong className="text-gray-700">só da parcela 1/{parcelas.total}</strong>
+                {parcelas.primeiroVencimento ? ` (${formatDateBR(parcelas.primeiroVencimento)})` : ''} e fatura o documento.
+                As outras {parcelas.total - 1} saem mês a mês, em Lançamentos. Seguir?</>
+            : <>Emite a NFS-e e fatura o documento. Seguir?</>}
+        </span>
         <button onClick={runEmitir} disabled={pending}
           className="font-medium text-orange-600 hover:text-orange-700 inline-flex items-center gap-1 disabled:opacity-50">
           {pending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Sim'}
@@ -188,8 +204,12 @@ export function FaturarButton({ action, missing, okToast, enviar, destinatarioPa
       {emitirNf ? (
         <>
           <button onClick={() => setMode('nf')} className={solido}
-            title="Emitir a NFS-e desta primeira parcela e faturar o documento">
-            <FileText className="w-3.5 h-3.5" /> Emitir NF <span className="hidden lg:inline">e faturar</span>
+            title={parcelas && parcelas.total > 1
+              ? `Emitir a NFS-e da parcela 1/${parcelas.total} e faturar o documento — as demais saem mês a mês`
+              : 'Emitir a NFS-e e faturar o documento'}>
+            <FileText className="w-3.5 h-3.5" />
+            Emitir NF{parcelas && parcelas.total > 1 ? ' 1/' + parcelas.total : ''}
+            <span className="hidden lg:inline">e faturar</span>
           </button>
           <button onClick={() => setMode('faturar')} className={vazado}
             title="Faturar sem emitir nota (documento que não leva NF)">

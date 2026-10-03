@@ -164,6 +164,7 @@ function FeeRow({ orgSlug, fee, cat }: { orgSlug: string; fee: FeeView; cat: Cat
               enviar={(dest) => enviarFaturamentoEmail(orgSlug, 'producao', fee.id, dest)}
               emitirNf={cat.nfseAtiva && !anexos.some(a => a.tipo === 'NF') ? abrirEmissao : undefined}
               jaFaturado={faturado}
+              parcelas={{ total: n, primeiroVencimento: cobrs[0] ?? agencias[0] ?? null }}
             />
           </div>
         </td>

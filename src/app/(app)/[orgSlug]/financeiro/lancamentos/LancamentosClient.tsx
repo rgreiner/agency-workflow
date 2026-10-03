@@ -77,6 +77,18 @@ export interface ContaRef { id: string; nome: string; tipo?: string | null; cor:
 // para achá-lo.
 const temNotaValida = (n?: NotaDoLancamento) => !!n && n.status === 'autorizada'
 
+/**
+ * A nota já é DEVIDA? Só conta como pendência o que tem competência chegada.
+ *
+ * Um fee 12x faturado hoje cria as 12 parcelas de uma vez, com competência de
+ * hoje até daqui a um ano. As 11 futuras não estão "sem nota" — elas ainda não
+ * têm nota a emitir, e emitir seria nota de serviço não prestado. Medido em
+ * 03/10/2026: dos 94 lançamentos sem nota, 50 tinham competência futura, até
+ * julho/2027. Mais da metade da fila era coisa para a qual não há o que fazer.
+ */
+const notaDevida = (l: Lancamento, hoje: string) =>
+  String(l.competencia ?? l.vencimento ?? '').slice(0, 10) <= hoje
+
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
 // Período da tela: mês, ano ou intervalo personalizado. A lista mostra SÓ o que cai no período.
@@ -172,7 +184,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       // filtro — e da contagem, que precisa bater com a lista.
       if (faltando && l.source === 'importado') return false
       // Sem nota: só faz sentido no que a agência fatura (entrada, não importado).
-      if (faltando === 'nota' && (l.tipo !== 'entrada' || l.source === 'importado' || temNotaValida(notas[l.id]))) return false
+      if (faltando === 'nota' && (l.tipo !== 'entrada' || l.source === 'importado' || temNotaValida(notas[l.id]) || !notaDevida(l, today))) return false
       if (faltando === 'categoria' && (l.categoria ?? '').trim()) return false
       if (faltando === 'centro' && (l.centro_custo ?? '').trim()) return false
       if (faltando === 'conta' && l.conta_id) return false
@@ -181,7 +193,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       if (q && !`${l.contato_nome ?? ''} ${l.descricao ?? ''} ${l.categoria ?? ''} ${l.doc_serie ?? ''} ${l.doc_numero ?? ''} ${textoBuscavel(l.anexos)}`.toLowerCase().includes(q)) return false
       return true
     })
-  }, [merged, tipoFilter, contaFilter, query, faltando, notas])
+  }, [merged, tipoFilter, contaFilter, query, faltando, notas, today])
 
   // Data efetiva: liquidação (se pago) ou vencimento (se em aberto).
   const effDate = (l: Lancamento) => (isPago(l.situacao) ? (l.data_liquidacao ?? l.vencimento) : l.vencimento)
@@ -294,14 +306,15 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       return { total: todos.length, fora: todos.length - dentro }
     }
     return {
-      // Sem nota é pendência só do que a agência fatura.
-      nota: conta(l => l.tipo === 'entrada' && !temNotaValida(notas[l.id])),
+      // Sem nota é pendência só do que a agência fatura, e só quando a
+      // competência já chegou — parcela futura não tem nota a emitir.
+      nota: conta(l => l.tipo === 'entrada' && !temNotaValida(notas[l.id]) && notaDevida(l, today)),
       categoria: conta(l => !(l.categoria ?? '').trim()),
       centro: conta(l => !(l.centro_custo ?? '').trim()),
       conta: conta(l => !l.conta_id),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [merged, tipoFilter, contaFilter, perStart, perEnd, notas])
+  }, [merged, tipoFilter, contaFilter, perStart, perEnd, notas, today])
 
   const contaFilterOptions = useMemo(() => [{ value: '', label: 'Todas as contas' }, ...contas.map(c => ({ value: c.id, label: c.nome }))], [contas])
   const hasFilters = tipoFilter !== 'todos' || !!contaFilter || !!query.trim() || !!cardFilter || !!faltando
@@ -388,6 +401,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       {faltando && (
         <p className="-mt-2 mb-4 text-xs text-amber-700">
           Mostrando todos os períodos enquanto o filtro de pendência está ligado — {periodoLabel(periodo)} fica de fora da conta.
+          {faltando === 'nota' && ' Parcela de competência futura não entra: a nota dela ainda não é devida.'}
         </p>
       )}
 
