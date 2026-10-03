@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Receipt, Send, Loader2, AlertTriangle, FileText } from 'lucide-react'
+import { Receipt, Send, Loader2, AlertTriangle, FileText, Check } from 'lucide-react'
 import { toast } from 'sonner'
 
 /**
@@ -11,17 +11,20 @@ import { toast } from 'sonner'
  *  • "Faturar e enviar" (quando `enviar` é passado) — fatura E dispara o e-mail
  *    ao cliente com os documentos anexados. NUNCA automático: o financeiro
  *    escolhe, confirma o destinatário e envia.
- *  • "e emitir NF" (quando `emitirNf` é passado) — fatura e abre a emissão da
- *    NFS-e. Nessa ordem porque a nota é emitida contra um lançamento, e o
- *    lançamento nasce no faturar. Quem passou `emitirNf` cuida do refresh:
- *    atualizar aqui tiraria a linha da tela no meio da emissão.
+ *  • "Emitir NF e faturar" (quando `emitirNf` é passado) — o ato principal
+ *    quando a org emite nota pelo Flow. Emitir a NFS-e É faturar: antes da
+ *    integração a nota saía fora do sistema e "Faturar" era só o registro no
+ *    caixa; agora os dois são o mesmo ato, e quem lidera a linha é a emissão.
+ *    Internamente o lançamento é criado primeiro (a nota é emitida CONTRA ele),
+ *    mas isso é ordem técnica, não a ordem do trabalho. Quem passou `emitirNf`
+ *    cuida do refresh: atualizar aqui tiraria a linha da tela no meio da emissão.
  * Se faltar NF/Boleto, avisa mas não trava (decisão: só avisar).
  *
  * `blocked` é outra coisa: é o caso em que faturar NÃO geraria lançamento — hoje,
  * mídia sem veículo. Aí o botão some e fica o motivo no lugar dele, porque deixar
  * clicar só pra receber erro do banco é pior do que não deixar clicar.
  */
-export function FaturarButton({ action, missing, okToast, enviar, destinatarioPadrao, blocked, semComissao, emitirNf }: {
+export function FaturarButton({ action, missing, okToast, enviar, destinatarioPadrao, blocked, semComissao, emitirNf, jaFaturado }: {
   action: () => Promise<{ error?: string } | void>
   missing: string[]
   okToast: string
@@ -40,6 +43,15 @@ export function FaturarButton({ action, missing, okToast, enviar, destinatarioPa
    * sobre documento que já tem nota é convidar à duplicata.
    */
   emitirNf?: () => Promise<{ error?: string } | void>
+  /**
+   * O documento JÁ foi faturado nesta sessão (a emissão da NF faturou).
+   *
+   * Existe para o último passo do processo: emitir a nota tira a linha da fila,
+   * e sem isto o envio ao cliente ficaria inalcançável justamente na tela onde
+   * ele deveria acontecer. Com a marca ligada sobra só "Enviar ao cliente", e o
+   * envio NÃO refatura — chamar `action()` de novo geraria as parcelas outra vez.
+   */
+  jaFaturado?: boolean
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -54,11 +66,18 @@ export function FaturarButton({ action, missing, okToast, enviar, destinatarioPa
     )
   }
 
-  const avisoMissing = missing.length > 0 && (
-    <span className="inline-flex items-center gap-1 text-amber-600" title={`Faltam: ${missing.join(', ')}`}>
-      <AlertTriangle className="w-3.5 h-3.5" /> falta {missing.join(' + ')}
+  const aviso = (faltas: string[]) => faltas.length > 0 && (
+    <span className="inline-flex items-center gap-1 text-amber-600" title={`Faltam: ${faltas.join(', ')}`}>
+      <AlertTriangle className="w-3.5 h-3.5" /> falta {faltas.join(' + ')}
     </span>
   )
+  const avisoMissing = aviso(missing)
+  // Na confirmação da emissão, a NF não está faltando: ela é o que o clique vai
+  // produzir. Sobra o boleto, que ainda vem do banco (o Flow não emite boleto).
+  const avisoEmissao = aviso(missing.filter(m => m !== 'NF'))
+
+  const solido = 'inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 text-[#fff] text-xs font-medium rounded-lg hover:bg-orange-700 active:scale-[0.97] transition-colors'
+  const vazado = 'inline-flex items-center gap-1.5 px-3 py-1.5 border border-orange-200 text-orange-700 text-xs font-medium rounded-lg hover:bg-orange-500/10 active:scale-[0.97] transition-colors'
 
   function runFaturar() {
     start(async () => {
@@ -72,8 +91,10 @@ export function FaturarButton({ action, missing, okToast, enviar, destinatarioPa
 
   function runEnviar() {
     start(async () => {
-      const r1 = await action()
-      if (r1?.error) { toast.error(r1.error); return }
+      if (!jaFaturado) {
+        const r1 = await action()
+        if (r1?.error) { toast.error(r1.error); return }
+      }
       const r2 = await enviar!(dest)
       if (r2?.error) { toast.error(r2.error); setMode(null); router.refresh(); return }
       toast.success('Faturado e enviado ao cliente.')
@@ -98,8 +119,8 @@ export function FaturarButton({ action, missing, okToast, enviar, destinatarioPa
   if (mode === 'nf') {
     return (
       <span className="inline-flex items-center gap-2 text-xs">
-        {avisoMissing}
-        <span className="text-gray-500">Fatura e abre a emissão. Faturar?</span>
+        {avisoEmissao}
+        <span className="text-gray-500">Emite a NFS-e e fatura o documento. Seguir?</span>
         <button onClick={runEmitir} disabled={pending}
           className="font-medium text-orange-600 hover:text-orange-700 inline-flex items-center gap-1 disabled:opacity-50">
           {pending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Sim'}
@@ -145,23 +166,45 @@ export function FaturarButton({ action, missing, okToast, enviar, destinatarioPa
     )
   }
 
+  // Pós-emissão: falta só mandar ao cliente.
+  if (jaFaturado) {
+    return (
+      <span className="inline-flex items-center gap-2">
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700">
+          <Check className="w-3.5 h-3.5" /> faturado
+        </span>
+        {enviar && (
+          <button onClick={() => { setDest(destinatarioPadrao ?? ''); setMode('enviar') }} className={solido}
+            title="Enviar a NF e o boleto ao cliente por e-mail">
+            <Send className="w-3.5 h-3.5" /> Enviar ao cliente
+          </button>
+        )}
+      </span>
+    )
+  }
+
   return (
     <span className="inline-flex items-center gap-1.5">
-      <button onClick={() => setMode('faturar')}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 text-[#fff] text-xs font-medium rounded-lg hover:bg-orange-700 active:scale-[0.97] transition">
-        <Receipt className="w-3.5 h-3.5" /> Faturar
-      </button>
-      {emitirNf && (
-        <button onClick={() => setMode('nf')}
-          title="Faturar e emitir a NFS-e desta primeira parcela"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-orange-200 text-orange-700 text-xs font-medium rounded-lg hover:bg-orange-500/10 active:scale-[0.97] transition-colors">
-          <FileText className="w-3.5 h-3.5" /> <span className="hidden sm:inline">e emitir NF</span>
+      {emitirNf ? (
+        <>
+          <button onClick={() => setMode('nf')} className={solido}
+            title="Emitir a NFS-e desta primeira parcela e faturar o documento">
+            <FileText className="w-3.5 h-3.5" /> Emitir NF <span className="hidden lg:inline">e faturar</span>
+          </button>
+          <button onClick={() => setMode('faturar')} className={vazado}
+            title="Faturar sem emitir nota (documento que não leva NF)">
+            <Receipt className="w-3.5 h-3.5" /> <span className="hidden sm:inline">sem NF</span>
+          </button>
+        </>
+      ) : (
+        <button onClick={() => setMode('faturar')} className={solido}>
+          <Receipt className="w-3.5 h-3.5" /> Faturar
         </button>
       )}
       {enviar && (
         <button onClick={() => { setDest(destinatarioPadrao ?? ''); setMode('enviar') }}
           title="Faturar e enviar o financeiro ao cliente por e-mail"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-orange-200 text-orange-700 text-xs font-medium rounded-lg hover:bg-orange-500/10 active:scale-[0.97] transition">
+          className={vazado}>
           <Send className="w-3.5 h-3.5" /> <span className="hidden sm:inline">e enviar</span>
         </button>
       )}

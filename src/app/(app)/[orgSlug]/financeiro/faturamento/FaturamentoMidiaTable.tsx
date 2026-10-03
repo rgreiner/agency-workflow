@@ -2,7 +2,6 @@
 
 import { Fragment, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { AlertTriangle, ChevronRight, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
@@ -76,8 +75,8 @@ function MidiaRow({ orgSlug, midia, cat }: { orgSlug: string; midia: MidiaView; 
   const [open, setOpen] = useState(true)
   const [anexos, setAnexos] = useState<Anexo[]>(midia.anexos)
   const [emitir, setEmitir] = useState<string | null>(null)
+  const [faturado, setFaturado] = useState(false)
   const [, startTransition] = useTransition()
-  const router = useRouter()
   // Pré-preenchido: centro = cliente (na GRAFIA do cadastro de centros — "É O
   // Amor" do cliente vira "É o Amor" do cadastro), categoria = Comissão, conta = padrão da org.
   const [cls, setCls] = useState<Classificacao>({
@@ -100,9 +99,11 @@ function MidiaRow({ orgSlug, midia, cat }: { orgSlug: string; midia: MidiaView; 
   }
 
   function notaEmitida(n: NotaDoLancamento) {
+    // Sem refresh: o documento já está faturado e a linha sairia da fila,
+    // levando junto o envio ao cliente — que é o passo seguinte do processo.
+    setFaturado(true)
     persist([...anexos, anexoDaNota(n)])
     setEmitir(null)
-    router.refresh()
   }
 
   return (
@@ -158,6 +159,7 @@ function MidiaRow({ orgSlug, midia, cat }: { orgSlug: string; midia: MidiaView; 
               enviar={(dest) => enviarFaturamentoEmail(orgSlug, 'midia', midia.id, dest)}
               emitirNf={cat.nfseAtiva && !semComissao && !midia.semVeiculo && !anexos.some(a => a.tipo === 'NF')
                 ? abrirEmissao : undefined}
+              jaFaturado={faturado}
             />
           </div>
         </td>
@@ -185,7 +187,9 @@ function MidiaRow({ orgSlug, midia, cat }: { orgSlug: string; midia: MidiaView; 
           orgSlug={orgSlug}
           lancamentoId={emitir}
           cliente={midia.cliente}
-          onFechar={() => { setEmitir(null); router.refresh() }}
+          // Fechar sem emitir não desfaz o faturamento que já aconteceu — por
+          // isso a linha fica, com o envio ao cliente ainda disponível.
+          onFechar={() => { setEmitir(null); setFaturado(true) }}
           onEmitida={notaEmitida}
         />
       )}

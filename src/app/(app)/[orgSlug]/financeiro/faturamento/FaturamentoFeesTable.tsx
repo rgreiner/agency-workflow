@@ -2,7 +2,6 @@
 
 import { Fragment, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { ChevronRight, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
@@ -72,8 +71,8 @@ function FeeRow({ orgSlug, fee, cat }: { orgSlug: string; fee: FeeView; cat: Cat
   const [open, setOpen] = useState(true)
   const [anexos, setAnexos] = useState<Anexo[]>(fee.anexos)
   const [emitir, setEmitir] = useState<{ lancamentoId: string; parcelas: number } | null>(null)
+  const [faturado, setFaturado] = useState(false)
   const [, startTransition] = useTransition()
-  const router = useRouter()
   // Pré-preenchido: centro = cliente (na grafia do cadastro de centros), categoria
   // pelo tipo (Fee/Job), conta = padrão.
   const [cls, setCls] = useState<Classificacao>({
@@ -103,11 +102,13 @@ function FeeRow({ orgSlug, fee, cat }: { orgSlug: string; fee: FeeView; cat: Cat
   }
 
   function notaEmitida(n: NotaDoLancamento) {
+    // Sem refresh: o documento já está faturado e a linha sairia da fila,
+    // levando junto o envio ao cliente — que é o passo seguinte do processo.
+    setFaturado(true)
     // Anexar aqui é o que faz a nota chegar ao cliente: o "e enviar" manda os
     // anexos do documento, e sem isto a NF recém-emitida ficaria de fora.
     persist([...anexos, anexoDaNota(n)])
     setEmitir(null)
-    router.refresh()
   }
 
   return (
@@ -162,6 +163,7 @@ function FeeRow({ orgSlug, fee, cat }: { orgSlug: string; fee: FeeView; cat: Cat
               destinatarioPadrao={fee.contatos.find(c => c.papel === 'Cliente')?.emailNf}
               enviar={(dest) => enviarFaturamentoEmail(orgSlug, 'producao', fee.id, dest)}
               emitirNf={cat.nfseAtiva && !anexos.some(a => a.tipo === 'NF') ? abrirEmissao : undefined}
+              jaFaturado={faturado}
             />
           </div>
         </td>
@@ -208,7 +210,9 @@ function FeeRow({ orgSlug, fee, cat }: { orgSlug: string; fee: FeeView; cat: Cat
           orgSlug={orgSlug}
           lancamentoId={emitir.lancamentoId}
           cliente={fee.cliente}
-          onFechar={() => { setEmitir(null); router.refresh() }}
+          // Fechar sem emitir não desfaz o faturamento que já aconteceu — por
+          // isso a linha fica, com o envio ao cliente ainda disponível.
+          onFechar={() => { setEmitir(null); setFaturado(true) }}
           onEmitida={notaEmitida}
         />
       )}
