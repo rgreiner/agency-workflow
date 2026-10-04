@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { updateProducao } from '@/app/actions/producao'
 import { loadProducaoSelectors } from '@/lib/midia-selectors'
+import { referenciaDeComissao } from '@/lib/producao/comissao-referencia'
 import { LockableFormShell } from '@/components/ui/LockableFormShell'
 import { PedidoForm, type PedidoValues, type ItemPed, type Parcela } from '../PedidoForm'
 
@@ -17,7 +18,8 @@ export default async function EditarPedidoPage({
   params: Promise<{ orgSlug: string; producaoId: string }>
 }) {
   const { orgSlug, producaoId } = await params
-  const { supabase, clientes, fornecedores, members, userId, today } = await loadProducaoSelectors(orgSlug)
+  const { supabase, orgId, clientes, fornecedores, members, userId, today } = await loadProducaoSelectors(orgSlug)
+  const comissaoRef = await referenciaDeComissao(supabase, orgId)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: p } = await (supabase as any).from('producao').select('*').eq('id', producaoId).single()
@@ -45,6 +47,7 @@ export default async function EditarPedidoPage({
         clientes={clientes}
         fornecedores={fornecedores}
         members={members}
+        comissaoRef={comissaoRef}
         defaultResponsavelId={userId}
         today={today}
         redirectTo={`/${orgSlug}/producao/pedido`}

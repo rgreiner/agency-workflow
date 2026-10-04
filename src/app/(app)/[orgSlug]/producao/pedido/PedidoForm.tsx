@@ -11,6 +11,7 @@ import { PRODUCAO_SITUACAO_OPTIONS, MIDIA_PRAZO_OPTIONS, formatBRL, parseMoney }
 import type { ClienteOpt, MemberOpt } from '../../midias/simplificada/MidiaForm'
 import type { FornecedorOpt } from '@/lib/midia-selectors'
 
+export interface ComissaoRef { padrao: number; noPadrao: number; total: number; minimo: number; maximo: number }
 export interface ItemPed { nome: string; descricao: string; n_orc: string; quant: string; valor: string; valor_total?: string }
 export interface Parcela { vencimento: string; valor: string; tipo: string }
 export interface PedidoValues {
@@ -99,11 +100,14 @@ function emptyValues(today: string, responsavelId: string): PedidoValues {
 
 export function PedidoForm({
   clientes, fornecedores, members, defaultResponsavelId, today, redirectTo, initial, submitLabel = 'Gravar', onSubmit,
+  comissaoRef,
 }: {
   clientes: ClienteOpt[]; fornecedores: FornecedorOpt[]; members: MemberOpt[]
   defaultResponsavelId: string; today: string; redirectTo: string
   initial?: Partial<PedidoValues>; submitLabel?: string
   onSubmit: (fd: FormData) => Promise<{ error?: string } | void>
+  /** O que a casa pratica — null quando ainda não há histórico que sustente. */
+  comissaoRef?: ComissaoRef | null
 }) {
   const router = useRouter()
   const [form, setForm] = useState<PedidoValues>({
@@ -288,7 +292,12 @@ export function PedidoForm({
             <div><p className="text-xs text-gray-400">Valor Total</p><p className="text-lg font-semibold text-gray-900">{formatBRL(valorTotal)}</p></div>
             <div><label className={labelCls}>Faturar</label><Select value={form.faturar} onChange={v => set('faturar', v)} options={FATURAR} /></div>
             <div><label className={labelCls}>Prazo</label><Select value={form.prazo} onChange={v => set('prazo', v)} options={MIDIA_PRAZO_OPTIONS} /></div>
-            <div><label className={labelCls}>Comissão (%)</label><input inputMode="decimal" value={form.bv_pct} onChange={e => set('bv_pct', e.target.value)} className={inputCls} /><p className="text-xs text-gray-400 mt-1">{formatBRL(bv)} — a receber do fornecedor</p></div>
+            <div>
+              <label className={labelCls}>Comissão (%)</label>
+              <input inputMode="decimal" value={form.bv_pct} onChange={e => set('bv_pct', e.target.value)} className={inputCls} />
+              <p className="text-xs text-gray-400 mt-1">{formatBRL(bv)} — a receber do fornecedor</p>
+              <ReguaDaCasa ref_={comissaoRef} atual={form.bv_pct} />
+            </div>
             <div><label className={labelCls}>Honorários (%)</label><input inputMode="decimal" value={form.honorarios_pct} onChange={e => set('honorarios_pct', e.target.value)} className={inputCls} /><p className="text-xs text-gray-400 mt-1">{formatBRL(honorarios)} — a receber do cliente</p></div>
             <div><label className={labelCls}>Dias agência</label><input inputMode="numeric" value={form.dias_agencia} onChange={e => set('dias_agencia', e.target.value)} className={inputCls} /><p className="text-xs text-gray-400 mt-1">A comissão entra no caixa {form.dias_agencia || '0'} dia(s) após a cobrança.</p></div>
           </div>
@@ -372,3 +381,33 @@ export function PedidoForm({
     </div>
   )
 }
+
+/**
+ * A régua da casa ao lado do campo de comissão.
+ *
+ * Mostra o PADRÃO, não a média. Medido nos 30 pedidos existentes: 26 em 15%,
+ * 2 em 12,9% e 2 em 10%. A média (14,53%) descreve um valor que nunca foi
+ * praticado; "o padrão é 15% e já abri exceção 4 vezes" é o que ajuda a decidir
+ * na hora de fechar.
+ *
+ * Só fala quando o valor digitado SAI do padrão — avisar que 15% é 15% seria
+ * ruído em 26 de cada 30 pedidos, e aviso que aparece sempre vira paisagem.
+ */
+function ReguaDaCasa({ ref_, atual }: { ref_?: ComissaoRef | null; atual: string }) {
+  if (!ref_) return null
+  const n = parseMoney(atual)
+  const forade = n > 0 && Math.abs(n - ref_.padrao) > 0.01
+  const excecoes = ref_.total - ref_.noPadrao
+
+  return (
+    <p className={cn('text-xs mt-1', forade ? 'text-amber-600' : 'text-gray-400')}>
+      {forade
+        ? <>Fora do padrão da casa ({fmtPct(ref_.padrao)}%) — {excecoes === 0
+            ? 'seria a primeira exceção'
+            : `já houve ${excecoes} exceção(ões) em ${ref_.total} pedidos`}.</>
+        : <>Padrão da casa: {fmtPct(ref_.padrao)}% em {ref_.noPadrao} de {ref_.total} pedidos.</>}
+    </p>
+  )
+}
+
+const fmtPct = (n: number) => String(Number(n.toFixed(2))).replace('.', ',')

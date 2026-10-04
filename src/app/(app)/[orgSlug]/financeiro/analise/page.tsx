@@ -3,6 +3,8 @@ import type { CuboRow } from '@/lib/fin-cubo'
 import type { CategoriaGrupoLike } from '@/lib/finance-categorias'
 import type { FinanceCentro } from '@/app/actions/financeiro'
 import { AnaliseClient } from './AnaliseClient'
+import { ComissaoPainel } from './ComissaoPainel'
+import { comissaoPorCliente, referenciaDeComissao } from '@/lib/producao/comissao-referencia'
 
 export const metadata = { title: 'Financeiro — Análise' }
 
@@ -38,13 +40,21 @@ export default async function AnalisePage({ params }: { params: Promise<{ orgSlu
     return out
   }
 
-  const [rows, resSettings] = await Promise.all([
+  const [rows, resSettings, comissoes, refComissao] = await Promise.all([
     paginado<CuboRow>('fin_cubo', 'a análise financeira'),
     sb.from('org_settings').select('finance_categorias, finance_centros_custo').eq('org_id', orgId).maybeSingle(),
+    // Fora do cubo: comissão é atributo do PEDIDO, o cubo é caixa.
+    comissaoPorCliente(supabase, orgId),
+    referenciaDeComissao(supabase, orgId),
   ])
 
   const categorias = (resSettings?.data?.finance_categorias ?? []) as CategoriaGrupoLike[]
   const centros = (resSettings?.data?.finance_centros_custo ?? []) as FinanceCentro[]
 
-  return <AnaliseClient orgSlug={orgSlug} rows={rows} categorias={categorias} centros={centros} />
+  return (
+    <div className="space-y-4">
+      <AnaliseClient orgSlug={orgSlug} rows={rows} categorias={categorias} centros={centros} />
+      <ComissaoPainel linhas={comissoes} referencia={refComissao} />
+    </div>
+  )
 }
