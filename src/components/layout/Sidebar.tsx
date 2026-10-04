@@ -145,7 +145,6 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Inadimplentes',  href: 'financeiro/inadimplentes' },
     { label: 'Faturamento',    href: 'financeiro/faturamento' },
     { label: 'NF do mês',      href: 'financeiro/notas' },
-    { label: 'Custos de produção', href: 'financeiro/custos' },
     { label: 'Contas',         href: 'financeiro/contas' },
     { label: 'Fechamento',     href: 'financeiro/fechamento' },
     { label: 'Categorias',     href: 'financeiro/categorias' },
