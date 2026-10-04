@@ -6,6 +6,7 @@ import { ArrowLeft, Check, Loader2, Plus, Trash2, CircleCheck, Circle, Send } fr
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { Combobox } from '@/components/ui/Combobox'
+import { MaisOpcoes } from '@/components/ui/MaisOpcoes'
 import { useFornecedorRapido } from '@/components/fornecedor/useFornecedorRapido'
 import { PRODUCAO_SITUACAO_OPTIONS, formatBRL, parseMoney } from '@/lib/midia'
 import { ItemImageField } from '@/components/ui/ItemImageField'
@@ -109,6 +110,12 @@ export function OrcamentoForm({
   }, 0), [form.itens])
   const honorarios = valorFaturar * (parseMoney(form.honorarios_pct) / 100)
   const valorTotal = valorFaturar + honorarios
+  // Quantos dos campos recolhidos já têm valor — a seção nasce aberta se houver
+  // algum, porque esconder dado preenchido é pior do que um formulário longo.
+  const opcionaisPreenchidos = [
+    form.validade_dias.trim(), parseMoney(form.honorarios_pct) ? '1' : '',
+    form.contato.trim(), form.texto_legal.trim(),
+  ].filter(Boolean).length
 
   const campanhaOptions = useMemo(() => {
     const c = clientes.find(c => c.id === form.workspace_id)
@@ -162,7 +169,6 @@ export function OrcamentoForm({
               <Select value={form.campaign_id} onChange={v => set('campaign_id', v)} options={campanhaOptions} placeholder={form.workspace_id ? 'Selecionar' : 'Escolha o cliente'} /></div>
             <div><label className={labelCls}>Faturar</label><Select value={form.faturar} onChange={v => set('faturar', v)} options={FATURAR} /></div>
             <div><label className={labelCls}>Emissão</label><input type="date" value={form.emissao} onChange={e => set('emissao', e.target.value)} className={inputCls} /></div>
-            <div><label className={labelCls}>Validade (dias)</label><input value={form.validade_dias} onChange={e => set('validade_dias', e.target.value)} className={inputCls} /></div>
             <div><label className={labelCls}>Comissão (%)</label><input inputMode="decimal" value={form.bv_pct} onChange={e => set('bv_pct', e.target.value)} className={inputCls} /></div>
           </div>
           <div className="mt-4"><label className={labelCls}>Título <span className="text-red-500">*</span></label>
@@ -202,9 +208,9 @@ export function OrcamentoForm({
                 <button type="button" onClick={() => addOpcao(ii)} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition"><Plus className="w-3 h-3" /> Opção</button>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-sm">
+                <table className="w-full min-w-[560px] text-sm">
                   <thead><tr className="text-[11px] font-medium text-gray-400 text-left">
-                    <th className="px-1 py-1 w-10" /><th className="px-1 py-1">Fornecedor</th><th className="px-1 py-1 w-24">Nº Orç.</th><th className="px-1 py-1 w-24">Pgto.</th>
+                    <th className="px-1 py-1 w-10" /><th className="px-1 py-1">Fornecedor</th>
                     <th className="px-1 py-1 w-20 text-right">Quant.</th><th className="px-1 py-1 w-28 text-right">Valor unit.</th><th className="px-1 py-1 w-28 text-right">Total</th><th className="w-8" />
                   </tr></thead>
                   <tbody>
@@ -218,8 +224,6 @@ export function OrcamentoForm({
                         <td className="px-1 py-1 relative"><Combobox size="sm" value={o.fornecedor_id} onChange={v => setOpcao(ii, oi, 'fornecedor_id', v)} options={fornecedorOptions} placeholder="Fornecedor"
                           onCreate={async nome => { const id = await criarFornecedor(nome); if (id) setOpcao(ii, oi, 'fornecedor_id', id) }} />
                           {o.cotacao_convite_id && <span title="Valor enviado pelo fornecedor no pedido de cotação" className="absolute -top-0.5 right-2 px-1 rounded bg-orange-100 text-orange-700 text-[9px] font-semibold uppercase tracking-wide pointer-events-none">cotação</span>}</td>
-                        <td className="px-1 py-1"><input value={o.n_orc} onChange={e => setOpcao(ii, oi, 'n_orc', e.target.value)} className={cellCls} /></td>
-                        <td className="px-1 py-1"><input value={o.pgto} onChange={e => setOpcao(ii, oi, 'pgto', e.target.value)} className={cellCls} /></td>
                         <td className="px-1 py-1"><input inputMode="numeric" value={o.quant} onChange={e => setOpcaoQuant(ii, oi, e.target.value)} className={cn(cellCls, 'text-right')} /></td>
                         <td className="px-1 py-1"><input inputMode="decimal" value={o.valor_unit} onChange={e => setOpcaoUnit(ii, oi, e.target.value)} placeholder="0,00" className={cn(cellCls, 'text-right')} /></td>
                         <td className="px-1 py-1"><input inputMode="decimal" value={o.valor_total ?? ''} onChange={e => setOpcaoTotal(ii, oi, e.target.value)} placeholder="0,00" className={cn(cellCls, 'text-right')} /></td>
@@ -235,23 +239,39 @@ export function OrcamentoForm({
 
         {/* Totais */}
         <div className={cardCls}>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
-            <div><p className="text-xs text-gray-400">Valor a Faturar</p><p className="text-lg font-semibold text-gray-900">{formatBRL(valorFaturar)}</p></div>
-            <div><label className={labelCls}>Honorários (%)</label><input inputMode="decimal" value={form.honorarios_pct} onChange={e => set('honorarios_pct', e.target.value)} className={inputCls} /><p className="text-xs text-gray-400 mt-1">{formatBRL(honorarios)}</p></div>
-            <div><p className="text-xs text-gray-400">Valor Total</p><p className="text-lg font-semibold text-gray-900">{formatBRL(valorTotal)}</p></div>
-          </div>
+          {honorarios > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+              <div><p className="text-xs text-gray-400">Valor a Faturar</p><p className="text-lg font-semibold text-gray-900">{formatBRL(valorFaturar)}</p></div>
+              <div><p className="text-xs text-gray-400">Honorários ({form.honorarios_pct}%)</p><p className="text-lg font-semibold text-gray-900">{formatBRL(honorarios)}</p></div>
+              <div><p className="text-xs text-gray-400">Valor Total</p><p className="text-lg font-semibold text-emerald-600">{formatBRL(valorTotal)}</p></div>
+            </div>
+          ) : (
+            // Sem honorários, "a faturar" e "total" são o mesmo número: mostrar os
+            // dois lado a lado é pedir pra pessoa conferir se são iguais.
+            <div><p className="text-xs text-gray-400">Valor Total</p><p className="text-lg font-semibold text-emerald-600">{formatBRL(valorTotal)}</p></div>
+          )}
         </div>
 
         {/* Textos + status */}
         <div className={cardCls}>
           <label className={labelCls}>Observação</label>
           <textarea rows={3} value={form.observacao} onChange={e => set('observacao', e.target.value)} className={cn(inputCls, 'resize-y min-h-[64px]')} />
-          <label className={cn(labelCls, 'mt-4')}>Texto Legal</label>
-          <textarea rows={2} value={form.texto_legal} onChange={e => set('texto_legal', e.target.value)} className={cn(inputCls, 'resize-y min-h-[42px]')} />
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
-            <div><label className={labelCls}>Contato</label><input value={form.contato} onChange={e => set('contato', e.target.value)} className={inputCls} /></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
             <div><label className={labelCls}>Responsável</label><Select value={form.responsavel_id} onChange={v => set('responsavel_id', v)} options={memberOptions} placeholder="Selecionar" /></div>
             <div><label className={labelCls}>Situação</label><Select value={form.situacao} onChange={v => set('situacao', v)} options={PRODUCAO_SITUACAO_OPTIONS} /></div>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-gray-100">
+            <MaisOpcoes preenchidos={opcionaisPreenchidos}>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div><label className={labelCls}>Validade (dias)</label><input value={form.validade_dias} onChange={e => set('validade_dias', e.target.value)} className={inputCls} /></div>
+                <div><label className={labelCls}>Honorários (%)</label><input inputMode="decimal" value={form.honorarios_pct} onChange={e => set('honorarios_pct', e.target.value)} className={inputCls} /><p className="text-xs text-gray-400 mt-1">{formatBRL(honorarios)} — a receber do cliente</p></div>
+                <div><label className={labelCls}>Contato</label><input value={form.contato} onChange={e => set('contato', e.target.value)} className={inputCls} /></div>
+              </div>
+              <label className={cn(labelCls, 'mt-4')}>Texto legal</label>
+              <textarea rows={2} value={form.texto_legal} onChange={e => set('texto_legal', e.target.value)} className={cn(inputCls, 'resize-y min-h-[42px]')} />
+              <p className="text-[11px] text-gray-400 mt-1">Sai no rodapé deste documento, abaixo das observações padrão da agência (Configurações → Documentos).</p>
+            </MaisOpcoes>
           </div>
         </div>
 

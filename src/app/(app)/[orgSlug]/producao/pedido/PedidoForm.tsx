@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Check, Loader2, Plus, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
+import { MaisOpcoes } from '@/components/ui/MaisOpcoes'
 import { Combobox } from '@/components/ui/Combobox'
 import { useFornecedorRapido } from '@/components/fornecedor/useFornecedorRapido'
 import { PRODUCAO_SITUACAO_OPTIONS, MIDIA_PRAZO_OPTIONS, formatBRL, parseMoney } from '@/lib/midia'
@@ -143,6 +144,10 @@ export function PedidoForm({
   const bv = valorTotal * (parseMoney(form.bv_pct) / 100)
   const honorarios = valorTotal * (parseMoney(form.honorarios_pct) / 100)
 
+  const opcionaisPreenchidos = [
+    parseMoney(form.honorarios_pct) ? '1' : '', form.contato.trim(), form.texto_legal.trim(),
+  ].filter(Boolean).length
+
   // Somas por tipo de parcela — pra conferir contra o valor total / comissão / honorários.
   const somaParc = (tipo: string) => form.parcelas.filter(p => p.tipo === tipo).reduce((s, p) => s + parseMoney(p.valor), 0)
   const somaPagForn = somaParc('cliente_paga_fornecedor')
@@ -275,8 +280,7 @@ export function PedidoForm({
                   {form.itens.length > 1 && <button aria-label="Remover" type="button" onClick={() => delItem(i)} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>}
                 </div>
                 <textarea rows={2} value={it.descricao} onChange={e => setItem(i, 'descricao', e.target.value)} placeholder="Descrição" className={cn(inputCls, 'resize-y min-h-[42px] mb-2')} />
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div><label className={labelCls}>Nº Orç.</label><input value={it.n_orc} onChange={e => setItem(i, 'n_orc', e.target.value)} className={cellCls} /></div>
+                <div className="grid grid-cols-3 gap-3">
                   <div><label className={labelCls}>Quantidade</label><input inputMode="numeric" value={it.quant} onChange={e => setItemQuant(i, e.target.value)} className={cn(cellCls, 'text-right')} /></div>
                   <div><label className={labelCls}>Valor unit. (R$)</label><input inputMode="decimal" value={it.valor} onChange={e => setItemUnit(i, e.target.value)} placeholder="0,00" className={cn(cellCls, 'text-right')} /></div>
                   <div><label className={labelCls}>Valor total (R$)</label><input inputMode="decimal" value={it.valor_total ?? ''} onChange={e => setItemTotal(i, e.target.value)} placeholder="0,00" className={cn(cellCls, 'text-right')} /></div>
@@ -298,7 +302,6 @@ export function PedidoForm({
               <p className="text-xs text-gray-400 mt-1">{formatBRL(bv)} — a receber do fornecedor</p>
               <ReguaDaCasa ref_={comissaoRef} atual={form.bv_pct} />
             </div>
-            <div><label className={labelCls}>Honorários (%)</label><input inputMode="decimal" value={form.honorarios_pct} onChange={e => set('honorarios_pct', e.target.value)} className={inputCls} /><p className="text-xs text-gray-400 mt-1">{formatBRL(honorarios)} — a receber do cliente</p></div>
             <div><label className={labelCls}>Dias agência</label><input inputMode="numeric" value={form.dias_agencia} onChange={e => set('dias_agencia', e.target.value)} className={inputCls} /><p className="text-xs text-gray-400 mt-1">A comissão entra no caixa {form.dias_agencia || '0'} dia(s) após a cobrança.</p></div>
           </div>
           <p className="text-xs text-gray-500 mt-3">No Financeiro entram só as comissões: <strong>Comissão (fornecedor)</strong> e <strong>Honorários (cliente)</strong>, e caem no caixa {form.dias_agencia || '0'} dia(s) após a cobrança. O pagamento do cliente ao fornecedor não é lançado.</p>
@@ -340,12 +343,21 @@ export function PedidoForm({
         <div className={cardCls}>
           <label className={labelCls}>Observação</label>
           <textarea rows={3} value={form.observacao} onChange={e => set('observacao', e.target.value)} className={cn(inputCls, 'resize-y min-h-[64px]')} />
-          <label className={cn(labelCls, 'mt-4')}>Texto Legal</label>
-          <textarea rows={2} value={form.texto_legal} onChange={e => set('texto_legal', e.target.value)} className={cn(inputCls, 'resize-y min-h-[42px]')} />
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
-            <div><label className={labelCls}>Contato</label><input value={form.contato} onChange={e => set('contato', e.target.value)} className={inputCls} /></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
             <div><label className={labelCls}>Responsável</label><Select value={form.responsavel_id} onChange={v => set('responsavel_id', v)} options={memberOptions} placeholder="Selecionar" /></div>
             <div><label className={labelCls}>Situação</label><Select value={form.situacao} onChange={v => set('situacao', v)} options={PRODUCAO_SITUACAO_OPTIONS} /></div>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-gray-100">
+            <MaisOpcoes preenchidos={opcionaisPreenchidos}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><label className={labelCls}>Honorários (%)</label><input inputMode="decimal" value={form.honorarios_pct} onChange={e => set('honorarios_pct', e.target.value)} className={inputCls} /><p className="text-xs text-gray-400 mt-1">{formatBRL(honorarios)} — a receber do cliente</p></div>
+                <div><label className={labelCls}>Contato</label><input value={form.contato} onChange={e => set('contato', e.target.value)} className={inputCls} /></div>
+              </div>
+              <label className={cn(labelCls, 'mt-4')}>Texto legal</label>
+              <textarea rows={2} value={form.texto_legal} onChange={e => set('texto_legal', e.target.value)} className={cn(inputCls, 'resize-y min-h-[42px]')} />
+              <p className="text-[11px] text-gray-400 mt-1">Sai no rodapé deste documento, abaixo das observações padrão da agência (Configurações → Documentos).</p>
+            </MaisOpcoes>
           </div>
         </div>
 

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Check, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
+import { MaisOpcoes } from '@/components/ui/MaisOpcoes'
 import { formatBRL, parseMoney } from '@/lib/midia'
 import type { ClienteOpt, MemberOpt } from '../../midias/simplificada/MidiaForm'
 
@@ -188,11 +189,18 @@ export function FeeForm({
               <p className="mt-1.5 text-[11px] text-gray-400">Texto padrão de Configurações → Documentos. Clique em “Editar” para personalizar só deste Fee.</p>
             </div>
           )}
-          <label className={cn(labelCls, 'mt-4')}>Texto Legal</label>
-          <textarea rows={2} value={form.texto_legal} onChange={e => set('texto_legal', e.target.value)} className={cn(inputCls, 'resize-none')} />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-            <div><label className={labelCls}>Contato</label><input value={form.contato} onChange={e => set('contato', e.target.value)} className={inputCls} /></div>
-            <div><label className={labelCls}>Responsável</label><Select value={form.responsavel_id} onChange={v => set('responsavel_id', v)} options={memberOptions} placeholder="Selecionar" /></div>
+          <div className="mt-4">
+            <label className={labelCls}>Responsável</label>
+            <Select value={form.responsavel_id} onChange={v => set('responsavel_id', v)} options={memberOptions} placeholder="Selecionar" />
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-gray-100">
+            <MaisOpcoes preenchidos={[form.contato.trim(), form.texto_legal.trim()].filter(Boolean).length}>
+              <div><label className={labelCls}>Contato</label><input value={form.contato} onChange={e => set('contato', e.target.value)} className={inputCls} /></div>
+              <label className={cn(labelCls, 'mt-4')}>Texto legal</label>
+              <textarea rows={2} value={form.texto_legal} onChange={e => set('texto_legal', e.target.value)} className={cn(inputCls, 'resize-none')} />
+              <p className="text-[11px] text-gray-400 mt-1">Sai no rodapé deste documento, abaixo das observações padrão da agência.</p>
+            </MaisOpcoes>
           </div>
         </div>
 

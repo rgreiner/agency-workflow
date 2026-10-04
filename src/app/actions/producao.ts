@@ -144,6 +144,12 @@ export async function gerarPedidosDoOrcamento(orgSlug: string, orcamentoId: stri
       honorarios_pct: String(orc.honorarios_pct ?? 0),
       valor: String(g.valor),
       situacao: 'em_aberto',
+      // O PP herda quem responde pelo orçamento. Sem isto a conversão perdia o
+      // responsável: medido em 03/10/2026, 19 dos 19 PPs vindos de orçamento
+      // estavam sem responsável, contra 10 de 11 preenchidos nos digitados à
+      // mão — não era desleixo de quem preenche, era a conversão zerando.
+      responsavel_id: orc.responsavel_id ?? '',
+      contato: orc.contato ?? '',
       // Coluna de verdade (migration 137). O detalhe.orcamento_id continua por
       // compatibilidade, mas é ele que o PedidoForm apaga ao salvar — quem manda é a coluna.
       origem_orcamento_id: orcamentoId,
