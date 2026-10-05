@@ -51,6 +51,17 @@ export function ImportarOfxButton({ orgSlug, contaId }: { orgSlug: string; conta
           (r?.skipped ? `, ${r.skipped} já existia(m)` : '') +
           (parsed.saldo != null ? ` · saldo do banco: ${parsed.saldo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : '') + '.',
         )
+        // O banco manda agendamento junto do extrato (a Cresol manda as parcelas
+        // de empréstimo ainda por debitar). Eles ficam de fora — mas em aviso
+        // separado, porque descartar em silêncio deixaria a pessoa procurando
+        // uma linha que ela viu no extrato do banco e não acha aqui.
+        if (r?.futuros) {
+          toast.info(
+            `${r.futuros} lançamento(s) com data futura ficaram de fora — o extrato guarda o que já aconteceu. ` +
+            'Eles entram sozinhos no próximo OFX, depois de debitados.',
+            { duration: 8000 },
+          )
+        }
         router.refresh()
       })
     } catch {

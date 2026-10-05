@@ -168,7 +168,7 @@ export async function importarOfx(
   }
   revalidatePath(`/${orgSlug}/financeiro/contas/${contaId}`)
   revalidatePath(`/${orgSlug}/financeiro/conciliacao`)
-  return { result: data as { inserted: number; skipped: number; total: number } }
+  return { result: data as { inserted: number; skipped: number; futuros?: number; total: number } }
 }
 
 /** Registra o OFX original que acabou de subir pro volume. A contabilidade quer o
