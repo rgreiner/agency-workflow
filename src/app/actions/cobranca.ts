@@ -8,6 +8,7 @@ import { sendMail, remetenteDominio } from '@/lib/email/send'
 import { boletosDosLancamentos } from '@/lib/email/cobranca-anexos'
 import { htmlCobranca, assuntoCobranca, tomPorDias, type TituloCobranca } from '@/lib/email/cobranca'
 import { pixDoTitulo } from '@/lib/pix/cobranca'
+import { copiasFinanceiras } from '@/lib/email/destinatarios'
 
 /**
  * Ações da cobrança (tela de Inadimplentes). A régua automática vive no cron;
@@ -87,8 +88,10 @@ export async function cobrarAgora(orgSlug: string, workspaceId: string, lancamen
   // O boleto vai junto: quem recebe a cobrança não deveria ter de procurar o
   // documento de pagar num e-mail antigo.
   const anexos = await boletosDosLancamentos(sb, org.id, lancs.map(l => l.id))
+  const cc = await copiasFinanceiras(sb, org.id, { workspaceId: ws.id, emailPrincipal: dest })
   const { error: erroEnvio } = await sendMail({
     to: dest,
+    cc: cc.length ? cc : undefined,
     from: dominio ? `${org.name} Financeiro <financeiro@${dominio}>` : undefined,
     replyTo: user.email || undefined,
     subject: `${assuntoCobranca(tom, dias)} — ${org.name}`,

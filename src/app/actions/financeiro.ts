@@ -818,6 +818,7 @@ export async function restaurarExtrato(orgSlug: string, importRefs: string[]) {
 // ── Envio do faturamento por e-mail ao cliente (não automático) ─────────────────
 import { sendMail, remetenteDominio } from '@/lib/email/send'
 import { htmlFaturamento, lerAnexosFaturamento } from '@/lib/email/faturamento'
+import { copiasFinanceiras } from '@/lib/email/destinatarios'
 import { docNumero } from '@/lib/doc-series'
 
 const RECEBER_TIPOS_EMAIL = ['receber_bv', 'receber_honorarios', 'receber_cliente']
@@ -848,7 +849,7 @@ export async function enviarFaturamentoEmail(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: doc } = await (supabase as any)
     .from(tabela)
-    .select('id, serie, numero, titulo, valor, detalhe, anexos, workspaces(name)')
+    .select('id, serie, numero, titulo, valor, detalhe, anexos, workspace_id, workspaces(name)')
     .eq('id', docId).single()
   if (!doc) return { error: 'Documento não encontrado' }
 
@@ -871,7 +872,14 @@ export async function enviarFaturamentoEmail(
   const from = dominio ? `${org.name} Financeiro <financeiro@${dominio}>` : undefined
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: cfg } = await (supabase as any).from('org_settings').select('contabil_emails').eq('org_id', org.id).maybeSingle()
-  const cc = ((cfg?.contabil_emails ?? []) as string[]).filter(Boolean)
+  // Contabilidade da agência + quem mais cuida do financeiro NO CLIENTE: a NF e
+  // o boleto precisam chegar a quem paga, não só a quem pediu o trabalho.
+  // Pelo id do cliente, não pelo destinatário: aqui o endereço é editável na
+  // tela, e buscar o cadastro por ele erraria assim que alguém digitasse outro.
+  const copiasCliente = await copiasFinanceiras(supabase, org.id, { workspaceId: doc.workspace_id, emailPrincipal: dest })
+  const cc = [...((cfg?.contabil_emails ?? []) as string[]), ...copiasCliente]
+    .filter(Boolean)
+    .filter(e => e.toLowerCase() !== dest.toLowerCase())
 
   const html = htmlFaturamento({
     orgName: org.name,

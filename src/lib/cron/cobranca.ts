@@ -3,6 +3,7 @@ import { sendMail, remetenteDominio } from '@/lib/email/send'
 import { boletosDosLancamentos } from '@/lib/email/cobranca-anexos'
 import { htmlCobranca, assuntoCobranca, tomPorDias } from '@/lib/email/cobranca'
 import { criarBuscadorPix, pixDoTitulo } from '@/lib/pix/cobranca'
+import { copiasFinanceiras } from '@/lib/email/destinatarios'
 import type { CronJob } from './jobs'
 
 interface Aviso {
@@ -44,6 +45,14 @@ export const cobrancaJob: CronJob = {
     const dominio = remetenteDominio()
 
     const buscarPix = criarBuscadorPix(supabase)
+    // Cache por destinatário: um cliente com 3 títulos atrasados gera 3 avisos,
+    // e a lista de cópias dele é a mesma nas três.
+    const cacheCopias = new Map<string, string[]>()
+    const buscarCopias = async (orgId: string, email: string) => {
+      const k = `${orgId}|${email.toLowerCase()}`
+      if (!cacheCopias.has(k)) cacheCopias.set(k, await copiasFinanceiras(supabase, orgId, { emailPrincipal: email }))
+      return cacheCopias.get(k)!
+    }
 
     let sent = 0, failed = 0
     for (const a of avisos) {
@@ -59,8 +68,13 @@ export const cobrancaJob: CronJob = {
       const anexos = a.org_id
         ? await boletosDosLancamentos(supabase, a.org_id, [a.lancamento_id])
         : []
+      // Quem mais cuida do pagamento neste cliente. O payload não traz o id do
+      // cliente, mas traz o e-mail principal — e é por ele que o próprio payload
+      // escolheu o destinatário, então acha o mesmo cadastro.
+      const cc = a.org_id ? await buscarCopias(a.org_id, a.email) : []
       const r = await sendMail({
         to: a.email,
+        cc: cc.length ? cc : undefined,
         from: dominio ? `${a.org_name} Financeiro <financeiro@${dominio}>` : undefined,
         subject: `${assuntoCobranca(tom, a.dias)} — ${a.org_name}`,
         html,
