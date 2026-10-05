@@ -73,10 +73,16 @@ async function versoesAtuais(m: Material, etapa: RevisaoEtapa): Promise<VersaoAr
   return versoesPecas(link)
 }
 
-const mesmasVersoes = (a: VersaoArquivo[], b: VersaoArquivo[]) => {
-  if (a.length !== b.length) return false
-  const mapa = new Map(a.map(x => [x.id, x.v]))
-  return b.every(x => mapa.get(x.id) === x.v)
+/**
+ * O material atual é o mesmo que foi revisado? Vale se TODA peça atual estava na
+ * revisão com a mesma versão. Arquivo que sumiu (apagado, ou Mockup que deixou de
+ * ser lido em 02/10) não pede revisão nova — não há texto novo para conferir.
+ * Antes a contagem tinha de bater: em 05/10 a Carta criança acusou "peças mudaram"
+ * só porque a revisão de 02/10 tinha contado o Mockup.
+ */
+const mesmasVersoes = (revisadas: VersaoArquivo[], atuais: VersaoArquivo[]) => {
+  const mapa = new Map(revisadas.map(x => [x.id, x.v]))
+  return atuais.every(x => mapa.get(x.id) === x.v)
 }
 
 /**
@@ -254,20 +260,20 @@ export type VeredictoAvanco =
 
 /** Como a tarefa se refere ao material de cada etapa nos avisos. */
 export const MATERIAL: Record<RevisaoEtapa, string> = {
-  redacao: 'O texto da Redação', design: 'As peças do Preview', finalizacao: 'O arquivo Final',
+  redacao: 'O texto da Redação mudou', design: 'As peças do Preview mudaram', finalizacao: 'O arquivo Final mudou',
 }
 
 /**
  * Pode avançar? Regras do Rafael (28–30/09/2026):
  *  1. Sair PARA FRENTE de uma etapa com Revisão ligada exige revisão feita depois
  *     da última entrada nela (voltou da validação, revisa de novo).
- *  2. Revisão de qualquer etapa já passada (ou da atual) deixa de valer se o
- *     material MUDOU depois dela — texto da Redação editado com a tarefa em
- *     Design, peça trocada no Preview… A pessoa revisa de novo (só o que mudou).
+ *  2. A revisão da etapa deixa de valer se o material MUDOU depois dela (peça
+ *     trocada no Preview, texto editado no Doc): revisa de novo (só o que mudou).
+ *     Só TRAVA quem sai da própria etapa (05/10/2026: "atendimento e mídia não têm
+ *     ação sobre o design"). Mudança em etapa já passada vira aviso na tarefa.
  *  3. Revisão com apontamentos (ou IA sem resposta) pede confirmação — `aceitar` =
  *     "Concordo, seguir": vira 'overridden' e uma nota na movimentação.
  * Voltar para trás nunca é barrado. Revisão/etapa desligada ou sem IA = não barra.
- * Etapa passada SEM revisão registrada (tarefa antiga, etapa pulada) não barra.
  */
 export async function checarAvanco(
   supabase: SB, userId: string, activityId: string, from: string | null, to: string, aceitar: boolean,
@@ -288,38 +294,27 @@ export async function checarAvanco(
   if (!cfg?.enabled || !iaDisponivel(cfg)) return { ok: true }
 
   const etapaAtual = etapaRevisavel(from)
-  const emJogo = ETAPAS.map(e => e.key).filter(e => cfg.stages[e] && pos(e) <= pos(from))
-  if (!emJogo.length) return { ok: true }
+  if (!etapaAtual || !cfg.stages[etapaAtual]) return { ok: true }
+  const e = etapaAtual
+  const label = ETAPAS.find(x => x.key === e)!.label
 
   const [revs, m] = await Promise.all([revisoesDaTarefa(supabase, activityId), material(supabase, activityId)])
-  const precisa: string[] = []
-  const confirmar: { etapa: RevisaoEtapa; rev: RevisaoSalva }[] = []
-
-  for (const e of emJogo) {
-    const rev = revs.get(e)
-    const label = ETAPAS.find(x => x.key === e)!.label
-    if (e === etapaAtual) {
-      const { data: entrada } = await supabase
-        .from('activity_history').select('changed_at').eq('activity_id', activityId).eq('to_status', e)
-        .order('changed_at', { ascending: false }).limit(1).maybeSingle()
-      if (!rev || (entrada?.changed_at && new Date(rev.revisado_em) < new Date(entrada.changed_at as string))) {
-        precisa.push(`Revise ${label} antes de avançar: use o botão Revisar na tarefa.`)
-        continue
-      }
-    } else if (!rev) continue
-    if (m && await materialMudou(m, rev)) {
-      precisa.push(`${MATERIAL[e]} mudou depois da revisão de ${label}: revise de novo na tarefa.`)
-      continue
-    }
-    if (rev.status === 'errors' || rev.status === 'failed') confirmar.push({ etapa: e, rev })
+  const rev = revs.get(e)
+  const { data: entrada } = await supabase
+    .from('activity_history').select('changed_at').eq('activity_id', activityId).eq('to_status', e)
+    .order('changed_at', { ascending: false }).limit(1).maybeSingle()
+  if (!rev || (entrada?.changed_at && new Date(rev.revisado_em) < new Date(entrada.changed_at as string))) {
+    return { ok: false, motivo: 'precisa_revisar', mensagem: `Revise ${label} antes de avançar: use o botão Revisar na tarefa.` }
   }
-
-  if (precisa.length) return { ok: false, motivo: 'precisa_revisar', mensagem: precisa.join(' ') }
-  if (!confirmar.length) return { ok: true }
+  if (m && await materialMudou(m, rev)) {
+    return { ok: false, motivo: 'precisa_revisar', mensagem: `${MATERIAL[e]} depois da revisão de ${label}: revise de novo na tarefa.` }
+  }
+  if (rev.status !== 'errors' && rev.status !== 'failed') return { ok: true }
+  const confirmar: { etapa: RevisaoEtapa; rev: RevisaoSalva }[] = [{ etapa: e, rev }]
 
   const erros = confirmar.flatMap(c => c.rev.status === 'failed' ? [] : c.rev.apontamentos)
   const falhou = confirmar.every(c => c.rev.status === 'failed')
-  const labels = confirmar.map(c => ETAPAS.find(x => x.key === c.etapa)!.label).join(' e ')
+  const labels = label
   if (!aceitar) {
     return {
       ok: false, motivo: 'confirmar', erros, falhou,

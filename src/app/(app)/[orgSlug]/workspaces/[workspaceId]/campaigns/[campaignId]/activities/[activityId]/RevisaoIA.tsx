@@ -14,7 +14,7 @@ export type ResultadoRevisao =
   | { tipo: 'aviso'; texto: string }
 
 const MATERIAL: Record<RevisaoEtapa, string> = {
-  redacao: 'O texto da Redação', design: 'As peças do Preview', finalizacao: 'O arquivo Final',
+  redacao: 'O texto da Redação mudou', design: 'As peças do Preview mudaram', finalizacao: 'O arquivo Final mudou',
 }
 
 interface Props {
@@ -27,7 +27,9 @@ interface Props {
   ultima: ResultadoRevisao | null
   /**
    * Etapa já PASSADA: o bloco só aparece se o material dela mudou depois da
-   * revisão (ex.: texto da Redação editado com a tarefa em Design).
+   * revisão — como AVISO: não impede avançar (atendimento e mídia não têm ação
+   * sobre o design; 05/10/2026). Quem cuida da etapa pode revisar daqui.
+   * Ex.: texto da Redação editado com a tarefa já em Design.
    */
   anterior?: boolean
 }
@@ -72,7 +74,9 @@ export function RevisaoIA({ activityId, path, etapa, etapaLabel, ultima, anterio
   const cabecalho = pending
     ? `Revisando ${etapaLabel}… ${etapa === 'redacao' ? 'pode levar até um minuto' : 'com muitas peças, revisa em partes e pode levar 1–2 minutos'}.`
     : mudou
-      ? `${MATERIAL[etapa]} mudou depois da revisão — revise de novo antes de avançar.`
+      ? anterior
+        ? `${MATERIAL[etapa]} depois da revisão de ${etapaLabel}. Não impede avançar — quem cuida de ${etapaLabel} pode revisar aqui.`
+        : `${MATERIAL[etapa]} depois da revisão — revise de novo antes de avançar.`
       : res ? `Revisão de ${etapaLabel}.` : `Revise ${etapaLabel} antes de avançar a tarefa — é obrigatório.`
 
   return (
