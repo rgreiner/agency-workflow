@@ -204,9 +204,16 @@ export async function subfolderOfTask(taskRef: string, name: string): Promise<{ 
   return info.sub[name] ?? null
 }
 
-/** Arquivos de uma subpasta da tarefa (ex.: as referências em Links/). */
+/**
+ * Arquivos de uma subpasta da tarefa (ex.: as referências em Links/). Só LÊ:
+ * subpasta que ainda não existe devolve vazio. Até 05/10/2026 isto passava por
+ * `subfolderOfTask` (que cria as que faltam) e o bloco Referências do detalhe —
+ * aberto logo depois de criar a tarefa — corria junto com a provisão em 2º plano:
+ * as duas criavam Redação/Mockup/Links e a pasta nascia com subpastas em dobro
+ * (12 de 54 tarefas entre 16 e 30/09). Quem cria é a provisão ou o upload.
+ */
 export async function listSubfolderFiles(taskRef: string, name: string): Promise<drive.FolderFile[]> {
-  const sub = await subfolderOfTask(taskRef, name)
+  const sub = (await inspectTaskFolder(taskRef)).sub[name]
   if (!sub?.id) return []
   return backendForRef(sub.id) === 's3' ? s3.listFolderFilesS3(sub.id) : drive.listFolderFiles(sub.id)
 }

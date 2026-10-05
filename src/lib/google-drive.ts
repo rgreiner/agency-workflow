@@ -109,7 +109,34 @@ async function createFolder(parentId: string, name: string): Promise<{ id: strin
 async function ensureFolder(parentId: string, name: string): Promise<{ id: string; link: string }> {
   const existing = await findFolder(parentId, name)
   if (existing) return { id: existing, link: folderLink(existing) }
-  return createFolder(parentId, name)
+  const criada = await createFolder(parentId, name)
+  return manterUnica(parentId, name, criada)
+}
+
+/**
+ * Rede contra corrida: dois processos que procuram e criam a mesma subpasta ao
+ * mesmo tempo (ex.: provisão em 2º plano × upload) passam ambos pelo `findFolder`
+ * vazio e criam duas. Depois de criar, confere: havendo homônima, vale a MAIS
+ * ANTIGA e a que acabamos de criar (vazia por definição) vai pra lixeira. Os dois
+ * lados convergem na mesma pasta, e a lixeira deixa desfazer.
+ */
+async function manterUnica(parentId: string, name: string, criada: { id: string; link: string }): Promise<{ id: string; link: string }> {
+  try {
+    const drive = getDrive()
+    const q = `'${parentId}' in parents and name = '${name.replace(/'/g, "\\'")}' and mimeType = '${FOLDER_MIME}' and trashed = false`
+    const r = await comRetry(() => drive.files.list({
+      q, fields: 'files(id, createdTime)', pageSize: 10, orderBy: 'createdTime',
+      supportsAllDrives: true, includeItemsFromAllDrives: true,
+    }))
+    const irmas = r.data.files ?? []
+    const primeira = irmas[0]?.id
+    if (!primeira || primeira === criada.id || irmas.length < 2) return criada
+    await comRetry(() => drive.files.update({ fileId: criada.id, requestBody: { trashed: true }, supportsAllDrives: true }))
+    return { id: primeira, link: folderLink(primeira) }
+  } catch (e) {
+    console.warn('[drive] conferência de homônima falhou; segue com a pasta criada', e instanceof Error ? e.message : e)
+    return criada
+  }
 }
 
 /**
