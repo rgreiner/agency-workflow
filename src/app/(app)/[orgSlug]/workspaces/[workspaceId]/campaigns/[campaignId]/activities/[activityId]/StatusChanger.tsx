@@ -4,9 +4,11 @@ import { useState, useTransition, useRef, useEffect } from 'react'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { updateActivityStatus } from '@/app/actions/activity'
 import { cn } from '@/lib/utils'
-import { ChevronDown, Check, Loader2, Search, ChevronRight } from 'lucide-react'
+import { ChevronDown, Check, Loader2, Search, ChevronRight, ChevronLeft } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAvancoRevisado } from './useAvancoRevisado'
+import { useOrgSettings } from '@/components/providers/OrgSettingsProvider'
+import { useFluxoStatus, destinosSugeridos } from '@/lib/fluxo-status'
 
 const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim()
 
@@ -39,10 +41,26 @@ export function StatusChanger({ activityId, currentStatus, path, compact, meusSt
   // termina. O servidor revalida; isto aqui só evita o clique que já vai falhar.
   const podeMover = ignoraCargo || meusStatus.length === 0 || meusStatus.includes(currentStatus)
 
-  // "Avançar" = próximo da ordem. Fluxo real (Design → Revisão etc.) vem depois;
-  // por ora a ordem da lista já cobre a maioria dos casos.
-  const idxAtual = statusConfig.findIndex(s => s.value === currentStatus)
-  const proximo = idxAtual >= 0 && idxAtual < statusConfig.length - 1 ? statusConfig[idxAtual + 1] : null
+  /**
+   * Sugestão pelo fluxo MEDIDO da casa (mig. 333), não pela ordem do cadastro.
+   *
+   * Até 06/10/2026 isto era `statusConfig[idxAtual + 1]`, com o comentário "a
+   * ordem da lista já cobre a maioria dos casos". Medido sobre 3.980
+   * transições: cobria 7 dos 21 status. Em briefing mandava para "pendente do
+   * cliente" quando o real é redação; em mídia, para "social" quando o real é
+   * concluído. Um clique só, na etapa errada, duas vezes em cada três.
+   */
+  const { orgId } = useOrgSettings()
+  const fluxo = useFluxoStatus(orgId)
+  const idxDe = (v: string) => statusConfig.findIndex(s => s.value === v)
+  const idxAtual = idxDe(currentStatus)
+  const sugeridos = destinosSugeridos(fluxo, currentStatus)
+    .map(t => ({ ...t, cfg: statusConfig.find(s => s.value === t.para) }))
+    .filter((t): t is typeof t & { cfg: NonNullable<typeof t.cfg> } => !!t.cfg)
+  // A ordem do cadastro não diz QUAL é o próximo, mas diz a DIREÇÃO: destino
+  // mais à frente é avanço, mais atrás é volta. Isso ela acerta.
+  const ehVolta = (valor: string) => idxAtual >= 0 && idxDe(valor) >= 0 && idxDe(valor) < idxAtual
+  const proximo = sugeridos[0]?.cfg ?? null
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -105,18 +123,20 @@ export function StatusChanger({ activityId, currentStatus, path, compact, meusSt
             {selectedCfg.label}
             <ChevronDown aria-hidden className={cn('w-3.5 h-3.5 transition-transform', open && 'rotate-180')} />
           </button>
-          {/* Avançar: um clique pro próximo da ordem, sem abrir o seletor. */}
+          {/* Um clique pro destino mais frequente a partir deste status. */}
           {proximo && podeMover && (
             <button
               type="button"
               disabled={isPending}
               onClick={() => applyStatus(proximo.value)}
-              title={`Avançar para ${proximo.label}`}
-              aria-label={`Avançar para ${proximo.label}`}
+              title={`${ehVolta(proximo.value) ? 'Voltar' : 'Avançar'} para ${proximo.label} — ${sugeridos[0].pct}% das vezes`}
+              aria-label={`${ehVolta(proximo.value) ? 'Voltar' : 'Avançar'} para ${proximo.label}`}
               style={{ backgroundColor: selectedCfg.bg, color: selectedCfg.text }}
-              className="flex items-center px-1.5 border-l border-black/10 hover:brightness-95 transition disabled:opacity-50"
+              className="flex items-center px-1.5 border-l border-black/10 hover:brightness-95 transition-colors disabled:opacity-50"
             >
-              <ChevronRight aria-hidden className="w-3.5 h-3.5" />
+              {ehVolta(proximo.value)
+                ? <ChevronLeft aria-hidden className="w-3.5 h-3.5" />
+                : <ChevronRight aria-hidden className="w-3.5 h-3.5" />}
             </button>
           )}
         </span>
@@ -139,6 +159,33 @@ export function StatusChanger({ activityId, currentStatus, path, compact, meusSt
               </div>
             </div>
             <div className="max-h-72 overflow-y-auto py-1">
+              {/* Sugeridos pelo fluxo real. Nunca substituem a lista: quando o
+                  caso é o incomum, a pessoa não pode ter que lutar com a tela. */}
+              {sugeridos.length > 0 && norm(query) === '' && (
+                <div className="border-b border-gray-100 pb-1 mb-1">
+                  <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                    Daqui costuma ir para
+                  </p>
+                  {sugeridos.map(t => (
+                    <button
+                      key={t.para}
+                      type="button"
+                      onClick={() => applyStatus(t.para)}
+                      className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-gray-50 transition-colors"
+                    >
+                      {ehVolta(t.para)
+                        ? <ChevronLeft aria-hidden className="w-3 h-3 text-gray-300 shrink-0" />
+                        : <ChevronRight aria-hidden className="w-3 h-3 text-gray-300 shrink-0" />}
+                      <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ backgroundColor: t.cfg.bg, color: t.cfg.text }}>
+                        {t.cfg.label}
+                      </span>
+                      {/* O porquê, discreto: transforma palpite em informação e
+                          deixa ver quando o fluxo da casa mudou. */}
+                      <span className="ml-auto text-[10px] text-gray-400 tabular-nums shrink-0">{t.pct}%</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               {['internal', 'external', 'done'].map(group => {
                 const q = norm(query)
                 const items = statusConfig.filter(s => s.group === group && (!q || norm(s.label).includes(q)))

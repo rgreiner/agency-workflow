@@ -6,6 +6,8 @@ import { updateActivityStatus } from '@/app/actions/activity'
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAvancoRevisado } from './useAvancoRevisado'
+import { useOrgSettings } from '@/components/providers/OrgSettingsProvider'
+import { useFluxoStatus } from '@/lib/fluxo-status'
 
 interface Props {
   activityId: string
@@ -18,8 +20,10 @@ interface Props {
 
 /**
  * Barra fixa no rodapé do detalhe da tarefa — só no celular (fase 3 do PWA).
- * O caso de uso é "passar pra frente / voltar" com o dedão: um toque move na
- * ordem dos status da org. A trava do cargo é antecipação de UX; quem decide
+ * O caso de uso é "passar pra frente / voltar" com o dedão: um toque move para
+ * o destino que a casa mais usa a partir da etapa atual (fluxo medido, mig.
+ * 333) — e não para o vizinho na ordem do cadastro, que é ordem de exibição e
+ * acertava 7 dos 21 status. A trava do cargo é antecipação de UX; quem decide
  * de verdade é o servidor (update_activity_status). Renderizar com
  * key={status} — mudança vinda de fora (AutoRefresh) zera o otimismo local.
  */
@@ -29,10 +33,22 @@ export function MobileStatusBar({ activityId, currentStatus, path, meusStatus = 
   const { mover, dialogo } = useAvancoRevisado()
   const statusConfig = useStatusConfig()
 
+  const { orgId } = useOrgSettings()
+  const fluxo = useFluxoStatus(orgId)
+
   const cfg = statusConfig.find(s => s.value === status)
   const idx = statusConfig.findIndex(s => s.value === status)
-  const anterior = idx > 0 ? statusConfig[idx - 1] : null
-  const proximo = idx >= 0 && idx < statusConfig.length - 1 ? statusConfig[idx + 1] : null
+  const idxDe = (v: string) => statusConfig.findIndex(x => x.value === v)
+
+  // Frente = destino mais frequente. Volta = o mais frequente que fica ATRÁS na
+  // ordem — a ordem não diz qual é o próximo, mas diz a direção, e isso acerta.
+  const porFrequencia = fluxo.filter(t => t.de === status).sort((a, b) => a.pos - b.pos)
+  const acha = (valor?: string) => statusConfig.find(x => x.value === valor) ?? null
+  const proximo = acha(porFrequencia.find(t => idxDe(t.para) > idx)?.para)
+    ?? acha(porFrequencia[0]?.para)
+  const anterior = acha(porFrequencia.find(t => idxDe(t.para) >= 0 && idxDe(t.para) < idx)?.para)
+    // Sem histórico ainda: o vizinho de trás é melhor que botão morto.
+    ?? (idx > 0 ? statusConfig[idx - 1] : null)
   const podeMover = ignoraCargo || meusStatus.length === 0 || meusStatus.includes(status)
 
   if (!cfg) return null
