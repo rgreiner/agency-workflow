@@ -20,7 +20,11 @@ concurrency:
 
 jobs:
   verificar:
-    runs-on: ubuntu-latest
+    # Imagem FIXA, não `ubuntu-latest`: em 19/10/2026 o rótulo latest migra para
+    # Ubuntu 26, e uma troca de SO no meio de uma sexta-feira é surpresa, não
+    # manutenção. Subir é decisão de quem mantém — aqui, quando der tempo de ver
+    # o CI quebrar por um motivo conhecido.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
