@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, X, Check, Loader2, Pencil, Landmark, Power, Layers, Eye, EyeOff, Star, CreditCard } from 'lucide-react'
+import { Plus, X, Check, Loader2, Pencil, Landmark, Power, Layers, Eye, EyeOff, Star, CreditCard, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
@@ -28,6 +28,12 @@ export interface Conta {
   vencimentoDia?: number | null
   limite?: number | null
   faturas?: FaturaAberta[]
+  /** Movimentos do banco esperando conciliação nesta conta. */
+  conciliar?: number
+  /** Data do pendente mais antigo — pendência de ontem não é igual à de um mês. */
+  conciliarDesde?: string | null
+  /** Mais de 15 dias parada. Vem do servidor: "hoje" no render seria impuro. */
+  conciliarAtrasada?: boolean
 }
 
 const TIPO_OPTIONS = [
@@ -218,6 +224,11 @@ function ContaCard({ conta: c, orgSlug, isPending, onEditar, onToggleAtivo, onTo
   onEditar: () => void; onToggleAtivo: () => void; onToggleFavorita: () => void; onPagarFatura: () => void
 }) {
   const saldo = Number(c.saldo_atual ?? 0)
+  const conciliar = c.conciliar ?? 0
+  const desdeLabel = c.conciliarDesde ? formatDateBR(c.conciliarDesde) : null
+  // Mais de 15 dias parada o tom reforça, sem virar alarme: é o ponto em que a
+  // pendência deixa de ser "do extrato desta semana" e vira coisa para trás.
+  const atrasada = !!c.conciliarAtrasada
   const ehCartao = c.tipo === 'cartao'
   const faturasAbertas = c.faturas ?? []
   const proxima = faturasAbertas[0] ?? null
@@ -279,6 +290,22 @@ function ContaCard({ conta: c, orgSlug, isPending, onEditar, onToggleAtivo, onTo
 
       {/* ações */}
       <div className="flex items-center gap-1.5 pt-1 border-t border-gray-100 -mb-1">
+        {/* Conciliação pendente: fica na LINHA DE AÇÕES e não no canto do card
+            porque não é rótulo, é trabalho a fazer — e leva direto para a
+            conciliação daquela conta, que é onde o trabalho acontece. */}
+        {conciliar > 0 && (
+          <Link href={`/${orgSlug}/financeiro/contas/${c.id}#conciliacao`}
+            title={desdeLabel
+              ? `${conciliar} movimento(s) do banco esperando conciliação — o mais antigo de ${desdeLabel}`
+              : `${conciliar} movimento(s) do banco esperando conciliação`}
+            className={cn('inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold transition-colors active:scale-[0.97]',
+              atrasada
+                ? 'text-amber-800 bg-amber-100 hover:bg-amber-200'
+                : 'text-amber-700 bg-amber-50 hover:bg-amber-100')}>
+            <AlertTriangle className="w-3.5 h-3.5" />
+            {conciliar} a conciliar
+          </Link>
+        )}
         {ehCartao && faturaTotal > 0 ? (
           <button onClick={onPagarFatura}
             className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-violet-700 hover:bg-violet-50 transition-colors active:scale-[0.97]">

@@ -209,9 +209,11 @@ export function ContaExtratoView({ orgSlug, movimentos, saldoInicial, saldoAtual
       {/* A CONCILIAR — bloco inteiro só quando há o que fazer. Sem pendência vira
           uma linha: dizer "nada a fazer" não merece um cartão de 150px. */}
       {slotConciliacao && (pendentesCount > 0 ? (
-        <div>{slotConciliacao}</div>
+        // `id` é o alvo do "N a conciliar" na lista de Contas — sem ele o chip
+        // levaria ao topo da página e a pessoa procuraria o bloco com o olho.
+        <div id="conciliacao" className="scroll-mt-4">{slotConciliacao}</div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div id="conciliacao" className="scroll-mt-4 bg-white rounded-xl border border-gray-200 overflow-hidden">
           <button onClick={() => setConciliacaoAberta(o => !o)}
             className="w-full flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors">
             <Check className="w-4 h-4 text-emerald-500 shrink-0" />
