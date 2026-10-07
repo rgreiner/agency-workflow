@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Check, CheckCheck, Loader2 } from 'lucide-react'
+import { Check, CheckCheck, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
 import { notasDosLancamentos, type NotaDoLancamento } from '@/app/actions/nfse'
@@ -20,7 +21,8 @@ export interface ItemNota {
   /** Só quando não é a comissão principal (mídia com parte de produção). */
   parte: string | null
   valor: number
-  competencia: string
+  /** O índice da tela: a nota sai junto da cobrança, e a cobrança é no vencimento. */
+  vencimento: string
   origem: 'producao' | 'midia'
   cliente: string
   /** Estado atual do boleto — a ação de flag grava os dois de uma vez. */
@@ -29,6 +31,10 @@ export interface ItemNota {
 
 const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 const mesLegivel = (ym: string) => `${MESES[Number(ym.slice(5, 7)) - 1]} de ${ym.slice(0, 4)}`
+const somaMes = (ym: string, n: number) => {
+  const d = new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)) - 1 + n, 1))
+  return d.toISOString().slice(0, 7)
+}
 
 /**
  * A lista de emissão do mês, agrupada por cliente.
@@ -38,8 +44,12 @@ const mesLegivel = (ym: string) => `${MESES[Number(ym.slice(5, 7)) - 1]} de ${ym
  * descrição do lançamento — em mídia ela é "Desconto Padrão Agência" sempre, e
  * deixava sete linhas da mesma cliente indistinguíveis.
  */
-export function NotasDoMesClient({ orgSlug, itens, mesCorrente }: {
-  orgSlug: string; itens: ItemNota[]; mesCorrente: string
+export function NotasDoMesClient({ orgSlug, itens, mes, mesCorrente }: {
+  orgSlug: string; itens: ItemNota[]
+  /** Mês olhado (seletor). */
+  mes: string
+  /** Mês de hoje — o seletor volta para ele. */
+  mesCorrente: string
 }) {
   const router = useRouter()
   const [notas, setNotas] = useState<Record<string, NotaDoLancamento>>({})
@@ -80,9 +90,9 @@ export function NotasDoMesClient({ orgSlug, itens, mesCorrente }: {
   const visiveis = useMemo(() => itens.filter(i => !fora.has(i.id)), [itens, fora])
   const { doMes, atrasados } = useMemo(() => {
     const doMes: ItemNota[] = [], atrasados: ItemNota[] = []
-    for (const i of visiveis) (i.competencia.slice(0, 7) === mesCorrente ? doMes : atrasados).push(i)
+    for (const i of visiveis) (i.vencimento.slice(0, 7) === mes ? doMes : atrasados).push(i)
     return { doMes, atrasados }
-  }, [visiveis, mesCorrente])
+  }, [visiveis, mes])
 
   const emitida = (id: string) => notas[id]?.status === 'autorizada'
   const pendentes = visiveis.filter(i => !emitida(i.id))
@@ -90,12 +100,15 @@ export function NotasDoMesClient({ orgSlug, itens, mesCorrente }: {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-lg font-semibold text-gray-900">NF do mês</h1>
-        <p className="text-gray-500 text-sm mt-0.5">
-          O que precisa de nota fiscal na competência de <strong className="font-medium text-gray-700">{mesLegivel(mesCorrente)}</strong>.
-          Parcela de mês futuro não aparece: a nota dela ainda não é devida.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
+        <div>
+          <h1 className="text-lg font-semibold text-gray-900">NF do mês</h1>
+          <p className="text-gray-500 text-sm mt-0.5">
+            Notas a emitir com cobrança em <strong className="font-medium text-gray-700">{mesLegivel(mes)}</strong> —
+            a nota sai junto da cobrança, então o mês é o do vencimento.
+          </p>
+        </div>
+        <SeletorMes base={`/${orgSlug}/financeiro/notas`} mes={mes} mesCorrente={mesCorrente} />
       </div>
 
       {visiveis.length === 0 ? (
@@ -104,7 +117,7 @@ export function NotasDoMesClient({ orgSlug, itens, mesCorrente }: {
         <div className="space-y-8">
           <Bloco
             orgSlug={orgSlug}
-            titulo={`Competência de ${mesLegivel(mesCorrente)}`}
+            titulo={`Vencem em ${mesLegivel(mes)}`}
             resumo={pendentes.length > 0
               ? <>A emitir: <strong className="text-emerald-600 tabular-nums">{formatBRL(total)}</strong> <span className="text-gray-400">· {pendentes.length} nota(s)</span></>
               : <span className="inline-flex items-center gap-1 text-emerald-600"><Check className="w-3.5 h-3.5" /> tudo emitido</span>}
@@ -115,12 +128,39 @@ export function NotasDoMesClient({ orgSlug, itens, mesCorrente }: {
             <Bloco
               orgSlug={orgSlug}
               titulo="De meses anteriores"
-              aviso="Competência passada sem nota. Se ela saiu pelo emissor web, marque como emitida fora do Flow."
+              aviso="Já venceram e não têm nota. Se ela saiu pelo emissor web, marque como emitida fora do Flow."
               itens={atrasados} notas={notas} carregando={carregando}
               onEmitida={registrar} onFora={i => marcarFora(i, true)}
             />
           )}
         </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Mês anterior / seguinte. Com o vencimento como índice, uma MX veiculada em
+ * outubro só vence em novembro — sem o seletor ela ficaria invisível até lá, e
+ * não daria para preparar as notas antes da virada.
+ */
+function SeletorMes({ base, mes, mesCorrente }: { base: string; mes: string; mesCorrente: string }) {
+  const botao = 'inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-100 active:scale-[0.95] transition-colors'
+  return (
+    <div className="flex items-center gap-1">
+      <Link href={`${base}?mes=${somaMes(mes, -1)}`} aria-label="Mês anterior" className={botao}>
+        <ChevronLeft className="w-4 h-4" />
+      </Link>
+      <span className="min-w-[8.5rem] text-center text-sm font-medium text-gray-700 capitalize tabular-nums">
+        {mesLegivel(mes)}
+      </span>
+      <Link href={`${base}?mes=${somaMes(mes, 1)}`} aria-label="Mês seguinte" className={botao}>
+        <ChevronRight className="w-4 h-4" />
+      </Link>
+      {mes !== mesCorrente && (
+        <Link href={base} className="ml-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-orange-700 hover:bg-orange-500/10 transition-colors">
+          Hoje
+        </Link>
       )}
     </div>
   )
@@ -132,8 +172,8 @@ function Vazio() {
       <Check className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
       <h3 className="text-gray-900 font-medium">Nenhuma nota a emitir</h3>
       <p className="text-gray-500 text-sm mt-1 max-w-md mx-auto">
-        Tudo que tem competência até este mês já está com nota — emitida aqui, anexada ou marcada como emitida fora.
-        As parcelas dos próximos meses aparecem quando chegar a competência delas.
+        Tudo que vence até este mês já está com nota — emitida aqui, anexada ou marcada como emitida fora.
+        Para adiantar as do mês seguinte, use as setas no alto.
       </p>
     </div>
   )
@@ -220,9 +260,9 @@ function Linha({ orgSlug, item: l, nota, carregando, onEmitida, onFora }: {
         {formatBRL(l.valor)}
       </div>
 
-      {/* competência */}
+      {/* vencimento — o índice da tela */}
       <div className="text-xs text-gray-400 tabular-nums sm:order-2">
-        <span className="sm:hidden">Competência </span>{formatDateBR(l.competencia)}
+        <span className="sm:hidden">Vence </span>{formatDateBR(l.vencimento)}
       </div>
 
       {/* ações */}

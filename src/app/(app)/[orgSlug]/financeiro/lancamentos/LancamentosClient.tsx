@@ -87,7 +87,10 @@ const temNotaValida = (n?: NotaDoLancamento) => !!n && n.status === 'autorizada'
  * julho/2027. Mais da metade da fila era coisa para a qual não há o que fazer.
  */
 const notaDevida = (l: Lancamento, hoje: string) =>
-  String(l.competencia ?? l.vencimento ?? '').slice(0, 10) <= hoje
+  // Pelo MÊS DO VENCIMENTO (decisão do Rafael, 06/10/2026): a nota sai junto da
+  // cobrança. Pela competência, a MX veiculada em outubro e cobrada em novembro
+  // aparecia como devida um mês antes. Mesma régua da tela NF do mês.
+  String(l.vencimento ?? l.competencia ?? '').slice(0, 7) <= hoje.slice(0, 7)
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 

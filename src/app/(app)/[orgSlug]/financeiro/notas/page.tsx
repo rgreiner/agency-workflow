@@ -28,9 +28,19 @@ export const dynamic = 'force-dynamic'
  *
  * Só produção e mídia: lançamento manual ("Estorno linha telefone") não é
  * serviço prestado. OFX e Conta Azul são extrato e histórico.
+ *
+ * O MÊS É O DO VENCIMENTO, não o da competência (decisão do Rafael, 06/10/2026).
+ * A competência é quando a veiculação acontece; o vencimento é quando a casa
+ * cobra — e a nota sai junto da cobrança. A MX 1651 tem competência 01/10 e
+ * vencimento 22/11 (15 DFM + 7 dias agência): indexada pela competência, ela
+ * aparecia para emitir em outubro uma nota que só se cobra em novembro.
  */
-export default async function NotasDoMesPage({ params }: { params: Promise<{ orgSlug: string }> }) {
+export default async function NotasDoMesPage({ params, searchParams }: {
+  params: Promise<{ orgSlug: string }>
+  searchParams: Promise<{ mes?: string }>
+}) {
   const { orgSlug } = await params
+  const { mes: mesParam } = await searchParams
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) redirect('/login')
@@ -42,9 +52,13 @@ export default async function NotasDoMesPage({ params }: { params: Promise<{ org
   const sb = supabase as any
 
   const hoje = new Date().toISOString().slice(0, 10)
-  // Último dia do mês corrente: a parcela que vence dia 23 e a que vence dia 2
-  // são do mesmo mês de trabalho, então o corte é o mês, não o dia de hoje.
-  const fimDoMes = new Date(Date.UTC(Number(hoje.slice(0, 4)), Number(hoje.slice(5, 7)), 0))
+  const mesCorrente = hoje.slice(0, 7)
+  // Mês olhado: o corrente, ou outro pelo seletor — com o vencimento como
+  // índice, as notas de novembro só seriam vistas em novembro sem ele.
+  const mes = /^\d{4}-\d{2}$/.test(mesParam ?? '') ? mesParam! : mesCorrente
+  // Último dia do mês olhado: a parcela que vence dia 23 e a que vence dia 2
+  // são do mesmo mês de trabalho, então o corte é o mês, não o dia.
+  const fimDoMes = new Date(Date.UTC(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0))
     .toISOString().slice(0, 10)
 
   const res = await sb.from('lancamentos')
@@ -52,8 +66,8 @@ export default async function NotasDoMesPage({ params }: { params: Promise<{ org
     .eq('org_id', org.id)
     .eq('tipo', 'entrada')
     .in('origem_tipo', ['producao', 'midia'])
-    .lte('competencia', fimDoMes)
-    .order('competencia', { ascending: true })
+    .lte('vencimento', fimDoMes)
+    .order('vencimento', { ascending: true })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const linhas = unwrap<any>(res, 'lançamentos do mês')
@@ -108,12 +122,12 @@ export default async function NotasDoMesPage({ params }: { params: Promise<{ org
       detalhe: [d?.veiculos?.name, periodo].filter(Boolean).join(' · ') || null,
       parte: l.origem_parte === 'producao' ? 'Comissão de produção' : null,
       valor: Number(l.valor ?? 0),
-      competencia: (l.competencia ?? l.vencimento ?? '').slice(0, 10),
+      vencimento: (l.vencimento ?? l.competencia ?? '').slice(0, 10),
       origem: l.origem_tipo as 'producao' | 'midia',
       cliente: l.workspaces?.name ?? l.contato_nome ?? l.centro_custo ?? 'Sem cliente',
       boleto: !!l.boleto_gerado,
     }
   })
 
-  return <NotasDoMesClient orgSlug={orgSlug} itens={itens} mesCorrente={hoje.slice(0, 7)} />
+  return <NotasDoMesClient orgSlug={orgSlug} itens={itens} mes={mes} mesCorrente={mesCorrente} />
 }
