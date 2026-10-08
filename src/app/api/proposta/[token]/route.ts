@@ -38,8 +38,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   // Ficha de admissão: rascunho a cada salvar, `final` quando o candidato
   // termina (é o que avisa o RH).
   if (body.acao === 'ficha') {
+    // ⚠️ `sql.json`, nunca `JSON.stringify(...)::jsonb`: o driver manda o texto
+    // já codificado e o cast devolve uma STRING json, não um objeto — a função
+    // recusava com "formato" e o candidato levava "não consegui ler os dados"
+    // (08/10, primeiro uso real). Mesmo jeito da cotação.
+    const ficha = typeof body.ficha === 'string'
+      ? (() => { try { return JSON.parse(body.ficha as unknown as string) } catch { return {} } })()
+      : (body.ficha ?? {})
     const rows = await sql`
-      select rh_admissao_salvar_ficha(${token}, ${JSON.stringify(body.ficha ?? {})}::jsonb, ${!!body.final}) as v
+      select rh_admissao_salvar_ficha(${token}, ${sql.json(JSON.parse(JSON.stringify(ficha)))}, ${!!body.final}) as v
     ` as { v: { ok: boolean; erro?: string } }[]
     const r = rows[0]?.v
     if (!r?.ok) return NextResponse.json({ error: ERROS[r?.erro ?? 'link'] ?? 'Não foi possível salvar.' }, { status: 409 })
