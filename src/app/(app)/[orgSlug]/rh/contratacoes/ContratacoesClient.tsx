@@ -20,7 +20,7 @@ import {
 } from '@/lib/admissao'
 import { salvarProposta, enviarProposta, cancelarProcesso, limparDadosProcesso, carregarFicha,
   efetivarAdmissao, enviarContabilidade } from '@/app/actions/rh-admissao'
-import { SECOES_FICHA, CAMPOS_CONJUGE, CAMPOS_FILHO, type FichaAdmissao } from '@/lib/admissao-ficha'
+import { SECOES_FICHA, CAMPOS_CONJUGE, CAMPOS_FILHO, CAMPOS_BANCO_LEGADO, type FichaAdmissao } from '@/lib/admissao-ficha'
 
 export interface AdmissaoRow {
   id: string; nome: string; email: string | null; telefone: string | null
@@ -598,6 +598,20 @@ function FichaModal({ orgSlug, admissao, onClose }: { orgSlug: string; admissao:
             </dl>
           </section>
         ))}
+        {/* Agência e conta de quem preencheu antes da troca por Pix (08/10). */}
+        {dados && CAMPOS_BANCO_LEGADO.some(c => campo('banco', c.k)) && (
+          <section>
+            <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500 mb-2">Dados bancários informados</h3>
+            <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
+              {CAMPOS_BANCO_LEGADO.filter(c => campo('banco', c.k)).map(c => (
+                <div key={c.k}>
+                  <dt className="text-[11px] text-gray-400">{c.label}</dt>
+                  <dd className="text-sm text-gray-900">{campo('banco', c.k)}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        )}
         {dados?.ficha?.conjuge && CAMPOS_CONJUGE.some(c => campo('conjuge', c.k)) && (
           <section>
             <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500 mb-2">Cônjuge</h3>

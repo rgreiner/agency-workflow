@@ -3,7 +3,7 @@
 // `lib/admissao-ficha`: formulário, conferência e PDF leem a MESMA definição.
 import { Text, View } from '@react-pdf/renderer'
 import { s, PRETO, CINZA, CINZA_CLARO, LINHA, FolhaA4, Cabecalho, Rodape, agoraBR, brl, dataBR, type Agencia } from './kit'
-import { SECOES_FICHA, CAMPOS_CONJUGE, CAMPOS_FILHO, type FichaAdmissao } from '@/lib/admissao-ficha'
+import { SECOES_FICHA, CAMPOS_CONJUGE, CAMPOS_FILHO, CAMPOS_BANCO_LEGADO, type FichaAdmissao } from '@/lib/admissao-ficha'
 import { hora, horasSemanais, type BeneficiosProposta, type JornadaProposta } from '@/lib/admissao'
 
 export interface FichaAdmissaoPdf {
@@ -51,8 +51,11 @@ export function FichaAdmissaoDoc({ d, agencia, logoUrl }: {
   const j = d.jornada ?? {}
   const b = d.beneficios ?? {}
 
-  const secoesPessoa = SECOES_FICHA.filter(x => x.id !== 'banco')
-  const banco = SECOES_FICHA.find(x => x.id === 'banco')
+  const secoesPessoa = SECOES_FICHA.filter(x => x.id !== 'pagamento')
+  const pagamento = SECOES_FICHA.find(x => x.id === 'pagamento')
+  // Quem preencheu antes da troca por Pix (08/10) tem agência e conta: a
+  // contabilidade precisa ver o que foi informado, não o campo novo vazio.
+  const temBanco = CAMPOS_BANCO_LEGADO.some(c => val('banco', c.k))
 
   return (
     <FolhaA4>
@@ -132,9 +135,12 @@ export function FichaAdmissaoDoc({ d, agencia, logoUrl }: {
           <Par label="Vale-alimentação" valor={b.va_dia ? `${brl(b.va_dia)}/dia${b.va_desconto_pct ? ` (desconto ${b.va_desconto_pct}%)` : ''}` : 'Não'} w="25%" />
         </View>
 
-        <Titulo n={7}>DADOS BANCÁRIOS</Titulo>
+        <Titulo n={7}>PAGAMENTO DO SALÁRIO</Titulo>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-          {(banco?.campos ?? []).map(c => (
+          {(pagamento?.campos ?? []).map(c => (
+            <Par key={c.k} label={c.label} valor={val('pagamento', c.k)} w={c.col === 2 ? '25%' : '40%'} />
+          ))}
+          {temBanco && CAMPOS_BANCO_LEGADO.map(c => (
             <Par key={c.k} label={c.label} valor={val('banco', c.k)} w="25%" />
           ))}
         </View>

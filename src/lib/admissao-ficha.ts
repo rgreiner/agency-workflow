@@ -82,15 +82,26 @@ export const SECOES_FICHA: SecaoFicha[] = [
     ],
   },
   {
-    id: 'banco', titulo: 'Dados bancários',
-    descricao: 'Conta em seu nome, para o pagamento do salário.',
+    id: 'pagamento', titulo: 'Pagamento do salário',
+    descricao: 'A chave Pix precisa estar no seu nome.',
     campos: [
-      { k: 'banco', label: 'Banco', obrigatorio: true },
-      { k: 'tipo', label: 'Tipo de conta', tipo: 'select', opcoes: ['Corrente', 'Poupança', 'Salário'] },
-      { k: 'agencia', label: 'Agência', col: 2, obrigatorio: true },
-      { k: 'conta', label: 'Conta (com dígito)', col: 4, obrigatorio: true },
+      { k: 'pix_tipo', label: 'Tipo da chave', tipo: 'select', col: 2, obrigatorio: true,
+        opcoes: ['CPF', 'Celular', 'E-mail', 'Chave aleatória'] },
+      { k: 'pix_chave', label: 'Chave Pix', col: 4, obrigatorio: true },
     ],
   },
+]
+
+/**
+ * Agência e conta: o formulário parou de pedir (decisão do Rafael, 08/10 — o
+ * salário sai por Pix). Fica aqui para EXIBIR o que já foi coletado de quem
+ * preencheu antes; a ficha do RH e o PDF continuam mostrando.
+ */
+export const CAMPOS_BANCO_LEGADO: CampoFicha[] = [
+  { k: 'banco', label: 'Banco' },
+  { k: 'tipo', label: 'Tipo de conta' },
+  { k: 'agencia', label: 'Agência', col: 2 },
+  { k: 'conta', label: 'Conta (com dígito)', col: 4 },
 ]
 
 /** Cônjuge e filhos ficam fora das seções porque filhos são uma lista. */
@@ -110,6 +121,8 @@ export interface FichaAdmissao {
   endereco?: Record<string, string>
   escolaridade?: Record<string, string>
   documentos?: Record<string, string>
+  pagamento?: Record<string, string>
+  /** Legado: quem preencheu antes de a ficha pedir Pix (08/10). */
   banco?: Record<string, string>
   conjuge?: Record<string, string>
   filhos?: Record<string, string>[]

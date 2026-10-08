@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Loader2, Paperclip, Plus, Trash2, Upload, X } from 'lucide-react'
+import { Check, Loader2, Paperclip, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
 import { downscaleImage } from '@/lib/image-resize'
 import {
   SECOES_FICHA, CAMPOS_CONJUGE, CAMPOS_FILHO, faltando, progresso,
@@ -57,6 +57,9 @@ export function FichaForm({ token, inicial, enviadaEm, docsPedidos, docsEnviados
   const [erro, setErro] = useState<string | null>(null)
   const [faltam, setFaltam] = useState<string[]>([])
   const [docs, setDocs] = useState<DocEnviado[]>(docsEnviados)
+  // Enviou e percebeu um erro (ou o RH pediu um dado novo): dá para reabrir e
+  // mandar de novo pelo mesmo link — antes só restava falar com a agência.
+  const [corrigindo, setCorrigindo] = useState(false)
   const [subindo, setSubindo] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const tipoRef = useRef<string>('outro')
@@ -83,6 +86,7 @@ export function FichaForm({ token, inicial, enviadaEm, docsPedidos, docsEnviados
     })
     const j = await r.json().catch(() => ({}))
     if (!r.ok) { setErro(j.error ?? 'Não foi possível salvar.'); return }
+    if (final) setCorrigindo(false)
     router.refresh()
   }
 
@@ -113,16 +117,27 @@ export function FichaForm({ token, inicial, enviadaEm, docsPedidos, docsEnviados
     if (r.ok) setDocs(d => d.filter(x => x.id !== id))
   }
 
-  if (enviadaEm) {
+  if (enviadaEm && !corrigindo) {
+    const faltaAgora = faltando(f)
     return (
       <div className="bg-white rounded-2xl border border-emerald-200 p-6">
         <div className="flex items-start gap-3">
           <Check className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-          <div>
+          <div className="flex-1 min-w-0">
             <h2 className="text-base font-semibold text-gray-900">Ficha enviada</h2>
             <p className="text-sm text-gray-500 mt-0.5">
-              Recebemos seus dados e seus {docs.length} anexo(s). Se precisar corrigir alguma coisa, fale com a agência.
+              Recebemos seus dados e seus {docs.length} anexo(s).
             </p>
+            {faltaAgora.length > 0 && (
+              <p className="text-sm text-amber-800 bg-amber-50 ring-1 ring-amber-200 rounded-xl px-3 py-2 mt-3">
+                Falta <b>{faltaAgora.length === 1 ? faltaAgora[0] : `${faltaAgora.length} informações`}</b> —
+                é só abrir e completar.
+              </p>
+            )}
+            <button onClick={() => setCorrigindo(true)}
+              className="mt-3 inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 active:scale-[0.97] transition-colors">
+              <Pencil className="w-3.5 h-3.5" /> {faltaAgora.length ? 'Completar a ficha' : 'Corrigir alguma coisa'}
+            </button>
           </div>
         </div>
       </div>
@@ -132,9 +147,13 @@ export function FichaForm({ token, inicial, enviadaEm, docsPedidos, docsEnviados
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-2xl border border-gray-200 p-5">
-        <h2 className="text-base font-semibold text-gray-900">Ficha de admissão</h2>
+        <h2 className="text-base font-semibold text-gray-900">
+          {corrigindo ? 'Corrigir a ficha' : 'Ficha de admissão'}
+        </h2>
         <p className="text-sm text-gray-500 mt-0.5">
-          São os dados do seu registro em carteira. Pode salvar e voltar depois — o link continua valendo.
+          {corrigindo
+            ? 'Ajuste o que precisar e envie de novo — a agência é avisada.'
+            : 'São os dados do seu registro em carteira. Pode salvar e voltar depois — o link continua valendo.'}
         </p>
         <div className="mt-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
           <div className="h-full bg-orange-500 rounded-full transition-all"
