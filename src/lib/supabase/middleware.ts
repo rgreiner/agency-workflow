@@ -40,7 +40,10 @@ export async function updateSession(request: NextRequest) {
   // credencial (validado na página e em cada rota de /api/cotacao/<token>/…).
   // /api/cotacao/arquivo é do MEMBRO e faz a própria checagem de sessão.
   const isCotacao = path.startsWith('/cotacao/') || path.startsWith('/api/cotacao/')
-  const isPublic = isAuthPage || isConvite || isCron || isPortal || isRest || isPwaAsset || isSenha || isCotacao
+  // Proposta de trabalho: o CANDIDATO abre sem conta — ele ainda não é do time.
+  // O token é a credencial, validado na página e em /api/proposta/<token>.
+  const isProposta = path.startsWith('/proposta/') || path.startsWith('/api/proposta/')
+  const isPublic = isAuthPage || isConvite || isCron || isPortal || isRest || isPwaAsset || isSenha || isCotacao || isProposta
 
   if (!claims && !isPublic) {
     const url = request.nextUrl.clone()
