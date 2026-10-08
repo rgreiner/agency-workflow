@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
   UserPlus, Plus, Loader2, Check, Copy, ExternalLink, Mail, Send, Ban, Eraser, Clock, FileText, Paperclip,
   Download, Building2, UserCheck,
@@ -133,6 +134,9 @@ export function ContratacoesClient({ orgSlug, agencia, lista, config, jornadaPad
         description={efetivar
           ? `Cria a ficha de ${nomeLegivel(efetivar.nome)} no RH com cargo, salário, admissão e jornada da proposta, `
             + 'e leva os anexos junto. O acesso ao Flow você libera depois, em Membros.'
+            + (efetivar.ficha_em
+              ? ''
+              : ' A ficha ainda não chegou: o link do candidato continua aberto e o que ele mandar depois entra na ficha do RH.')
           : ''}
         confirmLabel="Criar ficha no RH"
         onConfirm={() => {
@@ -196,7 +200,7 @@ export function ContratacoesClient({ orgSlug, agencia, lista, config, jornadaPad
   )
 }
 
-function Secao({ titulo, itens, vazio, pending, hoje, onAbrir, onCopiar, onReenviar, onCancelar, onLimpar, onVerFicha, onEfetivar, onContabil }: {
+function Secao({ titulo, itens, vazio, orgSlug, pending, hoje, onAbrir, onCopiar, onReenviar, onCancelar, onLimpar, onVerFicha, onEfetivar, onContabil }: {
   titulo: string; itens: AdmissaoRow[]; vazio: string; orgSlug: string; pending: boolean; hoje: string
   onAbrir: (a: AdmissaoRow) => void; onCopiar: (a: AdmissaoRow) => void; onReenviar: (a: AdmissaoRow) => void
   onCancelar: (a: AdmissaoRow) => void; onLimpar: (a: AdmissaoRow) => void; onVerFicha: (a: AdmissaoRow) => void
@@ -281,8 +285,10 @@ function Secao({ titulo, itens, vazio, pending, hoje, onAbrir, onCopiar, onReenv
                   {a.dados_limpos_em && <span>dados apagados em {dataHoraBR(a.dados_limpos_em)}</span>}
                 </div>
 
-                {/* Os três atos que fecham a contratação, só quando cabem. */}
-                {a.aceita_em && a.status !== 'efetivada' && a.status !== 'cancelada' && (
+                {/* Os atos que fecham a contratação, cada um quando cabe. O PDF e o
+                    envio seguem valendo depois de efetivar: a ficha pode chegar
+                    depois (mig. 337), e aí a contabilidade ainda espera o pacote. */}
+                {a.aceita_em && a.status !== 'cancelada' && (
                   <div className="flex flex-wrap items-center gap-2 mt-2">
                     {a.ficha_em && (
                       <>
@@ -296,11 +302,22 @@ function Secao({ titulo, itens, vazio, pending, hoje, onAbrir, onCopiar, onReenv
                         </button>
                       </>
                     )}
-                    <button onClick={() => onEfetivar(a)} disabled={pending}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 active:scale-[0.97] transition-colors disabled:opacity-50">
-                      <UserCheck className="w-3.5 h-3.5" /> Efetivar no RH
-                    </button>
-                    {!a.ficha_em && <span className="text-[11px] text-gray-400">a ficha ainda não foi enviada pelo candidato</span>}
+                    {a.status !== 'efetivada' ? (
+                      <button onClick={() => onEfetivar(a)} disabled={pending}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 active:scale-[0.97] transition-colors disabled:opacity-50">
+                        <UserCheck className="w-3.5 h-3.5" /> Efetivar no RH
+                      </button>
+                    ) : a.colaborador_id && (
+                      <Link href={`/${orgSlug}/rh/${a.colaborador_id}`}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 active:scale-[0.97] transition-colors">
+                        <UserCheck className="w-3.5 h-3.5" /> Ver a ficha no RH
+                      </Link>
+                    )}
+                    {!a.ficha_em && (
+                      <span className="text-[11px] text-gray-400">
+                        o candidato ainda não enviou a ficha — o link dele continua aberto
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
