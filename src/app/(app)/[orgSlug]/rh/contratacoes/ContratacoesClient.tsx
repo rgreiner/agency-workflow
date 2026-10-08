@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   UserPlus, Plus, Loader2, Check, Copy, ExternalLink, Mail, Send, Ban, Eraser, Clock, FileText, Paperclip,
+  Download, Building2, UserCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/ui/Modal'
@@ -16,7 +17,8 @@ import {
   montarCarta, urlProposta, horasSemanais, STATUS_ADMISSAO,
   type BeneficiosProposta, type JornadaProposta,
 } from '@/lib/admissao'
-import { salvarProposta, enviarProposta, cancelarProcesso, limparDadosProcesso, carregarFicha } from '@/app/actions/rh-admissao'
+import { salvarProposta, enviarProposta, cancelarProcesso, limparDadosProcesso, carregarFicha,
+  efetivarAdmissao, enviarContabilidade } from '@/app/actions/rh-admissao'
 import { SECOES_FICHA, CAMPOS_CONJUGE, CAMPOS_FILHO, type FichaAdmissao } from '@/lib/admissao-ficha'
 
 export interface AdmissaoRow {
@@ -30,6 +32,7 @@ export interface AdmissaoRow {
   aceita_em: string | null; recusada_em: string | null; recusa_motivo: string | null
   ficha_em: string | null; exame_em: string | null; exame_local: string | null
   status: string; observacao: string | null; dados_limpos_em: string | null
+  contabil_em?: string | null; colaborador_id?: string | null
   created_at: string
 }
 export interface ConfigAdmissao {
@@ -60,6 +63,8 @@ export function ContratacoesClient({ orgSlug, agencia, lista, config, jornadaPad
   const [cancelar, setCancelar] = useState<AdmissaoRow | null>(null)
   const [limpar, setLimpar] = useState<AdmissaoRow | null>(null)
   const [verFicha, setVerFicha] = useState<AdmissaoRow | null>(null)
+  const [efetivar, setEfetivar] = useState<AdmissaoRow | null>(null)
+  const [contabil, setContabil] = useState<AdmissaoRow | null>(null)
 
   const abertas = useMemo(() => lista.filter(a => !['efetivada', 'cancelada', 'recusada'].includes(a.status)), [lista])
   const fechadas = useMemo(() => lista.filter(a => ['efetivada', 'cancelada', 'recusada'].includes(a.status)), [lista])
@@ -108,17 +113,44 @@ export function ContratacoesClient({ orgSlug, agencia, lista, config, jornadaPad
           <Secao titulo="Em andamento" itens={abertas} vazio="Nada em andamento."
             orgSlug={orgSlug} pending={pending} hoje={hoje}
             onAbrir={setEditando} onCopiar={copiar} onReenviar={reenviar}
-            onCancelar={setCancelar} onLimpar={setLimpar} onVerFicha={setVerFicha} />
+            onCancelar={setCancelar} onLimpar={setLimpar} onVerFicha={setVerFicha}
+            onEfetivar={setEfetivar} onContabil={setContabil} />
           {fechadas.length > 0 && (
             <Secao titulo="Encerradas" itens={fechadas} vazio=""
               orgSlug={orgSlug} pending={pending} hoje={hoje}
               onAbrir={setEditando} onCopiar={copiar} onReenviar={reenviar}
-              onCancelar={setCancelar} onLimpar={setLimpar} onVerFicha={setVerFicha} />
+              onCancelar={setCancelar} onLimpar={setLimpar} onVerFicha={setVerFicha}
+              onEfetivar={setEfetivar} onContabil={setContabil} />
           )}
         </div>
       )}
 
       {verFicha && <FichaModal orgSlug={orgSlug} admissao={verFicha} onClose={() => setVerFicha(null)} />}
+
+      <ConfirmDialog
+        open={!!efetivar} loading={pending}
+        title="Efetivar no RH"
+        description={efetivar
+          ? `Cria a ficha de ${nomeLegivel(efetivar.nome)} no RH com cargo, salário, admissão e jornada da proposta, `
+            + 'e leva os anexos junto. O acesso ao Flow você libera depois, em Membros.'
+          : ''}
+        confirmLabel="Criar ficha no RH"
+        onConfirm={() => {
+          const a = efetivar; setEfetivar(null)
+          if (!a) return
+          start(async () => {
+            const r = await efetivarAdmissao(orgSlug, a.id)
+            if ('error' in r) { toast.error(r.error); return }
+            toast.success(`${nomeLegivel(a.nome)} agora tem ficha no RH.`, {
+              description: `${r.documentos} documento(s) foram para a ficha. Admissão em ${dataBR(r.data_admissao)}.`,
+              duration: 8000,
+            })
+            router.push(`/${orgSlug}/rh/${r.colaborador_id}`)
+          })
+        }}
+        onCancel={() => setEfetivar(null)} />
+
+      {contabil && <ContabilidadeModal orgSlug={orgSlug} admissao={contabil} onClose={() => setContabil(null)} />}
 
       {editando && (
         <PropostaModal orgSlug={orgSlug} agencia={agencia} config={config} jornadaPadrao={jornadaPadrao}
@@ -164,10 +196,11 @@ export function ContratacoesClient({ orgSlug, agencia, lista, config, jornadaPad
   )
 }
 
-function Secao({ titulo, itens, vazio, pending, hoje, onAbrir, onCopiar, onReenviar, onCancelar, onLimpar, onVerFicha }: {
+function Secao({ titulo, itens, vazio, pending, hoje, onAbrir, onCopiar, onReenviar, onCancelar, onLimpar, onVerFicha, onEfetivar, onContabil }: {
   titulo: string; itens: AdmissaoRow[]; vazio: string; orgSlug: string; pending: boolean; hoje: string
   onAbrir: (a: AdmissaoRow) => void; onCopiar: (a: AdmissaoRow) => void; onReenviar: (a: AdmissaoRow) => void
   onCancelar: (a: AdmissaoRow) => void; onLimpar: (a: AdmissaoRow) => void; onVerFicha: (a: AdmissaoRow) => void
+  onEfetivar: (a: AdmissaoRow) => void; onContabil: (a: AdmissaoRow) => void
 }) {
   if (!itens.length && !vazio) return null
   return (
@@ -244,8 +277,32 @@ function Secao({ titulo, itens, vazio, pending, hoje, onAbrir, onCopiar, onReenv
                   {a.aceita_em && <span className="text-emerald-700">aceita em {dataHoraBR(a.aceita_em)}</span>}
                   {a.ficha_em && <span className="text-emerald-700">ficha enviada em {dataHoraBR(a.ficha_em)}</span>}
                   {a.recusada_em && <span>recusou em {dataHoraBR(a.recusada_em)}{a.recusa_motivo ? ` — “${a.recusa_motivo}”` : ''}</span>}
+                  {a.contabil_em && <span>contabilidade avisada em {dataHoraBR(a.contabil_em)}</span>}
                   {a.dados_limpos_em && <span>dados apagados em {dataHoraBR(a.dados_limpos_em)}</span>}
                 </div>
+
+                {/* Os três atos que fecham a contratação, só quando cabem. */}
+                {a.aceita_em && a.status !== 'efetivada' && a.status !== 'cancelada' && (
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    {a.ficha_em && (
+                      <>
+                        <a href={`/api/rh/admissao/pdf?id=${a.id}`} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 active:scale-[0.97] transition-colors">
+                          <Download className="w-3.5 h-3.5" /> PDF da ficha
+                        </a>
+                        <button onClick={() => onContabil(a)} disabled={pending}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 active:scale-[0.97] transition-colors disabled:opacity-50">
+                          <Building2 className="w-3.5 h-3.5" /> {a.contabil_em ? 'Reenviar à contabilidade' : 'Enviar à contabilidade'}
+                        </button>
+                      </>
+                    )}
+                    <button onClick={() => onEfetivar(a)} disabled={pending}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 active:scale-[0.97] transition-colors disabled:opacity-50">
+                      <UserCheck className="w-3.5 h-3.5" /> Efetivar no RH
+                    </button>
+                    {!a.ficha_em && <span className="text-[11px] text-gray-400">a ficha ainda não foi enviada pelo candidato</span>}
+                  </div>
+                )}
               </div>
             )
           })}
@@ -574,6 +631,55 @@ function FichaModal({ orgSlug, admissao, onClose }: { orgSlug: string; admissao:
       </div>
       <div className="flex justify-end px-6 py-4 border-t border-gray-100">
         <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors">Fechar</button>
+      </div>
+    </Modal>
+  )
+}
+
+/** Envio do pacote à contabilidade: PDF da ficha + anexos, com recado opcional. */
+function ContabilidadeModal({ orgSlug, admissao, onClose }: { orgSlug: string; admissao: AdmissaoRow; onClose: () => void }) {
+  const router = useRouter()
+  const [corpo, setCorpo] = useState(
+    `Segue a ficha de admissão de ${nomeLegivel(admissao.nome)} para registro.`)
+  const [enviando, start] = useTransition()
+
+  return (
+    <Modal open onClose={onClose} label="Enviar à contabilidade" dismissable={!enviando} dismissOnBackdrop={false}>
+      <div className="px-6 py-4 border-b border-gray-100">
+        <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+          <Building2 className="w-4.5 h-4.5 text-orange-600" /> Enviar à contabilidade
+        </h2>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Vai a ficha em PDF e os documentos que {nomeLegivel(admissao.nome).split(' ')[0]} anexou, para a mesma
+          lista do fechamento do ponto.
+        </p>
+      </div>
+      <div className="px-6 py-5">
+        <label className="block text-[11px] font-medium text-gray-500 mb-1">Recado no corpo do e-mail</label>
+        <textarea value={corpo} onChange={e => setCorpo(e.target.value)} rows={4}
+          className="w-full px-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+        {admissao.contabil_em && (
+          <p className="text-[11px] text-amber-700 mt-2">
+            Já enviado em {dataHoraBR(admissao.contabil_em)} — este vai marcado como versão corrigida.
+          </p>
+        )}
+      </div>
+      <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-100">
+        <button onClick={onClose} disabled={enviando}
+          className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors">Cancelar</button>
+        <button disabled={enviando}
+          onClick={() => start(async () => {
+            const r = await enviarContabilidade(orgSlug, admissao.id, corpo)
+            if ('error' in r) { toast.error(r.error); return }
+            toast.success(`Enviado para ${r.destinatarios?.join(', ')}.`, {
+              description: r.foraDoEmail?.length ? `Ficaram fora por tamanho: ${r.foraDoEmail.join(', ')}.` : undefined,
+              duration: 8000,
+            })
+            onClose(); router.refresh()
+          })}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 active:scale-[0.97] transition-colors disabled:opacity-50">
+          {enviando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Enviar
+        </button>
       </div>
     </Modal>
   )

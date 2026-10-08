@@ -16,7 +16,8 @@ export default async function ContratacoesPage({ params }: { params: Promise<{ o
     .from('rh_admissao')
     .select('id, nome, email, telefone, cargo, tipo_vinculo, salario, data_inicio, data_primeiro_pagamento, '
       + 'local_trabalho, jornada, beneficios, carta, token, expira_em, enviada_em, aberta_em, aceita_em, '
-      + 'recusada_em, recusa_motivo, ficha_em, exame_em, exame_local, status, observacao, dados_limpos_em, created_at')
+      + 'recusada_em, recusa_motivo, ficha_em, exame_em, exame_local, status, observacao, dados_limpos_em, '
+      + 'contabil_em, colaborador_id, created_at')
     .eq('org_id', orgId)
     .order('created_at', { ascending: false }), 'contratações')
 

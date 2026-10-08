@@ -3,12 +3,19 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
-import { sendMail, remetenteDominio } from '@/lib/email/send'
+import { sendMail, remetenteDominio, type MailAttachment } from '@/lib/email/send'
 import { emailLayout } from '@/lib/email/layout'
 import { logSystemError } from '@/lib/system-error'
 import { novoToken } from '@/lib/admissao-server'
 import { urlProposta, type JornadaProposta, type BeneficiosProposta } from '@/lib/admissao'
 import type { FichaAdmissao } from '@/lib/admissao-ficha'
+import { nomeLegivel } from '@/lib/nomes'
+
+/** O cliente do PostgREST não é tipado neste módulo; o `as any` é local. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SupabaseLike = any
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
 async function ctx(orgSlug: string) {
   const supabase = await createClient()
@@ -131,5 +138,97 @@ export async function carregarFicha(orgSlug: string, id: string) {
   return {
     ficha: (a?.ficha ?? null) as FichaAdmissao | null,
     docs: (docs ?? []) as { id: string; tipo: string; nome: string | null }[],
+  }
+}
+
+/** O processo vira ficha no RH: colaborador, jornada e anexos (mig. 336). */
+export async function efetivarAdmissao(orgSlug: string, id: string, dados?: Record<string, string | null>) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (c.supabase as any).rpc('rh_admissao_efetivar', { p_id: id, p_dados: dados ?? {} })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/rh/contratacoes`)
+  revalidatePath(`/${orgSlug}/rh`)
+  return data as { colaborador_id: string; documentos: number; data_admissao: string }
+}
+
+/**
+ * Manda a ficha para a contabilidade: PDF no formato que ela já recebe, mais
+ * os anexos do candidato. Mesma lista de e-mails do fechamento do ponto.
+ */
+export async function enviarContabilidade(orgSlug: string, id: string, corpo?: string) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  const sb = c.supabase as SupabaseLike
+
+  const { data: a } = await sb.from('rh_admissao')
+    .select('org_id, nome, cargo, tipo_vinculo, salario, data_inicio, jornada, beneficios, exame_em, ficha, contabil_em')
+    .eq('id', id).maybeSingle()
+  if (!a) return { error: 'Processo não encontrado' }
+
+  const { data: cfg } = await sb.from('org_settings')
+    .select('rh_contabil_emails, logo_url').eq('org_id', c.orgId).maybeSingle()
+  const destinatarios = (cfg?.rh_contabil_emails ?? []) as string[]
+  if (!destinatarios.length) return { error: 'Nenhum e-mail do RH da contabilidade configurado (Ponto → Fechamento).' }
+
+  const { data: docs } = await sb.from('rh_admissao_doc').select('id, tipo, nome, chave').eq('admissao_id', id)
+  const anexosCand = (docs ?? []) as { id: string; tipo: string; nome: string | null; chave: string }[]
+
+  try {
+    const { renderToBuffer } = await import('@react-pdf/renderer')
+    const { FichaAdmissaoDoc } = await import('@/lib/pdf/FichaAdmissaoDoc')
+    const { loadOrgDocs } = await import('@/lib/agency')
+    const { lerPrivado } = await import('@/lib/arquivo-privado')
+    const { agency } = await loadOrgDocs(sb, c.orgId)
+    const nome = nomeLegivel(String(a.nome))
+
+    const pdf = await renderToBuffer(FichaAdmissaoDoc({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      d: { ...(a as any), nome, anexos: anexosCand.map(x => ({ tipo: x.tipo, nome: x.nome })) },
+      agencia: agency, logoUrl: cfg?.logo_url ?? null,
+    }))
+
+    const anexos: MailAttachment[] = [{ filename: `Ficha de admissão — ${nome}.pdf`, content: Buffer.from(pdf) }]
+    // Os documentos do candidato vão junto, até caber: e-mail com 40MB volta.
+    let orcamento = 12 * 1024 * 1024
+    const foraDoEmail: string[] = []
+    for (const d of anexosCand) {
+      const buf = await lerPrivado(d.chave)
+      if (!buf) continue
+      if (buf.length > orcamento) { foraDoEmail.push(d.nome ?? d.tipo); continue }
+      orcamento -= buf.length
+      anexos.push({ filename: `${d.tipo} — ${d.nome ?? 'anexo'}`, content: buf })
+    }
+
+    const reenvio = !!a.contabil_em
+    const texto = (corpo ?? '').trim()
+    const html = `
+      ${reenvio ? '<p><strong>Versão corrigida</strong> — substitui a ficha enviada antes.</p>' : ''}
+      ${texto ? texto.split(/\n+/).map(l => `<p>${escapeHtml(l)}</p>`).join('\n') : ''}
+      <p>Segue a ficha de admissão de <b>${escapeHtml(nome)}</b>${a.cargo ? ` — ${escapeHtml(String(a.cargo))}` : ''}${a.data_inicio ? `, com admissão em ${String(a.data_inicio).split('-').reverse().join('/')}` : ''}.</p>
+      ${foraDoEmail.length ? `<p style="color:#b45309">Anexos grandes ficaram fora do e-mail: ${foraDoEmail.map(escapeHtml).join(', ')}. Peça que a agência envie à parte.</p>` : ''}
+      <p style="color:#888;font-size:12px">Enviado pelo Flow — ficha em PDF e documentos anexos.</p>`
+
+    const { error: mailErr } = await sendMail({
+      to: destinatarios,
+      subject: `${reenvio ? '[Corrigida] ' : ''}Ficha de admissão — ${nome}`,
+      html, attachments: anexos,
+    })
+    if (mailErr) {
+      await logSystemError(c.supabase, { userId: c.userId, context: 'admissão: envio à contabilidade', error: mailErr })
+      return { error: `Não foi possível enviar: ${mailErr}` }
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: markErr } = await (c.supabase as any)
+      .rpc('rh_admissao_marcar_contabil', { p_id: id, p_para: destinatarios })
+    if (markErr) return { error: `E-mail enviado, mas o registro falhou: ${markErr.message}` }
+
+    revalidatePath(`/${orgSlug}/rh/contratacoes`)
+    return { ok: true, destinatarios, foraDoEmail }
+  } catch (e) {
+    await logSystemError(c.supabase, { userId: c.userId, context: 'admissão: envio à contabilidade', error: String(e) })
+    return { error: 'Falha ao montar o pacote da contabilidade.' }
   }
 }

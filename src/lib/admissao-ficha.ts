@@ -75,7 +75,7 @@ export const SECOES_FICHA: SecaoFicha[] = [
       { k: 'titulo', label: 'Título de eleitor' },
       { k: 'titulo_zona', label: 'Zona', col: 2 },
       { k: 'titulo_secao', label: 'Seção', col: 2 },
-      { k: 'reservista', label: 'Certificado de reservista', col: 2 },
+      { k: 'reservista', label: 'Reservista', col: 2, dica: 'nº do certificado' },
       { k: 'cnh', label: 'CNH' },
       { k: 'cnh_cat', label: 'Categoria', col: 2 },
       { k: 'cnh_validade', label: 'Validade', tipo: 'data', col: 2 },

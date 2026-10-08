@@ -31,8 +31,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!doc?.chave) return new Response('Não encontrado', { status: 404 })
 
   const rel = String(doc.chave)
-  // Defesa: a chave TEM que estar no prefixo privado e sem traversal.
-  if (!rel.startsWith('rh-privado/') || rel.includes('..')) return new Response('Não encontrado', { status: 404 })
+  // Defesa: a chave TEM que estar num prefixo privado e sem traversal. O anexo
+  // que veio da admissão (mig. 336) fica onde o candidato subiu — a ficha do RH
+  // aponta para ele em vez de mover arquivo, que falha pela metade.
+  const privado = rel.startsWith('rh-privado/') || rel.startsWith('admissao-privado/')
+  if (!privado || rel.includes('..')) return new Response('Não encontrado', { status: 404 })
 
   try {
     const buf = await readFile(path.join(uploadRoot(), rel))

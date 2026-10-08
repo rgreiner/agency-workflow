@@ -48,3 +48,9 @@ export async function servirPrivado(prefixo: string, chave: string, nome?: strin
     return new Response('Não encontrado', { status: 404 })
   }
 }
+
+/** Lê o arquivo privado para anexar em e-mail. null se sumiu do volume. */
+export async function lerPrivado(chave: string): Promise<Buffer | null> {
+  if (chave.includes('..')) return null
+  try { return await readFile(path.join(uploadRoot(), chave)) } catch { return null }
+}
