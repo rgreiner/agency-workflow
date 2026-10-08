@@ -8,6 +8,7 @@ import { emailLayout } from '@/lib/email/layout'
 import { logSystemError } from '@/lib/system-error'
 import { novoToken } from '@/lib/admissao-server'
 import { urlProposta, type JornadaProposta, type BeneficiosProposta } from '@/lib/admissao'
+import type { FichaAdmissao } from '@/lib/admissao-ficha'
 
 async function ctx(orgSlug: string) {
   const supabase = await createClient()
@@ -114,4 +115,21 @@ export async function limparDadosProcesso(orgSlug: string, id: string) {
   if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/rh/contratacoes`)
   return { ok: true }
+}
+
+/** Ficha + anexos de um processo, para a conferência do RH. */
+export async function carregarFicha(orgSlug: string, id: string) {
+  const c = await ctx(orgSlug)
+  if ('error' in c) return { error: c.error }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: a, error } = await (c.supabase as any)
+    .from('rh_admissao').select('ficha').eq('id', id).eq('org_id', c.orgId).maybeSingle()
+  if (error) return { error: error.message }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: docs } = await (c.supabase as any)
+    .from('rh_admissao_doc').select('id, tipo, nome').eq('admissao_id', id).order('enviado_em')
+  return {
+    ficha: (a?.ficha ?? null) as FichaAdmissao | null,
+    docs: (docs ?? []) as { id: string; tipo: string; nome: string | null }[],
+  }
 }

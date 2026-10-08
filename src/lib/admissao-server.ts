@@ -47,3 +47,6 @@ export async function admissaoPorToken(token: string): Promise<PropostaPublica |
 export function propostaVencida(p: PropostaPublica, hoje: string): boolean {
   return !!p.expira_em && !p.aceita_em && !p.recusada_em && hoje > p.expira_em
 }
+
+/** Pasta dos anexos do candidato no volume (fora de /uploads, que pede sessão). */
+export const PREFIXO_ADMISSAO = 'admissao-privado'

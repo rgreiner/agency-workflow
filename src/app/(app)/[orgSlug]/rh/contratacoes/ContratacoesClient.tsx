@@ -1,9 +1,9 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  UserPlus, Plus, Loader2, Check, Copy, ExternalLink, Mail, Send, Ban, Eraser, Clock,
+  UserPlus, Plus, Loader2, Check, Copy, ExternalLink, Mail, Send, Ban, Eraser, Clock, FileText, Paperclip,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/ui/Modal'
@@ -16,7 +16,8 @@ import {
   montarCarta, urlProposta, horasSemanais, STATUS_ADMISSAO,
   type BeneficiosProposta, type JornadaProposta,
 } from '@/lib/admissao'
-import { salvarProposta, enviarProposta, cancelarProcesso, limparDadosProcesso } from '@/app/actions/rh-admissao'
+import { salvarProposta, enviarProposta, cancelarProcesso, limparDadosProcesso, carregarFicha } from '@/app/actions/rh-admissao'
+import { SECOES_FICHA, CAMPOS_CONJUGE, CAMPOS_FILHO, type FichaAdmissao } from '@/lib/admissao-ficha'
 
 export interface AdmissaoRow {
   id: string; nome: string; email: string | null; telefone: string | null
@@ -58,6 +59,7 @@ export function ContratacoesClient({ orgSlug, agencia, lista, config, jornadaPad
   const [editando, setEditando] = useState<AdmissaoRow | 'novo' | null>(null)
   const [cancelar, setCancelar] = useState<AdmissaoRow | null>(null)
   const [limpar, setLimpar] = useState<AdmissaoRow | null>(null)
+  const [verFicha, setVerFicha] = useState<AdmissaoRow | null>(null)
 
   const abertas = useMemo(() => lista.filter(a => !['efetivada', 'cancelada', 'recusada'].includes(a.status)), [lista])
   const fechadas = useMemo(() => lista.filter(a => ['efetivada', 'cancelada', 'recusada'].includes(a.status)), [lista])
@@ -106,15 +108,17 @@ export function ContratacoesClient({ orgSlug, agencia, lista, config, jornadaPad
           <Secao titulo="Em andamento" itens={abertas} vazio="Nada em andamento."
             orgSlug={orgSlug} pending={pending} hoje={hoje}
             onAbrir={setEditando} onCopiar={copiar} onReenviar={reenviar}
-            onCancelar={setCancelar} onLimpar={setLimpar} />
+            onCancelar={setCancelar} onLimpar={setLimpar} onVerFicha={setVerFicha} />
           {fechadas.length > 0 && (
             <Secao titulo="Encerradas" itens={fechadas} vazio=""
               orgSlug={orgSlug} pending={pending} hoje={hoje}
               onAbrir={setEditando} onCopiar={copiar} onReenviar={reenviar}
-              onCancelar={setCancelar} onLimpar={setLimpar} />
+              onCancelar={setCancelar} onLimpar={setLimpar} onVerFicha={setVerFicha} />
           )}
         </div>
       )}
+
+      {verFicha && <FichaModal orgSlug={orgSlug} admissao={verFicha} onClose={() => setVerFicha(null)} />}
 
       {editando && (
         <PropostaModal orgSlug={orgSlug} agencia={agencia} config={config} jornadaPadrao={jornadaPadrao}
@@ -160,10 +164,10 @@ export function ContratacoesClient({ orgSlug, agencia, lista, config, jornadaPad
   )
 }
 
-function Secao({ titulo, itens, vazio, pending, hoje, onAbrir, onCopiar, onReenviar, onCancelar, onLimpar }: {
+function Secao({ titulo, itens, vazio, pending, hoje, onAbrir, onCopiar, onReenviar, onCancelar, onLimpar, onVerFicha }: {
   titulo: string; itens: AdmissaoRow[]; vazio: string; orgSlug: string; pending: boolean; hoje: string
   onAbrir: (a: AdmissaoRow) => void; onCopiar: (a: AdmissaoRow) => void; onReenviar: (a: AdmissaoRow) => void
-  onCancelar: (a: AdmissaoRow) => void; onLimpar: (a: AdmissaoRow) => void
+  onCancelar: (a: AdmissaoRow) => void; onLimpar: (a: AdmissaoRow) => void; onVerFicha: (a: AdmissaoRow) => void
 }) {
   if (!itens.length && !vazio) return null
   return (
@@ -189,6 +193,12 @@ function Secao({ titulo, itens, vazio, pending, hoje, onAbrir, onCopiar, onReenv
                   </span>
                   <div className="flex-1" />
                   <div className="flex items-center gap-1">
+                    {a.ficha_em && (
+                      <button onClick={() => onVerFicha(a)} title="Ver a ficha que o candidato preencheu"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-gray-500 hover:text-orange-600 hover:bg-orange-500/10 transition-colors">
+                        <FileText className="w-3.5 h-3.5" /> Ficha
+                      </button>
+                    )}
                     {a.token && (
                       <>
                         <button onClick={() => onCopiar(a)} title="Copiar o link do candidato"
@@ -232,6 +242,7 @@ function Secao({ titulo, itens, vazio, pending, hoje, onAbrir, onCopiar, onReenv
                     </span>
                   )}
                   {a.aceita_em && <span className="text-emerald-700">aceita em {dataHoraBR(a.aceita_em)}</span>}
+                  {a.ficha_em && <span className="text-emerald-700">ficha enviada em {dataHoraBR(a.ficha_em)}</span>}
                   {a.recusada_em && <span>recusou em {dataHoraBR(a.recusada_em)}{a.recusa_motivo ? ` — “${a.recusa_motivo}”` : ''}</span>}
                   {a.dados_limpos_em && <span>dados apagados em {dataHoraBR(a.dados_limpos_em)}</span>}
                 </div>
@@ -468,6 +479,101 @@ function PropostaModal({ orgSlug, agencia, config, jornadaPadrao, atual, onClose
             </button>
           </>
         )}
+      </div>
+    </Modal>
+  )
+}
+
+/** Conferência do RH: a ficha do candidato em leitura, com os anexos. */
+function FichaModal({ orgSlug, admissao, onClose }: { orgSlug: string; admissao: AdmissaoRow; onClose: () => void }) {
+  const [dados, setDados] = useState<{ ficha: FichaAdmissao | null; docs: { id: string; tipo: string; nome: string | null }[] } | null>(null)
+  const [erro, setErro] = useState<string | null>(null)
+
+  useEffect(() => {
+    carregarFicha(orgSlug, admissao.id).then(r => {
+      if ('error' in r) setErro(r.error)
+      else setDados({ ficha: r.ficha, docs: r.docs })
+    })
+  }, [orgSlug, admissao.id])
+
+  const campo = (sec: keyof FichaAdmissao, k: string) =>
+    String(((dados?.ficha?.[sec] ?? {}) as Record<string, string>)[k] ?? '').trim()
+
+  return (
+    <Modal open onClose={onClose} label={`Ficha de ${nomeLegivel(admissao.nome)}`}>
+      <div className="px-6 py-4 border-b border-gray-100">
+        <h2 className="text-base font-semibold text-gray-900">Ficha de admissão</h2>
+        <p className="text-xs text-gray-500 mt-0.5">
+          {nomeLegivel(admissao.nome)}{admissao.cargo && ` · ${admissao.cargo}`}
+          {admissao.ficha_em && ` · enviada em ${dataHoraBR(admissao.ficha_em)}`}
+        </p>
+      </div>
+      <div className="px-6 py-5 space-y-5 max-h-[65vh] overflow-y-auto">
+        {erro && <p className="text-sm text-red-700">{erro}</p>}
+        {!dados && !erro && <p className="py-6 text-center"><Loader2 className="w-4 h-4 animate-spin mx-auto text-gray-300" /></p>}
+        {dados && SECOES_FICHA.map(s => (
+          <section key={s.id}>
+            <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500 mb-2">{s.titulo}</h3>
+            <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
+              {s.campos.filter(c => campo(s.id as keyof FichaAdmissao, c.k)).map(c => (
+                <div key={c.k}>
+                  <dt className="text-[11px] text-gray-400">{c.label}</dt>
+                  <dd className="text-sm text-gray-900">{campo(s.id as keyof FichaAdmissao, c.k)}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        ))}
+        {dados?.ficha?.conjuge && CAMPOS_CONJUGE.some(c => campo('conjuge', c.k)) && (
+          <section>
+            <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500 mb-2">Cônjuge</h3>
+            <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
+              {CAMPOS_CONJUGE.filter(c => campo('conjuge', c.k)).map(c => (
+                <div key={c.k}>
+                  <dt className="text-[11px] text-gray-400">{c.label}</dt>
+                  <dd className="text-sm text-gray-900">{campo('conjuge', c.k)}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        )}
+        {!!dados?.ficha?.filhos?.length && (
+          <section>
+            <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500 mb-2">Filhos</h3>
+            <ul className="space-y-1">
+              {dados.ficha.filhos.map((filho, i) => (
+                <li key={i} className="text-sm text-gray-900">
+                  {CAMPOS_FILHO.map(c => filho[c.k]).filter(Boolean).join(' · ') || '—'}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {dados?.ficha?.observacao && (
+          <section>
+            <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500 mb-2">Observação do candidato</h3>
+            <p className="text-sm text-gray-700 whitespace-pre-line">{dados.ficha.observacao}</p>
+          </section>
+        )}
+        {!!dados?.docs.length && (
+          <section>
+            <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500 mb-2">Anexos</h3>
+            <ul className="space-y-1">
+              {dados.docs.map(d => (
+                <li key={d.id}>
+                  <a href={`/api/rh/admissao/arquivo/${d.id}`} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-orange-700 hover:text-orange-800 transition-colors">
+                    <Paperclip className="w-3.5 h-3.5" /> {d.nome || d.tipo}
+                    <span className="text-[11px] text-gray-400">({d.tipo})</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+      <div className="flex justify-end px-6 py-4 border-t border-gray-100">
+        <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors">Fechar</button>
       </div>
     </Modal>
   )

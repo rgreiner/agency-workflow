@@ -1,6 +1,8 @@
 import { AlertTriangle, CalendarClock, CheckCircle2, Clock, MapPin } from 'lucide-react'
 import { admissaoPorToken, propostaVencida } from '@/lib/admissao-server'
 import { PropostaClient } from './PropostaClient'
+import { FichaForm } from './FichaForm'
+import type { FichaAdmissao } from '@/lib/admissao-ficha'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,23 +70,16 @@ export default async function PropostaPage({ params }: { params: Promise<{ token
             </article>
           </div>
 
-          {/* Próximos passos: o exame já sai aqui porque é o que trava a
-              admissão. A ficha entra neste mesmo lugar na próxima etapa. */}
-          <div className="mt-5 bg-white rounded-2xl border border-gray-200 p-6">
-            <h2 className="text-base font-semibold text-gray-900 mb-3">Próximos passos</h2>
-            <ol className="space-y-4">
-              <li className="flex gap-3">
-                <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-700 text-xs font-semibold flex items-center justify-center shrink-0">1</span>
-                <div className="text-sm text-gray-600">
-                  <b className="text-gray-900 block">Ficha de admissão</b>
-                  A {p.agencia} vai te enviar o formulário com os dados para o registro em carteira.
-                </div>
-              </li>
-              {(p.exame_local || p.exame_em) && (
+          {/* O exame vem ANTES da ficha na tela: é o que trava a admissão e
+              tem hora marcada; a ficha a pessoa preenche quando puder. */}
+          {(p.exame_local || p.exame_em) && (
+            <div className="mt-5 bg-white rounded-2xl border border-gray-200 p-6">
+              <h2 className="text-base font-semibold text-gray-900 mb-3">Exame admissional</h2>
+              <ol className="space-y-4">
                 <li className="flex gap-3">
-                  <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-700 text-xs font-semibold flex items-center justify-center shrink-0">2</span>
+                  <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-700 text-xs font-semibold flex items-center justify-center shrink-0">1</span>
                   <div className="text-sm text-gray-600">
-                    <b className="text-gray-900 block">Exame admissional</b>
+                    <b className="text-gray-900 block">Onde e quando</b>
                     {p.exame_em && (
                       <span className="inline-flex items-center gap-1.5 text-gray-800 font-medium">
                         <CalendarClock className="w-3.5 h-3.5" /> {dataHoraBR(p.exame_em)}
@@ -99,8 +94,13 @@ export default async function PropostaPage({ params }: { params: Promise<{ token
                     {p.exame_observacao && <span className="block mt-1 text-gray-500">{p.exame_observacao}</span>}
                   </div>
                 </li>
-              )}
-            </ol>
+              </ol>
+            </div>
+          )}
+
+          <div className="mt-5">
+            <FichaForm token={token} inicial={(p.ficha as FichaAdmissao) ?? null} enviadaEm={p.ficha_em}
+              docsPedidos={p.documentos_pedidos ?? []} docsEnviados={p.documentos ?? []} />
           </div>
         </>
       ) : (
