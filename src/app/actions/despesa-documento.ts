@@ -25,7 +25,12 @@ export interface DocumentoLido {
   numero: string | null
   emissao: string | null
   vencimento: string | null
+  /** Total impresso no(s) documento(s). */
   valor: number | null
+  /** O que a pessoa marcou como da empresa (manuscrito ou grifado). */
+  valorMarcado: number | null
+  criterio: 'manuscrito' | 'grifado' | null
+  documentos: number
   descricao: string | null
   pagoNoAto: boolean
   categoria: string | null
@@ -78,6 +83,7 @@ export async function lerDocumentoDespesa(orgSlug: string, urls: string[]): Prom
       doc: {
         emitente: lido.emitente, cnpj: lido.cnpj, numero: lido.numero,
         emissao: lido.emissao, vencimento: lido.vencimento, valor: lido.valor_total,
+        valorMarcado: lido.valor_marcado, criterio: lido.criterio_marcado, documentos: lido.documentos,
         descricao: lido.descricao, pagoNoAto: lido.pago_no_ato, categoria: lido.categoria,
         fornecedorId: achado?.id ?? null, fornecedorNome: achado?.name ?? null, casouPor,
       },

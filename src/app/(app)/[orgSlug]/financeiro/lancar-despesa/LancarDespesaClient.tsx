@@ -49,12 +49,20 @@ export function LancarDespesaClient({ orgSlug, contas, contaPadrao, categorias, 
   const [cls, setCls] = useState<Classificacao>(clsInicial)
   const [arrastando, setArrastando] = useState(false)
   const [salvando, start] = useTransition()
+  // Despesas já lançadas com o documento atual. Um cupom vira mais de uma
+  // despesa com frequência: o de R$ 178,29 da Muffato virou "Happy Hour"
+  // (R$ 112,55, só a cerveja e a coca) + "Supermercado" (o resto).
+  const [lancadas, setLancadas] = useState<{ descricao: string; valor: number }[]>([])
 
   const set = (k: keyof Formulario, v: string) => setF(x => ({ ...x, [k]: v }))
 
   function limpar() {
-    setArquivos([]); setLido(null); setF(VAZIO); setCls(clsInicial)
+    setArquivos([]); setLido(null); setF(VAZIO); setCls(clsInicial); setLancadas([])
   }
+
+  const moeda = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const jaLancado = lancadas.reduce((a, l) => a + l.valor, 0)
+  const restante = lido?.valor != null ? Math.round((lido.valor - jaLancado) * 100) / 100 : 0
 
   async function ler(lista: Anexo[]) {
     if (lista.length === 0) return
@@ -73,8 +81,11 @@ export function LancarDespesaClient({ orgSlug, contas, contaPadrao, categorias, 
       descricao: d.descricao ?? x.descricao,
       // Em formato brasileiro: é como a pessoa digita e como parseMoney lê.
       // "1454.4" cru viraria 14544 no parser (ele tira os pontos de milhar).
-      valor: d.valor != null
-        ? d.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      // O que a pessoa marcou no papel vence o total impresso: o financeiro grifa
+      // a parte da empresa e escreve o subtotal à mão (o resto é compra pessoal
+      // ou outra despesa). Total só quando nada foi marcado.
+      valor: (d.valorMarcado ?? d.valor) != null
+        ? (d.valorMarcado ?? d.valor)!.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         : x.valor,
       // Cupom já pago não tem vencimento: a data da compra é a data do lançamento.
       vencimento: d.vencimento ?? d.emissao ?? x.vencimento,
@@ -137,8 +148,19 @@ export function LancarDespesaClient({ orgSlug, contas, contaPadrao, categorias, 
       toast.success('Despesa lançada.', {
         action: { label: 'Ver em Lançamentos', onClick: () => router.push(`/${orgSlug}/financeiro/lancamentos`) },
       })
-      // Tela feita para a pilha de papel: volta limpa para o próximo documento.
-      limpar()
+      const novas = [...lancadas, { descricao: f.descricao.trim(), valor: valorNum }]
+      const sobra = lido?.valor != null ? Math.round((lido.valor - novas.reduce((a, l) => a + l.valor, 0)) * 100) / 100 : 0
+      if (sobra > 0.009) {
+        // Sobrou valor do documento: prepara a próxima despesa com o MESMO
+        // arquivo e o restante já no campo. Se a sobra é compra pessoal (o item
+        // de quem foi ao mercado), "Próximo documento" descarta sem lançar.
+        setLancadas(novas)
+        setF(x => ({ ...x, descricao: '', valor: moeda(sobra) }))
+        setCls(c => ({ ...c, categoria: '' }))
+      } else {
+        // Tela feita para a pilha de papel: volta limpa para o próximo documento.
+        limpar()
+      }
     })
   }
 
@@ -216,6 +238,18 @@ export function LancarDespesaClient({ orgSlug, contas, contaPadrao, categorias, 
                 <Sparkles className="w-3.5 h-3.5 text-orange-500" /> Lido do documento
               </p>
               {lido.emitente && <p>{lido.emitente}{lido.cnpj && <span className="text-gray-400 tabular-nums"> · {lido.cnpj}</span>}</p>}
+              {lido.documentos > 1 && <p>{lido.documentos} documentos diferentes nas imagens — valores somados.</p>}
+              {(lido.valor != null || lido.valorMarcado != null) && (
+                <p className="tabular-nums">
+                  {lido.valor != null && <>Total impresso R$ {moeda(lido.valor)}</>}
+                  {lido.valor != null && lido.valorMarcado != null && ' · '}
+                  {lido.valorMarcado != null && (
+                    <strong className="font-medium text-gray-800">
+                      {lido.criterio === 'manuscrito' ? 'escrito à mão' : 'itens grifados'} R$ {moeda(lido.valorMarcado)}
+                    </strong>
+                  )}
+                </p>
+              )}
               <p className={lido.fornecedorId ? 'text-emerald-700' : 'text-gray-500'}>
                 {lido.fornecedorId
                   ? `Fornecedor do cadastro: ${lido.fornecedorNome} (casou pelo ${lido.casouPor === 'cnpj' ? 'CNPJ' : 'nome'}).`
@@ -233,6 +267,26 @@ export function LancarDespesaClient({ orgSlug, contas, contaPadrao, categorias, 
 
         {/* ── lançamento ────────────────────────────────────────── */}
         <section className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4 self-start">
+          {lancadas.length > 0 && (
+            <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2.5 text-sm">
+              <p className="text-emerald-800">
+                <Check className="w-3.5 h-3.5 inline -mt-0.5 mr-1" />
+                Deste documento já foram lançadas {lancadas.length} despesa(s):{' '}
+                {lancadas.map(l => `${l.descricao} (R$ ${moeda(l.valor)})`).join(', ')}.
+              </p>
+              {restante > 0.009 && (
+                <p className="text-emerald-700 text-xs mt-1">
+                  {lido?.criterio
+                    ? <>O restante do papel (<strong className="tabular-nums">R$ {moeda(restante)}</strong>) não estava marcado. Se for outra despesa da empresa, lance abaixo; se é compra pessoal, siga para o próximo documento.</>
+                    : <>Faltam <strong className="tabular-nums">R$ {moeda(restante)}</strong> do total de R$ {moeda(lido!.valor!)}. Lance o restante abaixo, ou siga para o próximo documento se ele não é despesa da empresa.</>}
+                </p>
+              )}
+              <button type="button" onClick={limpar}
+                className="mt-2 text-xs font-medium text-emerald-800 hover:text-emerald-950 underline-offset-2 hover:underline transition-colors">
+                Próximo documento
+              </button>
+            </div>
+          )}
           <div>
             <label className={labelCls}>Fornecedor</label>
             <Select value={f.fornecedorId} onChange={v => set('fornecedorId', v)}

@@ -25,6 +25,15 @@ export interface NfFornecedorLida {
   vencimento: string | null
   valor_total: number | null
   descricao: string | null
+  /**
+   * O que a PESSOA marcou como despesa da empresa: valor escrito à mão no papel
+   * ou soma dos itens grifados. É assim que o financeiro trabalha — medido em
+   * cupons reais (09/10/2026): grifa a parte da empresa e escreve o subtotal.
+   */
+  valor_marcado: number | null
+  criterio_marcado: 'manuscrito' | 'grifado' | null
+  /** Quantos documentos DIFERENTES vieram nas imagens (dois cupons ≠ um em pedaços). */
+  documentos: number
   /** Cupom fiscal / recibo = compra já paga no ato; NF e boleto costumam vencer depois. */
   pago_no_ato: boolean
   /** Uma das categorias da org, ou null. Sugestão — quem confirma é a pessoa. */
@@ -39,17 +48,33 @@ O QUE DEVOLVER
 - numero: o número da nota, como impresso.
 - emissao: data de emissão, AAAA-MM-DD.
 - vencimento: data de vencimento, AAAA-MM-DD. Só se o documento disser; não deduza da emissão.
-- valor_total: o valor LÍQUIDO a pagar. Ponto decimal, sem "R$" nem separador de milhar.
+- valor_total: o valor LÍQUIDO a pagar — o TOTAL final do documento, depois de descontos. Em cupom, é a linha de total/valor a pagar, não um item. Ponto decimal, sem "R$" nem separador de milhar.
 - descricao: uma linha curta do serviço/produto, como está na discriminação. Em cupom de mercado, resuma o tipo de compra ("Compras de mercado", "Combustível"), não liste itens.
+- valor_marcado: o que a PESSOA marcou no papel como despesa da empresa. Ordem de prioridade:
+  1. um valor ESCRITO À MÃO no documento (ex.: "R$ 66,84" de caneta) → é ele;
+  2. senão, itens GRIFADOS com marca-texto → a SOMA dos valores totais desses itens;
+  3. senão, 0.
+- criterio_marcado: "manuscrito", "grifado" ou "" — de onde saiu o valor_marcado.
+- documentos: quantos documentos DIFERENTES vieram (veja VÁRIAS IMAGENS).
 - pago_no_ato: true para cupom fiscal e recibo (a compra foi paga na hora); false para nota com vencimento e boleto.
 - categoria: escolha UMA da lista de categorias informada na mensagem, copiando o nome exatamente. Se nenhuma servir com segurança, null. Não invente categoria fora da lista.
+
+TODOS OS CAMPOS SÃO OBRIGATÓRIOS NA RESPOSTA
+- Quando o documento não mostra um dado, devolva "" (texto vazio) ou 0 (número). Nunca omita o campo.
+
+DATAS
+- Ano com 2 dígitos é deste século: "25/09/26" é 2026-09-25. Nunca troque o ano por outro.
+- Cupom fiscal costuma trazer só a data e hora da compra: ela é a "emissao".
 
 CUIDADOS
 - Nota tem DOIS CNPJs: o do prestador e o do tomador. Devolva o do PRESTADOR (quem está cobrando).
 - Quando houver "valor líquido" e "valor bruto" diferentes (retenções), devolva o LÍQUIDO a pagar.
 - Campo que o documento não mostra fica null. Chute é pior que vazio: o valor errado vira despesa errada.
 - Se o documento for um BOLETO e não uma nota, leia o que der (valor, vencimento, beneficiário) e deixe o resto null.
-- Várias imagens são partes do MESMO documento fotografado em pedaços: devolva um cabeçalho só, com o total final (não some subtotais de fotos diferentes).`
+VÁRIAS IMAGENS
+- Podem ser o MESMO documento fotografado em pedaços (mesmo emitente, data e número; trechos que se repetem) OU documentos DIFERENTES (emitente, CNPJ, data ou número diferentes — ex.: dois cupons de lojas diferentes).
+- Mesmo documento em pedaços: um cabeçalho só, documentos = 1, total final (não some subtotais de fotos diferentes).
+- Documentos diferentes: documentos = quantos são; emitente, cnpj, numero e emissao do PRIMEIRO; valor_total = SOMA dos totais; valor_marcado = SOMA do que foi marcado em cada um (manuscrito de um + grifados do outro, se for o caso).`
 
 const SCHEMA = {
   type: 'object',
@@ -60,11 +85,18 @@ const SCHEMA = {
     emissao: { type: 'string' },
     vencimento: { type: 'string' },
     valor_total: { type: 'number' },
+    valor_marcado: { type: 'number' },
+    criterio_marcado: { type: 'string' },
+    documentos: { type: 'number' },
     descricao: { type: 'string' },
     pago_no_ato: { type: 'boolean' },
     categoria: { type: 'string' },
   },
-  required: [],
+  // Todos obrigatórios. Com campos opcionais o Gemini OMITE o que não quer
+  // preencher: medido em 09/10/2026 com documentos reais, ele terminava normal
+  // (STOP) devolvendo só 3–4 campos em ~60 tokens — sem valor, sem data. Vazio
+  // ("" ou 0) é tratado como ausente pelos conversores abaixo.
+  required: ['emitente', 'cnpj', 'numero', 'emissao', 'vencimento', 'valor_total', 'valor_marcado', 'criterio_marcado', 'documentos', 'descricao', 'pago_no_ato', 'categoria'],
 } as const
 
 const num = (v: unknown): number | null => {
@@ -104,9 +136,10 @@ export async function lerNfFornecedor(
       ].join('\n\n') },
     ],
     schema: SCHEMA,
-    // Cabeçalho é resposta curta; o orçamento grande do cupom (16k) existia por
-    // causa da lista de itens, que aqui não existe.
-    maxOutputTokens: 2048,
+    // A RESPOSTA é curta (~60 tokens), mas o modelo PENSA antes, e o pensamento
+    // sai do mesmo orçamento: medido em documentos reais, 1,7k a 5,5k tokens.
+    // Com 2048 o JSON vinha vazio. Mesmo teto do cupom; paga-se o que se usa.
+    maxOutputTokens: 16384,
     timeoutMs: 60_000,
   })
 
@@ -119,6 +152,10 @@ export async function lerNfFornecedor(
     vencimento: data(d?.vencimento),
     valor_total: num(d?.valor_total),
     descricao: txt(d?.descricao),
+    valor_marcado: num(d?.valor_marcado),
+    criterio_marcado: d?.criterio_marcado === 'manuscrito' || d?.criterio_marcado === 'grifado'
+      ? d.criterio_marcado : null,
+    documentos: Math.max(1, Math.round(Number(d?.documentos) || 1)),
     pago_no_ato: d?.pago_no_ato === true,
     // Só vale se for EXATAMENTE uma da lista: categoria inventada pela IA viraria
     // uma folha nova na árvore, criada por ninguém.
