@@ -26,20 +26,22 @@ export const FORMA_OPTIONS = [
  * Faturamento é sempre entrada → só categorias de receita.
  */
 export function ClassificacaoFields({
-  contas, categorias, centros, value, onChange,
+  contas, categorias, centros, value, onChange, tipo = 'entrada',
 }: {
   contas: ContaRef[]
   categorias: FinanceCategoriaGrupo[]
   centros: FinanceCentro[]
   value: Classificacao
   onChange: (patch: Partial<Classificacao>) => void
+  /** Faturamento é entrada (padrão); "Lançar despesa" usa as categorias de saída. */
+  tipo?: 'entrada' | 'saida'
 }) {
   const catOptions = useMemo(() => {
-    const nomes = categoriaNomes(categorias, 'entrada')
+    const nomes = categoriaNomes(categorias, tipo)
     // a categoria já escolhida continua listada mesmo se não estiver na árvore
     const extra = value.categoria && !nomes.includes(value.categoria) ? [value.categoria] : []
     return [...nomes, ...extra].map(n => ({ value: n, label: n }))
-  }, [categorias, value.categoria])
+  }, [categorias, value.categoria, tipo])
 
   // Ativos + o valor atual quando não é um ativo, com o motivo real no rótulo
   // ("arquivado" só se o cadastro diz; "fora do cadastro" se não existe lá).
@@ -63,7 +65,7 @@ export function ClassificacaoFields({
           <Select size="sm" value={value.categoria} onChange={v => onChange({ categoria: v })}
             options={catOptions} placeholder="—" />
         </Field>
-        <Field label="Conta a receber">
+        <Field label={tipo === 'saida' ? 'Conta a pagar' : 'Conta a receber'}>
           <Select size="sm" value={value.conta} onChange={v => onChange({ conta: v })}
             options={contaOptions} placeholder="—" />
         </Field>
