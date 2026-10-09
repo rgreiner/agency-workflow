@@ -38,6 +38,12 @@ export interface NfFornecedorLida {
   pago_no_ato: boolean
   /** Uma das categorias da org, ou null. Sugestão — quem confirma é a pessoa. */
   categoria: string | null
+  /**
+   * Cronograma de parcelas (empréstimo, financiamento, parcelamento). Vazio
+   * para documento de uma cobrança só. O de 09/10/2026 tinha 55 parcelas em 4
+   * páginas, com valores decrescentes — por isso a lista inteira, uma a uma.
+   */
+  parcelas: { numero: number | null; vencimento: string; valor: number; pago: boolean }[]
 }
 
 const SYSTEM = `Você lê um documento de DESPESA da empresa — nota fiscal (NFS-e de serviço, NF-e, DANFE), cupom fiscal (NFC-e de mercado, posto, restaurante), recibo ou boleto — e devolve o CABEÇALHO.
@@ -55,7 +61,13 @@ O QUE DEVOLVER
   2. senão, itens GRIFADOS com marca-texto → a SOMA dos valores totais desses itens;
   3. senão, 0.
 - criterio_marcado: "manuscrito", "grifado" ou "" — de onde saiu o valor_marcado.
-- documentos: quantos documentos DIFERENTES vieram (veja VÁRIAS IMAGENS).
+- documentos: quantos documentos DIFERENTES vieram (veja CRONOGRAMA DE PARCELAS
+- Se o documento for uma TABELA de parcelas (previsão de parcelas, cronograma de empréstimo ou financiamento, parcelamento), liste TODAS em "parcelas", na ordem, de TODAS as páginas — não pare na primeira página e não resuma.
+- Cada parcela: numero (o "Parcela Nº" impresso), vencimento (AAAA-MM-DD), valor (o "Valor da Parcela") e pago (true só se o documento mostrar valor pago maior que zero, data de liquidação ou situação de paga/liquidada; "EM CONTRATAÇÃO", "EM ABERTO" ou "A VENCER" é false).
+- Nesse caso: valor_total = soma das parcelas; vencimento = o da primeira parcela; descricao = o que o documento é (ex.: "Empréstimo — previsão de parcelas"); emitente = a instituição credora, se aparecer (não o tomador).
+- Documento que NÃO é tabela de parcelas: parcelas = [] (lista vazia). Um boleto com "parcela 3/10" impresso é UMA cobrança, não um cronograma.
+
+VÁRIAS IMAGENS).
 - pago_no_ato: true para cupom fiscal e recibo (a compra foi paga na hora); false para nota com vencimento e boleto.
 - categoria: escolha UMA da lista de categorias informada na mensagem, copiando o nome exatamente. Se nenhuma servir com segurança, null. Não invente categoria fora da lista.
 
@@ -71,6 +83,12 @@ CUIDADOS
 - Quando houver "valor líquido" e "valor bruto" diferentes (retenções), devolva o LÍQUIDO a pagar.
 - Campo que o documento não mostra fica null. Chute é pior que vazio: o valor errado vira despesa errada.
 - Se o documento for um BOLETO e não uma nota, leia o que der (valor, vencimento, beneficiário) e deixe o resto null.
+CRONOGRAMA DE PARCELAS
+- Se o documento for uma TABELA de parcelas (previsão de parcelas, cronograma de empréstimo ou financiamento, parcelamento), liste TODAS em "parcelas", na ordem, de TODAS as páginas — não pare na primeira página e não resuma.
+- Cada parcela: numero (o "Parcela Nº" impresso), vencimento (AAAA-MM-DD), valor (o "Valor da Parcela") e pago (true só se o documento mostrar valor pago maior que zero, data de liquidação ou situação de paga/liquidada; "EM CONTRATAÇÃO", "EM ABERTO" ou "A VENCER" é false).
+- Nesse caso: valor_total = soma das parcelas; vencimento = o da primeira parcela; descricao = o que o documento é (ex.: "Empréstimo — previsão de parcelas"); emitente = a instituição credora, se aparecer (não o tomador).
+- Documento que NÃO é tabela de parcelas: parcelas = [] (lista vazia). Um boleto com "parcela 3/10" impresso é UMA cobrança, não um cronograma.
+
 VÁRIAS IMAGENS
 - Podem ser o MESMO documento fotografado em pedaços (mesmo emitente, data e número; trechos que se repetem) OU documentos DIFERENTES (emitente, CNPJ, data ou número diferentes — ex.: dois cupons de lojas diferentes).
 - Mesmo documento em pedaços: um cabeçalho só, documentos = 1, total final (não some subtotais de fotos diferentes).
@@ -91,12 +109,25 @@ const SCHEMA = {
     descricao: { type: 'string' },
     pago_no_ato: { type: 'boolean' },
     categoria: { type: 'string' },
+    parcelas: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          numero: { type: 'number' },
+          vencimento: { type: 'string' },
+          valor: { type: 'number' },
+          pago: { type: 'boolean' },
+        },
+        required: ['numero', 'vencimento', 'valor', 'pago'],
+      },
+    },
   },
   // Todos obrigatórios. Com campos opcionais o Gemini OMITE o que não quer
   // preencher: medido em 09/10/2026 com documentos reais, ele terminava normal
   // (STOP) devolvendo só 3–4 campos em ~60 tokens — sem valor, sem data. Vazio
   // ("" ou 0) é tratado como ausente pelos conversores abaixo.
-  required: ['emitente', 'cnpj', 'numero', 'emissao', 'vencimento', 'valor_total', 'valor_marcado', 'criterio_marcado', 'documentos', 'descricao', 'pago_no_ato', 'categoria'],
+  required: ['emitente', 'cnpj', 'numero', 'emissao', 'vencimento', 'valor_total', 'valor_marcado', 'criterio_marcado', 'documentos', 'descricao', 'pago_no_ato', 'categoria', 'parcelas'],
 } as const
 
 const num = (v: unknown): number | null => {
@@ -157,6 +188,16 @@ export async function lerNfFornecedor(
       ? d.criterio_marcado : null,
     documentos: Math.max(1, Math.round(Number(d?.documentos) || 1)),
     pago_no_ato: d?.pago_no_ato === true,
+    parcelas: (Array.isArray(d?.parcelas) ? d.parcelas : [])
+      .map((x: unknown) => {
+        const o = (x ?? {}) as Record<string, unknown>
+        const venc = data(o.vencimento)
+        const valor = num(o.valor)
+        if (!venc || valor == null) return null
+        const n = Number(o.numero)
+        return { numero: Number.isFinite(n) && n > 0 ? Math.round(n) : null, vencimento: venc, valor, pago: o.pago === true }
+      })
+      .filter((x: unknown): x is { numero: number | null; vencimento: string; valor: number; pago: boolean } => x !== null),
     // Só vale se for EXATAMENTE uma da lista: categoria inventada pela IA viraria
     // uma folha nova na árvore, criada por ninguém.
     categoria: (() => {

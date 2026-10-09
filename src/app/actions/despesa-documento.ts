@@ -39,6 +39,8 @@ export interface DocumentoLido {
   fornecedorNome: string | null
   /** Por onde casou — a tela diz, para a pessoa saber o quanto confiar. */
   casouPor: 'cnpj' | 'nome' | null
+  /** Cronograma (empréstimo/financiamento): uma linha por parcela. Vazio = cobrança única. */
+  parcelas: { numero: number | null; vencimento: string; valor: number; pago: boolean }[]
 }
 
 export async function lerDocumentoDespesa(orgSlug: string, urls: string[]): Promise<{ doc?: DocumentoLido; error?: string }> {
@@ -86,6 +88,7 @@ export async function lerDocumentoDespesa(orgSlug: string, urls: string[]): Prom
         valorMarcado: lido.valor_marcado, criterio: lido.criterio_marcado, documentos: lido.documentos,
         descricao: lido.descricao, pagoNoAto: lido.pago_no_ato, categoria: lido.categoria,
         fornecedorId: achado?.id ?? null, fornecedorNome: achado?.name ?? null, casouPor,
+        parcelas: lido.parcelas,
       },
     }
   } catch (e) {
@@ -156,4 +159,63 @@ export async function lancarDespesaDeDocumento(orgSlug: string, d: NovaDespesa):
 
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
   return { id: id as string }
+}
+
+export interface NovoCronograma {
+  descricao: string
+  fornecedorId?: string | null
+  contatoNome?: string | null
+  contaId?: string | null
+  categoria: string
+  centroCusto: string
+  forma?: string | null
+  /** Total de parcelas DO DOCUMENTO — mantém "2/55" mesmo sem lançar a 1. */
+  parcelaTotal: number | null
+  parcelas: { numero: number | null; vencimento: string; valor: number }[]
+  anexos: Anexo[]
+}
+
+/**
+ * Lança as parcelas escolhidas de um cronograma, numa transação só (mig. 339).
+ * Cada uma com o SEU valor e data — empréstimo amortizado não tem parcela igual.
+ */
+export async function lancarCronograma(orgSlug: string, d: NovoCronograma): Promise<{ n?: number; error?: string }> {
+  const { supabase, orgId } = await assertFinanceAccess(orgSlug)
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  if (d.parcelas.length === 0) return { error: 'Escolha ao menos uma parcela.' }
+  if (!d.descricao?.trim()) return { error: 'Informe a descrição.' }
+  if (!d.categoria?.trim()) return { error: 'Escolha a categoria.' }
+  if (!d.centroCusto?.trim()) return { error: 'Informe o centro de custo — ele diz de qual cliente sai o dinheiro.' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any
+  let nome = d.contatoNome?.trim() || null
+  if (d.fornecedorId) {
+    const { data: f } = await sb.from('fornecedores').select('name').eq('id', d.fornecedorId).eq('org_id', orgId).maybeSingle()
+    nome = f?.name ?? nome
+  }
+
+  const { data: n, error } = await sb.rpc('create_lancamentos_cronograma', {
+    p_user_id: user.id, p_org_id: orgId,
+    p_data: {
+      tipo: 'saida',
+      contato_tipo: d.fornecedorId ? 'fornecedor' : null,
+      contato_id: d.fornecedorId ?? null,
+      contato_nome: nome,
+      descricao: d.descricao.trim(),
+      conta_id: d.contaId || null,
+      categoria: d.categoria,
+      centro_custo: d.centroCusto,
+      forma_pagamento: d.forma || null,
+      parcela_total: d.parcelaTotal,
+      anexos: d.anexos,
+    },
+    p_parcelas: d.parcelas,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+  return { n: n as number }
 }

@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { uploadFile } from '@/lib/storage/upload-client'
 import { downscaleImage } from '@/lib/image-resize'
-import { lerDocumentoDespesa, lancarDespesaDeDocumento, type DocumentoLido } from '@/app/actions/despesa-documento'
+import { lerDocumentoDespesa, lancarDespesaDeDocumento, lancarCronograma, type DocumentoLido } from '@/app/actions/despesa-documento'
 import type { Anexo, FinanceCentro, FinanceCategoriaGrupo } from '@/app/actions/financeiro'
 import { ClassificacaoFields, type Classificacao, type ContaRef } from '../faturamento/ClassificacaoFields'
 
@@ -53,11 +53,15 @@ export function LancarDespesaClient({ orgSlug, contas, contaPadrao, categorias, 
   // despesa com frequência: o de R$ 178,29 da Muffato virou "Happy Hour"
   // (R$ 112,55, só a cerveja e a coca) + "Supermercado" (o resto).
   const [lancadas, setLancadas] = useState<{ descricao: string; valor: number }[]>([])
+  // Cronograma: quais parcelas entram (índices). A data de "hoje" é fixada na
+  // LEITURA, não no render — Date durante o render é impuro e repinta sozinho.
+  const [selecao, setSelecao] = useState<Set<number>>(new Set())
+  const [hojeLeitura, setHojeLeitura] = useState('')
 
   const set = (k: keyof Formulario, v: string) => setF(x => ({ ...x, [k]: v }))
 
   function limpar() {
-    setArquivos([]); setLido(null); setF(VAZIO); setCls(clsInicial); setLancadas([])
+    setArquivos([]); setLido(null); setF(VAZIO); setCls(clsInicial); setLancadas([]); setSelecao(new Set())
   }
 
   const moeda = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -92,6 +96,14 @@ export function LancarDespesaClient({ orgSlug, contas, contaPadrao, categorias, 
       numero: d.numero ?? x.numero,
     }))
     if (d.categoria) setCls(c => ({ ...c, categoria: d.categoria! }))
+    if (d.parcelas.length > 1) {
+      // Parcela já vencida começa DESMARCADA: o documento do banco não diz que
+      // foi paga ("EM CONTRATAÇÃO" em todas), mas quem paga sabe. Lançá-la de
+      // novo criaria uma despesa em aberto que já saiu do caixa.
+      const hoje = new Date().toISOString().slice(0, 10)
+      setHojeLeitura(hoje)
+      setSelecao(new Set(d.parcelas.flatMap((p, i) => (!p.pago && p.vencimento >= hoje ? [i] : []))))
+    }
   }
 
   async function adicionar(files: FileList | File[]) {
@@ -165,6 +177,38 @@ export function LancarDespesaClient({ orgSlug, contas, contaPadrao, categorias, 
   }
 
   const ocupado = subindo || lendo
+  const cronograma = lido && lido.parcelas.length > 1 ? lido.parcelas : null
+  const escolhidas = cronograma ? cronograma.filter((_, i) => selecao.has(i)) : []
+  const somaEscolhidas = escolhidas.reduce((a, p) => a + p.valor, 0)
+  const alternar = (i: number) => setSelecao(s => { const n = new Set(s); if (n.has(i)) n.delete(i); else n.add(i); return n })
+
+  function salvarCronograma() {
+    const faltaC = [
+      escolhidas.length === 0 && 'parcelas',
+      !f.descricao.trim() && 'descrição',
+      !cls.categoria && 'categoria',
+      !cls.centro && 'centro de custo',
+    ].filter(Boolean) as string[]
+    if (faltaC.length) { toast.error(`Falta: ${faltaC.join(', ')}.`); return }
+    start(async () => {
+      const r = await lancarCronograma(orgSlug, {
+        descricao: f.descricao,
+        fornecedorId: f.fornecedorId || null,
+        contatoNome: f.fornecedorId ? null : (f.nomeLivre.trim() || null),
+        contaId: cls.conta || null, categoria: cls.categoria, centroCusto: cls.centro, forma: cls.forma || null,
+        // Total DO DOCUMENTO (maior número impresso), não o que foi marcado:
+        // pular a parcela 1 já paga não pode renumerar a 2 como "1/54".
+        parcelaTotal: Math.max(...cronograma!.map(p => p.numero ?? 0)) || cronograma!.length,
+        parcelas: escolhidas.map(p => ({ numero: p.numero, vencimento: p.vencimento, valor: p.valor })),
+        anexos: arquivos,
+      })
+      if (r.error) { toast.error(r.error); return }
+      toast.success(`${r.n} parcelas lançadas.`, {
+        action: { label: 'Ver em Lançamentos', onClick: () => router.push(`/${orgSlug}/financeiro/lancamentos`) },
+      })
+      limpar()
+    })
+  }
 
   return (
     <div className="p-6 max-w-5xl">
@@ -303,6 +347,42 @@ export function LancarDespesaClient({ orgSlug, contas, contaPadrao, categorias, 
               placeholder="o que foi comprado ou contratado" className={inputCls} />
           </div>
 
+          {cronograma ? (
+            <div>
+              <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1.5">
+                <label className={cn(labelCls, 'mb-0')}>Parcelas do cronograma</label>
+                <span className="text-xs text-gray-500 tabular-nums">
+                  {escolhidas.length} de {cronograma.length} · <strong className="font-medium text-gray-800">R$ {moeda(somaEscolhidas)}</strong>
+                </span>
+              </div>
+              <div className="max-h-72 overflow-y-auto rounded-xl border border-gray-100 divide-y divide-gray-50">
+                {cronograma.map((p, i) => {
+                  const vencida = !!hojeLeitura && p.vencimento < hojeLeitura
+                  const marcada = selecao.has(i)
+                  return (
+                    <label key={i} className={cn('flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors',
+                      marcada ? 'hover:bg-gray-50' : 'bg-gray-50/60 hover:bg-gray-50')}>
+                      <input type="checkbox" checked={marcada} onChange={() => alternar(i)}
+                        className="w-4 h-4 accent-orange-600 shrink-0" />
+                      <span className="w-12 text-xs text-gray-500 tabular-nums">{p.numero ?? i + 1}/{Math.max(...cronograma.map(x => x.numero ?? 0)) || cronograma.length}</span>
+                      <span className={cn('text-sm tabular-nums', marcada ? 'text-gray-800' : 'text-gray-400')}>
+                        {p.vencimento.split('-').reverse().join('/')}
+                      </span>
+                      {(vencida || p.pago) && (
+                        <span className="text-[11px] text-amber-700">{p.pago ? 'paga no documento' : 'vencida — já paga?'}</span>
+                      )}
+                      <span className={cn('ml-auto text-sm tabular-nums', marcada ? 'text-gray-900 font-medium' : 'text-gray-400 line-through')}>
+                        R$ {moeda(p.valor)}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1.5">
+                Cada parcela vira um lançamento em aberto, ligado aos outros como série. Parcela vencida começa desmarcada: o documento não diz se foi paga.
+              </p>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className={labelCls}>Valor <span className="text-red-500">*</span></label>
@@ -318,21 +398,23 @@ export function LancarDespesaClient({ orgSlug, contas, contaPadrao, categorias, 
               <input value={f.numero} onChange={e => set('numero', e.target.value)} placeholder="opcional" className={inputCls} />
             </div>
           </div>
+          )}
 
           <ClassificacaoFields tipo="saida" contas={contas} categorias={categorias} centros={centros}
             value={cls} onChange={p => setCls(c => ({ ...c, ...p }))} />
 
           <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-            {falta.length > 0 && (arquivos.length > 0 || f.descricao) && (
+            {!cronograma && falta.length > 0 && (arquivos.length > 0 || f.descricao) && (
               <span className="mr-auto text-xs text-gray-400">Falta: {falta.join(', ')}</span>
             )}
             {(arquivos.length > 0 || f.descricao || f.valor) && (
               <button type="button" onClick={limpar} disabled={salvando}
                 className="px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">Limpar</button>
             )}
-            <button type="button" onClick={salvar} disabled={salvando || ocupado}
+            <button type="button" onClick={cronograma ? salvarCronograma : salvar} disabled={salvando || ocupado}
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 active:scale-[0.97] disabled:opacity-50 transition-colors">
-              {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Lançar despesa
+              {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              {cronograma ? `Lançar ${escolhidas.length} parcela${escolhidas.length === 1 ? '' : 's'}` : 'Lançar despesa'}
             </button>
           </div>
         </section>
