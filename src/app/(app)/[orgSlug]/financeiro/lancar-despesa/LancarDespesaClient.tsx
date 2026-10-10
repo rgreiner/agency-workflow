@@ -7,7 +7,8 @@ import { toast } from 'sonner'
 import { parseMoney } from '@/lib/midia'
 import { Upload, Loader2, FileText, X, Sparkles, Check, RotateCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Select } from '@/components/ui/Select'
+import { Combobox } from '@/components/ui/Combobox'
+import { useFornecedorRapido } from '@/components/fornecedor/useFornecedorRapido'
 import { uploadFile } from '@/lib/storage/upload-client'
 import { downscaleImage } from '@/lib/image-resize'
 import { lerDocumentoDespesa, lancarDespesaDeDocumento, lancarCronograma, type DocumentoLido } from '@/app/actions/despesa-documento'
@@ -40,6 +41,10 @@ export function LancarDespesaClient({ orgSlug, contas, contaPadrao, categorias, 
   const clsInicial: Classificacao = { conta: contaPadrao, categoria: '', centro: centroPadrao, forma: '' }
 
   const router = useRouter()
+  // Cadastro rápido no próprio campo (mesmo hook do orçamento): o credor de um
+  // empréstimo ou o mercado novo nascem pelo nome, e o homônimo é reaproveitado.
+  const { options: fornecedorOptions, criar: criarFornecedor } = useFornecedorRapido(
+    orgSlug, fornecedores.map(x => ({ id: x.id, name: x.nome })))
   const fileRef = useRef<HTMLInputElement>(null)
   const [arquivos, setArquivos] = useState<Anexo[]>([])
   const [subindo, setSubindo] = useState(false)
@@ -333,9 +338,19 @@ export function LancarDespesaClient({ orgSlug, contas, contaPadrao, categorias, 
           )}
           <div>
             <label className={labelCls}>Fornecedor</label>
-            <Select value={f.fornecedorId} onChange={v => set('fornecedorId', v)}
-              options={[{ value: '', label: '— sem cadastro —' }, ...fornecedores.map(x => ({ value: x.id, label: x.nome }))]} />
+            <Combobox value={f.fornecedorId} onChange={v => set('fornecedorId', v)}
+              options={fornecedorOptions} placeholder="Buscar ou cadastrar fornecedor"
+              onCreate={async nome => { const id = await criarFornecedor(nome); if (id) set('fornecedorId', id) }} />
+            {f.fornecedorId && (
+              // O Combobox não tem "limpar": sem isto, escolher o fornecedor errado
+              // prendia o lançamento num cadastro.
+              <button type="button" onClick={() => set('fornecedorId', '')}
+                className="mt-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors">
+                Usar sem cadastro
+              </button>
+            )}
             {!f.fornecedorId && (
+              // Sem cadastro também vale: o mercado da esquina não precisa virar fornecedor.
               <input value={f.nomeLivre} onChange={e => set('nomeLivre', e.target.value)}
                 placeholder="Nome de quem cobrou (ex.: Supermercado Muffato)" className={cn(inputCls, 'mt-2')} />
             )}
