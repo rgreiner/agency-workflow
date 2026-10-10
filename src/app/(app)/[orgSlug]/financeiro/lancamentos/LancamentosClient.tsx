@@ -28,6 +28,7 @@ import { Paperclip, ExternalLink, CalendarClock, Landmark } from 'lucide-react'
 import { GuiaImportModal } from './GuiaImportModal'
 import { ItensCompra, DetalharLote } from './ItensCompra'
 import { NotaCelula, NotaFiscalBloco } from './NotaFiscal'
+import { FORMA_OPTIONS } from '../faturamento/ClassificacaoFields'
 import { notasDosLancamentos, type NotaDoLancamento } from '@/app/actions/nfse'
 import { Modal } from '@/components/ui/Modal'
 
@@ -936,14 +937,6 @@ function Flag({ on, onClick, label, viaAnexo = false }: {
 }
 
 const TIPO_OPTIONS = [{ value: 'saida', label: 'Saída (pagar)' }, { value: 'entrada', label: 'Entrada (receber)' }]
-const FORMA_OPTIONS = [
-  { value: '', label: '—' },
-  { value: 'pix', label: 'Pix' },
-  { value: 'boleto', label: 'Boleto' },
-  { value: 'transferencia', label: 'Transferência' },
-  { value: 'cartao', label: 'Cartão' },
-  { value: 'dinheiro', label: 'Dinheiro' },
-]
 
 function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', categorias, centros, sugestoesContato = [], foco, onClose, nota, onNotaEmitida }: {
   orgSlug: string; lancamento: Lancamento | null; contas: ContaRef[]; contaPadrao?: string

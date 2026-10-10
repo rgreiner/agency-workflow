@@ -9,12 +9,17 @@ import type { FinanceCentro, FinanceCategoriaGrupo } from '@/app/actions/finance
 export interface ContaRef { id: string; nome: string }
 export interface Classificacao { conta: string; categoria: string; centro: string; forma: string }
 
-// Mesmas opções do modal de Lançamentos — a forma é livre, sem default obrigatório.
+// Fonte ÚNICA das formas de pagamento — o modal de Lançamentos importa daqui.
+// Eram duas cópias, e por isso "Débito em conta" teria entrado numa só.
+// A forma é livre, sem default obrigatório.
 export const FORMA_OPTIONS = [
   { value: '', label: '—' },
   { value: 'pix', label: 'Pix' },
   { value: 'boleto', label: 'Boleto' },
   { value: 'transferencia', label: 'Transferência' },
+  // Débito automático (parcela de empréstimo, tarifa, convênio): o banco tira
+  // da conta sem ninguém pagar — não é boleto nem transferência.
+  { value: 'debito_conta', label: 'Débito em conta' },
   { value: 'cartao', label: 'Cartão' },
   { value: 'dinheiro', label: 'Dinheiro' },
 ]
