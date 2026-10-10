@@ -136,19 +136,22 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Proposta',           href: 'producao/proposta' },
     { label: 'Relatório de autorização', href: 'relatorios/autorizacao' },
   ] },
+  // Financeiro em blocos pelo sentido do dinheiro (pedido do Rafael, 10/10):
+  // o geral no topo, depois o que entra, o que sai, os relatórios e os ajustes.
+  // "A receber" segue a ordem do processo: fatura → nota → cobra o atrasado.
   { id: 'financeiro', label: 'Financeiro', icon: Wallet, finance: true, items: [
     { label: 'Painel',         href: 'financeiro/painel' },
-    { label: 'Fluxo de caixa', href: 'financeiro/fluxo-caixa' },
-    { label: 'Análise',        href: 'financeiro/analise' },
-    { label: 'Margem por cliente', href: 'financeiro/margem' },
     { label: 'Lançamentos',    href: 'financeiro/lancamentos' },
-    { label: 'Lançar despesa', href: 'financeiro/lancar-despesa' },
-    { label: 'Inadimplentes',  href: 'financeiro/inadimplentes' },
-    { label: 'Faturamento',    href: 'financeiro/faturamento' },
-    { label: 'NF do mês',      href: 'financeiro/notas' },
     { label: 'Contas',         href: 'financeiro/contas' },
+    { label: 'Fluxo de caixa', href: 'financeiro/fluxo-caixa' },
+    { label: 'Faturamento',    href: 'financeiro/faturamento', heading: 'A receber' },
+    { label: 'NF do mês',      href: 'financeiro/notas' },
+    { label: 'Inadimplentes',  href: 'financeiro/inadimplentes' },
+    { label: 'Lançar despesa', href: 'financeiro/lancar-despesa', heading: 'A pagar' },
+    { label: 'Análise',        href: 'financeiro/analise', heading: 'Relatórios' },
+    { label: 'Margem por cliente', href: 'financeiro/margem' },
     { label: 'Fechamento',     href: 'financeiro/fechamento' },
-    { label: 'Categorias',     href: 'financeiro/categorias' },
+    { label: 'Categorias',     href: 'financeiro/categorias', heading: 'Ajustes' },
     { label: 'Lixeira',        href: 'financeiro/lixeira' },
   ] },
   { id: 'cadastros', label: 'Cadastros', icon: Users, items: [
