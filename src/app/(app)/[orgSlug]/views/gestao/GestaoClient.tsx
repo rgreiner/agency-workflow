@@ -9,7 +9,8 @@ import { MultiSelect, Select } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { AlertTriangle, UserX, CalendarOff, PauseCircle, Loader2, Activity as ActivityIcon, X, ExternalLink, ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import { formatBRL } from '@/lib/midia'
-import { templateComExtras, dentroDe, GRUPO_FORA, type DreLine, type DreConfig } from '@/lib/dre-template'
+import type { DreConfig } from '@/lib/dre-template'
+import { calcularDre, rotuloDre, type CatMesV } from '@/lib/dre-calculo'
 
 export interface ProblemTask { status: string; ws_id: string; ws_name: string; assignees: string[]; dias: number }
 export interface CargaRow { user_id: string; full_name: string | null; avatar_url: string | null; ativas: number; horas: number }
@@ -25,7 +26,7 @@ export interface EngDaily { user_id: string; day: string; n: number }
 export interface EngajamentoData { since: string; until: string; days: number; users: EngUser[]; daily: EngDaily[] }
 export interface TipoTotal { tipo: string; n: number; total: number }
 export interface NTotal { n: number; total: number }
-export interface CatMesV { categoria: string; mes: string; v: number }
+export type { CatMesV }
 export interface FinanceiroData {
   mes: string
   a_receber: number; a_pagar: number; recebido: number; pago: number
@@ -329,43 +330,9 @@ function Financeiro({ orgSlug, fin, dre }: { orgSlug: string; fin: FinanceiroDat
   // A estrutura é a padrão + o que a org ajustou (Financeiro → Estrutura da DRE).
   // Categoria fora dela cai num grupo próprio, para o erro ficar visível.
   const meses = fin.dre_meses
-  const realMap = catMesMap(fin.dre_real)
-  const prevMap = catMesMap(fin.dre_prev)
-  const template = templateComExtras([...realMap.keys(), ...prevMap.keys()], dre)
-  const gv = (map: Map<string, Map<string, number>>, cat: string, m: string) => map.get(cat)?.get(m) ?? 0
-  const folhasDe = (pred: (l: Extract<DreLine, { kind: 'folha' }>) => boolean) =>
-    template.filter((l): l is Extract<DreLine, { kind: 'folha' }> => l.kind === 'folha' && pred(l))
-
-  // Percorre o template acumulando as folhas; totais (NNT) = soma corrida.
-  const accR: Record<string, number> = {}, accP: Record<string, number> = {}
-  for (const m of meses) { accR[m] = 0; accP[m] = 0 }
-  const linhas: { line: DreLine; vr: Record<string, number>; vp: Record<string, number> }[] = []
-  for (const line of template) {
-    const vr: Record<string, number> = {}, vp: Record<string, number> = {}
-    if (line.kind === 'folha') {
-      for (const m of meses) { vr[m] = gv(realMap, line.categoria, m); vp[m] = gv(prevMap, line.categoria, m); accR[m] += vr[m]; accP[m] += vp[m] }
-    } else if (line.kind === 'grupo') {
-      const fs = folhasDe(l => l.grupo === line.code)
-      for (const m of meses) { vr[m] = fs.reduce((s, l) => s + gv(realMap, l.categoria, m), 0); vp[m] = fs.reduce((s, l) => s + gv(prevMap, l.categoria, m), 0) }
-    } else if (line.kind === 'sub') {
-      // Subgrupo soma também os que se abrem dentro dele (06.2 inclui 06.2.1).
-      const fs = folhasDe(l => dentroDe(l.sub, line.code))
-      for (const m of meses) { vr[m] = fs.reduce((s, l) => s + gv(realMap, l.categoria, m), 0); vp[m] = fs.reduce((s, l) => s + gv(prevMap, l.categoria, m), 0) }
-    } else {
-      for (const m of meses) { vr[m] = accR[m]; vp[m] = accP[m] }
-    }
-    linhas.push({ line, vr, vp })
-  }
-  const foraDaEstrutura = (l: DreLine) =>
-    l.kind === 'grupo' ? l.code === GRUPO_FORA
-      : l.kind === 'total' ? l.code === '99T'
-      : l.grupo === GRUPO_FORA
-  const nFora = linhas.filter(r => r.line.kind === 'folha' && foraDaEstrutura(r.line)).length
-
-  const visivel = linhas.filter(r =>
-    r.line.kind === 'grupo' || r.line.kind === 'total' || meses.some(m => r.vr[m] !== 0 || r.vp[m] !== 0))
-
-  const lbl = (l: DreLine) => l.kind === 'folha' ? l.categoria : l.kind === 'total' ? l.label : `${l.code} ${l.label}`
+  const visivel = calcularDre(meses, fin.dre_real, fin.dre_prev, dre)
+  const nFora = visivel.filter(r => r.line.kind === 'folha' && r.fora).length
+  const lbl = rotuloDre
   const mesArquivo = fin.mes
   function exportarCsv() {
     const numBR = (n: number) => (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false })
@@ -405,7 +372,17 @@ function Financeiro({ orgSlug, fin, dre }: { orgSlug: string; fin: FinanceiroDat
       <div className="bg-white rounded-2xl border border-gray-200 p-5">
         <div className="flex items-center justify-between gap-2 mb-1">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">DRE mensal</h3>
-          <button onClick={exportarCsv} className="inline-flex items-center gap-1 text-xs font-medium text-orange-600 hover:text-orange-700"><Download className="w-3.5 h-3.5" /> CSV</button>
+          {/* Para a contabilidade ou o banco: baixa direto, gerado no servidor com a
+              mesma conta da tabela. O CSV continua para quem quer o bruto. */}
+          <div className="flex items-center gap-3">
+            {(['pdf', 'xlsx'] as const).map(f => (
+              <a key={f} href={`/api/financeiro/dre?org=${orgSlug}&mes=${mesArquivo}&formato=${f}`} download
+                className="inline-flex items-center gap-1 text-xs font-medium text-orange-600 hover:text-orange-700 transition-colors">
+                <Download className="w-3.5 h-3.5" /> {f === 'pdf' ? 'PDF' : 'Excel'}
+              </a>
+            ))}
+            <button onClick={exportarCsv} className="inline-flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-gray-600 transition-colors">CSV</button>
+          </div>
         </div>
         <p className="text-[11px] text-gray-400 mb-4">
           Realizado (topo) × previsto (cinza), em milhares (k). Últimos 6 meses.
@@ -426,11 +403,12 @@ function Financeiro({ orgSlug, fin, dre }: { orgSlug: string; fin: FinanceiroDat
                 </tr>
               </thead>
               <tbody>
-                {visivel.map(({ line, vr, vp }, i) => {
+                {visivel.map((r, i) => {
+                  const { line, vr, vp } = r
                   const isTotal = line.kind === 'total', isGrupo = line.kind === 'grupo', isSub = line.kind === 'sub'
                   const strong = isTotal || isGrupo
                   // Âmbar = fora da estrutura contábil: precisa ser mapeado, não é erro de valor.
-                  const fora = foraDaEstrutura(line)
+                  const fora = r.fora
                   return (
                     <tr key={i} className={cn('border-t', isTotal ? 'border-gray-300' : 'border-gray-50',
                       isGrupo && (fora ? 'bg-amber-50/70' : 'bg-gray-50/60'))}>
@@ -463,15 +441,6 @@ function Financeiro({ orgSlug, fin, dre }: { orgSlug: string; fin: FinanceiroDat
   )
 }
 
-function catMesMap(rows: CatMesV[]) {
-  const m = new Map<string, Map<string, number>>()
-  for (const r of rows) {
-    if (!m.has(r.categoria)) m.set(r.categoria, new Map())
-    const inner = m.get(r.categoria)!
-    inner.set(r.mes, (inner.get(r.mes) ?? 0) + Number(r.v))
-  }
-  return m
-}
 function fmtK(n: number) {
   const a = Math.abs(n)
   if (a >= 1000) return (n / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 'k'
