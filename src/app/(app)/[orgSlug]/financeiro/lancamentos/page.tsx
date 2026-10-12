@@ -60,9 +60,9 @@ export default async function LancamentosPage({
   searchParams: Promise<{ ver?: string }>
 }) {
   const { orgSlug } = await params
-  // Atalho "Contas a pagar" do menu: abre já no recorte de despesas em aberto.
+  // Atalhos "Contas a pagar/receber" do menu: abrem já no recorte em aberto.
   const { ver } = await searchParams
-  const atalho = ver === 'a-pagar' ? 'a-pagar' as const : undefined
+  const atalho = ver === 'a-pagar' || ver === 'a-receber' ? ver : undefined
   const { supabase, orgId } = await assertFinanceAccess(orgSlug)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -129,8 +129,8 @@ const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent round
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 
 export function LancamentosClient({ orgSlug, lancamentos, importadas = [], contas, contaPadrao = '', categorias, centros, today, sugestoesContato = [], atalho }: {
-  /** 'a-pagar' = atalho do menu: despesas em aberto, das atrasadas até o fim do mês. */
-  atalho?: 'a-pagar'
+  /** Atalho do menu: despesas (a-pagar) ou receitas (a-receber) em aberto, das atrasadas até o fim do mês. */
+  atalho?: 'a-pagar' | 'a-receber'
   orgSlug: string; lancamentos: Lancamento[]; importadas?: Lancamento[]; contas: ContaRef[]
   contaPadrao?: string; categorias: FinanceCategoriaGrupo[]; centros: FinanceCentro[]; today: string
   /** Nomes já em uso (cadastro + lançamentos) para o campo Contato sugerir. */
@@ -138,11 +138,12 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
 }) {
   const [periodo, setPeriodo] = useState<Periodo>(() => {
     const doMes: Periodo = { tipo: 'mes', ano: Number(today.slice(0, 4)), mes: Number(today.slice(5, 7)) }
-    if (atalho !== 'a-pagar') return doMes
-    // Conta a pagar atrasada é a que mais importa — começar no mês corrente a
-    // esconderia. O período vai da despesa em aberto mais antiga ao fim do mês.
+    if (!atalho) return doMes
+    // A conta atrasada é a que mais importa — começar no mês corrente a
+    // esconderia. O período vai da mais antiga em aberto ao fim do mês.
+    const tipo = atalho === 'a-pagar' ? 'saida' : 'entrada'
     const abertas = lancamentos
-      .filter(l => l.tipo === 'saida' && !isPago(l.situacao))
+      .filter(l => l.tipo === tipo && !isPago(l.situacao))
       .map(l => (l.vencimento ?? '').slice(0, 10))
       .filter(Boolean).sort()
     const fim = periodoRange(doMes).end
@@ -171,7 +172,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
   }, [])
   const [query, setQuery] = useState('')
   // Recorte pelos cards de resumo (tipo + situação). null = tudo (card "Resultado").
-  const [cardFilter, setCardFilter] = useState<null | 'rec_aberto' | 'rec_real' | 'desp_aberto' | 'desp_real'>(atalho === 'a-pagar' ? 'desp_aberto' : null)
+  const [cardFilter, setCardFilter] = useState<null | 'rec_aberto' | 'rec_real' | 'desp_aberto' | 'desp_real'>(atalho === 'a-pagar' ? 'desp_aberto' : atalho === 'a-receber' ? 'rec_aberto' : null)
   const [creating, setCreating] = useState(false)
   const [transferindo, setTransferindo] = useState(false)
   // PDF de guia (Darf/FGTS/DAS…) escolhido pra importar — abre o modal de conciliação.

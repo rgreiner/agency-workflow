@@ -144,10 +144,11 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Lançamentos',    href: 'financeiro/lancamentos' },
     { label: 'Contas',         href: 'financeiro/contas' },
     { label: 'Fluxo de caixa', href: 'financeiro/fluxo-caixa' },
-    { label: 'Faturamento',    href: 'financeiro/faturamento', heading: 'A receber' },
+    { label: 'Contas a receber', href: 'financeiro/lancamentos?ver=a-receber', heading: 'A receber' },
+    { label: 'Faturamento',    href: 'financeiro/faturamento' },
     { label: 'NF do mês',      href: 'financeiro/notas' },
     { label: 'Inadimplentes',  href: 'financeiro/inadimplentes' },
-    // Atalho: Lançamentos já no recorte de despesas em aberto (atrasadas incluídas).
+    // Atalhos "Contas a …": Lançamentos já no recorte em aberto (atrasadas incluídas).
     { label: 'Contas a pagar', href: 'financeiro/lancamentos?ver=a-pagar', heading: 'A pagar' },
     { label: 'Lançar despesa', href: 'financeiro/lancar-despesa' },
     { label: 'Análise',        href: 'financeiro/analise', heading: 'Relatórios' },
