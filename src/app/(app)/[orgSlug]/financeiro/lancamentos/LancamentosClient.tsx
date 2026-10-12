@@ -128,13 +128,26 @@ const parseBR = (s: string) => { const t = s.trim().replace(/\./g, '').replace('
 const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 
-export function LancamentosClient({ orgSlug, lancamentos, importadas = [], contas, contaPadrao = '', categorias, centros, today, sugestoesContato = [] }: {
+export function LancamentosClient({ orgSlug, lancamentos, importadas = [], contas, contaPadrao = '', categorias, centros, today, sugestoesContato = [], atalho }: {
+  /** 'a-pagar' = atalho do menu: despesas em aberto, das atrasadas até o fim do mês. */
+  atalho?: 'a-pagar'
   orgSlug: string; lancamentos: Lancamento[]; importadas?: Lancamento[]; contas: ContaRef[]
   contaPadrao?: string; categorias: FinanceCategoriaGrupo[]; centros: FinanceCentro[]; today: string
   /** Nomes já em uso (cadastro + lançamentos) para o campo Contato sugerir. */
   sugestoesContato?: string[]
 }) {
-  const [periodo, setPeriodo] = useState<Periodo>({ tipo: 'mes', ano: Number(today.slice(0, 4)), mes: Number(today.slice(5, 7)) })
+  const [periodo, setPeriodo] = useState<Periodo>(() => {
+    const doMes: Periodo = { tipo: 'mes', ano: Number(today.slice(0, 4)), mes: Number(today.slice(5, 7)) }
+    if (atalho !== 'a-pagar') return doMes
+    // Conta a pagar atrasada é a que mais importa — começar no mês corrente a
+    // esconderia. O período vai da despesa em aberto mais antiga ao fim do mês.
+    const abertas = lancamentos
+      .filter(l => l.tipo === 'saida' && !isPago(l.situacao))
+      .map(l => (l.vencimento ?? '').slice(0, 10))
+      .filter(Boolean).sort()
+    const fim = periodoRange(doMes).end
+    return abertas.length && abertas[0] < fim ? { tipo: 'custom', start: abertas[0], end: fim } : doMes
+  })
   const { start: perStart, end: perEnd } = useMemo(() => periodoRange(periodo), [periodo])
   const [contaFilter, setContaFilter] = useState('')
   const [tipoFilter, setTipoFilter] = useState<'todos' | 'entrada' | 'saida'>('todos')
@@ -158,7 +171,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
   }, [])
   const [query, setQuery] = useState('')
   // Recorte pelos cards de resumo (tipo + situação). null = tudo (card "Resultado").
-  const [cardFilter, setCardFilter] = useState<null | 'rec_aberto' | 'rec_real' | 'desp_aberto' | 'desp_real'>(null)
+  const [cardFilter, setCardFilter] = useState<null | 'rec_aberto' | 'rec_real' | 'desp_aberto' | 'desp_real'>(atalho === 'a-pagar' ? 'desp_aberto' : null)
   const [creating, setCreating] = useState(false)
   const [transferindo, setTransferindo] = useState(false)
   // PDF de guia (Darf/FGTS/DAS…) escolhido pra importar — abre o modal de conciliação.

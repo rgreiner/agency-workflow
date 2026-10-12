@@ -54,11 +54,15 @@ function extratoToLancamento(e: any, contaIdByName: Map<string, string>): Lancam
 }
 
 export default async function LancamentosPage({
-  params,
+  params, searchParams,
 }: {
   params: Promise<{ orgSlug: string }>
+  searchParams: Promise<{ ver?: string }>
 }) {
   const { orgSlug } = await params
+  // Atalho "Contas a pagar" do menu: abre já no recorte de despesas em aberto.
+  const { ver } = await searchParams
+  const atalho = ver === 'a-pagar' ? 'a-pagar' as const : undefined
   const { supabase, orgId } = await assertFinanceAccess(orgSlug)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -151,6 +155,10 @@ export default async function LancamentosPage({
 
   return (
     <LancamentosClient
+      // key: ir de Lançamentos para o atalho é a mesma rota; sem a key o estado
+      // inicial (filtro) não seria relido.
+      key={atalho ?? 'todos'}
+      atalho={atalho}
       orgSlug={orgSlug}
       lancamentos={lancamentos}
       importadas={importadas}
