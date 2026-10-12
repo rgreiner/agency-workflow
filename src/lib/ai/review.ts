@@ -1,6 +1,6 @@
 import 'server-only'
 import type { PecasParaRevisao, PecaRevisao } from '@/lib/google-drive'
-import type { IAPart } from './gemini'
+import { geminiArquivosDisponivel, geminiSubirArquivo, geminiApagarArquivo, type IAPart } from './gemini'
 import { iaDisponivel, iaJson } from './provedor'
 import type { RevisaoConfig } from './revisao-config'
 
@@ -29,6 +29,8 @@ export interface ReviewResult {
   naoLidas?: string[]
   /** Em quantas partes as peças foram revisadas (1 = de uma vez). */
   partes?: number
+  /** Quantas peças a IA de fato leu (0 = nada revisado). */
+  lidas?: number
 }
 
 /** O que a tarefa pediu: briefing + comentários recentes (texto puro). */
@@ -206,6 +208,8 @@ function montarLotes(pecas: PecaRevisao[]): PecaRevisao[][] {
   let atual: PecaRevisao[] = []
   let bytes = 0
   for (const p of pecas) {
+    // Peça grande vai sozinha (pela rota de arquivos): não divide pedido com outras.
+    if (p.grande) { lotes.push([p]); continue }
     if (atual.length && (atual.length >= LOTE_MAX_PECAS || bytes + p.bytes > LOTE_MAX_BYTES)) {
       lotes.push(atual); atual = []; bytes = 0
     }
@@ -213,6 +217,12 @@ function montarLotes(pecas: PecaRevisao[]): PecaRevisao[][] {
   }
   if (atual.length) lotes.push(atual)
   return lotes
+}
+
+/** Chave para a rota de arquivos do Gemini, se o provedor principal permitir. */
+function rotaDeArquivos(cfg: RevisaoConfig): { ok: boolean; chave: string | null } {
+  if (cfg.apiKey) return cfg.provider === 'gemini' ? { ok: true, chave: cfg.apiKey } : { ok: false, chave: null }
+  return { ok: geminiArquivosDisponivel(null), chave: null }
 }
 
 const AVISO_PARTE = (k: number, n: number, nomes: string[]) => `PARTE ${k} DE ${n} DAS PEÇAS. O material tem ${nomes.length} peças (lista abaixo); você recebe só as desta parte — as outras são revisadas em separado.
@@ -238,21 +248,45 @@ Nomes de arquivo variam ("Card 1", "Carrossel 1 - Card 1", "post1"): na dúvida,
  */
 export async function reviewArtwork(cfg: RevisaoConfig, material: PecasParaRevisao, textoAprovado?: string, ctx?: ContextoRevisao | null): Promise<ReviewResult> {
   const { texto, truncated } = cortar(textoAprovado ?? '')
-  const nomes = material.pecas.map(p => p.name)
-  const lotes = montarLotes(material.pecas)
+  // Peça grande sem rota de arquivos (provedor principal = Claude): fica de fora, com o nome.
+  const arquivos = rotaDeArquivos(cfg)
+  const naoLidas = [...material.naoLidas]
+  const pecas = material.pecas.filter(p => {
+    if (!p.grande || arquivos.ok) return true
+    naoLidas.push(`${p.name} (acima de 7 MB — só o Gemini lê arquivo grande)`)
+    return false
+  })
+  const nomes = pecas.map(p => p.name)
+  const lotes = montarLotes(pecas)
   const n = lotes.length
+  // Se alguma parte não vê o conjunto inteiro (mais de um lote, ou arquivos da pasta
+  // que não serão lidos), "peça faltando" sai das partes e vai para a conferência final.
+  const emPartes = n > 1 || material.todos.length > nomes.length
   const system = texto ? SYSTEM_PECAS_COM_TEXTO : SYSTEM_PECAS
 
   const revisarLote = async (lote: PecaRevisao[], k: number) => {
     const parts: IAPart[] = [...blocoContexto(ctx)]
     if (texto) parts.push({ kind: 'text', text: `TEXTO APROVADO PELA REDAÇÃO:\n--- INÍCIO ---\n${texto}\n--- FIM ---` })
-    if (n > 1) parts.push({ kind: 'text', text: AVISO_PARTE(k, n, nomes) })
+    if (emPartes) parts.push({ kind: 'text', text: AVISO_PARTE(k, n, material.todos) })
     parts.push({ kind: 'text', text: `MATERIAL A REVISAR (peças${n > 1 ? ` da parte ${k}` : ''}):` })
-    for (const p of lote) {
-      parts.push({ kind: 'text', text: `Peça: ${p.name}` })
-      parts.push({ kind: 'media', mimeType: p.mimeType, base64: await p.carregar() })
+    const enviados: string[] = []
+    try {
+      for (const p of lote) {
+        parts.push({ kind: 'text', text: `Peça: ${p.name}` })
+        const buf = await p.carregar()
+        if (p.grande) {
+          // Arquivo inteiro, sem converter: Files API do Gemini (o corpo só aceita ~20 MB).
+          const f = await geminiSubirArquivo(buf, p.mimeType, p.name, arquivos.chave)
+          enviados.push(f.name)
+          parts.push({ kind: 'arquivo', mimeType: p.mimeType, uri: f.uri })
+        } else {
+          parts.push({ kind: 'media', mimeType: p.mimeType, base64: buf.toString('base64') })
+        }
+      }
+      return await run(cfg, system, parts)
+    } finally {
+      for (const n of enviados) await geminiApagarArquivo(n, arquivos.chave)
     }
-    return run(cfg, system, parts)
   }
 
   const resultados: { model: string; list: ReviewError[] }[] = new Array(n)
@@ -263,10 +297,12 @@ export async function reviewArtwork(cfg: RevisaoConfig, material: PecasParaRevis
   }
 
   let lista = resultados.flatMap(r => r.list)
-  if (n > 1 && texto) {
+  if (emPartes && texto && n > 0) {
     const conj = await run(cfg, SYSTEM_CONJUNTO, [
       { kind: 'text', text: `TEXTO APROVADO PELA REDAÇÃO:\n--- INÍCIO ---\n${texto}\n--- FIM ---` },
-      { kind: 'text', text: `ARQUIVOS NA PASTA DE PEÇAS:\n${nomes.join('\n')}` },
+      // TODOS os arquivos da pasta, lidos ou não: em 10/2026 a lista só das peças
+      // lidas fazia a IA acusar "não há arquivo" de crachá/backdrop grandes demais.
+      { kind: 'text', text: `ARQUIVOS NA PASTA DE PEÇAS:\n${material.todos.join('\n')}` },
     ])
     lista = [...lista, ...conj.list.filter(e => e.tipo !== 'pendencia')]
   }
@@ -277,7 +313,7 @@ export async function reviewArtwork(cfg: RevisaoConfig, material: PecasParaRevis
     if (vistos.has(chave)) return false
     vistos.add(chave); return true
   })
-  return { model: resultados[0]?.model ?? '—', errors, truncated, naoLidas: material.naoLidas, partes: n }
+  return { model: resultados[0]?.model ?? '—', errors, truncated, naoLidas, partes: n, lidas: pecas.length }
 }
 
 // ── Execução ────────────────────────────────────────────────────────────────

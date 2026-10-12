@@ -280,6 +280,7 @@ export default async function ActivityPage({
       .filter(e => e.trecho && e.correcao)
     if ((r.status === 'errors' || r.status === 'overridden') && lista.length) return { tipo: 'erros' as const, errors: lista }
     if (r.status === 'clean') return { tipo: 'limpo' as const }
+    if (r.status === 'nao_lido') return { tipo: 'aviso' as const, texto: 'Nada pôde ser revisado pela IA nesta pasta (só subpastas, Mockups ou arquivos que ela não lê). Para avançar, você confirma que revisou por conta própria.' }
     return null
   }
   const revisaoLigada = !!etapaRev && etapasLigadas.includes(etapaRev)

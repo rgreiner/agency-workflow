@@ -20,6 +20,8 @@ export async function claudeJson<T>(opts: {
   const content: Anthropic.Beta.BetaContentBlockParam[] = []
   for (const p of opts.parts) {
     if (p.kind === 'text') { content.push({ type: 'text', text: p.text }); continue }
+    // Peça grande vai pela rota de arquivos do Gemini; o Claude não a enxerga.
+    if (p.kind === 'arquivo') throw new ErroIA(0, 'Claude: peça grande (acima de 7 MB) só é lida pelo Gemini.')
     if (p.mimeType === 'application/pdf') {
       content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: p.base64 } })
       continue

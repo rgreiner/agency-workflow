@@ -6,7 +6,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { linhaApontamento } from '@/lib/ai/revisao-modelos'
 
 type Apontamento = { trecho: string; correcao: string; tipo?: string }
-type Resultado = { error?: string; revisao?: 'confirmar'; erros?: Apontamento[]; falhou?: boolean } | undefined
+type Resultado = { error?: string; revisao?: 'confirmar'; erros?: Apontamento[]; falhou?: boolean; semLeitura?: boolean } | undefined
 
 /**
  * Mover o status passando pela Revisão IA: quando o servidor pede confirmação
@@ -14,7 +14,7 @@ type Resultado = { error?: string; revisao?: 'confirmar'; erros?: Apontamento[];
  * pessoa concordar, repete o pedido com `aceitar`. Cancelar = `{ cancelado }`.
  */
 export function useAvancoRevisado() {
-  const [pedido, setPedido] = useState<{ erros: Apontamento[]; falhou: boolean } | null>(null)
+  const [pedido, setPedido] = useState<{ erros: Apontamento[]; falhou: boolean; semLeitura: boolean } | null>(null)
   const resolver = useRef<((ok: boolean) => void) | null>(null)
 
   function responder(ok: boolean) {
@@ -28,7 +28,7 @@ export function useAvancoRevisado() {
     if (r?.revisao !== 'confirmar') return r
     const ok = await new Promise<boolean>(res => {
       resolver.current = res
-      setPedido({ erros: r.erros ?? [], falhou: !!r.falhou })
+      setPedido({ erros: r.erros ?? [], falhou: !!r.falhou, semLeitura: !!r.semLeitura })
     })
     if (!ok) return { cancelado: true }
     return chamar(true)
@@ -40,8 +40,10 @@ export function useAvancoRevisado() {
   const dialogo = pedido && typeof document !== 'undefined' && createPortal(
     <ConfirmDialog
       open
-      title={pedido?.falhou ? 'Seguir sem a revisão?' : `Seguir com ${n} ${n === 1 ? 'apontamento' : 'apontamentos'}?`}
-      description={pedido?.falhou
+      title={pedido?.semLeitura ? 'Nada foi revisado — seguir assim?' : pedido?.falhou ? 'Seguir sem a revisão?' : `Seguir com ${n} ${n === 1 ? 'apontamento' : 'apontamentos'}?`}
+      description={pedido?.semLeitura
+        ? 'A IA não conseguiu ler nenhuma peça (só subpastas, Mockups ou arquivos que ela não lê). Confirmando, você assume que revisou por conta própria — fica registrado na movimentação.'
+        : pedido?.falhou
         ? 'A revisão por IA não foi concluída. Confirmando, você assume seguir sem ela — fica registrado na movimentação.'
         : 'Confirmando, você concorda em seguir com os apontamentos abaixo sem corrigir — fica registrado na movimentação.'}
       confirmLabel="Concordo, seguir"

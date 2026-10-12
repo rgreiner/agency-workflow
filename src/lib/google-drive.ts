@@ -306,14 +306,16 @@ const PDF_MIME    = 'application/pdf'
 const SLIDES_MIME = 'application/vnd.google-apps.presentation'
 const IMAGE_MIME_RE = /^image\/(png|jpe?g|webp|gif)$/i
 
-// Revisão por visão (02/10/2026): até 40 peças, cada uma no tamanho ORIGINAL (letra
-// miúda precisa chegar legível), e quem chama revisa em LOTES (lib/ai/review.ts).
-// Antes o teto era 12 arquivos / 12 MB no total: em jobs de 20–30 PNGs a IA lia
-// 6 ou 7 e acusava "Carrossel 2 faltando" de peças que estavam na pasta.
-// 7 MB por peça = teto de imagem do Claude (10 MB em base64); acima disso a peça
-// fica de fora e a tela avisa o nome. Mockup repete as peças — fica de fora.
-export const REVIEW_MAX_PECAS = 40
+// Revisão por visão: até 120 peças, cada uma no tamanho ORIGINAL (letra miúda
+// precisa chegar legível; nada é reduzido nem convertido), e quem chama revisa em
+// LOTES (lib/ai/review.ts). Peça até 7 MB vai no corpo do pedido (teto de imagem
+// do Claude); acima disso é GRANDE: vai inteira pela rota de arquivos do Gemini
+// (até 300 MB aqui). Histórico: 02/10 o teto era 12 arquivos/12 MB (lia 6 de 30);
+// 12/10 PDFs de impressão (crachá, backdrop, catálogo de 108 MB) nunca eram lidos.
+// Mockup repete as peças e subpasta (old, versões) não é a entrega — ficam de fora.
+export const REVIEW_MAX_PECAS = 120
 export const REVIEW_MAX_BYTES_PECA = 7 * 1024 * 1024
+export const REVIEW_MAX_BYTES_ARQUIVO = 300 * 1024 * 1024
 
 /** "Mockup …" é a montagem das peças para apresentar — não entra na revisão. */
 export const ehMockup = (nome: string) => /mock-?up/i.test(nome)
@@ -324,41 +326,44 @@ export interface PecaRevisao {
   mimeType: string
   /** Tamanho conhecido antes de baixar (estimado em Slides exportado). */
   bytes: number
-  carregar: () => Promise<string>
+  /** Acima de REVIEW_MAX_BYTES_PECA: só pela rota de arquivos (Gemini). */
+  grande: boolean
+  carregar: () => Promise<Buffer>
 }
 
 /** Resultado da leitura: peças a revisar + as que ficaram de fora (nome e motivo). */
-export interface PecasParaRevisao { pecas: PecaRevisao[]; naoLidas: string[] }
+export interface PecasParaRevisao {
+  pecas: PecaRevisao[]
+  naoLidas: string[]
+  /** Nome de TODO arquivo da pasta (menos Mockup) — a conferência do conjunto usa. */
+  todos: string[]
+  /** Itens que não são peça revisável: subpastas, Mockups, formatos que a IA não lê. */
+  outros: number
+}
 
 function isReviewable(mime: string): boolean {
   return IMAGE_MIME_RE.test(mime) || mime === PDF_MIME || mime === SLIDES_MIME
 }
 
-async function downloadBase64(fileId: string): Promise<{ base64: string; bytes: number }> {
-  const drive = getDrive()
-  const r = await drive.files.get(
-    { fileId, alt: 'media', supportsAllDrives: true },
-    { responseType: 'arraybuffer' },
-  )
-  const buf = Buffer.from(r.data as ArrayBuffer)
-  return { base64: buf.toString('base64'), bytes: buf.length }
+async function baixarBuffer(fileId: string): Promise<Buffer> {
+  const r = await getDrive().files.get({ fileId, alt: 'media', supportsAllDrives: true }, { responseType: 'arraybuffer' })
+  return Buffer.from(r.data as ArrayBuffer)
 }
 
-async function exportBase64(fileId: string, mimeType: string): Promise<{ base64: string; bytes: number }> {
-  const drive = getDrive()
-  const r = await drive.files.export({ fileId, mimeType }, { responseType: 'arraybuffer' })
-  const buf = Buffer.from(r.data as ArrayBuffer)
-  return { base64: buf.toString('base64'), bytes: buf.length }
+async function exportarBuffer(fileId: string, mimeType: string): Promise<Buffer> {
+  const r = await getDrive().files.export({ fileId, mimeType }, { responseType: 'arraybuffer' })
+  return Buffer.from(r.data as ArrayBuffer)
 }
 
 /**
  * Peças de um link do Drive (arquivo único OU pasta) para a revisão por visão:
- * imagem/PDF (Slides exportado como PDF), sem Mockup, até REVIEW_MAX_PECAS. Não
- * baixa nada — cada peça traz `carregar()`, chamado no lote dela.
+ * imagem/PDF (Slides exportado como PDF) da RAIZ da pasta — subpastas ficam de fora
+ * (decisão do Rafael, 12/10) —, sem Mockup, até REVIEW_MAX_PECAS. Não baixa nada:
+ * cada peça traz `carregar()`, chamado no lote dela.
  */
 export async function listarPecasRevisao(link: string): Promise<PecasParaRevisao> {
   const id = extractFolderId(link)
-  if (!id) return { pecas: [], naoLidas: [] }
+  if (!id) return { pecas: [], naoLidas: [], todos: [], outros: 0 }
   const drive = getDrive()
 
   const meta = (await drive.files.get({
@@ -366,10 +371,15 @@ export async function listarPecasRevisao(link: string): Promise<PecasParaRevisao
   })).data
 
   const candidates: { id: string; name: string; mimeType: string; size: number }[] = []
+  const todos: string[] = []
+  let outros = 0
   const pega = (f: drive_v3.Schema$File) => {
-    if (f.id && f.mimeType && isReviewable(f.mimeType) && !ehMockup(f.name ?? '')) {
-      candidates.push({ id: f.id, name: f.name ?? '', mimeType: f.mimeType, size: Number(f.size ?? 0) })
-    }
+    const nome = f.name ?? ''
+    if (!f.id || !f.mimeType) return
+    if (f.mimeType === FOLDER_MIME || ehMockup(nome)) { outros++; return }
+    todos.push(nome)
+    if (!isReviewable(f.mimeType)) { outros++; return }
+    candidates.push({ id: f.id, name: nome, mimeType: f.mimeType, size: Number(f.size ?? 0) })
   }
   if (meta.mimeType === FOLDER_MIME) {
     let pageToken: string | undefined
@@ -389,16 +399,17 @@ export async function listarPecasRevisao(link: string): Promise<PecasParaRevisao
   const pecas: PecaRevisao[] = []
   for (const c of candidates) {
     if (pecas.length >= REVIEW_MAX_PECAS) { naoLidas.push(`${c.name} (passou de ${REVIEW_MAX_PECAS} peças)`); continue }
-    if (c.size > REVIEW_MAX_BYTES_PECA) { naoLidas.push(`${c.name} (arquivo acima de 7 MB)`); continue }
+    if (c.size > REVIEW_MAX_BYTES_ARQUIVO) { naoLidas.push(`${c.name} (arquivo acima de 300 MB)`); continue }
     const isSlides = c.mimeType === SLIDES_MIME
     pecas.push({
       name: c.name,
       mimeType: isSlides ? PDF_MIME : c.mimeType,
       bytes: isSlides ? 2 * 1024 * 1024 : c.size,
-      carregar: async () => (isSlides ? await exportBase64(c.id, PDF_MIME) : await downloadBase64(c.id)).base64,
+      grande: !isSlides && c.size > REVIEW_MAX_BYTES_PECA,
+      carregar: () => isSlides ? exportarBuffer(c.id, PDF_MIME) : baixarBuffer(c.id),
     })
   }
-  return { pecas, naoLidas }
+  return { pecas, naoLidas, todos, outros }
 }
 
 // ── Versões (revisão: "o material mudou desde a revisão?") ─────────────────

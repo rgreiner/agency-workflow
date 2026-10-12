@@ -62,7 +62,8 @@ export function RevisaoIA({ activityId, path, etapa, etapaLabel, ultima, anterio
       if (!r.ok) { setRes({ tipo: 'aviso', texto: r.aviso }); return }
       setRes(r.errors.length ? { tipo: 'erros', errors: r.errors } : { tipo: 'limpo' })
       setNaoLidas(r.naoLidas)
-      if (r.parcial) toast.message('Revisado só o que mudou desde a última revisão.')
+      if (r.reaproveitada) toast.message('Nada mudou desde a última revisão: resultado mantido.')
+      else if (r.parcial) toast.message('Revisado só o que mudou desde a última revisão.')
       if (r.partes > 1) toast.message(`Peças revisadas em ${r.partes} partes.`)
       if (r.truncated) toast.message('O material é longo: só o começo foi revisado.')
     })

@@ -5,7 +5,7 @@ import {
   GetObjectCommand,
 } from '@aws-sdk/client-s3'
 import type { TaskFoldersResult, FolderFile, CreateTaskFoldersOpts, PecaRevisao, PecasParaRevisao } from '@/lib/google-drive'
-import { ehMockup, REVIEW_MAX_PECAS, REVIEW_MAX_BYTES_PECA } from '@/lib/google-drive'
+import { ehMockup, REVIEW_MAX_PECAS, REVIEW_MAX_BYTES_PECA, REVIEW_MAX_BYTES_ARQUIVO } from '@/lib/google-drive'
 
 /**
  * Pastas de tarefa no bucket S3 (Cloudflare R2) — o disco que o time monta como F:.
@@ -203,15 +203,24 @@ export async function versoesPecasS3(folderPath: string): Promise<{ id: string; 
 
 /** Peças de uma subpasta (Preview/Final) para revisão — baixadas só no lote delas. */
 export async function listarPecasRevisaoS3(folderPath: string): Promise<PecasParaRevisao> {
-  const files = (await listFolderFilesS3(folderPath)).filter(f => isReviewableMime(f.mime) && !ehMockup(f.name))
+  // listFolderFilesS3 já lista só a raiz (Delimiter '/'): subpasta fica de fora.
+  const arquivos = await listFolderFilesS3(folderPath)
   const naoLidas: string[] = []
   const pecas: PecaRevisao[] = []
-  for (const f of files) {
+  const todos: string[] = []
+  let outros = 0
+  for (const f of arquivos) {
+    if (ehMockup(f.name)) { outros++; continue }
+    todos.push(f.name)
+    if (!isReviewableMime(f.mime)) { outros++; continue }
     if (pecas.length >= REVIEW_MAX_PECAS) { naoLidas.push(`${f.name} (passou de ${REVIEW_MAX_PECAS} peças)`); continue }
-    if (f.size > REVIEW_MAX_BYTES_PECA) { naoLidas.push(`${f.name} (arquivo acima de 7 MB)`); continue }
-    pecas.push({ name: f.name, mimeType: f.mime, bytes: f.size, carregar: async () => (await readFolderFileS3(f.ref)).buffer.toString('base64') })
+    if (f.size > REVIEW_MAX_BYTES_ARQUIVO) { naoLidas.push(`${f.name} (arquivo acima de 300 MB)`); continue }
+    pecas.push({
+      name: f.name, mimeType: f.mime, bytes: f.size, grande: f.size > REVIEW_MAX_BYTES_PECA,
+      carregar: async () => (await readFolderFileS3(f.ref)).buffer,
+    })
   }
-  return { pecas, naoLidas }
+  return { pecas, naoLidas, todos, outros }
 }
 
 /** Cria as subpastas padrão que faltarem numa pasta de tarefa existente. */

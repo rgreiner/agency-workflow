@@ -25,6 +25,8 @@ import 'server-only'
 export type IAPart =
   | { kind: 'text'; text: string }
   | { kind: 'media'; mimeType: string; base64: string }
+  /** Arquivo já enviado à rota de arquivos do Gemini (peça grande; ver geminiSubirArquivo). */
+  | { kind: 'arquivo'; mimeType: string; uri: string }
 
 /** Erro de IA com o status HTTP preservado (mensagemErroRevisao, lib/ai/review.ts, traduz pela pessoa). */
 export class ErroIA extends Error {
@@ -143,7 +145,9 @@ export async function geminiJson<T>(opts: GeminiJsonOpts): Promise<{ model: stri
       role: 'user',
       parts: opts.parts.map(p => p.kind === 'text'
         ? { text: p.text }
-        : { inlineData: { mimeType: p.mimeType, data: p.base64 } }),
+        : p.kind === 'arquivo'
+          ? { fileData: { mimeType: p.mimeType, fileUri: p.uri } }
+          : { inlineData: { mimeType: p.mimeType, data: p.base64 } }),
     }],
     generationConfig: {
       temperature: opts.temperature ?? 0,
@@ -307,4 +311,69 @@ export function parseJson<T>(raw: string): T | null {
   const m = limpo.match(/[[{][\s\S]*[\]}]/)
   if (!m) return null
   try { return JSON.parse(m[0]) as T } catch { return null }
+}
+
+// ── Rota de arquivos (peças grandes) ────────────────────────────────────────
+
+/**
+ * Há rota de arquivos para esta chave? Só no AI Studio (chave da org ou do
+ * ambiente); o Vertex não tem a Files API.
+ */
+export function geminiArquivosDisponivel(chave?: string | null): boolean {
+  if (chave) return true
+  const backend = (process.env.GEMINI_BACKEND || 'auto').toLowerCase()
+  return backend !== 'vertex' && !!(process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY)
+}
+
+const FILES = 'https://generativelanguage.googleapis.com'
+
+/**
+ * Envia um arquivo INTEIRO (sem converter nem reduzir) para a Files API do
+ * Gemini e devolve a URI para usar como parte do pedido. É o caminho das peças
+ * acima de 7 MB (PDF de impressão, render): o corpo do pedido só aceita ~20 MB,
+ * a Files API até 2 GB. O arquivo some sozinho em 48 h; quem chama apaga antes.
+ */
+export async function geminiSubirArquivo(buf: Buffer, mimeType: string, nome: string, chave?: string | null): Promise<{ uri: string; name: string }> {
+  const key = chave || process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY
+  if (!key) throw new ErroIA(503, 'Gemini: sem chave para enviar arquivo.')
+  const ini = await fetch(`${FILES}/upload/v1beta/files`, {
+    method: 'POST',
+    headers: {
+      'x-goog-api-key': key,
+      'X-Goog-Upload-Protocol': 'resumable',
+      'X-Goog-Upload-Command': 'start',
+      'X-Goog-Upload-Header-Content-Length': String(buf.length),
+      'X-Goog-Upload-Header-Content-Type': mimeType,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ file: { display_name: nome.slice(0, 120) } }),
+    signal: AbortSignal.timeout(60_000),
+  })
+  const url = ini.headers.get('x-goog-upload-url')
+  if (!ini.ok || !url) throw new ErroIA(ini.status, `Gemini (arquivo) ${ini.status}: ${(await ini.text().catch(() => '')).slice(0, 300)}`)
+  const up = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Length': String(buf.length), 'X-Goog-Upload-Offset': '0', 'X-Goog-Upload-Command': 'upload, finalize' },
+    body: new Uint8Array(buf),
+    signal: AbortSignal.timeout(300_000),
+  })
+  const j = await up.json().catch(() => null) as { file?: { name?: string; uri?: string; state?: string } } | null
+  const f = j?.file
+  if (!up.ok || !f?.uri || !f.name) throw new ErroIA(up.status, `Gemini (arquivo) ${up.status}: envio sem URI.`)
+  // PDF/imagem costumam nascer ACTIVE; se vier PROCESSING, espera até ~60 s.
+  let estado = f.state
+  for (let i = 0; estado === 'PROCESSING' && i < 30; i++) {
+    await new Promise(r => setTimeout(r, 2000))
+    const g = await fetch(`${FILES}/v1beta/${f.name}`, { headers: { 'x-goog-api-key': key } })
+    estado = ((await g.json().catch(() => null)) as { state?: string } | null)?.state
+  }
+  if (estado && estado !== 'ACTIVE') throw new ErroIA(0, `Gemini (arquivo): ficou em ${estado}.`)
+  return { uri: f.uri, name: f.name }
+}
+
+/** Apaga o arquivo enviado (melhor esforço — de todo jeito expira em 48 h). */
+export async function geminiApagarArquivo(name: string, chave?: string | null): Promise<void> {
+  const key = chave || process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY
+  if (!key) return
+  await fetch(`${FILES}/v1beta/${name}`, { method: 'DELETE', headers: { 'x-goog-api-key': key } }).catch(() => {})
 }

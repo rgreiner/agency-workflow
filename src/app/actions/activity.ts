@@ -193,7 +193,7 @@ export async function updateActivityStatus(
   comment: string,
   /** A pessoa confirmou que segue com os apontamentos da Revisão IA. */
   aceitarRevisao = false,
-): Promise<{ error?: string; revisao?: 'confirmar'; erros?: { trecho: string; correcao: string; tipo?: string }[]; falhou?: boolean } | undefined> {
+): Promise<{ error?: string; revisao?: 'confirmar'; erros?: { trecho: string; correcao: string; tipo?: string }[]; falhou?: boolean; semLeitura?: boolean } | undefined> {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
@@ -207,7 +207,7 @@ export async function updateActivityStatus(
   const v = await checarAvanco(supabase, user.id, activityId, fromStatus, newStatus, aceitarRevisao)
   if (!v.ok) {
     return v.motivo === 'confirmar'
-      ? { error: v.mensagem, revisao: 'confirmar', erros: v.erros, falhou: v.falhou }
+      ? { error: v.mensagem, revisao: 'confirmar', erros: v.erros, falhou: v.falhou, semLeitura: v.semLeitura }
       : { error: v.mensagem }
   }
 
@@ -636,7 +636,7 @@ export async function toggleCommentReaction(path: string, commentId: string, emo
  * com a impressão digital do material — sem comentário, o painel já mostra.
  */
 export async function revisarTarefa(path: string, activityId: string, etapaAlvo?: RevisaoEtapa): Promise<
-  | { ok: true; errors: { trecho: string; correcao: string; tipo?: string }[]; model: string; truncated: boolean; parcial: boolean; naoLidas: string[]; partes: number }
+  | { ok: true; errors: { trecho: string; correcao: string; tipo?: string }[]; model: string; truncated: boolean; parcial: boolean; naoLidas: string[]; partes: number; reaproveitada: boolean }
   | { ok: false; aviso: string }
   | { error: string }
 > {
@@ -663,8 +663,11 @@ export async function revisarTarefa(path: string, activityId: string, etapaAlvo?
     const out = await revisarAtividade(supabase, activityId, user.id, etapa, cfg, anterior)
     // Sem material para revisar (pasta vazia, Doc vazio) conta como revisado.
     if (!out.ok) {
-      await salvarRevisao(supabase, activityId, user.id, etapa, { status: 'vazio', apontamentos: null, fonte: out.fonte, texto: null })
-      await registrarHistorico(supabase, activityId, user.id, etapa, { evento: 'revisao', status: 'vazio' })
+      // Pasta/Doc vazio conta como revisado; havia arquivos mas nada foi lido não
+      // (nao_lido pede confirmação para avançar).
+      const status = out.naoLido ? 'nao_lido' : 'vazio'
+      await salvarRevisao(supabase, activityId, user.id, etapa, { status, apontamentos: null, fonte: out.fonte, texto: null })
+      await registrarHistorico(supabase, activityId, user.id, etapa, { evento: 'revisao', status })
       revalidatePath(path)
       return { ok: false, aviso: out.vazio }
     }
@@ -677,7 +680,7 @@ export async function revisarTarefa(path: string, activityId: string, etapaAlvo?
       modelo: out.model, parcial: out.parcial, partes: out.partes ?? null, naoLidas: out.naoLidas ?? null,
     })
     revalidatePath(path)
-    return { ok: true, errors: out.errors, model: out.model, truncated: out.truncated, parcial: out.parcial, naoLidas: out.naoLidas ?? [], partes: out.partes ?? 1 }
+    return { ok: true, errors: out.errors, model: out.model, truncated: out.truncated, parcial: out.parcial, naoLidas: out.naoLidas ?? [], partes: out.partes ?? 1, reaproveitada: !!out.reaproveitada }
   } catch (e) {
     console.error('[revisao] falhou', e)
     await logSystemError(supabase, { userId: user.id, context: `review:${etapa}`, error: e, activityId })

@@ -31,7 +31,15 @@ import { createHash } from 'crypto'
 type SB = SupabaseClient<Database>
 
 /** Impressão digital do material revisado: versões dos arquivos + hash do texto. */
-export interface FonteRevisao { arquivos: VersaoArquivo[]; hash?: string }
+export interface FonteRevisao {
+  arquivos: VersaoArquivo[]
+  /** Hash do texto da Redação lido. */
+  hash?: string
+  /** Hash do briefing + comentários usados (comentário novo = revisar de verdade). */
+  ctx?: string
+  /** Design: hash do texto aprovado da Redação conferido junto. */
+  aprovado?: string
+}
 
 /** Revisão vigente de uma etapa (tabela activity_revisao). */
 export interface RevisaoSalva {
@@ -44,8 +52,12 @@ export interface RevisaoSalva {
 }
 
 export type RevisaoOutcome =
-  | { ok: true; errors: ReviewError[]; model: string; truncated: boolean; fonte: FonteRevisao | null; texto: string | null; parcial: boolean; naoLidas?: string[]; partes?: number }
-  | { ok: false; vazio: string; fonte: FonteRevisao | null }
+  | { ok: true; errors: ReviewError[]; model: string; truncated: boolean; fonte: FonteRevisao | null; texto: string | null; parcial: boolean; naoLidas?: string[]; partes?: number; reaproveitada?: boolean }
+  /** naoLido = havia arquivos, mas nada pôde ser lido (pede confirmação para avançar). */
+  | { ok: false; vazio: string; fonte: FonteRevisao | null; naoLido?: boolean }
+
+/** Estados cuja lista de apontamentos pode ser reaproveitada se nada mudou. */
+const REAPROVEITAVEL = new Set(['clean', 'errors', 'overridden'])
 
 const hashTexto = (t: string) => createHash('sha256').update(t.replace(/\s+/g, ' ').trim()).digest('hex')
 
@@ -128,15 +140,24 @@ export async function revisarAtividade(
   }
   // Versões ANTES de ler: se alguém editar durante a revisão, a próxima checagem pega.
   const versoes = act ? await versoesAtuais(act, etapa).catch(() => null) : null
+  const ctx = await contextoDaTarefa(supabase, activityId)
+  const ctxHash = hashTexto(JSON.stringify(ctx))
+  // Nada mudou desde a última revisão (material, briefing, comentários)? Devolve o
+  // mesmo resultado sem chamar a IA — 12/10: 40% das tarefas eram revisadas 3 a 9
+  // vezes, às vezes em segundos, e o resultado oscilava entre cliques.
+  const reaproveitar = (fonte: FonteRevisao | null): RevisaoOutcome | null =>
+    anterior && fonte && REAPROVEITAVEL.has(anterior.status) && anterior.fonte?.ctx === ctxHash
+      ? { ok: true, errors: anterior.apontamentos, model: 'reaproveitada', truncated: false, fonte, texto: anterior.texto, parcial: false, reaproveitada: true }
+      : null
 
   if (etapa === 'redacao') {
     // No S3 a redação é .docx; o leitor de Word entra com o módulo de Redação.
     if (isS3) return { ok: false, vazio: 'A redação desta tarefa está em arquivo Word — a revisão de texto ainda não lê .docx.', fonte: null }
     if (!act?.redacao_url) return { ok: false, vazio: 'Sem link de Redação nesta tarefa.', fonte: null }
     const text = await lerRedacao('review:redacao')
-    const fonte = versoes ? { arquivos: versoes, hash: hashTexto(text) } : null
+    const fonte = versoes ? { arquivos: versoes, hash: hashTexto(text), ctx: ctxHash } : null
     if (!text.trim()) return { ok: false, vazio: 'O Doc de Redação está vazio.', fonte }
-    const ctx = await contextoDaTarefa(supabase, activityId)
+    if (fonte && anterior?.fonte?.hash === fonte.hash) { const r = reaproveitar(fonte); if (r) return r }
     // Já revisada antes (com o texto guardado): olha só o que mudou.
     if (anterior?.texto && anterior.status !== 'failed') {
       const r = await reviewTextAlteracoes(cfg, text, {
@@ -157,16 +178,28 @@ export async function revisarAtividade(
     if (!link || !driveConfigured()) return { ok: false, vazio: `Sem pasta de ${sub} nesta tarefa.`, fonte: null }
     pecasLidas = await listarPecasRevisao(link)
   }
-  const fonte = versoes ? { arquivos: versoes } : null
-  if (!pecasLidas.pecas.length) {
-    return { ok: false, vazio: pecasLidas.naoLidas.length
-      ? `Nenhuma peça pôde ser lida na pasta ${sub}: ${pecasLidas.naoLidas.join('; ')}.`
-      : `Nenhuma peça (imagem/PDF) na pasta ${sub}.`, fonte }
-  }
-
   // Design confere também contra o texto aprovado da Redação (em cada parte).
   const aprovado = etapa === 'design' ? await lerRedacao('review:design') : ''
-  const r = await reviewArtwork(cfg, pecasLidas, aprovado, await contextoDaTarefa(supabase, activityId))
+  const fonte: FonteRevisao | null = versoes ? { arquivos: versoes, ctx: ctxHash, aprovado: hashTexto(aprovado) } : null
+
+  // Havia arquivos, mas nada que a IA leia (só subpastas, Mockups, formato não lido,
+  // grande demais): NÃO conta como revisado — 12/10: Livro Zezé (PDF de 33 MB) e Long
+  // neck (peças em subpastas) passaram "revisados" sem a IA ver nada.
+  const nadaLido = (motivos: string[]) => ({
+    ok: false as const, naoLido: true, fonte,
+    vazio: `Nada pôde ser revisado na pasta ${sub}${motivos.length ? `: ${motivos.join('; ')}` : ''}. Subpastas e Mockups ficam fora da revisão.`,
+  })
+  if (!pecasLidas.pecas.length) {
+    if (pecasLidas.naoLidas.length || pecasLidas.outros) return nadaLido(pecasLidas.naoLidas)
+    return { ok: false, vazio: `Nenhuma peça (imagem/PDF) na pasta ${sub}.`, fonte }
+  }
+  const mesmoMaterial = fonte && anterior?.fonte?.arquivos
+    && anterior.fonte.arquivos.length === fonte.arquivos.length && mesmasVersoes(anterior.fonte.arquivos, fonte.arquivos)
+    && anterior.fonte.aprovado === fonte.aprovado
+  if (mesmoMaterial) { const r = reaproveitar(fonte); if (r) return r }
+
+  const r = await reviewArtwork(cfg, pecasLidas, aprovado, ctx)
+  if (!r.lidas) return nadaLido(r.naoLidas ?? [])
   return { ok: true, ...r, fonte, texto: null, parcial: false }
 }
 
@@ -256,7 +289,7 @@ async function contextoDaTarefa(supabase: SupabaseClient<Database>, activityId: 
 export type VeredictoAvanco =
   | { ok: true; nota?: string }
   | { ok: false; motivo: 'precisa_revisar'; mensagem: string }
-  | { ok: false; motivo: 'confirmar'; mensagem: string; erros: ReviewError[]; falhou: boolean }
+  | { ok: false; motivo: 'confirmar'; mensagem: string; erros: ReviewError[]; falhou: boolean; semLeitura?: boolean }
 
 /** Como a tarefa se refere ao material de cada etapa nos avisos. */
 export const MATERIAL: Record<RevisaoEtapa, string> = {
@@ -309,31 +342,38 @@ export async function checarAvanco(
   if (m && await materialMudou(m, rev)) {
     return { ok: false, motivo: 'precisa_revisar', mensagem: `${MATERIAL[e]} depois da revisão de ${label}: revise de novo na tarefa.` }
   }
-  if (rev.status !== 'errors' && rev.status !== 'failed') return { ok: true }
+  if (rev.status !== 'errors' && rev.status !== 'failed' && rev.status !== 'nao_lido') return { ok: true }
   const confirmar: { etapa: RevisaoEtapa; rev: RevisaoSalva }[] = [{ etapa: e, rev }]
 
-  const erros = confirmar.flatMap(c => c.rev.status === 'failed' ? [] : c.rev.apontamentos)
-  const falhou = confirmar.every(c => c.rev.status === 'failed')
+  const semLeitura = rev.status === 'nao_lido'
+  const falhou = rev.status === 'failed' || semLeitura
+  const erros = falhou ? [] : rev.apontamentos
   const labels = label
   if (!aceitar) {
     return {
-      ok: false, motivo: 'confirmar', erros, falhou,
-      mensagem: falhou
-        ? `A revisão de ${labels} não foi concluída. Abra a tarefa para confirmar que segue sem ela.`
-        : `A revisão de ${labels} tem ${erros.length} ${erros.length === 1 ? 'apontamento' : 'apontamentos'}. Abra a tarefa para confirmar que segue assim.`,
+      ok: false, motivo: 'confirmar', erros, falhou, semLeitura,
+      mensagem: semLeitura
+        ? `Nada de ${labels} pôde ser revisado pela IA. Abra a tarefa para confirmar que segue sem revisão.`
+        : falhou
+          ? `A revisão de ${labels} não foi concluída. Abra a tarefa para confirmar que segue sem ela.`
+          : `A revisão de ${labels} tem ${erros.length} ${erros.length === 1 ? 'apontamento' : 'apontamentos'}. Abra a tarefa para confirmar que segue assim.`,
     }
   }
   for (const c of confirmar) {
+    // Seguir sem revisão (falha/nada lido) NÃO vira 'overridden': esse estado é
+    // reaproveitado como resultado, e aqui não houve resultado nenhum.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from('activity_revisao').update({ status: 'overridden' })
+    await (supabase as any).from('activity_revisao').update({ status: falhou ? 'seguiu_sem_revisao' : 'overridden' })
       .eq('activity_id', activityId).eq('etapa', c.etapa)
     await registrarHistorico(supabase, activityId, userId, c.etapa, {
-      evento: 'seguiu', status: c.rev.status, apontamentos: c.rev.status === 'failed' ? null : c.rev.apontamentos,
+      evento: 'seguiu', status: c.rev.status, apontamentos: falhou ? null : c.rev.apontamentos,
     })
   }
   return {
     ok: true,
-    nota: falhou
+    nota: semLeitura
+      ? `Seguiu sem a revisão de ${labels} (nada pôde ser lido pela IA).`
+      : falhou
       ? `Seguiu sem a revisão de ${labels} (a IA não respondeu).`
       : `Seguiu com ${erros.length} ${erros.length === 1 ? 'apontamento' : 'apontamentos'} da revisão de ${labels}.`,
   }
