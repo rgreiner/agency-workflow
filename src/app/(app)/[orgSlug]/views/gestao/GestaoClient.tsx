@@ -9,7 +9,7 @@ import { MultiSelect, Select } from '@/components/ui/Select'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { AlertTriangle, UserX, CalendarOff, PauseCircle, Loader2, Activity as ActivityIcon, X, ExternalLink, ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import { formatBRL } from '@/lib/midia'
-import { templateComExtras, GRUPO_FORA, type DreLine } from '@/lib/dre-template'
+import { templateComExtras, dentroDe, GRUPO_FORA, type DreLine, type DreConfig } from '@/lib/dre-template'
 
 export interface ProblemTask { status: string; ws_id: string; ws_name: string; assignees: string[]; dias: number }
 export interface CargaRow { user_id: string; full_name: string | null; avatar_url: string | null; ativas: number; horas: number }
@@ -45,7 +45,7 @@ const DIAS_OPTIONS = [
 const KIND_LABEL: Record<string, string> = { status: 'status', campo: 'campos', comentario: 'comentários', reacao: 'reações' }
 
 export function GestaoClient({
-  orgSlug, workspaces, wsFilter, dias, mes, aba: abaInicial, gestao, engajamento, financeiro,
+  orgSlug, workspaces, wsFilter, dias, mes, aba: abaInicial, gestao, engajamento, financeiro, dre,
 }: {
   orgSlug: string
   workspaces: { id: string; name: string }[]
@@ -56,6 +56,8 @@ export function GestaoClient({
   gestao: GestaoData | null
   engajamento: EngajamentoData | null
   financeiro: FinanceiroData | null
+  /** Ajustes da org sobre a estrutura padrão da DRE (org_settings.dre_estrutura). */
+  dre?: DreConfig | null
 }) {
   const router = useRouter()
   const [aba, setAba] = useState(abaInicial)
@@ -112,7 +114,7 @@ export function GestaoClient({
 
       {aba === 'operacao' && <Operacao orgSlug={orgSlug} gestao={gestao} />}
       {aba === 'engajamento' && <Engajamento engajamento={engajamento} />}
-      {aba === 'financeiro' && <Financeiro orgSlug={orgSlug} fin={financeiro} />}
+      {aba === 'financeiro' && <Financeiro orgSlug={orgSlug} fin={financeiro} dre={dre} />}
     </div>
   )
 }
@@ -317,20 +319,19 @@ function countBy(rows: ProblemTask[], key: (t: ProblemTask) => string) {
 // ── Financeiro (macro do mês: fluxo, o que acelerar, despesas) ───────────────
 const TIPO_MIDIA: Record<string, string> = { impressa_jornal: 'Impressa (jornal)', impressa_revista: 'Impressa (revista)', eletronica: 'Eletrônica', externa: 'Externa', digital: 'Digital', outros: 'Outros' }
 
-function Financeiro({ orgSlug, fin }: { orgSlug: string; fin: FinanceiroData | null }) {
+function Financeiro({ orgSlug, fin, dre }: { orgSlug: string; fin: FinanceiroData | null; dre?: DreConfig | null }) {
   if (!fin) return <p className="text-sm text-gray-400">Sem dados.</p>
 
   const resultado = Number(fin.recebido) - Number(fin.pago)
   const margem = Number(fin.recebido) > 0 ? (resultado / Number(fin.recebido)) * 100 : 0
 
   // ── DRE mensal pela estrutura contábil ──
-  // O template é fixo; categoria que não está nele não entrava em nenhuma linha e
-  // sumia do resultado sem aviso. `templateComExtras` acrescenta um grupo com o
-  // que apareceu no período e ainda não foi mapeado, para o erro ficar visível.
+  // A estrutura é a padrão + o que a org ajustou (Financeiro → Estrutura da DRE).
+  // Categoria fora dela cai num grupo próprio, para o erro ficar visível.
   const meses = fin.dre_meses
   const realMap = catMesMap(fin.dre_real)
   const prevMap = catMesMap(fin.dre_prev)
-  const template = templateComExtras([...realMap.keys(), ...prevMap.keys()])
+  const template = templateComExtras([...realMap.keys(), ...prevMap.keys()], dre)
   const gv = (map: Map<string, Map<string, number>>, cat: string, m: string) => map.get(cat)?.get(m) ?? 0
   const folhasDe = (pred: (l: Extract<DreLine, { kind: 'folha' }>) => boolean) =>
     template.filter((l): l is Extract<DreLine, { kind: 'folha' }> => l.kind === 'folha' && pred(l))
@@ -347,7 +348,8 @@ function Financeiro({ orgSlug, fin }: { orgSlug: string; fin: FinanceiroData | n
       const fs = folhasDe(l => l.grupo === line.code)
       for (const m of meses) { vr[m] = fs.reduce((s, l) => s + gv(realMap, l.categoria, m), 0); vp[m] = fs.reduce((s, l) => s + gv(prevMap, l.categoria, m), 0) }
     } else if (line.kind === 'sub') {
-      const fs = folhasDe(l => l.sub === line.code)
+      // Subgrupo soma também os que se abrem dentro dele (06.2 inclui 06.2.1).
+      const fs = folhasDe(l => dentroDe(l.sub, line.code))
       for (const m of meses) { vr[m] = fs.reduce((s, l) => s + gv(realMap, l.categoria, m), 0); vp[m] = fs.reduce((s, l) => s + gv(prevMap, l.categoria, m), 0) }
     } else {
       for (const m of meses) { vr[m] = accR[m]; vp[m] = accP[m] }
@@ -409,7 +411,8 @@ function Financeiro({ orgSlug, fin }: { orgSlug: string; fin: FinanceiroData | n
           Realizado (topo) × previsto (cinza), em milhares (k). Últimos 6 meses.
           {nFora > 0 && (
             <span className="text-amber-600">
-              {' '}· {nFora} categoria{nFora > 1 ? 's' : ''} ainda fora da estrutura contábil, no fim da tabela — some{nFora > 1 ? 'm' : ''} do resultado até serem mapeadas.
+              {' '}· {nFora} categoria{nFora > 1 ? 's' : ''} ainda fora da estrutura contábil, no fim da tabela.{' '}
+              <Link href={`/${orgSlug}/financeiro/dre`} className="font-medium underline underline-offset-2 hover:text-amber-700">Ajustar a estrutura</Link>
             </span>
           )}
         </p>
@@ -433,7 +436,8 @@ function Financeiro({ orgSlug, fin }: { orgSlug: string; fin: FinanceiroData | n
                       isGrupo && (fora ? 'bg-amber-50/70' : 'bg-gray-50/60'))}>
                       <td className={cn('text-left py-1.5 px-2 sticky left-0 truncate max-w-[220px]',
                         isGrupo && fora ? 'bg-amber-50/70' : 'bg-white',
-                        isSub && 'pl-5 text-gray-500 text-[13px]', line.kind === 'folha' && 'pl-7 text-gray-600',
+                        isSub && (line.code.split('.').length > 2 ? 'pl-8' : 'pl-5'), isSub && 'text-gray-500 text-[13px]',
+                        line.kind === 'folha' && (line.sub.split('.').length > 2 ? 'pl-10' : 'pl-7'), line.kind === 'folha' && 'text-gray-600',
                         fora && !strong && 'text-amber-700',
                         strong ? (fora ? 'font-semibold text-amber-800' : 'font-semibold text-gray-800') : '')}
                         title={fora && line.kind === 'folha' ? `${lbl(line)} — categoria ainda não mapeada na estrutura da DRE` : lbl(line)}>{lbl(line)}</td>

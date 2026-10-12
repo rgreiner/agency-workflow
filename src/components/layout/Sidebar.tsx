@@ -157,6 +157,7 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Margem por cliente', href: 'financeiro/margem' },
     { label: 'Fechamento',     href: 'financeiro/fechamento' },
     { label: 'Categorias',     href: 'financeiro/categorias', heading: 'Ajustes' },
+    { label: 'Estrutura da DRE', href: 'financeiro/dre' },
     { label: 'Lixeira',        href: 'financeiro/lixeira' },
   ] },
   { id: 'cadastros', label: 'Cadastros', icon: Users, items: [

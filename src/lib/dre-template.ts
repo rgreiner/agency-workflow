@@ -1,101 +1,159 @@
-// Template da DRE (estrutura contábil vinda do Conta Azul, via anexo pivot.xlsx).
-// Ordem importa: grupos (NN) → subgrupos (NN.N) → folhas (= categoria do lançamento)
-// → totais (NNT, subtotal corrido). Sinal vem do tipo do lançamento (receita +,
+// Estrutura da DRE (vinda do Conta Azul, via anexo pivot.xlsx).
+//
+// Três camadas: grupos (NN, fixos, cada um com o seu total corrido NNT) →
+// subgrupos (NN.N, e NN.N.N quando um subgrupo se abre em outro) → folhas
+// (= categoria do lançamento). O sinal vem do tipo do lançamento (receita +,
 // despesa −), então os totais são soma corrida das folhas acima.
+//
+// O código traz o PADRÃO. A org pode acrescentar subgrupos e mover categorias
+// pela tela Financeiro → Estrutura da DRE; isso fica em org_settings.dre_estrutura
+// (mig. 340) como DIFERENÇA sobre o padrão — assim um ajuste no padrão continua
+// valendo para o que a org não mexeu. Módulo puro: roda no client e no server.
 
 export type DreLine =
   | { kind: 'grupo'; code: string; label: string }
-  | { kind: 'sub'; code: string; label: string; grupo: string }
+  | { kind: 'sub'; code: string; label: string; grupo: string; custom?: boolean }
   | { kind: 'folha'; categoria: string; grupo: string; sub: string }
   | { kind: 'total'; code: string; label: string }
 
-export const DRE_TEMPLATE: DreLine[] = [
-  { kind: 'grupo', code: "01", label: "Receitas Operacionais" },
-  { kind: 'sub', code: "01.1", label: "Receita de Vendas de Produtos e Serviços", grupo: "01" },
-  { kind: 'folha', categoria: "Comissão", grupo: "01", sub: "01.1" },
-  { kind: 'folha', categoria: "Fee", grupo: "01", sub: "01.1" },
-  { kind: 'folha', categoria: "Job", grupo: "01", sub: "01.1" },
-  { kind: 'folha', categoria: "Produção", grupo: "01", sub: "01.1" },
-  { kind: 'sub', code: "01.2", label: "Receita de Fretes e Entregas", grupo: "01" },
-  { kind: 'total', code: "01T", label: "Receita Bruta de Vendas" },
-  { kind: 'grupo', code: "02", label: "Deduções da Receita Bruta" },
-  { kind: 'sub', code: "02.1", label: "Impostos Sobre Vendas", grupo: "02" },
-  { kind: 'folha', categoria: "Simples Nacional - DAS", grupo: "02", sub: "02.1" },
-  { kind: 'sub', code: "02.2", label: "Comissões Sobre Vendas", grupo: "02" },
-  { kind: 'sub', code: "02.3", label: "Descontos Incondicionais", grupo: "02" },
-  { kind: 'sub', code: "02.4", label: "Devoluções de Vendas", grupo: "02" },
-  { kind: 'total', code: "02T", label: "Receita Líquida de Vendas" },
-  { kind: 'grupo', code: "03", label: "Custos Operacionais" },
-  { kind: 'sub', code: "03.1", label: "Custo dos Produtos Vendidos", grupo: "03" },
-  { kind: 'folha', categoria: "Custo dos produtos vendidos", grupo: "03", sub: "03.1" },
-  { kind: 'sub', code: "03.2", label: "Custo das Vendas de Produtos", grupo: "03" },
-  { kind: 'sub', code: "03.3", label: "Custo dos Serviços Prestados", grupo: "03" },
-  { kind: 'total', code: "03T", label: "Lucro Bruto" },
-  { kind: 'grupo', code: "04", label: "Despesas Operacionais" },
-  { kind: 'sub', code: "04.1", label: "Despesas Comerciais", grupo: "04" },
-  { kind: 'sub', code: "04.2", label: "Despesas Administrativas", grupo: "04" },
-  { kind: 'folha', categoria: "Aluguel", grupo: "04", sub: "04.2" },
-  { kind: 'folha', categoria: "Alvará de Funcionamento", grupo: "04", sub: "04.2" },
-  { kind: 'folha', categoria: "Condomínio", grupo: "04", sub: "04.2" },
-  { kind: 'folha', categoria: "Darf - INSS e IRRF", grupo: "04", sub: "04.2" },
-  { kind: 'folha', categoria: "Energia Elétrica", grupo: "04", sub: "04.2" },
-  { kind: 'folha', categoria: "FGTS", grupo: "04", sub: "04.2" },
-  { kind: 'folha', categoria: "Honorários Contábeis", grupo: "04", sub: "04.2" },
-  { kind: 'folha', categoria: "Limpeza", grupo: "04", sub: "04.2" },
-  { kind: 'folha', categoria: "Remuneração de Estagiários", grupo: "04", sub: "04.2" },
-  { kind: 'folha', categoria: "Remuneração Funcionários", grupo: "04", sub: "04.2" },
-  { kind: 'folha', categoria: "Supermercado", grupo: "04", sub: "04.2" },
-  { kind: 'folha', categoria: "Telefonia e Internet", grupo: "04", sub: "04.2" },
-  { kind: 'folha', categoria: "Telefonia Móvel", grupo: "04", sub: "04.2" },
-  { kind: 'folha', categoria: "Transporte Urbano (táxi, Uber)", grupo: "04", sub: "04.2" },
-  { kind: 'folha', categoria: "Vale Refeição", grupo: "04", sub: "04.2" },
-  { kind: 'folha', categoria: "Vale-Transporte", grupo: "04", sub: "04.2" },
-  { kind: 'sub', code: "04.3", label: "Despesas Operacionais", grupo: "04" },
-  { kind: 'total', code: "04T", label: "Lucro / Prejuízo Operacional" },
-  { kind: 'grupo', code: "05", label: "Receitas e Despesas Financeiras" },
-  { kind: 'sub', code: "05.1", label: "Receitas e Rendimentos Financeiros", grupo: "05" },
-  { kind: 'folha', categoria: "Rendimentos de Aplicações", grupo: "05", sub: "05.1" },
-  { kind: 'sub', code: "05.2", label: "Despesas Financeiras", grupo: "05" },
-  { kind: 'grupo', code: "06", label: "Outras Receitas e Despesas Não Operacionais" },
-  { kind: 'sub', code: "06.1", label: "Outras Receitas Não Operacionais", grupo: "06" },
-  { kind: 'sub', code: "06.2", label: "Outras Despesas Não Operacionais", grupo: "06" },
-  { kind: 'folha', categoria: "Distribuição de Lucros", grupo: "06", sub: "06.2" },
-  { kind: 'folha', categoria: "Quitação de Passivos", grupo: "06", sub: "06.2" },
-  { kind: 'total', code: "06T", label: "Lucro / Prejuízo Líquido" },
-  { kind: 'grupo', code: "07", label: "Despesas com Investimentos e Empréstimos" },
-  { kind: 'sub', code: "07.1", label: "Investimentos em Imobilizado", grupo: "07" },
-  { kind: 'folha', categoria: "Software / Licença de Uso", grupo: "07", sub: "07.1" },
-  { kind: 'sub', code: "07.2", label: "Empréstimos e Dívidas", grupo: "07" },
-  { kind: 'total', code: "07T", label: "Lucro / Prejuízo Final" },
+export interface DreGrupo { code: string; label: string; total?: string }
+export interface DreSub { code: string; label: string; grupo: string }
+
+/** O que a org mudou sobre o padrão. `mapa[categoria] = ''` tira a categoria da DRE. */
+export interface DreConfig {
+  subs?: DreSub[]
+  mapa?: Record<string, string>
+}
+
+export const DRE_GRUPOS: DreGrupo[] = [
+  { code: '01', label: 'Receitas Operacionais', total: 'Receita Bruta de Vendas' },
+  { code: '02', label: 'Deduções da Receita Bruta', total: 'Receita Líquida de Vendas' },
+  { code: '03', label: 'Custos Operacionais', total: 'Lucro Bruto' },
+  { code: '04', label: 'Despesas Operacionais', total: 'Lucro / Prejuízo Operacional' },
+  { code: '05', label: 'Receitas e Despesas Financeiras' },
+  { code: '06', label: 'Outras Receitas e Despesas Não Operacionais', total: 'Lucro / Prejuízo Líquido' },
+  { code: '07', label: 'Despesas com Investimentos e Empréstimos', total: 'Lucro / Prejuízo Final' },
 ]
 
-// Categorias-folha conhecidas (p/ detectar lançamentos fora do template).
-export const DRE_CATEGORIAS = new Set(DRE_TEMPLATE.filter(l => l.kind === 'folha').map(l => (l as { categoria: string }).categoria))
+export const DRE_SUBS_PADRAO: DreSub[] = [
+  { code: '01.1', label: 'Receita de Vendas de Produtos e Serviços', grupo: '01' },
+  { code: '01.2', label: 'Receita de Fretes e Entregas', grupo: '01' },
+  { code: '02.1', label: 'Impostos Sobre Vendas', grupo: '02' },
+  { code: '02.2', label: 'Comissões Sobre Vendas', grupo: '02' },
+  { code: '02.3', label: 'Descontos Incondicionais', grupo: '02' },
+  { code: '02.4', label: 'Devoluções de Vendas', grupo: '02' },
+  { code: '03.1', label: 'Custo dos Produtos Vendidos', grupo: '03' },
+  { code: '03.2', label: 'Custo das Vendas de Produtos', grupo: '03' },
+  { code: '03.3', label: 'Custo dos Serviços Prestados', grupo: '03' },
+  { code: '04.1', label: 'Despesas Comerciais', grupo: '04' },
+  { code: '04.2', label: 'Despesas Administrativas', grupo: '04' },
+  { code: '04.3', label: 'Despesas Operacionais', grupo: '04' },
+  { code: '05.1', label: 'Receitas e Rendimentos Financeiros', grupo: '05' },
+  { code: '05.2', label: 'Despesas Financeiras', grupo: '05' },
+  { code: '06.1', label: 'Outras Receitas Não Operacionais', grupo: '06' },
+  { code: '06.2', label: 'Outras Despesas Não Operacionais', grupo: '06' },
+  // Desligamento fica fora do administrativo de propósito (Rafael, 12/10/2026):
+  // a casa quer enxergar quanto custa uma saída, separado do custo de operar.
+  { code: '06.2.1', label: 'Desligamentos', grupo: '06' },
+  { code: '07.1', label: 'Investimentos em Imobilizado', grupo: '07' },
+  { code: '07.2', label: 'Empréstimos e Dívidas', grupo: '07' },
+]
+
+/** Categoria → subgrupo, no padrão. A ordem aqui é a ordem das folhas na tabela. */
+export const DRE_MAPA_PADRAO: Record<string, string> = {
+  'Comissão': '01.1', 'Fee': '01.1', 'Job': '01.1', 'Produção': '01.1',
+  'Receitas de Serviços': '01.1', 'Receitas de Vendas': '01.1',
+  'Simples Nacional - DAS': '02.1',
+  'Custo dos produtos vendidos': '03.1',
+  'Marketing e Publicidade': '04.1',
+  'Aluguel': '04.2', 'Alvará de Funcionamento': '04.2', 'Condomínio': '04.2',
+  'Confraternizações': '04.2', 'Darf - INSS e IRRF': '04.2', 'Energia Elétrica': '04.2',
+  'Exames Demissionais e Admissionais': '04.2', 'FGTS': '04.2',
+  // Free Lancer é gente contratada de fora: despesa de pessoas, ao lado da folha.
+  'Free Lancer': '04.2', 'Gratificações': '04.2', 'Honorários Contábeis': '04.2',
+  'Limpeza': '04.2', 'Manutenção de Equipamentos': '04.2', 'Manutenção Salas': '04.2',
+  'Materiais de Limpeza e de Higiene': '04.2',
+  'Remuneração de Estagiários': '04.2', 'Remuneração Funcionários': '04.2',
+  'Supermercado': '04.2', 'Telefonia e Internet': '04.2', 'Telefonia Móvel': '04.2',
+  'Transporte Urbano (táxi, Uber)': '04.2', 'Vale Refeição': '04.2', 'Vale-Transporte': '04.2',
+  // "Rendimentos" é o nome que a importação de OFX cria.
+  'Rendimentos': '05.1', 'Rendimentos de Aplicações': '05.1',
+  'Tarifas Bancárias': '05.2',
+  'Distribuição de Lucros': '06.2', 'Quitação de Passivos': '06.2',
+  'Multa FGTS': '06.2.1', 'Rescisões': '06.2.1',
+  // Compra e venda do imobilizado juntas: o saldo é o investimento líquido.
+  'Imobilizado': '07.1', 'Venda de Imobilizado': '07.1', 'Software / Licença de Uso': '07.1',
+  'Empréstimos': '07.2', 'Empréstimos de Bancos': '07.2',
+}
 
 /** Código do grupo que recolhe o que não está na estrutura contábil. */
 export const GRUPO_FORA = '99'
 
+/** Ordem natural de códigos: 06.2 < 06.2.1 < 06.10. */
+export function compararCodigo(a: string, b: string): number {
+  const pa = a.split('.').map(Number), pb = b.split('.').map(Number)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i] ?? -1, y = pb[i] ?? -1
+    if (x !== y) return x - y
+  }
+  return 0
+}
+
+/** Subgrupos valendo para a org: os do padrão + os que ela criou, em ordem. */
+export function subsDaOrg(config?: DreConfig | null): (DreSub & { custom?: boolean })[] {
+  const padrao = new Set(DRE_SUBS_PADRAO.map(s => s.code))
+  const extras = (config?.subs ?? []).filter(s => s?.code && !padrao.has(s.code)).map(s => ({ ...s, custom: true }))
+  return [...DRE_SUBS_PADRAO, ...extras].sort((a, b) => compararCodigo(a.code, b.code))
+}
+
+/** Categoria → subgrupo valendo para a org (só aponta para subgrupo que existe). */
+export function mapaDaOrg(config?: DreConfig | null): Map<string, string> {
+  const existe = new Set(subsDaOrg(config).map(s => s.code))
+  const m = new Map<string, string>()
+  for (const [cat, sub] of Object.entries({ ...DRE_MAPA_PADRAO, ...(config?.mapa ?? {}) })) {
+    if (sub && existe.has(sub)) m.set(cat, sub)
+  }
+  return m
+}
+
+/** O subgrupo `sub` é ele mesmo ou está dentro de `pai`? (06.2.1 está dentro de 06.2) */
+export const dentroDe = (sub: string, pai: string) => sub === pai || sub.startsWith(`${pai}.`)
+
 /**
- * Template + as categorias que APARECERAM no período e não estão na estrutura.
+ * A estrutura montada + as categorias que APARECERAM no período e não estão nela.
  *
- * O template é uma lista fixa; até aqui, lançamento com categoria fora dela não
- * entrava em nenhuma linha e simplesmente sumia do resultado, sem aviso. E não é
- * pouca coisa: medido em produção, 21 categorias ficavam de fora, entre elas
- * "Empréstimos de Bancos" (R$ 141,7 mil em 6 meses) e "Rendimentos" — que a
- * própria importação de OFX cria, enquanto o template só conhece "Rendimentos de
- * Aplicações". Agora elas aparecem num grupo próprio, e o resultado final passa
- * a incluir tudo. O erro fica visível em vez de desaparecer.
+ * Lançamento com categoria fora da estrutura não entrava em nenhuma linha e
+ * sumia do resultado sem aviso (medido: 21 categorias, entre elas "Empréstimos
+ * de Bancos", R$ 141,7 mil em 6 meses). Agora elas aparecem num grupo próprio,
+ * e o resultado final inclui tudo. O erro fica visível em vez de desaparecer.
  *
  * `categorias` = todas as que vieram do banco (realizado + previsto).
  */
-export function templateComExtras(categorias: Iterable<string>): DreLine[] {
+export function templateComExtras(categorias: Iterable<string>, config?: DreConfig | null): DreLine[] {
+  const subs = subsDaOrg(config)
+  const mapa = mapaDaOrg(config)
+  const ordem = Object.keys(DRE_MAPA_PADRAO)
+  const pos = (c: string) => { const i = ordem.indexOf(c); return i < 0 ? Infinity : i }
+
+  const linhas: DreLine[] = []
+  for (const g of DRE_GRUPOS) {
+    linhas.push({ kind: 'grupo', code: g.code, label: g.label })
+    for (const s of subs.filter(x => x.grupo === g.code)) {
+      linhas.push({ kind: 'sub', code: s.code, label: s.label, grupo: g.code, custom: s.custom })
+      const folhas = [...mapa].filter(([, sub]) => sub === s.code).map(([c]) => c)
+        .sort((a, b) => pos(a) - pos(b) || a.localeCompare(b, 'pt-BR'))
+      for (const categoria of folhas) linhas.push({ kind: 'folha', categoria, grupo: g.code, sub: s.code })
+    }
+    if (g.total) linhas.push({ kind: 'total', code: `${g.code}T`, label: g.total })
+  }
+
   const extras = [...new Set(categorias)]
-    .filter(c => c && !DRE_CATEGORIAS.has(c))
+    .filter(c => c && !mapa.has(c))
     .sort((a, b) => a.localeCompare(b, 'pt-BR'))
-  if (extras.length === 0) return DRE_TEMPLATE
+  if (extras.length === 0) return linhas
 
   return [
-    ...DRE_TEMPLATE,
+    ...linhas,
     { kind: 'grupo', code: GRUPO_FORA, label: 'Fora da estrutura contábil' },
     { kind: 'sub', code: '99.1', label: 'Categorias ainda não mapeadas na DRE', grupo: GRUPO_FORA },
     ...extras.map((categoria): DreLine => ({ kind: 'folha', categoria, grupo: GRUPO_FORA, sub: '99.1' })),
