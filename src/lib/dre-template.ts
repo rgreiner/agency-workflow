@@ -48,6 +48,9 @@ export const DRE_SUBS_PADRAO: DreSub[] = [
   { code: '04.1', label: 'Despesas Comerciais', grupo: '04' },
   { code: '04.2', label: 'Despesas Administrativas', grupo: '04' },
   { code: '04.3', label: 'Despesas Operacionais', grupo: '04' },
+  // Pessoal separado do administrativo (Rafael, 12/10/2026): misturada com
+  // aluguel e energia, a folha — o maior custo da casa — não aparecia sozinha.
+  { code: '04.4', label: 'Despesas com Pessoal', grupo: '04' },
   { code: '05.1', label: 'Receitas e Rendimentos Financeiros', grupo: '05' },
   { code: '05.2', label: 'Despesas Financeiras', grupo: '05' },
   { code: '06.1', label: 'Outras Receitas Não Operacionais', grupo: '06' },
@@ -67,15 +70,15 @@ export const DRE_MAPA_PADRAO: Record<string, string> = {
   'Custo dos produtos vendidos': '03.1',
   'Marketing e Publicidade': '04.1',
   'Aluguel': '04.2', 'Alvará de Funcionamento': '04.2', 'Condomínio': '04.2',
-  'Confraternizações': '04.2', 'Darf - INSS e IRRF': '04.2', 'Energia Elétrica': '04.2',
-  'Exames Demissionais e Admissionais': '04.2', 'FGTS': '04.2',
-  // Free Lancer é gente contratada de fora: despesa de pessoas, ao lado da folha.
-  'Free Lancer': '04.2', 'Gratificações': '04.2', 'Honorários Contábeis': '04.2',
+  'Confraternizações': '04.2', 'Energia Elétrica': '04.2', 'Honorários Contábeis': '04.2',
   'Limpeza': '04.2', 'Manutenção de Equipamentos': '04.2', 'Manutenção Salas': '04.2',
-  'Materiais de Limpeza e de Higiene': '04.2',
-  'Remuneração de Estagiários': '04.2', 'Remuneração Funcionários': '04.2',
-  'Supermercado': '04.2', 'Telefonia e Internet': '04.2', 'Telefonia Móvel': '04.2',
-  'Transporte Urbano (táxi, Uber)': '04.2', 'Vale Refeição': '04.2', 'Vale-Transporte': '04.2',
+  'Materiais de Limpeza e de Higiene': '04.2', 'Supermercado': '04.2',
+  'Telefonia e Internet': '04.2', 'Telefonia Móvel': '04.2', 'Transporte Urbano (táxi, Uber)': '04.2',
+  // Pessoal: salário, encargos, benefícios e quem é contratado por fora.
+  // Free Lancer é fornecedor, mas é gente fazendo o trabalho da casa.
+  'Remuneração Funcionários': '04.4', 'Remuneração de Estagiários': '04.4', 'Free Lancer': '04.4',
+  'Gratificações': '04.4', 'Darf - INSS e IRRF': '04.4', 'FGTS': '04.4',
+  'Vale Refeição': '04.4', 'Vale-Transporte': '04.4', 'Exames Demissionais e Admissionais': '04.4',
   // "Rendimentos" é o nome que a importação de OFX cria.
   'Rendimentos': '05.1', 'Rendimentos de Aplicações': '05.1',
   'Tarifas Bancárias': '05.2',
