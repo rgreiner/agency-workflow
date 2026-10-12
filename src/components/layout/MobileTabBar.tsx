@@ -16,8 +16,10 @@ import { cn } from '@/lib/utils'
  * está em --barra-inferior (globals.css) para a bolha do chat, o lembrete de
  * ponto e os toasts subirem acima dela.
  */
-export function MobileTabBar({ orgSlug, onMenu, onSearch }: {
+export function MobileTabBar({ orgSlug, trabalharHref = 'views/atendimento', onMenu, onSearch }: {
   orgSlug: string
+  /** Destino do "Trabalhar" — `midia` para cargo de mídia (ver computeAccess). */
+  trabalharHref?: string
   onMenu: () => void
   onSearch: () => void
 }) {
@@ -35,7 +37,7 @@ export function MobileTabBar({ orgSlug, onMenu, onSearch }: {
   if (pathname.includes('/activities/')) return null
 
   const abas = [
-    { id: 'trabalhar', label: 'Trabalhar', icon: Briefcase, href: `${base}/views/atendimento`, ativo: pathname.startsWith(`${base}/views/atendimento`) },
+    { id: 'trabalhar', label: 'Trabalhar', icon: Briefcase, href: `${base}/${trabalharHref}`, ativo: trabalharHref === 'midia' ? pathname === `${base}/midia` : pathname.startsWith(`${base}/${trabalharHref}`) },
     { id: 'inbox',     label: 'Caixa',     icon: Inbox,     href: `${base}/inbox`,             ativo: pathname === `${base}/inbox`, badge: unread },
     { id: 'ponto',     label: 'Ponto',     icon: Clock,     href: `${base}/ponto`,             ativo: pathname.startsWith(`${base}/ponto`) },
   ]

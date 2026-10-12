@@ -63,6 +63,8 @@ interface SidebarProps {
   accentColor?: string
   /** Nome do cargo — rótulo do item "Trabalhar" quando houver. */
   positionName?: string | null
+  /** Destino do "Trabalhar" (sem a barra): `midia` para cargo de mídia. */
+  trabalharHref?: string
   /** Permissão para ver "Liberação de mídias". */
   canMidias?: boolean
   canMidiaHub?: boolean
@@ -364,7 +366,7 @@ const MODE_TABS: { m: SidebarMode; Icon: LucideIcon; label: string }[] = [
 
 export function Sidebar({
   orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor = '#ff6a00', canManage,
-  positionName, canMidias = false, canProducao = false, canFinance = false, canCadastros = false, canRh = false,
+  positionName, trabalharHref = 'views/atendimento', canMidias = false, canProducao = false, canFinance = false, canCadastros = false, canRh = false,
   canMidiaHub = false,
   canListaGlobal = false,
   onboardingPendente = 0, midiaTransicao = { migrar: 0, vincular: 0 }, collapsed, onCollapse, onExpand, prefs, painel,
@@ -455,7 +457,9 @@ export function Sidebar({
   }
   // Só mostra a aba de quem pode entrar nela: quem não tem RH nunca vê a aba RH.
   const abas = MODE_TABS.filter(a => modoPermitido[a.m])
-  const linha2 = canManage ? [...ATALHOS, GESTAO] : ATALHOS
+  // Cargo de mídia: o "Trabalhar" do topo abre a fila da mídia (Rafael, 12/10).
+  const atalhos = ATALHOS.map(a => a.id === 'trabalhar' ? { ...a, href: trabalharHref } : a)
+  const linha2 = canManage ? [...atalhos, GESTAO] : atalhos
 
   const [mode, setMode] = useState<SidebarMode>(() => {
     const m = modeForPath(pathname, base)
@@ -647,7 +651,8 @@ export function Sidebar({
           {linha2.map(({ id, label, icon: Icon, href }, i) => {
             // "Trabalhar" mostra o cargo da pessoa, como o item antigo fazia.
             const titulo = id === 'trabalhar' && positionName ? `${label} · ${positionName}` : label
-            const ativo = noSegmento(pathname, `${base}/${href}`)
+            // `/midia` é exato: o ícone não acende em toda a Mídia, só na fila.
+            const ativo = href === 'midia' ? pathname === `${base}/midia` : noSegmento(pathname, `${base}/${href}`)
             return (
               <Link
                 key={id}
@@ -900,7 +905,7 @@ export function Sidebar({
   return (
     <>
       {/* Celular: barra inferior no lugar do hambúrguer (Menu abre o drawer). */}
-      <MobileTabBar orgSlug={orgSlug} onMenu={() => setMobileOpen(true)} onSearch={() => setPaletteOpen(true)} />
+      <MobileTabBar orgSlug={orgSlug} trabalharHref={trabalharHref} onMenu={() => setMobileOpen(true)} onSearch={() => setPaletteOpen(true)} />
 
       {/* Expandir — desktop, quando a sidebar está recolhida (substitui o botão do topo) */}
       {collapsed && onExpand && (
@@ -949,6 +954,7 @@ export function Sidebar({
         canManage={canManage}
         canListaGlobal={canListaGlobal}
         positionName={positionName}
+        trabalharHref={trabalharHref}
         telas={telasPalette}
       />
     </>

@@ -166,6 +166,7 @@ export default async function OrgLayout({
         logoUrl={orgSettings.logoUrl}
         accentColor={accent}
         positionName={positionName}
+        trabalharHref={access.trabalharHref}
         canMidias={access.midias}
         canProducao={access.producao}
         canFinance={access.financeiro}

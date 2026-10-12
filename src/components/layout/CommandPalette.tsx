@@ -41,6 +41,8 @@ interface Props {
   canListaGlobal?: boolean
   /** Cargo da pessoa — dica ao lado de "Trabalhar", igual ao tooltip da sidebar. */
   positionName?: string | null
+  /** Destino do "Trabalhar" — `midia` para cargo de mídia (ver computeAccess). */
+  trabalharHref?: string
   /** Telas dos módulos (só aparecem quando há busca digitada). */
   telas?: PaletteTela[]
 }
@@ -74,7 +76,7 @@ export function CommandPalette({ open, ...rest }: Props) {
   return <PalettePanel {...rest} />
 }
 
-function PalettePanel({ orgSlug, workspaces, onClose, canManage, canListaGlobal, positionName, telas = [] }: Omit<Props, 'open'>) {
+function PalettePanel({ orgSlug, workspaces, onClose, canManage, canListaGlobal, positionName, trabalharHref = 'views/atendimento', telas = [] }: Omit<Props, 'open'>) {
   const router = useRouter()
   const [query, setQuery] = useState('')
   const [activeIdx, setActiveIdx] = useState(0)
@@ -131,7 +133,7 @@ function PalettePanel({ orgSlug, workspaces, onClose, canManage, canListaGlobal,
       // Telas globais — mesmos nomes da sidebar (uma tela, um nome). O
       // Financeiro saiu daqui: entra por `telas`, junto dos outros módulos.
       { id: 'v-inbox',  label: 'Caixa de entrada', group: 'Ir para', href: `${base}/inbox`,             icon: Inbox },
-      { id: 'v-atend',  label: 'Trabalhar',        group: 'Ir para', href: `${base}/views/atendimento`, icon: Briefcase, hint: positionName ?? undefined, keywords: 'atendimento pauta' },
+      { id: 'v-atend',  label: 'Trabalhar',        group: 'Ir para', href: `${base}/${trabalharHref}`, icon: Briefcase, hint: positionName ?? undefined, keywords: 'atendimento pauta' },
       ...(canListaGlobal ? [
         { id: 'v-lista', label: 'Lista',           group: 'Ir para', href: `${base}/views/lista`,       icon: List, keywords: 'atividades' },
       ] : []),
@@ -175,7 +177,7 @@ function PalettePanel({ orgSlug, workspaces, onClose, canManage, canListaGlobal,
       { id: 's-perfil',    label: 'Meu perfil',         group: 'Configurações', href: `${base}/perfil`,             icon: User },
     ]
     return items
-  }, [base, workspaces, canManage, canListaGlobal, positionName])
+  }, [base, workspaces, canManage, canListaGlobal, positionName, trabalharHref])
 
   // Telas dos módulos: só com busca digitada. Com a busca vazia o palette é
   // pra folhear (clientes, campanhas); com texto, é pra pular.

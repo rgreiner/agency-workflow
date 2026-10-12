@@ -24,6 +24,8 @@ interface Props {
   accentColor?: string
   /** Nome do cargo do usuário — rótulo da aba de trabalho no menu superior. */
   positionName?: string | null
+  /** Destino do "Trabalhar" — ver computeAccess. */
+  trabalharHref?: string
   /** Permissão para ver "Liberação de mídias". */
   canMidias?: boolean
   canMidiaHub?: boolean
@@ -54,7 +56,7 @@ interface Props {
  * a própria Sidebar mostra um botão flutuante para reabrir.
  */
 export function AppShell({
-  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, canMidias, canMidiaHub, canProducao, canFinance, canCadastros, canRh, canManage, canListaGlobal, onboardingPendente, midiaTransicao, prefs, painel, children,
+  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, trabalharHref, canMidias, canMidiaHub, canProducao, canFinance, canCadastros, canRh, canManage, canListaGlobal, onboardingPendente, midiaTransicao, prefs, painel, children,
 }: Props) {
   // Recolhida: vem do cookie lido no servidor, então o HTML já chega recolhido.
   // Antes o localStorage era lido depois do paint e a sidebar "pulava" 240px.
@@ -80,6 +82,7 @@ export function AppShell({
         logoUrl={logoUrl}
         accentColor={accentColor}
         positionName={positionName}
+        trabalharHref={trabalharHref}
         canMidias={canMidias}
         canMidiaHub={canMidiaHub}
         canProducao={canProducao}

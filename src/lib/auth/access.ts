@@ -25,6 +25,10 @@ export interface OperacionalAccess {
   operacional: boolean
   isOwner: boolean
   positionName: string | null
+  /** Destino do "Trabalhar" (sem a barra inicial): quem tem cargo de mídia
+   *  (o Hub ligado no PRÓPRIO cargo, não herdado do "vê tudo") trabalha na fila
+   *  da mídia; os demais, na fila por status do cargo (Rafael, 12/10). */
+  trabalharHref: string
 }
 
 type PosRow = { name?: string | null; op_ver_tudo?: boolean | null; op_midias?: boolean | null; op_producao?: boolean | null; op_midia_hub?: boolean | null }
@@ -59,6 +63,7 @@ export function computeAccess(m: MembershipRow): OperacionalAccess {
     operacional: midias || producao || midiaHub || financeiro || cadastros || rh,
     isOwner: m.role === 'owner',
     positionName: pos?.name ?? null,
+    trabalharHref: pos?.op_midia_hub ? 'midia' : 'views/atendimento',
   }
 }
 
