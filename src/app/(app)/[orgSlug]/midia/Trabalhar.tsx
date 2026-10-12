@@ -19,11 +19,10 @@ import { criarPrefLocal } from '@/lib/pref-local'
 import { concluirTarefaMidia, desdobrarEmDatas, marcarItemChecklist, mudarSituacaoEntrega } from '@/app/actions/midia-hub'
 
 /**
- * Onde a linha mora. Em cima, os solicitados em duas colunas por etapa:
- * `implantar` (implantação/validação — a peça chegou, é o mais urgente) e
- * `trabalho` (Mídia, Social — plano, tabela, o que está sendo feito). Embaixo,
- * `peca` (entrega ao veículo) e `rotina`. Post datado segue a região da
- * tarefa-mãe.
+ * O tipo do trabalho — a cor da barra (ver TIPOS). `implantar` é implantação/
+ * validação (a peça chegou), `trabalho` é o que está sendo feito (plano,
+ * tabela), `peca` é a entrega ao veículo e `rotina` vem do catálogo. Post
+ * datado herda o tipo da tarefa-mãe. O nome ficou de quando eram regiões.
  */
 export type Regiao = 'implantar' | 'trabalho' | 'peca' | 'rotina'
 
@@ -101,23 +100,12 @@ const prefPrazo = criarPrefLocal<string>('flow:midia:trabalhar:prazo:v1', '',
 const hojeBR = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
 const fmt = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '—')
 
+/** Dias até a data (negativo = atrasado); sem data vai para o fim. */
 function prazo(data: string | null) {
-  if (!data) return { texto: 'sem prazo', tom: 'neutro' as const, dias: 9999 }
+  if (!data) return { dias: 9999 }
   const d = data.slice(0, 10)
-  const dias = Math.round(
-    (new Date(d + 'T12:00:00').getTime() - new Date(hojeBR() + 'T12:00:00').getTime()) / 86400000)
-  if (dias < 0) return { texto: `${fmt(d)} · atrasado`, tom: 'atraso' as const, dias }
-  if (dias === 0) return { texto: `${fmt(d)} · hoje`, tom: 'hoje' as const, dias }
-  if (dias === 1) return { texto: `${fmt(d)} · amanhã`, tom: 'perto' as const, dias }
-  if (dias <= 7) return { texto: `${fmt(d)} · em ${dias}d`, tom: 'perto' as const, dias }
-  return { texto: fmt(d), tom: 'neutro' as const, dias }
-}
-
-const TOM: Record<string, string> = {
-  atraso: 'text-red-700 bg-red-50',
-  hoje: 'text-orange-700 bg-orange-50',
-  perto: 'text-amber-700 bg-amber-50',
-  neutro: 'text-gray-600 bg-gray-100',
+  return { dias: Math.round(
+    (new Date(d + 'T12:00:00').getTime() - new Date(hojeBR() + 'T12:00:00').getTime()) / 86400000) }
 }
 
 const FOCO = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300'
@@ -126,30 +114,76 @@ const BTN_NEUTRO = BTN + ' bg-gray-100 text-gray-700 hover:bg-gray-200'
 const BTN_OK = BTN + ' bg-emerald-600 text-[#fff] hover:bg-emerald-700'
 const CHIP = 'text-[11px] font-medium px-2 py-0.5 rounded-full'
 
+// ── Tipo de trabalho: a cor da barra à esquerda da linha ────────────────────
+
 /**
- * A fila da mídia em quatro regiões (Rafael, 04/09 a 10/09): em cima, **Para
- * implantar** e **Em trabalho** — os solicitados, por etapa; embaixo, **Entregas
- * ao veículo** à esquerda e **Rotinas** à direita. Post datado segue a região da
- * tarefa-mãe; dentro de cada região a ordem é a data. O painel (Visão geral)
- * continua existindo para o retrato da operação; aqui não entra KPI nem radar.
+ * As quatro regiões viraram TIPO (Rafael, 12/10): uma lista só, por data, e a
+ * cor diz o que é. Cores fixas de propósito: não são cadastro da org como o
+ * status, são a classificação da própria fila. Nenhuma repete os tons do prazo
+ * (vermelho/laranja/âmbar), para a cor do tipo nunca ser lida como urgência.
+ * Rotina é cinza: é o fundo da agenda, não o que pede atenção.
+ */
+const TIPOS: { chave: Regiao; label: string; barra: string; texto: string }[] = [
+  { chave: 'implantar', label: 'Para implantar', barra: 'bg-sky-500',     texto: 'text-sky-700' },
+  { chave: 'trabalho',  label: 'Em trabalho',    barra: 'bg-pink-500',    texto: 'text-pink-700' },
+  { chave: 'peca',      label: 'Entrega',        barra: 'bg-emerald-500', texto: 'text-emerald-700' },
+  { chave: 'rotina',    label: 'Rotina',         barra: 'bg-gray-300',    texto: 'text-gray-500' },
+]
+const TIPO = new Map(TIPOS.map(t => [t.chave, t]))
+const SEM_OCULTOS: Regiao[] = []
+/** Tipos escondidos pela legenda — por pessoa, no navegador. */
+const prefOcultos = criarPrefLocal<Regiao[]>('flow:midia:trabalhar:ocultos:v1', SEM_OCULTOS, b => {
+  const v = JSON.parse(b)
+  return Array.isArray(v) ? v.filter((x): x is Regiao => TIPO.has(x)) : SEM_OCULTOS
+})
+
+// ── Faixas de data: os marcos de leitura da lista ───────────────────────────
+
+type Faixa = 'atraso' | 'hoje' | 'amanha' | 'semana' | 'depois' | 'sem'
+const FAIXA: Record<Faixa, { label: string; cls: string }> = {
+  atraso: { label: 'Atrasado',        cls: 'text-red-700' },
+  hoje:   { label: 'Hoje',            cls: 'text-orange-700' },
+  amanha: { label: 'Amanhã',          cls: 'text-gray-700' },
+  semana: { label: 'Próximos 7 dias', cls: 'text-gray-700' },
+  depois: { label: 'Mais adiante',    cls: 'text-gray-500' },
+  sem:    { label: 'Sem prazo',       cls: 'text-gray-500' },
+}
+function faixaDe(dias: number): Faixa {
+  if (dias === 9999) return 'sem'
+  if (dias < 0) return 'atraso'
+  if (dias === 0) return 'hoje'
+  if (dias === 1) return 'amanha'
+  if (dias <= 7) return 'semana'
+  return 'depois'
+}
+
+/** "seg 13/10" — o dia da semana é o que se usa para planejar a semana. */
+function dataCurta(d: string | null) {
+  if (!d) return '—'
+  const dia = new Date(d.slice(0, 10) + 'T12:00:00')
+    .toLocaleDateString('pt-BR', { weekday: 'short', timeZone: 'America/Sao_Paulo' }).replace('.', '')
+  return `${dia} ${fmt(d)}`
+}
+
+/**
+ * A fila da mídia é UMA lista, em ordem de data (Rafael, 12/10 — os quatro
+ * blocos confundiam: a mesma pergunta "o que faço agora?" tinha quatro
+ * respostas em quatro lugares). O tipo virou cor: a barra à esquerda e a
+ * legenda do cabeçalho, que também filtra. A data ganhou marcos (Atrasado,
+ * Hoje, Amanhã, Próximos 7 dias, Mais adiante, Sem prazo) — divisórias dentro
+ * da mesma lista, não blocos: a ordem continua sendo só a data.
  *
  * Uma linha por trabalho: entrega vinculada a uma tarefa que já está na fila
  * aparece só como entrega — o prazo do veículo é o que manda.
  *
  * ## A régua do que aparece (distill de 02/10, medido em produção)
- * Eram 50 linhas, cada uma um cartão branco com pílula de prazo, ícone, chip de
- * status, chips de sinal e uma faixa de links. O que o dado mostrou:
- *  · **32 das 50 são rotina** — zero bandeira, zero complexidade, zero checklist
- *    e 0,1 link em média. Carregavam o aparato de uma linha rica sem usar nada:
- *    viram lista densa (data · nome · cliente · Feito).
- *  · **O chip de status repetia o título da coluna em 100% dos casos** (as três
- *    regiões tinham UM status distinto cada). Agora só aparece quando a região
- *    de fato mistura status — `statusVariado`.
- *  · **Bandeira em 1 de 50, complexidade em 0.** Ficam: justamente por serem
- *    raros é que valem quando aparecem.
- * Regra que fica: a linha mostra o que MUDA entre uma linha e outra. O que é
- * igual para a região inteira pertence ao título da região, não à linha.
- * Cartão por item virou lista com divisória — 50 bordas não são hierarquia.
+ *  · **Rotina é densa** (data · nome · cliente · Feito): zero bandeira, zero
+ *    checklist e 0,1 link em média em 32 de 50 linhas.
+ *  · **O chip de status só aparece quando o TIPO mistura status** — em cada
+ *    tipo havia um status só, e o chip repetia o rótulo do tipo.
+ *  · **Bandeira e complexidade ficam**: raros, valem quando aparecem.
+ * A linha mostra o que muda entre uma linha e outra; o que é igual para o grupo
+ * pertence ao rótulo do grupo.
  */
 export function Trabalhar({ orgSlug, itens, statusCfg, meuId }: {
   orgSlug: string
@@ -164,69 +198,100 @@ export function Trabalhar({ orgSlug, itens, statusCfg, meuId }: {
   const soEu = useSyncExternalStore(prefEu.assinar, prefEu.get, () => false)
   const links = useSyncExternalStore(prefLinks.assinar, prefLinks.get, () => LINKS_PADRAO)
   const prazoFiltro = useSyncExternalStore(prefPrazo.assinar, prefPrazo.get, () => '')
+  const ocultos = useSyncExternalStore(prefOcultos.assinar, prefOcultos.get, () => SEM_OCULTOS)
   const hoje = hojeBR()
 
   // "Eu" = o que está comigo. Entrega sem tarefa não tem dono: é de quem opera,
-  // então continua aparecendo. O prazo filtra todas as regiões com a régua da Lista.
-  const lista = useMemo(() => itens
+  // então continua aparecendo. O prazo filtra com a régua da Lista.
+  const base = useMemo(() => itens
     .filter(i => !feitos.has(i.chave))
     .filter(i => !soEu || i.assigneeIds.includes(meuId) || (i.tipo === 'entrega' && !i.activityId))
     .filter(i => matchesDateFilter(i.data, prazoFiltro, hoje)),
   [itens, feitos, soEu, meuId, prazoFiltro, hoje])
-  const filtrando = soEu || !!prazoFiltro
+  // A legenda conta ANTES de esconder o tipo: quem desligou "Rotina" ainda vê
+  // quantas estão lá.
+  const porTipo = useMemo(() => {
+    const m = new Map<Regiao, ItemFila[]>(TIPOS.map(t => [t.chave, []]))
+    for (const i of base) m.get(i.regiao)?.push(i)
+    return m
+  }, [base])
+  const lista = base.filter(i => !ocultos.includes(i.regiao))
+  const filtrando = soEu || !!prazoFiltro || ocultos.length > 0
   const atrasados = lista.filter(i => prazo(i.data).dias < 0).length
   const hojeCount = lista.filter(i => prazo(i.data).dias === 0).length
 
-  const implantar = lista.filter(i => i.regiao === 'implantar')
-  const trabalho = lista.filter(i => i.regiao === 'trabalho')
-  const pecas = lista.filter(i => i.regiao === 'peca')
-  const rotinas = lista.filter(i => i.regiao === 'rotina')
+  // O chip de status só informa quando o tipo mistura status (medido: não
+  // misturava; o chip repetia o rótulo). Entrega mostra sempre, ver Linha.
+  const variado = useMemo(() => new Set(
+    TIPOS.filter(t => t.chave === 'peca' || new Set(porTipo.get(t.chave)!.map(i => i.status)).size > 1)
+      .map(t => t.chave)),
+  [porTipo])
 
   const concluir = (chave: string) => setFeitos(prev => new Set([...prev, chave]))
-  const comum = { orgSlug, cfg, links, onFeito: concluir }
-  // O chip de status só informa quando a região mistura status; se todos são
-  // iguais, ele repete o título da coluna em cada linha (medido: era sempre).
-  const variado = (l: ItemFila[]) => new Set(l.map(i => i.status)).size > 1
+  const alternarTipo = (t: Regiao) =>
+    prefOcultos.set(ocultos.includes(t) ? ocultos.filter(x => x !== t) : [...ocultos, t])
+
+  // A lista já chega ordenada por data (page.tsx); aqui só se intercalam os marcos.
+  const linhas: React.ReactNode[] = []
+  let faixaAtual: Faixa | null = null
+  for (const i of lista) {
+    const f = faixaDe(prazo(i.data).dias)
+    if (f !== faixaAtual) {
+      faixaAtual = f
+      const n = lista.filter(x => faixaDe(prazo(x.data).dias) === f).length
+      linhas.push(
+        <li key={`f:${f}`} aria-hidden
+          className="flex items-baseline gap-2 px-4 pt-4 pb-1.5 first:pt-3 bg-gray-50/70">
+          <span className={cn('text-[11px] font-semibold uppercase tracking-wide', FAIXA[f].cls)}>{FAIXA[f].label}</span>
+          <span className="text-[11px] tabular-nums text-gray-400">{n}</span>
+        </li>,
+      )
+    }
+    linhas.push(
+      <Linha key={i.chave} orgSlug={orgSlug} item={i} cfg={cfg} links={links} onFeito={concluir}
+        faixa={f} densa={i.regiao === 'rotina'} mostrarStatus={variado.has(i.regiao)} />,
+    )
+  }
 
   return (
-    <div className="p-6">
+    <div className="p-6 max-w-5xl">
       <Cabecalho orgSlug={orgSlug} atrasados={atrasados} hoje={hojeCount} total={lista.length}
         soEu={soEu} onEu={() => prefEu.set(!soEu)}
         links={links} onLinks={prefLinks.set}
         prazo={prazoFiltro} onPrazo={prefPrazo.set} />
 
+      {/* Legenda = filtro: a cor se explica onde se escolhe o que ver. */}
+      <div className="mt-4 flex flex-wrap items-center gap-1.5" role="group" aria-label="Tipos de trabalho">
+        {TIPOS.map(t => {
+          const ligado = !ocultos.includes(t.chave)
+          const n = porTipo.get(t.chave)!.length
+          return (
+            <button key={t.chave} type="button" onClick={() => alternarTipo(t.chave)} aria-pressed={ligado}
+              title={ligado ? `Esconder ${t.label.toLowerCase()}` : `Mostrar ${t.label.toLowerCase()}`}
+              className={cn('inline-flex items-center gap-2 pl-2.5 pr-3 py-1.5 text-xs font-medium rounded-full border transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.97]', FOCO,
+                ligado ? 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                  : 'bg-transparent border-dashed border-gray-300 text-gray-400 hover:text-gray-600')}>
+              <span className={cn('w-2 h-2 rounded-full transition-opacity duration-150', t.barra, !ligado && 'opacity-30')} aria-hidden />
+              {t.label}
+              <span className="tabular-nums text-gray-400">{n}</span>
+            </button>
+          )
+        })}
+      </div>
+
       {lista.length === 0 ? (
-        <div className="text-center py-20 bg-white border border-gray-200 rounded-2xl mt-6">
+        <div className="text-center py-20 bg-white border border-gray-200 rounded-2xl mt-4">
           <PartyPopper className="w-8 h-8 text-emerald-600 mx-auto" />
           <p className="text-sm text-gray-600 mt-3">
-            {filtrando ? 'Nada com esse filtro. Limpe o prazo ou desligue o "Eu" para ver a fila inteira.'
+            {filtrando ? 'Nada com esse filtro. Religue os tipos, limpe o prazo ou desligue o "Eu".'
               : 'Fila limpa. Nada esperando por você.'}
           </p>
         </div>
       ) : (
-        <>
-          <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-6">
-            <Regiao className="lg:col-span-7" titulo="Para implantar" contagem={implantar.length}
-              vazio={filtrando ? 'Nada para implantar neste filtro.' : 'Nada para implantar.'}>
-              {implantar.map(i => <Linha key={i.chave} item={i} mostrarStatus={variado(implantar)} {...comum} />)}
-            </Regiao>
-            <Regiao className="lg:col-span-5" titulo="Em trabalho" contagem={trabalho.length}
-              vazio={filtrando ? 'Nada em trabalho neste filtro.' : 'Nada em trabalho.'}>
-              {trabalho.map(i => <Linha key={i.chave} item={i} mostrarStatus={variado(trabalho)} {...comum} />)}
-            </Regiao>
-          </div>
-
-          <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-6">
-            <Regiao className="lg:col-span-7" titulo="Entregas ao veículo" contagem={pecas.length}
-              vazio={filtrando ? 'Nenhuma entrega neste filtro.' : 'Nenhuma entrega ao veículo pendente.'}>
-              {pecas.map(i => <Linha key={i.chave} item={i} mostrarStatus {...comum} />)}
-            </Regiao>
-            <Regiao className="lg:col-span-5" titulo="Rotinas" contagem={rotinas.length}
-              vazio={filtrando ? 'Nenhuma rotina neste filtro.' : 'Nenhuma rotina em aberto.'}>
-              {rotinas.map(i => <Linha key={i.chave} item={i} densa {...comum} />)}
-            </Regiao>
-          </div>
-        </>
+        <ul className="mt-4 bg-white border border-gray-200 rounded-xl divide-y divide-gray-100 overflow-hidden"
+          aria-label="Fila da mídia, por data">
+          {linhas}
+        </ul>
       )}
     </div>
   )
@@ -244,26 +309,6 @@ function FiltroPrazo({ valor, onChange }: { valor: string; onChange: (v: string)
         </button>
       ))}
     </div>
-  )
-}
-
-function Regiao({ titulo, contagem, vazio, className, children }: {
-  titulo: string; contagem: number; vazio: string; className?: string; children: React.ReactNode
-}) {
-  return (
-    <section className={cn('min-w-0', className)} aria-label={titulo}>
-      <h2 className="flex items-baseline gap-2 px-1 mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600">
-        {titulo}
-        <span className="font-normal tabular-nums text-gray-400">{contagem}</span>
-      </h2>
-      {contagem === 0 ? (
-        <p className="px-1 text-xs text-gray-400">{vazio}</p>
-      ) : (
-        <ul className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100 overflow-hidden">
-          {children}
-        </ul>
-      )}
-    </section>
   )
 }
 
@@ -354,9 +399,11 @@ function MenuLinks({ links, onChange }: { links: LinksVisiveis; onChange: (v: Li
   )
 }
 
-function Linha({ orgSlug, item, cfg, links, densa = false, mostrarStatus = false, onFeito }: {
+function Linha({ orgSlug, item, cfg, links, faixa, densa = false, mostrarStatus = false, onFeito }: {
   orgSlug: string
   item: ItemFila
+  /** O marco de data em que a linha está — pinta a data quando é agora. */
+  faixa: Faixa
   cfg: Map<string, StatusCfg>
   links: LinksVisiveis
   /** Rotina: repetitiva por natureza, lida como agenda — sem links nem status. */
@@ -444,22 +491,22 @@ function Linha({ orgSlug, item, cfg, links, densa = false, mostrarStatus = false
     origem || null,
   ].filter(Boolean).join(' · ')
 
-  // Só o ícone que DISTINGUE dentro da região: o post datado, que mora junto dos
-  // pedidos. Caminhão em "Entregas" e seta em "Rotinas" só repetiam o título.
+  // Só o ícone que DISTINGUE dentro do tipo: o post datado, que mora junto dos
+  // pedidos.
   const Icone = item.item ? ListChecks : null
-  const urgente = p.tom === 'atraso' || p.tom === 'hoje'
+  const tipo = TIPO.get(item.regiao)!
 
   return (
-    <li className={cn('px-3 transition-colors hover:bg-gray-50/70', densa ? 'py-2' : 'py-2.5')}>
+    <li className={cn('relative pl-4 pr-3 transition-colors duration-150 hover:bg-gray-50/70', densa ? 'py-2' : 'py-2.5')}>
+      {/* O tipo é a barra: lida de relance na coluna inteira, sem ocupar a linha. */}
+      <span className={cn('absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full', tipo.barra)} aria-hidden />
       <div className="flex items-start gap-3">
-        {/* Pílula colorida só quando é agora: atrasado ou hoje. O resto é data —
-            40 pílulas coloridas não hierarquizam nada. A caixa tem largura fixa
-            nos dois casos, para as datas alinharem na coluna. */}
-        <span className={cn('shrink-0 w-[5.75rem] text-[11px] tabular-nums',
-          urgente
-            ? cn('inline-flex items-center justify-center rounded-md px-1.5 py-0.5 font-medium', TOM[p.tom])
-            : 'pt-0.5 text-gray-500')}>
-          {p.texto}
+        {/* Sem pílula: o marco acima já diz "Atrasado"/"Hoje"; a data só ganha a
+            cor dele. Largura fixa para alinhar na coluna. */}
+        <span className={cn('shrink-0 w-[4.5rem] pt-0.5 text-[11px] tabular-nums',
+          faixa === 'atraso' ? 'font-medium text-red-700' : faixa === 'hoje' ? 'font-medium text-orange-700' : 'text-gray-500')}
+          title={p.dias < 0 ? `Atrasado há ${-p.dias} dia${p.dias < -1 ? 's' : ''}` : undefined}>
+          {dataCurta(item.data)}
         </span>
 
         <div className="min-w-0 flex-1">
@@ -512,7 +559,11 @@ function Linha({ orgSlug, item, cfg, links, densa = false, mostrarStatus = false
             )}
           </div>
 
-          {meta && <p className="text-[11px] text-gray-500 mt-0.5 truncate" title={meta}>{meta}</p>}
+          {/* O tipo também por escrito: a cor sozinha não chega a quem não a distingue. */}
+          <p className="text-[11px] text-gray-500 mt-0.5 truncate" title={meta ? `${tipo.label} · ${meta}` : tipo.label}>
+            <span className={cn('font-medium', tipo.texto)}>{tipo.label}</span>
+            {meta && <> · {meta}</>}
+          </p>
 
           {item.conflito && (
             <p className="text-[11px] text-red-700 mt-1 inline-flex items-center gap-1">

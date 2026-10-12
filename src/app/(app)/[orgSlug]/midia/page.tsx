@@ -16,10 +16,9 @@ export default async function MidiaTrabalharPage({ params }: { params: Promise<{
   const porId = new Map(fila.tarefas.map(t => [t.id, t]))
   const comEntrega = new Set(fila.entregas.map(e => e.activityId).filter(Boolean) as string[])
 
-  // Regiões da tela (Rafael, 04/09, 09/09 e 10/09): em cima, os trabalhos
-  // solicitados em duas colunas por etapa — "Para implantar" (implantação e
-  // validação: a peça chegou, é o mais urgente) e "Em trabalho" (Mídia, Social:
-  // plano, tabela…); embaixo, entregas ao veículo à esquerda e rotinas à direita.
+  // Tipo do trabalho (a cor da barra na lista única, Rafael 12/10): "Para
+  // implantar" (implantação e validação: a peça chegou), "Em trabalho" (plano,
+  // tabela…), entrega ao veículo e rotina. A tela é uma lista só, por data.
   const paraImplantar = (status: string) => /implantacao|validacao/.test(status)
   const daEntrega: ItemFila[] = fila.entregas.map(e => {
     const t = e.activityId ? porId.get(e.activityId) ?? null : null
