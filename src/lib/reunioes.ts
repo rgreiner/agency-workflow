@@ -13,14 +13,30 @@ export interface PassoReuniao {
   producaoId: string | null
   /** Consulta/combinado resolvido sem virar trabalho de pauta — mig. 307. */
   feito: boolean
+  /** Foi para "Minhas anotações" da Caixa de entrada (todos) — mig. 341. */
+  todoId: string | null
 }
 
 /** Link exibido no passo (tarefa ou orçamento). */
 export interface LinkPasso { titulo: string; href: string }
 
 /** O passo já tem desfecho: tarefa, orçamento ou marcado como feito. */
-export const passoResolvido = (p: { activityId?: string | null; producaoId?: string | null; feito?: boolean }) =>
-  !!(p.activityId || p.producaoId || p.feito)
+export const passoResolvido = (p: { activityId?: string | null; producaoId?: string | null; feito?: boolean; todoId?: string | null }) =>
+  !!(p.activityId || p.producaoId || p.feito || p.todoId)
+
+/** Passo ainda em aberto, de qualquer ata — a pauta da próxima reunião. */
+export interface Pendencia {
+  passoId: string
+  reuniaoId: string
+  reuniaoTitulo: string
+  realizadaEm: string
+  workspaceId: string
+  cliente: string
+  texto: string
+  responsavel: ResponsavelPasso
+  /** Por onde anda: tarefa (com o status), orçamento, anotação — ou nada ainda. */
+  andamento: { tipo: 'tarefa' | 'orcamento' | 'anotacao'; rotulo: string; href?: string } | null
+}
 
 export interface Reuniao {
   id: string | null

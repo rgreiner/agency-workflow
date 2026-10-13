@@ -213,13 +213,15 @@ export async function buscarOrcamentosCliente(
  */
 export async function ajustarPasso(
   orgSlug: string, workspaceId: string, reuniaoId: string, passoId: string,
-  patch: { activityId?: string | null; producaoId?: string | null; feito?: boolean },
+  patch: { activityId?: string | null; producaoId?: string | null; feito?: boolean; todoId?: null },
 ): Promise<Resultado<object>> {
   const user = await getUsuario()
   if (!user) return { ok: false, error: 'Sessão expirada. Entre de novo.' }
   const campos: Record<string, unknown> = {}
   if (patch.activityId !== undefined) campos.activity_id = patch.activityId
   if (patch.producaoId !== undefined) campos.producao_id = patch.producaoId
+  // Só soltar: criar a anotação é o `enviarParaAnotacoes` (o todo é da pessoa).
+  if (patch.todoId === null) campos.todo_id = null
   if (patch.feito !== undefined) {
     campos.feito_em = patch.feito ? new Date().toISOString() : null
     campos.feito_por = patch.feito ? user.id : null
@@ -234,4 +236,38 @@ export async function ajustarPasso(
   if (!data?.length) return { ok: false, error: 'Só o Atendimento (ou admin) altera os passos.' }
   rotas(orgSlug, workspaceId, reuniaoId)
   return { ok: true }
+}
+
+/**
+ * Passo vira item de "Minhas anotações" (Caixa de entrada) de quem clicou —
+ * ação do atendimento que não é pauta: ligar, cobrar, negociar. Concluir a
+ * anotação marca o passo feito (gatilho da mig. 341).
+ */
+export async function enviarParaAnotacoes(
+  orgSlug: string, workspaceId: string, reuniaoId: string, passoId: string,
+  dados: { texto: string; prazo: string | null },
+): Promise<Resultado<{ todoId: string }>> {
+  const user = await getUsuario()
+  if (!user) return { ok: false, error: 'Sessão expirada. Entre de novo.' }
+  const texto = dados.texto.trim()
+  if (!texto) return { ok: false, error: 'O passo está sem texto.' }
+  const orgId = await orgDoWorkspace(workspaceId)
+  if (!orgId) return { ok: false, error: 'Cliente não encontrado.' }
+  const supabase = await createClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any
+  const { data: todo, error } = await sb.from('todos')
+    .insert({ org_id: orgId, user_id: user.id, texto, due_date: dados.prazo || null })
+    .select('id').single()
+  if (error) return { ok: false, error: error.message }
+  const { data, error: e2 } = await sb.from('reuniao_passos')
+    .update({ todo_id: todo.id }).eq('id', passoId).eq('reuniao_id', reuniaoId).select('id')
+  if (e2 || !data?.length) {
+    // Sem vínculo, a anotação solta só confundiria: desfaz.
+    await sb.from('todos').delete().eq('id', todo.id)
+    return { ok: false, error: e2?.message ?? 'Só o Atendimento (ou admin) altera os passos.' }
+  }
+  rotas(orgSlug, workspaceId, reuniaoId)
+  revalidatePath(`/${orgSlug}/inbox`)
+  return { ok: true, todoId: todo.id as string }
 }

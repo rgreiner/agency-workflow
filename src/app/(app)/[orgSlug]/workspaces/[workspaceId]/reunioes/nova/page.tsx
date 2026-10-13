@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { ReuniaoEditor } from '../ReuniaoEditor'
 import { contextoReuniao } from '../dados'
+import { carregarPendencias } from '@/lib/reunioes-pendencias'
 
 export const metadata = { title: 'Nova ata — Flow' }
 
@@ -17,6 +18,7 @@ export default async function NovaReuniaoPage({ params, searchParams }: {
 
   // Data civil de Brasília: à noite o UTC já virou o dia.
   const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+  const anteriores = await carregarPendencias(ctx.sb, { orgId: ctx.orgId, orgSlug, workspaceId })
   return (
     <ReuniaoEditor
       orgSlug={orgSlug}
@@ -25,6 +27,7 @@ export default async function NovaReuniaoPage({ params, searchParams }: {
       campanhas={ctx.campanhas}
       tarefas={{}}
       orcamentos={{}}
+      anteriores={anteriores}
       podeEditar
       inicial={{
         id: null, titulo: '', realizadaEm: hoje,

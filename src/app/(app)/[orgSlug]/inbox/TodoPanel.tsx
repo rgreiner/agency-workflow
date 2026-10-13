@@ -6,11 +6,16 @@
  */
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Plus, Trash2, CheckSquare, Square, Loader2, NotebookPen, CalendarDays } from 'lucide-react'
 import { cn, formatDate } from '@/lib/utils'
 import { createTodo, toggleTodo, deleteTodo } from '@/app/actions/todos'
 
-export interface Todo { id: string; texto: string; done: boolean; due_date: string | null }
+export interface Todo {
+  id: string; texto: string; done: boolean; due_date: string | null
+  /** Ata de onde a anotação veio (mig. 341), se veio de uma. */
+  origem?: string | null
+}
 
 const todayStr = () => new Date().toISOString().slice(0, 10)
 
@@ -88,9 +93,14 @@ export function TodoPanel({ orgSlug, todos }: { orgSlug: string; todos: Todo[] }
                 </button>
                 <div className="flex-1 min-w-0">
                   <p className={cn('text-sm break-words', t.done ? 'line-through text-gray-400' : 'text-gray-700')}>{t.texto}</p>
-                  {t.due_date && (
-                    <span className={cn('text-[11px]', overdue ? 'text-red-500 font-medium' : 'text-gray-400')}>{formatDate(t.due_date)}</span>
-                  )}
+                  <span className="flex items-center gap-2">
+                    {t.due_date && (
+                      <span className={cn('text-[11px]', overdue ? 'text-red-500 font-medium' : 'text-gray-400')}>{formatDate(t.due_date)}</span>
+                    )}
+                    {t.origem && (
+                      <Link href={t.origem} className="text-[11px] text-gray-400 hover:text-orange-600 transition-colors">da reunião</Link>
+                    )}
+                  </span>
                 </div>
                 <button onClick={() => remove(t.id)} className="shrink-0 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition" title="Excluir">
                   <Trash2 className="w-3.5 h-3.5" />

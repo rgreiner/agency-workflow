@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
-  NotebookPen, Sparkles, Loader2, Plus, X, Trash2, Globe, ChevronDown, ExternalLink, ListPlus, Link2, Unlink, Search, Check, Undo2, Calculator,
+  NotebookPen, Sparkles, Loader2, Plus, X, Trash2, Globe, ChevronDown, ExternalLink, ListPlus, Link2, Unlink, Search, Check, Undo2, Calculator, Inbox, History,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
@@ -13,12 +13,13 @@ import { Switch } from '@/components/ui/Switch'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import {
-  salvarReuniao, excluirReuniao, organizarReuniao, buscarTarefasCliente, buscarOrcamentosCliente, ajustarPasso,
+  salvarReuniao, excluirReuniao, organizarReuniao, buscarTarefasCliente, buscarOrcamentosCliente, ajustarPasso, enviarParaAnotacoes,
 } from '@/app/actions/reunioes'
 import {
   passoResolvido,
-  type Reuniao, type PassoReuniao, type ResponsavelPasso, type TarefaVinculavel, type OrcamentoVinculavel, type LinkPasso,
+  type Reuniao, type PassoReuniao, type ResponsavelPasso, type TarefaVinculavel, type OrcamentoVinculavel, type LinkPasso, type Pendencia,
 } from '@/lib/reunioes'
+import { PendenciasChecklist } from '@/app/(app)/[orgSlug]/reunioes/PendenciasChecklist'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 
 export type TarefaDoPasso = LinkPasso
@@ -28,7 +29,7 @@ const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', curren
 const inputCls = 'w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent disabled:opacity-70'
 
 const passoVazio = (responsavel: ResponsavelPasso = 'agencia'): PassoReuniao =>
-  ({ id: null, texto: '', responsavel, rascunho: '', activityId: null, producaoId: null, feito: false })
+  ({ id: null, texto: '', responsavel, rascunho: '', activityId: null, producaoId: null, feito: false, todoId: null })
 
 /**
  * Editor da ata (mig. 306). Colar notas → "Organizar com IA" propõe resumo e
@@ -37,7 +38,7 @@ const passoVazio = (responsavel: ResponsavelPasso = 'agencia'): PassoReuniao =>
  * organiza no padrão da casa.
  */
 export function ReuniaoEditor({
-  orgSlug, workspaceId, clienteNome, inicial, campanhas, tarefas, orcamentos, podeEditar,
+  orgSlug, workspaceId, clienteNome, inicial, campanhas, tarefas, orcamentos, anteriores, podeEditar,
 }: {
   orgSlug: string
   workspaceId: string
@@ -48,6 +49,8 @@ export function ReuniaoEditor({
   tarefas: Record<string, LinkPasso>
   /** passoId → orçamento ligado a ele (mig. 307). */
   orcamentos: Record<string, LinkPasso>
+  /** Em aberto das reuniões anteriores do mesmo cliente (13/10/2026). */
+  anteriores: Pendencia[]
   podeEditar: boolean
 }) {
   const router = useRouter()
@@ -186,7 +189,26 @@ export function ReuniaoEditor({
     setBusca(''); setAchadas([]); setAchados([]); setVinculando({ i, aba: 'tarefa' })
   }
 
-  type Patch = { activityId?: string | null; producaoId?: string | null; feito?: boolean }
+  type Patch = { activityId?: string | null; producaoId?: string | null; feito?: boolean; todoId?: null }
+
+  /** Leva o passo para "Minhas anotações" da Caixa de entrada de quem clicou. */
+  function anotar(i: number) {
+    startSalvar(async () => {
+      const base = sujo || !ata.id || !ata.passos[i]?.id ? await gravar(ata, false) : ata
+      const passo = base?.passos[i]
+      if (!base?.id || !passo?.id) return
+      const res = await enviarParaAnotacoes(orgSlug, workspaceId, base.id, passo.id, {
+        texto: `${clienteNome} · ${passo.texto.trim()}`, prazo: null,
+      })
+      if (!res.ok) { toast.error(res.error); return }
+      const mudar = (lista: PassoReuniao[]) => lista.map((x, j) => (j === i ? { ...x, todoId: res.todoId } : x))
+      setAta(a => ({ ...a, passos: mudar(a.passos) }))
+      setSalvo(JSON.stringify({ ...base, passos: mudar(base.passos) }))
+      toast.success('Foi para Minhas anotações, na Caixa de entrada. Concluir lá marca o passo como feito.')
+      if (!ata.id) router.replace(`/${orgSlug}/workspaces/${workspaceId}/reunioes/${base.id}`)
+      else router.refresh()
+    })
+  }
 
   /** Grava o desfecho de um passo (salvando a ata antes, se preciso) e reflete na tela. */
   function ajustar(i: number, patch: Patch, links: { tarefa?: LinkPasso | null; orcamento?: LinkPasso | null } = {}, aviso = '') {
@@ -282,6 +304,22 @@ export function ReuniaoEditor({
         </label>
       </div>
 
+      {/* ── O que ficou das reuniões anteriores: a sequência da conversa ── */}
+      {anteriores.length > 0 && (
+        <details open={!ata.id} className="group mb-6 rounded-2xl border border-orange-500/25 bg-orange-500/5">
+          <summary className="flex items-center gap-2 px-4 py-3 cursor-pointer list-none select-none">
+            <History className="w-4 h-4 text-orange-600" />
+            <span className="text-sm font-semibold text-gray-900">Ficou em aberto das reuniões anteriores</span>
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-600 tabular-nums">{anteriores.length}</span>
+            <ChevronDown className="w-4 h-4 text-gray-400 ml-auto transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="px-4 pb-4">
+            <p className="text-xs text-gray-500 mb-2">Use como pauta: o que for resolvido na conversa, marque aqui.</p>
+            <PendenciasChecklist orgSlug={orgSlug} cliente={clienteNome} itens={anteriores} podeEditar={podeEditar} />
+          </div>
+        </details>
+      )}
+
       {/* ── 1. O que aconteceu: material bruto, só o time vê ── */}
       <section className="mb-4">
         <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500 mb-3">
@@ -365,7 +403,7 @@ export function ReuniaoEditor({
                     className={cn('flex-1 min-w-0 bg-transparent text-sm placeholder-gray-400 px-2 py-1.5 rounded-lg focus:outline-none focus:bg-gray-100 disabled:opacity-100',
                       p.feito ? 'text-gray-400 line-through' : 'text-gray-900')} />
                   {/* Desfechos: tarefa, orçamento, feito — cada um com o seu "desfazer". */}
-                  {(p.activityId || p.producaoId || p.feito) && (
+                  {(p.activityId || p.producaoId || p.feito || p.todoId) && (
                     <span className="shrink-0 inline-flex items-center gap-1">
                       {p.activityId && (
                         <span className="inline-flex items-center rounded-lg bg-green-500/15 text-green-600">
@@ -401,6 +439,21 @@ export function ReuniaoEditor({
                           )}
                         </span>
                       )}
+                      {p.todoId && !p.feito && (
+                        <span className="inline-flex items-center rounded-lg bg-orange-500/15 text-orange-600">
+                          <Link href={`/${orgSlug}/inbox`} title="Está em Minhas anotações, na Caixa de entrada"
+                            className="inline-flex items-center gap-1 text-xs font-medium pl-2 pr-1.5 py-1 rounded-lg hover:bg-orange-500/15 transition-colors">
+                            <Inbox className="w-3 h-3" /> Nas anotações
+                          </Link>
+                          {podeEditar && (
+                            <button type="button" disabled={salvando} title="Tirar o vínculo (a anotação continua na sua lista)"
+                              onClick={() => ajustar(i, { todoId: null }, {}, 'Vínculo desfeito. A anotação continua na sua lista.')}
+                              className="p-1 mr-0.5 rounded-md text-orange-600/70 hover:text-red-600 hover:bg-red-500/10 transition-colors disabled:opacity-50">
+                              <Unlink className="w-3 h-3" />
+                            </button>
+                          )}
+                        </span>
+                      )}
                       {p.feito && (
                         <span className="inline-flex items-center rounded-lg bg-gray-100 text-gray-600">
                           <span className="inline-flex items-center gap-1 text-xs font-medium pl-2 pr-1.5 py-1"><Check className="w-3 h-3" /> Feito</span>
@@ -422,6 +475,11 @@ export function ReuniaoEditor({
                         title="Consulta ou combinado resolvido, sem virar trabalho de pauta"
                         className="press inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50">
                         <Check className="w-3.5 h-3.5" /> Feito
+                      </button>
+                      <button type="button" onClick={() => anotar(i)} disabled={salvando || !p.texto.trim()}
+                        title="Ação sua, que não é pauta (ligar, cobrar, negociar): vai para Minhas anotações na Caixa de entrada"
+                        className="press inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+                        <Inbox className="w-3.5 h-3.5" /> Anotar
                       </button>
                       {p.responsavel === 'agencia' && (<>
                         <button type="button" onClick={() => abrirVincular(i)} disabled={salvando || !p.texto.trim()}

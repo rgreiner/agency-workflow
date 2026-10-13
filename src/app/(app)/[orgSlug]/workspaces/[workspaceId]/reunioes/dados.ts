@@ -16,6 +16,7 @@ export async function contextoReuniao(workspaceId: string) {
   ])
   return {
     sb,
+    orgId: workspace.org_id as string,
     clienteNome: workspace.name as string,
     campanhas: (campanhas ?? []) as { id: string; name: string }[],
     podeGerir: podeGerir === true,

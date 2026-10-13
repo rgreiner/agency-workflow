@@ -32,12 +32,17 @@ export default async function InboxPage({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: td } = await (supabase as any)
       .from('todos')
-      .select('id, texto, done, due_date')
+      // A anotação que veio de uma ata (mig. 341) leva de volta a ela.
+      .select('id, texto, done, due_date, reuniao_passos(reuniao_id, reunioes(workspace_id))')
       .eq('user_id', user.id).eq('org_id', org.id)
       .order('done', { ascending: true })
       .order('due_date', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: true })
-    todos = (td ?? []) as Todo[]
+    type TodoRow = Omit<Todo, 'origem'> & { reuniao_passos?: { reuniao_id: string; reunioes: { workspace_id: string } | null }[] }
+    todos = ((td ?? []) as TodoRow[]).map(({ reuniao_passos, ...t }) => {
+      const p = reuniao_passos?.[0]
+      return { ...t, origem: p?.reunioes ? `/${orgSlug}/workspaces/${p.reunioes.workspace_id}/reunioes/${p.reuniao_id}` : null }
+    })
   }
 
   // Minhas tarefas = activities onde sou responsável (activity_assignees), não arquivadas
