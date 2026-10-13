@@ -113,6 +113,8 @@ export function ReuniaoEditor({
   }
 
   function alternarPublicada(v: boolean) {
+    // Ata ainda não salva: a chave só escolhe; vale no "Salvar ata" (padrão é publicar).
+    if (!ata.id) { set('publicada', v); return }
     if (v) { setConfirmPublicar(true); return }
     startSalvar(async () => {
       const ok = await gravar({ ...ata, publicada: false })
@@ -531,7 +533,7 @@ export function ReuniaoEditor({
       {podeEditar && (
         <div className="sticky bottom-[calc(var(--barra-inferior,0px)+1rem)] z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white/95 backdrop-blur border border-gray-200 shadow-lg px-4 py-3">
           <label className="flex items-center gap-2.5 text-sm text-gray-700">
-            <Switch checked={ata.publicada} onChange={alternarPublicada} disabled={salvando || !ata.resumo.trim()}
+            <Switch checked={ata.publicada} onChange={alternarPublicada} disabled={salvando || (!!ata.id && !ata.publicada && !ata.resumo.trim())}
               label="Mostrar no portal do cliente" />
             <span className="inline-flex items-center gap-1.5">
               <Globe className={cn('w-4 h-4', ata.publicada ? 'text-green-600' : 'text-gray-400')} />

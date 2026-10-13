@@ -33,7 +33,9 @@ export default async function NovaReuniaoPage({ params, searchParams }: {
         id: null, titulo: '', realizadaEm: hoje,
         // Vindo da campanha (?c=): já nasce amarrada a ela.
         campaignId: c && ctx.campanhas.some(x => x.id === c) ? c : null, participantes: '',
-        notas: '', transcricao: '', resumo: '', publicada: false, passos: [],
+        notas: '', transcricao: '', resumo: '',
+        // Padrão da casa (13/10/2026): ata nasce visível ao cliente no portal.
+        publicada: true, passos: [],
       }}
     />
   )
