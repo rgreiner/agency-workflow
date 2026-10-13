@@ -59,7 +59,7 @@ function emptyValues(today: string, responsavelId: string): OrcamentoValues {
 }
 
 export function OrcamentoForm({
-  clientes, fornecedores, members, defaultResponsavelId, today, redirectTo, initial, submitLabel = 'Gravar', onSubmit, cotacao,
+  clientes, fornecedores, members, defaultResponsavelId, today, redirectTo, initial, submitLabel = 'Gravar', onSubmit, cotacao, portalSlot,
 }: {
   clientes: ClienteOpt[]; fornecedores: FornecedorOpt[]; members: MemberOpt[]
   defaultResponsavelId: string; today: string; redirectTo: string
@@ -67,6 +67,8 @@ export function OrcamentoForm({
   onSubmit: (fd: FormData) => Promise<{ error?: string } | void>
   /** Só na edição: o pedido de cotação sai de orçamento já gravado. */
   cotacao?: { orcamentoId: string; agencia: string; cotacoes: CotacaoView[]; fornecedores: FornecedorCotacaoOpt[]; abrir?: boolean }
+  /** Card "Painel do cliente" (mig. 342) — só na edição. */
+  portalSlot?: React.ReactNode
 }) {
   const router = useRouter()
   const [form, setForm] = useState<OrcamentoValues>({
@@ -251,6 +253,8 @@ export function OrcamentoForm({
             <div><p className="text-xs text-gray-400">Valor Total</p><p className="text-lg font-semibold text-emerald-600">{formatBRL(valorTotal)}</p></div>
           )}
         </div>
+
+        {portalSlot}
 
         {/* Textos + status */}
         <div className={cardCls}>

@@ -125,15 +125,20 @@ export const COOKIE_PORTAL = "flow-portal-jwt";
 const PORTAL_VALIDADE_DIAS = 30;
 export const PORTAL_MAX_AGE_SEG = PORTAL_VALIDADE_DIAS * 24 * 60 * 60;
 
-export type PortalClaims = { portalSub: string; email: string };
+/**
+ * `preview`: membro da agência vendo o painel como o cliente vê (mig. 342) —
+ * só leitura; `voltar` é a tela do Flow para onde o "sair" leva.
+ */
+export type PortalClaims = { portalSub: string; email: string; preview?: boolean; voltar?: string };
 
-export async function mintPortalToken({ portalSub, email }: PortalClaims): Promise<string> {
+export async function mintPortalToken({ portalSub, email, preview, voltar }: PortalClaims): Promise<string> {
   const agora = Math.floor(Date.now() / 1000);
   const header = b64urlJson({ alg: "HS256", typ: "JWT" });
   const payload = b64urlJson({
     role: "portal",
     portal_sub: portalSub,
     email,
+    ...(preview ? { preview: true, voltar: voltar ?? "/" } : {}),
     iat: agora,
     exp: agora + PORTAL_MAX_AGE_SEG,
   });
@@ -158,7 +163,12 @@ export async function verifyPortalToken(token: string | undefined): Promise<Port
     const payload = JSON.parse(new TextDecoder().decode(b64urlDecode(p)));
     if (payload?.role !== "portal" || !payload?.portal_sub) return null;
     if (typeof payload.exp === "number" && Math.floor(Date.now() / 1000) > payload.exp) return null;
-    return { portalSub: String(payload.portal_sub), email: String(payload.email ?? "") };
+    return {
+      portalSub: String(payload.portal_sub),
+      email: String(payload.email ?? ""),
+      preview: payload.preview === true,
+      voltar: typeof payload.voltar === "string" && payload.voltar.startsWith("/") ? payload.voltar : undefined,
+    };
   } catch {
     return null;
   }

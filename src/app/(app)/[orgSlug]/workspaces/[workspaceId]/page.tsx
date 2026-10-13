@@ -5,6 +5,7 @@ import { loadActivityList } from '@/lib/activity-list'
 import { ListaClient } from '../../views/lista/ListaClient'
 import { WorkspaceEditButton } from './WorkspaceEditButton'
 import { PortalAccessButton, type PortalUserRow } from './PortalAccessButton'
+import { linkCadastroAtivo } from '@/app/actions/portal'
 import { UnarchiveButton } from '@/components/ui/UnarchiveButton'
 import { AvatarGroup } from '@/components/ui/Avatar'
 import { ImportSpecsButton } from './campaigns/[campaignId]/ImportSpecsButton'
@@ -38,7 +39,9 @@ export default async function WorkspacePage({
     .from('portal_users')
     .select('id, nome, email, ativo, last_login_at')
     .eq('workspace_id', workspaceId)
+    .is('interno_user_id', null)  // "ver como cliente" da agência não é contato
     .order('created_at', { ascending: true })
+  const linkCadastro = await linkCadastroAtivo(workspaceId)
 
   const data = await loadActivityList(orgSlug, { scopeWorkspaceId: workspaceId, archived: archivedView })
   if (!data) return null
@@ -73,7 +76,9 @@ export default async function WorkspacePage({
           <PortalAccessButton
             orgSlug={orgSlug}
             workspaceId={workspaceId}
+            clienteNome={workspace.name}
             contatos={(portalUsers ?? []) as PortalUserRow[]}
+            linkCadastro={linkCadastro}
           />
           <WorkspaceEditButton
             orgSlug={orgSlug}

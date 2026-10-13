@@ -39,7 +39,7 @@ export async function buscarPortalUsersPorEmail(email: string): Promise<PortalUs
   return sql<PortalUser[]>`
     select id, org_id, workspace_id, nome, email, ativo
     from public.portal_users
-    where lower(email) = lower(${email.trim()}) and ativo
+    where lower(email) = lower(${email.trim()}) and ativo and interno_user_id is null
     order by created_at
   `
 }
@@ -86,10 +86,18 @@ export async function consumirTokenPortal(raw: string): Promise<PortalUser | nul
   return users[0] ?? null
 }
 
-/** Abre a sessão do portal (seta o cookie). */
-export async function iniciarSessaoPortal(user: PortalUser): Promise<void> {
+/**
+ * Abre a sessão do portal (seta o cookie). `preview` = membro vendo como o
+ * cliente (contato interno, só leitura); `voltar` = tela do Flow ao sair.
+ */
+export async function iniciarSessaoPortal(
+  user: Pick<PortalUser, 'id' | 'email'>, opts?: { preview?: boolean; voltar?: string },
+): Promise<void> {
   const jar = await cookies()
-  jar.set(COOKIE_PORTAL, await mintPortalToken({ portalSub: user.id, email: user.email }), {
+  const token = await mintPortalToken({
+    portalSub: user.id, email: user.email, preview: opts?.preview, voltar: opts?.voltar,
+  })
+  jar.set(COOKIE_PORTAL, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
@@ -149,6 +157,7 @@ export async function verificarSenhaPortal(email: string, senha: string): Promis
     select id, org_id, workspace_id, nome, email, ativo, senha_hash
     from public.portal_users
     where lower(email) = lower(${email.trim()}) and ativo and senha_hash is not null
+      and interno_user_id is null
     order by created_at
   `
   for (const r of rows) {
@@ -159,4 +168,37 @@ export async function verificarSenhaPortal(email: string, senha: string): Promis
     }
   }
   return null
+}
+
+// ── Cadastro pelo link de convite (mig. 342) ───────────────────────────────────
+
+/** Cliente e agência do convite, se o link ainda vale; senão null. */
+export async function conviteInfoPortal(token: string): Promise<{ cliente: string; agencia: string } | null> {
+  const rows = await sql<{ info: { cliente: string; agencia: string } | null }[]>`
+    select public.portal_convite_info(${token}) as info
+  `
+  return rows[0]?.info ?? null
+}
+
+/**
+ * Cria o acesso pelo convite (nome, e-mail, senha) e devolve o contato. Erros
+ * esperados voltam como código: convite_invalido | ja_tem_acesso | campos.
+ */
+export async function cadastrarPortalViaConvite(
+  token: string, nome: string, email: string, senha: string,
+): Promise<{ user?: PortalUser; erro?: 'convite_invalido' | 'ja_tem_acesso' | 'campos' | 'falha' }> {
+  const hash = await hashSenha(normalizarSenha(senha))
+  try {
+    const rows = await sql<{ u: PortalUser }[]>`
+      select public.portal_cadastrar(${token}, ${nome}, ${email}, ${hash}) as u
+    `
+    return { user: rows[0].u }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : ''
+    if (msg.includes('convite_invalido')) return { erro: 'convite_invalido' }
+    if (msg.includes('ja_tem_acesso')) return { erro: 'ja_tem_acesso' }
+    if (msg.includes('campos')) return { erro: 'campos' }
+    console.error('[portal] falha no cadastro por convite:', e)
+    return { erro: 'falha' }
+  }
 }

@@ -6,6 +6,7 @@ import { cobrancaJob } from './cobranca'
 import { btgSyncJob } from './btg-sync'
 import { fechamentoContabilJob } from './fechamento-contabil'
 import { rhExpurgoJob } from './rh-expurgo'
+import { portalAvisosJob } from './portal-avisos'
 import { limparTentativasAntigas } from '@/lib/auth/rate-limit'
 import { dispatchPushNotificacoes, pushLembretePonto } from '@/lib/push'
 
@@ -70,6 +71,7 @@ export const JOBS: CronJob[] = [
   btgSyncJob,  // extrato do BTG 7h (BRT), antes do digest — só orgs conectadas
   digestJob,   // resumo diário 8h30 (BRT)
   cobrancaJob, // lembrete de vencimento ao cliente 9h (BRT), opt-in por cliente
+  portalAvisosJob, // aviso ao cliente do portal 9h (BRT): o que chegou para ele decidir
   fechamentoContabilJob, // abre o fechamento do mes anterior e avisa o Financeiro (nao envia)
   rhExpurgoJob, // retencao de documentos de RH: dia 1, 3h (unico job que APAGA arquivo)
   {

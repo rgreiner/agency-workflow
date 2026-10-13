@@ -67,7 +67,7 @@ const money = (v: unknown) => parseMoney(String(v ?? ''))
  * o form gravava o unitário derivado arredondado a 2 casas (1.398,60 ÷ 1000 → "1,40")
  * e recalcular quant × "1,40" aqui dava 1.400,00 — diferente do que a tela mostrava.
  */
-function valoresItem(quant: unknown, valorUnit: unknown, valorTotal: unknown): { valorUnit: number; total: number } {
+export function valoresItem(quant: unknown, valorUnit: unknown, valorTotal: unknown): { valorUnit: number; total: number } {
   const q = parseInt(String(quant ?? '') || '1', 10) || 0
   const unit = money(valorUnit)
   const totalDigitado = money(valorTotal)
@@ -204,4 +204,26 @@ export async function loadProducaoDoc(supabase: any, orgId: string, producaoId: 
   const honorarios = Math.round(faturar * honorariosPct) / 100
   const totais: OrcTotais = { faturar, honorariosPct, honorarios, total: faturar + honorarios }
   return { ...base, tipo: 'orcamento', orcamento: { itens, notas: nfNotes, totais } }
+}
+
+/**
+ * Cliente "de mentira" que responde às consultas do loadProducaoDoc com um pacote
+ * já pronto. É o caminho do PORTAL (mig. 342): o cliente não tem RLS nas tabelas,
+ * então a RPC `portal_orcamento_doc` valida o acesso e devolve só os campos que o
+ * PDF usa — e o desenho continua sendo um só para a agência e para o cliente.
+ */
+export function clienteDePacote(pacote: Record<string, unknown>) {
+  return {
+    from(tabela: string) {
+      const resposta = () => Promise.resolve({ data: pacote[tabela] ?? null })
+      const q = {
+        select: () => q,
+        eq: () => q,
+        single: resposta,
+        maybeSingle: resposta,
+        then: (ok: (v: { data: unknown }) => unknown, falha?: (e: unknown) => unknown) => resposta().then(ok, falha),
+      }
+      return q
+    },
+  }
 }

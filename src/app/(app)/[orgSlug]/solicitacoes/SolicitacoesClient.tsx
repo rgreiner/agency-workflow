@@ -111,7 +111,8 @@ function EntradaCard({
     ajuste:      { icon: PenLine,            cls: 'bg-amber-500/15 text-amber-600',   verbo: '✏️ Pediu ajustes' },
   }[e.kind] ?? { icon: Inbox, cls: 'bg-gray-100 text-gray-600', verbo: 'Entrada' }
   const TipoIcon = TIPO.icon
-  const temTarefa = e.kind !== 'solicitacao'
+  const orcamento = !!e.producaoId
+  const temTarefa = e.kind !== 'solicitacao' && !orcamento
 
   const taskUrl = e.activityId && e.campaignId
     ? `/${orgSlug}/workspaces/${e.workspaceId}/campaigns/${e.campaignId}/activities/${e.activityId}`
@@ -142,7 +143,9 @@ function EntradaCard({
           </div>
 
           <p className="text-sm font-medium text-gray-800 mt-1.5">
-            {e.kind === 'solicitacao'
+            {orcamento
+              ? <>{e.kind === 'aprovacao' ? '✅ Aprovou' : '✏️ Pediu alteração'}: <span className="text-gray-600 font-normal">{e.titulo ?? 'orçamento'}</span></>
+              : e.kind === 'solicitacao'
               ? (e.titulo ?? 'Nova solicitação')
               : <>{TIPO.verbo}: <span className="text-gray-600 font-normal">{e.atividadeTitulo ?? '—'}</span></>}
           </p>
@@ -187,7 +190,15 @@ function EntradaCard({
                 <ExternalLink className="w-3.5 h-3.5" /> Ver tarefa
               </Link>
             )}
-            {!temTarefa && (
+            {orcamento && (
+              <Link
+                href={`/${orgSlug}/producao/orcamento/${e.producaoId}`}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-700 border border-gray-200 rounded-lg px-2.5 py-1.5 hover:bg-gray-50 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> Ver orçamento
+              </Link>
+            )}
+            {!temTarefa && !orcamento && (
               <Link
                 href={`/${orgSlug}/workspaces/${e.workspaceId}`}
                 className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-700 border border-gray-200 rounded-lg px-2.5 py-1.5 hover:bg-gray-50 transition-colors"

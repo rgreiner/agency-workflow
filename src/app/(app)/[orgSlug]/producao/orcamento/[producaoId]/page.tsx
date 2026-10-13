@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { updateProducao } from '@/app/actions/producao'
 import { loadProducaoSelectors } from '@/lib/midia-selectors'
 import { OrcamentoForm, type OrcamentoValues, type ItemOrc } from '../OrcamentoForm'
+import { PortalOrcamentoCard } from '../PortalOrcamentoCard'
 import type { CotacaoView, FornecedorCotacaoOpt } from '../CotacaoPainel'
 import { urlCotacao } from '@/lib/cotacao'
 import { telefoneNacional } from '@/lib/telefone'
@@ -40,12 +41,17 @@ export default async function EditarOrcamentoPage({
   // Pedido de cotação (mig. 310): rodadas deste orçamento + cadastro para escolher quem recebe.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any
-  const [{ data: cots }, { data: forns }, { data: org }] = await Promise.all([
+  const [{ data: cots }, { data: forns }, { data: org }, { data: quemDecidiu }, { count: contatosPortal }] = await Promise.all([
     sb.from('cotacoes')
       .select('id, created_at, prazo_resposta, encerrada, mensagem, anexos, itens, convites:cotacao_convites(id, fornecedor_id, token, email_para, email_enviado_em, whatsapp_em, aberto_em, respondido_em, recusado_em, resposta, resposta_anexos, dados_fornecedor, fornecedor:fornecedor_id(name, telefones))')
       .eq('producao_id', producaoId).order('created_at', { ascending: false }),
     sb.from('fornecedores').select('id, name, tipo, tags, emails, telefones').eq('org_id', p.org_id).eq('archived', false).order('name'),
     sb.from('organizations').select('name').eq('id', p.org_id).single(),
+    p.portal_decidido_por
+      ? sb.from('portal_users').select('nome').eq('id', p.portal_decidido_por).maybeSingle()
+      : Promise.resolve({ data: null }),
+    sb.from('portal_users').select('id', { count: 'exact', head: true })
+      .eq('workspace_id', p.workspace_id).eq('ativo', true).is('interno_user_id', null),
   ])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cotacoes: CotacaoView[] = (cots ?? []).map((c: any) => ({
@@ -86,6 +92,17 @@ export default async function EditarOrcamentoPage({
       submitLabel="Salvar"
       onSubmit={updateProducao.bind(null, orgSlug, producaoId)}
       cotacao={{ orcamentoId: producaoId, agencia: org?.name ?? '', cotacoes, fornecedores: fornecedoresCotacao, abrir: abrirCotacao === '1' }}
+      portalSlot={
+        <PortalOrcamentoCard
+          orgSlug={orgSlug}
+          producaoId={producaoId}
+          publicadoEm={p.portal_publicado_em ?? null}
+          decisao={p.portal_decisao && p.portal_decidido_em ? {
+            kind: p.portal_decisao, em: p.portal_decidido_em, por: quemDecidiu?.nome ?? null, ip: p.portal_decisao_ip ?? null,
+          } : null}
+          contatos={contatosPortal ?? 0}
+        />
+      }
     />
   )
 }

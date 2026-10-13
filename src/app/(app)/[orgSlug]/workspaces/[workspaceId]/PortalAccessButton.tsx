@@ -3,8 +3,13 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Globe, X, Send, UserX, UserCheck } from 'lucide-react'
-import { criarAcessoPortal, setAcessoPortalAtivo, enviarConvitePortal } from '@/app/actions/portal'
+import { Globe, X, Send, UserX, UserCheck, Eye, Link2, RefreshCw } from 'lucide-react'
+import {
+  criarAcessoPortal, setAcessoPortalAtivo, enviarConvitePortal,
+  gerarLinkCadastro, revogarLinkCadastro, verComoCliente,
+} from '@/app/actions/portal'
+import { CopyButton } from '@/components/ui/CopyButton'
+import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon'
 
 export interface PortalUserRow {
   id: string
@@ -14,18 +19,23 @@ export interface PortalUserRow {
   last_login_at: string | null
 }
 
+export interface LinkCadastro { url: string; expiraEm: string; usos: number }
+
 interface Props {
   orgSlug: string
   workspaceId: string
+  clienteNome: string
   contatos: PortalUserRow[]
+  /** Link de cadastro ativo (mig. 342) — null quando não há ou quem vê não gere o portal. */
+  linkCadastro: LinkCadastro | null
 }
 
 /**
- * "Portal do cliente" na tela do cliente: gerencia quem (do cliente) acessa o
- * painel de acompanhamento — cadastrar contato, enviar o link de acesso,
- * ativar/desativar. Só owner/admin consegue efetivar (a action barra o resto).
+ * "Portal do cliente" na tela do cliente: link de cadastro (o cliente cria o
+ * próprio acesso), ver o painel como o cliente vê, e a lista de quem acessa —
+ * reenviar link, ativar/desativar, cadastrar à mão.
  */
-export function PortalAccessButton({ orgSlug, workspaceId, contatos }: Props) {
+export function PortalAccessButton({ orgSlug, workspaceId, clienteNome, contatos, linkCadastro }: Props) {
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
@@ -47,6 +57,36 @@ export function PortalAccessButton({ orgSlug, workspaceId, contatos }: Props) {
       router.refresh()
     })
   }
+
+  function handleGerarLink() {
+    startTransition(async () => {
+      const res = await gerarLinkCadastro(orgSlug, workspaceId)
+      if (res.error || !res.url) { toast.error(res.error ?? 'Não foi possível gerar o link.'); return }
+      navigator.clipboard?.writeText(res.url).catch(() => {})
+      toast.success('Link gerado e copiado. Mande para o cliente.')
+      router.refresh()
+    })
+  }
+
+  function handleRevogar() {
+    startTransition(async () => {
+      const res = await revogarLinkCadastro(orgSlug, workspaceId)
+      if (res.error) { toast.error(res.error); return }
+      toast.success('Link desativado. Quem já tem acesso continua entrando.')
+      router.refresh()
+    })
+  }
+
+  function handleVerComoCliente() {
+    startTransition(async () => {
+      const res = await verComoCliente(orgSlug, workspaceId)
+      if (res?.error) toast.error(res.error)
+    })
+  }
+
+  const textoWhats = linkCadastro
+    ? `Olá! Criamos um painel para você acompanhar os trabalhos da ${clienteNome} com a gente: aprovações, orçamentos, datas de entrega e atas das reuniões. Crie seu acesso por aqui: ${linkCadastro.url}`
+    : ''
 
   function handleConvite(id: string) {
     startTransition(async () => {
@@ -78,10 +118,68 @@ export function PortalAccessButton({ orgSlug, workspaceId, contatos }: Props) {
 
             <div className="px-6 py-5 overflow-y-auto space-y-5">
               <p className="text-sm text-gray-500 leading-relaxed">
-                Quem estiver aqui acessa o <span className="font-medium text-gray-700">painel de
-                acompanhamento</span> deste cliente (entra por link enviado ao e-mail, sem senha).
-                A pessoa vê só o resumo dos trabalhos <em>deste</em> cliente — nada interno.
+                O cliente acompanha o que está em andamento, aprova trabalhos e orçamentos e vê
+                as datas de entrega e as atas. Ele vê só <em>este</em> cliente, nada interno.
               </p>
+
+              <button
+                type="button"
+                onClick={handleVerComoCliente}
+                disabled={isPending}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors active:scale-[0.97] disabled:opacity-50"
+              >
+                <Eye className="w-4 h-4" /> Ver como o cliente vê
+              </button>
+
+              {/* Link de cadastro: o cliente cria o próprio acesso */}
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3.5 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <Link2 className="w-4 h-4 text-orange-600" />
+                  <p className="text-sm font-medium text-gray-900">Link de cadastro</p>
+                </div>
+                {linkCadastro ? (
+                  <>
+                    <div className="flex items-center gap-1.5 rounded-lg bg-white border border-gray-200 px-2.5 py-1.5">
+                      <span className="flex-1 min-w-0 truncate text-xs text-gray-600 font-mono">{linkCadastro.url}</span>
+                      <CopyButton text={linkCadastro.url} label="Copiar link" />
+                      <a
+                        href={`https://wa.me/?text=${encodeURIComponent(textoWhats)}`}
+                        target="_blank" rel="noopener"
+                        title="Enviar pelo WhatsApp"
+                        className="p-1 rounded text-gray-400 hover:text-green-600 hover:bg-gray-100 transition-colors shrink-0"
+                      >
+                        <WhatsAppIcon className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Vale até {new Date(linkCadastro.expiraEm).toLocaleDateString('pt-BR')}
+                      {' · '}{linkCadastro.usos === 0 ? 'ninguém usou ainda' : `${linkCadastro.usos} cadastro${linkCadastro.usos > 1 ? 's' : ''}`}.
+                      Quem abrir preenche nome, e-mail e senha e entra direto.
+                    </p>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={handleGerarLink} disabled={isPending}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg px-2 py-1 transition-colors disabled:opacity-50">
+                        <RefreshCw className="w-3.5 h-3.5" /> Gerar novo
+                      </button>
+                      <button type="button" onClick={handleRevogar} disabled={isPending}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg px-2 py-1 transition-colors disabled:opacity-50">
+                        <X className="w-3.5 h-3.5" /> Desativar
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      Gere um link e mande ao cliente. Quem abrir preenche nome, e-mail e senha e já
+                      entra no painel. Vale 30 dias e serve para mais de uma pessoa do cliente.
+                    </p>
+                    <button type="button" onClick={handleGerarLink} disabled={isPending}
+                      className="w-full px-4 py-2.5 rounded-xl text-[#fff] text-sm font-medium bg-orange-600 hover:bg-orange-700 transition-colors active:scale-[0.97] disabled:opacity-50">
+                      Gerar link de cadastro
+                    </button>
+                  </>
+                )}
+              </div>
 
               {contatos.length > 0 && (
                 <ul className="space-y-2">
@@ -126,7 +224,7 @@ export function PortalAccessButton({ orgSlug, workspaceId, contatos }: Props) {
               )}
 
               <form action={handleAdd} className="space-y-3 pt-1 border-t border-gray-100">
-                <p className="text-sm font-medium text-gray-700 pt-3">Novo contato</p>
+                <p className="text-sm font-medium text-gray-700 pt-3">Cadastrar à mão</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <input
                     name="nome" required placeholder="Nome"
@@ -140,7 +238,7 @@ export function PortalAccessButton({ orgSlug, workspaceId, contatos }: Props) {
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="w-full px-4 py-2.5 rounded-xl text-[#fff] text-sm font-medium bg-orange-600 hover:bg-orange-700 transition disabled:opacity-50"
+                  className="w-full px-4 py-2.5 rounded-xl text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-50"
                 >
                   Criar acesso
                 </button>
