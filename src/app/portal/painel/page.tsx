@@ -10,6 +10,7 @@ import {
 import { dataBR } from '@/lib/reunioes'
 import { PortalThemeToggle } from '../PortalThemeToggle'
 import { SenhaPortalButton } from './SenhaPortalButton'
+import { PortalNav } from '../PortalNav'
 import { FlowMark } from '@/components/brand/FlowMark'
 
 export const dynamic = 'force-dynamic'
@@ -183,6 +184,7 @@ export default async function PortalPainelPage() {
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <PortalNav atual="painel" />
           {!preview && (
             <Link
               href="/portal/solicitar"

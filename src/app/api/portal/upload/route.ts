@@ -29,6 +29,7 @@ function uploadRoot(): string {
 export async function POST(request: Request) {
   const claims = await sessaoPortal()
   if (!claims) return NextResponse.json({ error: 'Sessão expirada' }, { status: 401 })
+  if (claims.preview) return NextResponse.json({ error: 'Visualização da agência: só o cliente envia arquivos.' }, { status: 403 })
 
   // org/workspace vêm do BANCO (linha do contato), nunca do form — o cliente
   // não escolhe onde grava.

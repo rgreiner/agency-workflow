@@ -6,6 +6,8 @@
  * Lado admin (sessão de membro owner/admin): gerenciar os contatos com acesso.
  */
 import { randomBytes } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
@@ -23,6 +25,7 @@ import {
 import { limiteEstourado, registrarTentativa, registrarBloqueio } from '@/lib/auth/rate-limit'
 import { sendMail } from '@/lib/email/send'
 import { emailLayout } from '@/lib/email/layout'
+import { uploadToSubfolder } from '@/lib/task-folders'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
 
@@ -544,5 +547,57 @@ export async function publicarOrcamentoPortal(
   })
   if (error) return { error: String(error.message ?? 'Não foi possível atualizar.') }
   revalidatePath(`/${orgSlug}/producao/orcamento/${producaoId}`)
+  return {}
+}
+
+// ── Quadro: solicitar alteração (mig. 343) ────────────────────────────────────
+
+const MIME_POR_EXT: Record<string, string> = {
+  pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
+  gif: 'image/gif', txt: 'text/plain', doc: 'application/msword', xls: 'application/vnd.ms-excel',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+}
+
+/**
+ * Cliente pede alteração num trabalho do quadro (fora da aprovação). Não muda o
+ * status: registra, avisa o atendimento e manda os anexos para a pasta Links da
+ * tarefa, onde o time já procura referência.
+ */
+export async function solicitarAlteracao(
+  activityId: string, mensagem: string, anexos: PortalAnexo[],
+): Promise<{ error?: string }> {
+  if (await emPreview()) return { error: MSG_PREVIEW }
+  if (!mensagem.trim()) return { error: 'Conte o que precisa mudar.' }
+  const supabase = await createPortalClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('portal_solicitar_alteracao', {
+    p_activity_id: activityId, p_mensagem: mensagem, p_anexos: anexos,
+  })
+  if (error) {
+    if (String(error.message ?? '').includes('indisponível')) return { error: 'Este trabalho não aceita alteração por aqui agora.' }
+    return { error: 'Não foi possível enviar. Tente de novo.' }
+  }
+
+  const r = data as { pasta_ref: string | null; org_id: string; workspace_id: string }
+  after(async () => {
+    await dispatchPushNotificacoes().catch(() => {})
+    if (!r.pasta_ref || anexos.length === 0) return
+    const prefixo = `portal-privado/${r.org_id}/${r.workspace_id}/`
+    const raiz = process.env.UPLOAD_DIR || '/app/uploads'
+    for (const a of anexos) {
+      // Só arquivo que o próprio cliente subiu (a chave nasce no /api/portal/upload).
+      if (!a.chave.startsWith(prefixo) || a.chave.includes('..')) continue
+      try {
+        const buf = await readFile(path.join(raiz, a.chave))
+        const ext = (a.chave.split('.').pop() ?? '').toLowerCase()
+        const nome = `Cliente - ${a.nome}`.replace(/[/\\]/g, '-').slice(0, 180)
+        await uploadToSubfolder(r.pasta_ref, 'Links', nome, MIME_POR_EXT[ext] ?? 'application/octet-stream', buf)
+      } catch (e) {
+        // O anexo segue acessível em Solicitações; só não chegou à pasta.
+        console.error('[portal] anexo não foi para a pasta Links:', e)
+      }
+    }
+  })
   return {}
 }

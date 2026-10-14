@@ -7,6 +7,7 @@ import {
   CheckCircle2, Loader2, PartyPopper, X, ChevronDown, ChevronRight,
 } from 'lucide-react'
 import { registrarDecisao, type ComentarioPeca } from '@/app/actions/portal'
+import type { GrupoPeca } from '@/lib/portal-legendas'
 
 export interface Peca { ref: string; name: string; mime: string; size: number }
 
@@ -17,6 +18,8 @@ interface Props {
   titulo: string
   campanha: string
   pecas: Peca[]
+  /** Peças agrupadas com a legenda de cada uma (mig. 343); null = modo lista. */
+  grupos?: GrupoPeca[] | null
   /** Já respondido antes: 'aprovacao' | 'ajuste' | null */
   decidido: string | null
 }
@@ -24,7 +27,7 @@ interface Props {
 const urlPeca = (activityId: string, ref: string, download = false) =>
   `/api/portal/peca/${activityId}?ref=${encodeURIComponent(ref)}${download ? '&download=1' : ''}`
 
-export function AprovacaoClient({ activityId, titulo, campanha, pecas, decidido }: Props) {
+export function AprovacaoClient({ activityId, titulo, campanha, pecas, grupos = null, decidido }: Props) {
   const router = useRouter()
   const [coment, setComent] = useState<Record<string, string>>({})
   const [abertos, setAbertos] = useState<Set<string>>(new Set())
@@ -40,14 +43,20 @@ export function AprovacaoClient({ activityId, titulo, campanha, pecas, decidido 
   function comentarios(): ComentarioPeca[] {
     return Object.entries(coment)
       .filter(([, v]) => v.trim())
-      .map(([ref, v]) => ({ nome: pecas.find((p) => p.ref === ref)?.name ?? 'peça', comentario: v.trim() }))
+      .map(([ref, v]) => ({
+        // Comentário do grupo (modo legenda) leva o nome da peça da Redação.
+        nome: ref.startsWith('g:')
+          ? (grupos?.[Number(ref.slice(2))]?.nome || 'peça')
+          : (pecas.find((p) => p.ref === ref)?.name ?? 'peça'),
+        comentario: v.trim(),
+      }))
   }
 
   function enviar(decisao: 'aprovado' | 'ajuste') {
     setErro(null)
     const cs = comentarios()
     if (decisao === 'ajuste' && !mensagem.trim() && cs.length === 0) {
-      setErro('Conte o que precisa ser ajustado — no campo abaixo ou comentando uma peça.')
+      setErro('Conte o que precisa mudar — no campo abaixo ou comentando uma peça.')
       return
     }
     startTransition(async () => {
@@ -94,6 +103,102 @@ export function AprovacaoClient({ activityId, titulo, campanha, pecas, decidido 
     )
   }
 
+  const porRef = new Map(pecas.map((p) => [p.ref, p]))
+
+  /** Peça "no formato": imagem/vídeo dentro do carrossel do grupo; PDF e .docx abrem inteiros. */
+  function visual(p: Peca) {
+    if (p.mime.startsWith('image/')) {
+      return (
+        <button onClick={() => setZoom(p)} className="block w-full h-full bg-gray-100">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={urlPeca(activityId, p.ref)} alt={p.name} className="w-full h-full max-h-[70vh] object-contain" />
+        </button>
+      )
+    }
+    if (p.mime.startsWith('video/')) {
+      return <video controls preload="metadata" className="w-full max-h-[70vh] bg-black" src={urlPeca(activityId, p.ref)} />
+    }
+    if (p.mime === 'application/pdf') {
+      return (
+        <object data={urlPeca(activityId, p.ref)} type="application/pdf" className="w-full h-[70vh] bg-gray-100">
+          <p className="p-6 text-sm text-gray-500">Seu navegador não abre PDF aqui. Use o botão Baixar.</p>
+        </object>
+      )
+    }
+    if (p.mime === DOCX_MIME || p.name.toLowerCase().endsWith('.docx')) {
+      return <DocxPreview activityId={activityId} pecaRef={p.ref} />
+    }
+    return <p className="p-6 text-sm text-gray-500 text-center">{p.name}</p>
+  }
+
+  /** Um bloco da Redação: as peças dele lado a lado e a legenda embaixo, como no feed. */
+  function renderGrupo(g: GrupoPeca, gi: number) {
+    const itens = g.refs.map((r) => porRef.get(r)).filter((p): p is Peca => !!p)
+    const chave = `g:${gi}`
+    const aberto = abertos.has(chave)
+    return (
+      <div key={chave} className="rounded-2xl border border-gray-200 overflow-hidden bg-white">
+        {g.nome && (
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+            <span className="text-sm font-semibold text-gray-900">{g.nome}</span>
+            <span className="text-xs text-gray-400">{itens.length} {itens.length === 1 ? 'arquivo' : 'arquivos'}</span>
+          </div>
+        )}
+
+        {/* Peças do bloco: rolagem lateral com encaixe (carrossel) */}
+        <div className="flex overflow-x-auto snap-x snap-mandatory bg-gray-100">
+          {itens.map((p) => (
+            <div key={p.ref} className={`snap-center shrink-0 ${itens.length > 1 ? 'w-[88%] sm:w-[70%]' : 'w-full'} border-r border-gray-200 last:border-r-0`}>
+              {visual(p)}
+              <div className="flex items-center gap-2 px-3 py-2 bg-white border-t border-gray-100">
+                <span className="flex-1 min-w-0 truncate text-xs text-gray-500">{p.name}</span>
+                <a href={urlPeca(activityId, p.ref, true)} title="Baixar"
+                  className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+                  <Download className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            </div>
+          ))}
+        </div>
+        {itens.length > 1 && (
+          <p className="text-[11px] text-gray-400 text-center py-1.5 border-b border-gray-100">Arraste para o lado para ver todas</p>
+        )}
+
+        {g.legenda && (
+          <div className="px-4 py-3.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-1.5">Legenda</p>
+            <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">{g.legenda}</p>
+          </div>
+        )}
+
+        {!jaRespondido && (
+          <div className="px-4 pb-3.5">
+            <button
+              onClick={() => setAbertos((s) => {
+                const n = new Set(s); if (n.has(chave)) n.delete(chave); else n.add(chave); return n
+              })}
+              className={`inline-flex items-center gap-1.5 text-xs font-medium rounded-lg px-2.5 py-1.5 transition-colors ${
+                coment[chave]?.trim() ? 'text-orange-700 bg-orange-100 hover:bg-orange-200' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <MessageSquarePlus className="w-3.5 h-3.5" />
+              {coment[chave]?.trim() ? 'Comentada' : 'Comentar esta peça'}
+            </button>
+            {aberto && (
+              <textarea
+                value={coment[chave] ?? ''}
+                onChange={(e) => setComent((c) => ({ ...c, [chave]: e.target.value }))}
+                rows={3}
+                placeholder="O que mudar nesta peça ou na legenda?"
+                className="mt-2 w-full px-3.5 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 resize-y focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <>
       <p className="text-xs font-semibold uppercase tracking-wide text-orange-600 mb-1">{campanha}</p>
@@ -112,7 +217,7 @@ export function AprovacaoClient({ activityId, titulo, campanha, pecas, decidido 
       ) : (
         <p className="text-sm text-gray-500 mt-1 leading-relaxed">
           Confira as peças abaixo. Você pode comentar em cada uma e depois <b>aprovar</b> ou
-          <b> pedir ajustes</b>.
+          <b> solicitar alteração</b>.
         </p>
       )}
 
@@ -124,7 +229,7 @@ export function AprovacaoClient({ activityId, titulo, campanha, pecas, decidido 
           </p>
         )}
 
-        {pecas.map((p) => {
+        {grupos ? grupos.map((g, gi) => renderGrupo(g, gi)) : pecas.map((p) => {
           const isImg = p.mime.startsWith('image/')
           const isVid = p.mime.startsWith('video/')
           const isPdf = p.mime === 'application/pdf'
@@ -208,7 +313,7 @@ export function AprovacaoClient({ activityId, titulo, campanha, pecas, decidido 
           {modo === 'ajuste' && (
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                O que precisa ser ajustado?
+                O que precisa mudar?
               </label>
               <textarea
                 value={mensagem}
@@ -229,7 +334,7 @@ export function AprovacaoClient({ activityId, titulo, campanha, pecas, decidido 
               className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-[#fff] font-medium bg-green-600 hover:bg-green-700 transition disabled:opacity-50"
             >
               {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-              Aprovar trabalho
+              Aprovar
             </button>
             <button
               onClick={() => (modo === 'ajuste' ? enviar('ajuste') : setModo('ajuste'))}
@@ -237,7 +342,7 @@ export function AprovacaoClient({ activityId, titulo, campanha, pecas, decidido 
               className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
             >
               <MessageSquarePlus className="w-4 h-4" />
-              {modo === 'ajuste' ? 'Enviar ajustes' : 'Pedir ajustes'}
+              {modo === 'ajuste' ? 'Enviar alteração' : 'Solicitar alteração'}
             </button>
           </div>
           <p className="text-xs text-gray-400 text-center mt-3">

@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import { sessaoPortal } from '@/lib/auth/portal'
 import { createPortalClient } from '@/lib/supabase/portal'
 import { listPreviewFiles } from '@/lib/task-folders'
+import { driveConfigured, readRedacaoText } from '@/lib/google-drive'
+import { agruparPorLegenda, type GrupoPeca } from '@/lib/portal-legendas'
 import { PortalShell } from '../../PortalShell'
 import { AprovacaoClient, type Peca } from './AprovacaoClient'
 
@@ -23,6 +25,7 @@ export default async function PortalAprovacaoPage({
 
   const t = data as {
     id: string; titulo: string; campanha: string; pasta_ref: string | null
+    redacao_ref: string | null
     decisao: { kind: string } | null
   }
 
@@ -37,6 +40,18 @@ export default async function PortalAprovacaoPage({
     }
   }
 
+  // Legenda de cada peça (mig. 343): o servidor lê a Redação e entrega só o
+  // trecho "Legenda" de cada bloco. Falhou ou não tem? A tela segue em lista.
+  let grupos: GrupoPeca[] | null = null
+  if (pecas.length && t.redacao_ref && driveConfigured()) {
+    try {
+      const { text } = await readRedacaoText(t.redacao_ref)
+      grupos = agruparPorLegenda(pecas, text)
+    } catch (e) {
+      console.error('[portal] leitura da Redação falhou', e)
+    }
+  }
+
   return (
     <PortalShell wide>
       <AprovacaoClient
@@ -44,6 +59,7 @@ export default async function PortalAprovacaoPage({
         titulo={t.titulo}
         campanha={t.campanha}
         pecas={pecas}
+        grupos={grupos}
         decidido={t.decisao?.kind ?? null}
       />
     </PortalShell>
