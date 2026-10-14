@@ -73,6 +73,21 @@ export const JOBS: CronJob[] = [
   cobrancaJob, // lembrete de vencimento ao cliente 9h (BRT), opt-in por cliente
   portalAvisosJob, // aviso ao cliente do portal 9h (BRT): o que chegou para ele decidir
   fechamentoContabilJob, // abre o fechamento do mes anterior e avisa o Financeiro (nao envia)
+  {
+    // Cobrança diária do Financeiro (mig. 350): OFX não importado hoje, saldo
+    // que não bate com o banco e fila de conciliação parada há mais de 3 dias.
+    // Repete todo dia útil até resolver — diferença que espera vira arqueologia.
+    name: 'financeiro-alertas',
+    dailyAfterHour: 10,
+    weekdaysOnly: true,
+    run: async ({ supabase, dry }) => {
+      if (dry) return 'conferiria OFX, saldo × banco e fila de conciliação'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc('cron_financeiro_alertas')
+      if (error) throw new Error(error.message)
+      return `${(data as { avisos?: number } | null)?.avisos ?? 0} aviso(s) ativo(s)`
+    },
+  },
   rhExpurgoJob, // retencao de documentos de RH: dia 1, 3h (unico job que APAGA arquivo)
   {
     // Varredura de web-push: pega notificação criada por trigger/cron (due_soon

@@ -1,4 +1,4 @@
-import { MessageSquare, ArrowRightLeft, UserPlus, LogIn, AtSign, FolderSync, AlarmClock, MessageSquareReply, Inbox, BadgeCheck, PenLine, Receipt, Globe } from 'lucide-react'
+import { MessageSquare, ArrowRightLeft, UserPlus, LogIn, AtSign, FolderSync, AlarmClock, MessageSquareReply, Inbox, BadgeCheck, PenLine, Receipt, Globe, Landmark } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { commentPreview } from '@/lib/html'
 import { STATUS_CONFIG, type StatusConfig } from '@/types'
@@ -60,6 +60,7 @@ export function messageOf(n: NotificationItem, statuses: StatusConfig[] = STATUS
       const f = n.data?.fornecedor ?? 'Um fornecedor'
       return n.data?.recusou ? `${f} não vai cotar desta vez` : `💰 ${f} enviou a proposta da cotação`
     }
+    case 'financeiro_alerta': return `⚠️ ${n.data?.texto ?? 'Pendência no Financeiro'}`
     default:               return 'Atualização'
   }
 }
@@ -79,6 +80,7 @@ export function NotifIcon({ type, className = 'w-3.5 h-3.5' }: { type: string; c
   if (type === 'portal_orcamento_ajuste')   return <PenLine className={cn(className, 'text-orange-500')} />
   if (type === 'portal_cadastro')           return <Globe className={cn(className, 'text-orange-500')} />
   if (type === 'cotacao_resposta')   return <Receipt className={cn(className, 'text-emerald-500')} />
+  if (type === 'financeiro_alerta')  return <Landmark className={cn(className, 'text-red-500')} />
   return <ArrowRightLeft className={cn(className, 'text-orange-500')} />
 }
 
