@@ -2,7 +2,9 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { updateCampaign, deleteCampaign, setCampaignArchived, setCampaignDrive } from '@/app/actions/workspace'
+import { updateCampaign, deleteCampaign, setCampaignArchived, setCampaignDrive, moveCampaign } from '@/app/actions/workspace'
+import { Select } from '@/components/ui/Select'
+import { toast } from 'sonner'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { Settings, X, Check, Trash2, Loader2, Archive, ArchiveRestore } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -17,9 +19,12 @@ interface Props {
   endDate: string
   archived?: boolean
   driveFolderId?: string | null
+  /** Clientes da org — trocar aqui move o projeto (job criado no cliente errado). */
+  clientes?: { id: string; name: string }[]
 }
 
-export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, description, startDate, endDate, archived = false, driveFolderId = null }: Props) {
+export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, description, startDate, endDate, archived = false, driveFolderId = null, clientes = [] }: Props) {
+  const [cliente, setCliente] = useState(workspaceId)
   const [open, setOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [form, setForm] = useState({ name, description, start_date: startDate, end_date: endDate })
@@ -48,6 +53,18 @@ export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, des
       if (res?.error) { setError(res.error); return }
       const d = await setCampaignDrive(orgSlug, workspaceId, campaignId, drive)
       if (d?.error) { setError(d.error); return }
+      if (cliente !== workspaceId) {
+        const m = await moveCampaign(orgSlug, campaignId, cliente)
+        if (m.error) { setError(m.error); return }
+        const nome = clientes.find(c => c.id === cliente)?.name ?? 'o novo cliente'
+        if (m.pasta === 'movida') toast.success(`Projeto movido para ${nome}, com a pasta do Drive`)
+        else if (m.pasta === 'sem-destino') toast.warning(`Projeto movido para ${nome}. A pasta ficou onde estava: ${nome} ainda não tem projeto com pasta para servir de referência — mova no Drive.`, { duration: 10000 })
+        else if (m.pasta === 'erro') toast.warning(`Projeto movido para ${nome}, mas a pasta não foi movida no Drive — mova à mão.`, { duration: 10000 })
+        else toast.success(`Projeto movido para ${nome}`)
+        setOpen(false)
+        router.push(`/${orgSlug}/workspaces/${cliente}/campaigns/${campaignId}`)
+        return
+      }
       setOpen(false)
       router.refresh()
     })
@@ -100,6 +117,19 @@ export function CampaignEditButton({ orgSlug, workspaceId, campaignId, name, des
                   className="w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
               </div>
+
+              {clientes.length > 1 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Cliente</label>
+                  <Select value={cliente} onChange={setCliente}
+                    options={clientes.map(c => ({ value: c.id, label: c.name }))} />
+                  {cliente !== workspaceId && (
+                    <p className="text-xs text-orange-600 mt-1">
+                      Ao salvar, o projeto e as tarefas vão para este cliente, e a pasta vai junto no Drive.
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Descrição</label>

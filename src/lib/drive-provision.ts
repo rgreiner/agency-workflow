@@ -2,7 +2,7 @@ import 'server-only'
 import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
-import { createTaskFolders, moveTaskFolder, inspectTaskFolder, completarSubpastas, folderConfigured, resolvePathPrefix, backendForRef, refIncompativel, renameTaskFolder, taskFolderHasFiles, folderInfo } from '@/lib/task-folders'
+import { createTaskFolders, moveTaskFolder, inspectTaskFolder, completarSubpastas, folderConfigured, resolvePathPrefix, backendForRef, refIncompativel, renameTaskFolder, taskFolderHasFiles, folderInfo, folderPath } from '@/lib/task-folders'
 import { ultimoSegmento } from '@/lib/task-folder-names'
 import { logSystemError } from '@/lib/system-error'
 
@@ -332,4 +332,65 @@ export async function syncFolderNameAfterTitleChange(
       await logSystemError(supabase, { userId: params.userId, context: 'drive:rename-auto', error: e, activityId: params.activityId })
     }
   })
+}
+
+/**
+ * Projeto mudou de cliente: leva a pasta dele para a pasta do cliente novo.
+ *
+ * O Flow não guarda a pasta do CLIENTE — só a de cada projeto. A do cliente novo
+ * é deduzida dos projetos que ele já tem: a pasta-mãe que eles compartilham.
+ * Sem projeto com pasta no destino, não há como saber para onde ir, e a pasta
+ * fica onde está (o projeto muda de cliente só no Flow).
+ *
+ * A pasta do projeto é reparentada (o ID e os links sobrevivem); o caminho local
+ * de cada tarefa muda e é regravado em 2º plano.
+ */
+export async function moveCampaignDrive(
+  supabase: SupabaseClient<Database>,
+  params: { campaignId: string; newWorkspaceId: string; userId: string },
+): Promise<'movida' | 'sem-pasta' | 'sem-destino' | 'erro'> {
+  const cfg = await resolve(supabase, params.campaignId)
+  if (!cfg || backendForRef(cfg.folderId) !== 'drive') return 'sem-pasta'
+
+  try {
+    const { data: irmaos } = await supabase.from('campaigns')
+      .select('drive_folder_id').eq('workspace_id', params.newWorkspaceId)
+      .neq('id', params.campaignId).not('drive_folder_id', 'is', null).limit(8)
+    const contagem = new Map<string, number>()
+    for (const c of (irmaos ?? []) as { drive_folder_id: string }[]) {
+      if (backendForRef(c.drive_folder_id) !== 'drive') continue
+      const info = await folderInfo(c.drive_folder_id).catch(() => null)
+      if (info?.exists && !info.trashed && info.parentId) contagem.set(info.parentId, (contagem.get(info.parentId) ?? 0) + 1)
+    }
+    const destino = [...contagem].sort((a, b) => b[1] - a[1])[0]?.[0]
+    if (!destino) return 'sem-destino'
+
+    const atual = await folderInfo(cfg.folderId)
+    if (!atual?.exists) return 'sem-pasta'
+    if (atual.parentId !== destino) await moveTaskFolder(cfg.folderId, destino)
+  } catch (e) {
+    await logSystemError(supabase, { userId: params.userId, context: 'drive:move-projeto', error: e })
+    return 'erro'
+  }
+
+  after(async () => {
+    const { data: tarefas } = await supabase.from('activities')
+      .select('id, drive_folder_id').eq('campaign_id', params.campaignId).not('drive_folder_id', 'is', null)
+    for (const t of (tarefas ?? []) as { id: string; drive_folder_id: string }[]) {
+      try {
+        const caminho = await folderPath(t.drive_folder_id)
+        if (!caminho) continue
+        // set_activity_drive faz coalesce: null mantém o que está salvo.
+        await supabase.rpc('set_activity_drive', {
+          p_user_id: params.userId, p_activity_id: t.id,
+          p_drive_folder_id: null, p_drive_path: joinLocalPath(cfg.prefix, caminho),
+          p_drive_folder_url: null, p_redacao_url: null,
+          p_finalizacao_url: null, p_preview_url: null,
+        })
+      } catch (e) {
+        await logSystemError(supabase, { userId: params.userId, context: 'drive:move-projeto', error: e, activityId: t.id })
+      }
+    }
+  })
+  return 'movida'
 }

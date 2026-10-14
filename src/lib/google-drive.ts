@@ -159,6 +159,11 @@ async function nomeLivre(parentId: string, name: string): Promise<string> {
 }
 
 /** Reconstrói o caminho da pasta no Drive (ex.: "Clientes\One a One\2026\Institucional\<tarefa>"). */
+/** Caminho relativo da pasta no Drive, refeito a partir dos pais de hoje. */
+export async function drivePathOf(folderId: string): Promise<string> {
+  return buildDrivePath(folderId)
+}
+
 async function buildDrivePath(folderId: string): Promise<string> {
   const drive = getDrive()
   const parts: string[] = []

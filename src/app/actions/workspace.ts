@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 import { extractCampaignFolderRef, refIncompativel } from '@/lib/task-folders'
+import { moveCampaignDrive } from '@/lib/drive-provision'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
@@ -257,4 +258,25 @@ export async function setCampaignArchived(orgSlug: string, workspaceId: string, 
   })
   if (error) return { error: error.message }
   revalidatePath('/', 'layout')
+}
+
+/**
+ * Move o projeto para outro cliente (mig. 341) e leva a pasta junto no Drive.
+ * O banco decide se pode (PP/PI/MX ligados bloqueiam); a pasta é melhor-esforço
+ * e a resposta diz o que aconteceu com ela, para a tela avisar.
+ */
+export async function moveCampaign(orgSlug: string, campaignId: string, newWorkspaceId: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('move_campaign', {
+    p_user_id: user.id, p_campaign_id: campaignId, p_new_workspace_id: newWorkspaceId,
+  })
+  if (error) return { error: error.message }
+
+  const pasta = await moveCampaignDrive(supabase, { campaignId, newWorkspaceId, userId: user.id })
+  revalidatePath('/', 'layout')
+  return { pasta }
 }

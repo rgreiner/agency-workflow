@@ -23,11 +23,14 @@ export default async function CampaignPage({
 
   const { data: campaign } = await supabase
     .from('campaigns')
-    .select('*, workspaces(name, archived)')
+    .select('*, workspaces(name, archived, org_id)')
     .eq('id', campaignId)
     .single()
   if (!campaign) return null
 
+  // Clientes da org para "mover o projeto" (job criado no cliente errado).
+  const { data: clientes } = await supabase.from('workspaces')
+    .select('id, name').eq('org_id', (campaign.workspaces as unknown as { org_id: string } | null)?.org_id ?? '').eq('archived', false).order('name')
   const data = await loadActivityList(orgSlug, { scopeCampaignId: campaignId, archived: archivedView })
   if (!data) return null
 
@@ -89,6 +92,7 @@ export default async function CampaignPage({
           endDate={campaign.end_date ?? ''}
           archived={campaign.archived ?? false}
           driveFolderId={campaign.drive_folder_id ?? null}
+          clientes={(clientes ?? []) as { id: string; name: string }[]}
         />
       }
     />

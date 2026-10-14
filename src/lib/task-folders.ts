@@ -180,6 +180,12 @@ export async function folderInfo(ref: string): Promise<drive.FolderInfo | null> 
   return drive.getFolderInfo(ref)
 }
 
+/** Caminho relativo de hoje (só Drive — no S3 o caminho já é a referência). */
+export async function folderPath(ref: string): Promise<string | null> {
+  if (backendForRef(ref) !== 'drive') return null
+  return drive.drivePathOf(ref)
+}
+
 /** Tem arquivo na pasta da tarefa (ou nas subpastas)? */
 export async function taskFolderHasFiles(taskRef: string): Promise<boolean> {
   if (backendForRef(taskRef) === 's3') return (await s3.listFolderFilesS3(taskRef)).length > 0
