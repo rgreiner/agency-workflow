@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { FolderOpen, Search, Mail, Globe, AlertTriangle } from 'lucide-react'
+import { FolderOpen, Search, Mail, Globe, AlertTriangle, Wallet } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { AvatarGroup } from '@/components/ui/Avatar'
 import { CopyButton } from '@/components/ui/CopyButton'
@@ -30,6 +30,8 @@ export interface ClienteCard {
   /** Dias desde a última movimentação de tarefa (calculado no servidor); null = nenhuma. */
   diasParado: number | null
   portal: { acessos: number; ultimoLogin: string | null }
+  /** A receber em aberto relativo ao cliente; null = quem vê não tem acesso ao Financeiro. */
+  financeiro: { aReceber: number; vencido: number; doCliente: number; qtd: number } | null
   equipe: { full_name: string | null; avatar_url: string | null }[]
 }
 
@@ -105,7 +107,7 @@ function Numero({ valor, rotulo, alerta = false }: { valor: number; rotulo: stri
   )
 }
 
-type Ordem = 'nome' | 'atrasadas' | 'cliente' | 'abertas' | 'parados' | 'recentes'
+type Ordem = 'nome' | 'atrasadas' | 'cliente' | 'abertas' | 'parados' | 'recentes' | 'receber' | 'vencido'
 
 const ORDENS: { value: Ordem; label: string }[] = [
   { value: 'nome', label: 'Nome (A–Z)' },
@@ -115,6 +117,13 @@ const ORDENS: { value: Ordem; label: string }[] = [
   { value: 'parados', label: 'Parados há mais tempo' },
   { value: 'recentes', label: 'Mexidos mais recentemente' },
 ]
+/** Só aparecem para quem tem acesso ao Financeiro. */
+const ORDENS_FIN: { value: Ordem; label: string }[] = [
+  { value: 'receber', label: 'Mais a receber' },
+  { value: 'vencido', label: 'Mais vencido a receber' },
+]
+
+const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
 
 /** Preferência por pessoa (localStorage). Versionar a chave se os padrões mudarem. */
 const CHAVE_ORDEM = 'clientes-ordem-v1'
@@ -130,11 +139,16 @@ function comparar(ordem: Ordem) {
     case 'abertas':   return (a: ClienteCard, b: ClienteCard) => b.abertas - a.abertas || nome(a, b)
     case 'parados':   return (a: ClienteCard, b: ClienteCard) => parado(b) - parado(a) || nome(a, b)
     case 'recentes':  return (a: ClienteCard, b: ClienteCard) => parado(a) - parado(b) || nome(a, b)
+    case 'receber':   return (a: ClienteCard, b: ClienteCard) => (b.financeiro?.aReceber ?? 0) - (a.financeiro?.aReceber ?? 0) || nome(a, b)
+    case 'vencido':   return (a: ClienteCard, b: ClienteCard) => (b.financeiro?.vencido ?? 0) - (a.financeiro?.vencido ?? 0) || (b.financeiro?.aReceber ?? 0) - (a.financeiro?.aReceber ?? 0) || nome(a, b)
     default:          return nome
   }
 }
 
-export function ClientesGrid({ orgSlug, clientes, arquivados }: { orgSlug: string; clientes: ClienteCard[]; arquivados: boolean }) {
+export function ClientesGrid({ orgSlug, clientes, arquivados, verFinanceiro = false }: {
+  orgSlug: string; clientes: ClienteCard[]; arquivados: boolean; verFinanceiro?: boolean
+}) {
+  const ordens = verFinanceiro ? [...ORDENS, ...ORDENS_FIN] : ORDENS
   const [busca, setBusca] = useState('')
   const [ordem, setOrdemState] = useState<Ordem>('nome')
 
@@ -143,9 +157,9 @@ export function ClientesGrid({ orgSlug, clientes, arquivados }: { orgSlug: strin
     try {
       const salva = localStorage.getItem(CHAVE_ORDEM) as Ordem | null
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (salva && ORDENS.some(o => o.value === salva)) setOrdemState(salva)
+      if (salva && ordens.some(o => o.value === salva)) setOrdemState(salva)
     } catch { /* sem storage: fica no padrão */ }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function setOrdem(v: string) {
     setOrdemState(v as Ordem)
@@ -178,7 +192,7 @@ export function ClientesGrid({ orgSlug, clientes, arquivados }: { orgSlug: strin
         <div className="sm:ml-auto flex items-center gap-2">
           <span className="text-xs text-gray-500 shrink-0">Ordenar por</span>
           <div className="w-56">
-            <Select value={ordem} onChange={setOrdem} options={ORDENS} />
+            <Select value={ordem} onChange={setOrdem} options={ordens} />
           </div>
         </div>
       </div>
@@ -227,6 +241,30 @@ export function ClientesGrid({ orgSlug, clientes, arquivados }: { orgSlug: strin
                 <Numero valor={c.comCliente} rotulo="Com o cliente" />
                 <Numero valor={c.campanhas} rotulo={c.campanhas === 1 ? 'Campanha' : 'Campanhas'} />
               </Link>
+
+              {/* A receber (só Financeiro): total relativo ao cliente + o que já venceu */}
+              {c.financeiro && (
+                <div className="mt-2 flex items-center gap-2 text-xs">
+                  <Wallet className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  {c.financeiro.aReceber > 0 ? (
+                    <>
+                      <Link href={`/${orgSlug}/financeiro/lancamentos`}
+                        title={`${c.financeiro.qtd} lançamento(s) em aberto · ${brl(c.financeiro.doCliente)} pagos pelo próprio cliente; o resto é comissão paga por veículo ou fornecedor`}
+                        className="text-gray-700 hover:text-orange-600 transition-colors">
+                        A receber <b className="tabular-nums">{brl(c.financeiro.aReceber)}</b>
+                      </Link>
+                      {c.financeiro.vencido > 0 && (
+                        <Link href={`/${orgSlug}/financeiro/inadimplentes`}
+                          className="ml-auto inline-flex items-center gap-1 font-medium text-orange-600 hover:text-orange-700 transition-colors">
+                          <AlertTriangle className="w-3 h-3" /> vencido {brl(c.financeiro.vencido)}
+                        </Link>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-gray-400">Nada a receber em aberto</span>
+                  )}
+                </div>
+              )}
 
               {/* Rodapé: equipe, portal, movimento */}
               <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">

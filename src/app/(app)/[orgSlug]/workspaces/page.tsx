@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getAccess } from '@/lib/auth/access'
 import Link from 'next/link'
 import { Plus, FolderOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -94,6 +95,30 @@ export default async function WorkspacesPage({
   ]) : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }]
 
   const hoje = hojeBR()
+
+  // A receber em aberto (14/10): só para quem tem acesso ao Financeiro — e a RLS
+  // de lancamentos (fin_can) barraria de qualquer jeito. Vale o lançamento
+  // RELATIVO ao cliente (workspace_id): fee e produção pagos por ele + comissão de
+  // mídia paga pelo veículo. Baixa parcial desconta o já recebido.
+  const acesso = await getAccess(orgSlug)
+  const verFinanceiro = !!acesso?.access.financeiro && ids.length > 0
+  const { data: lancs } = verFinanceiro
+    ? await sb.from('lancamentos')
+        .select('workspace_id, valor, valor_realizado, vencimento, contato_tipo, contato_id')
+        .eq('org_id', org.id).eq('tipo', 'entrada').eq('situacao', 'em_aberto')
+        .in('workspace_id', ids).limit(5000)
+    : { data: [] }
+  const receber = new Map<string, { aReceber: number; vencido: number; doCliente: number; qtd: number }>()
+  for (const l of (lancs ?? []) as { workspace_id: string; valor: number; valor_realizado: number | null; vencimento: string | null; contato_tipo: string | null; contato_id: string | null }[]) {
+    const saldo = Math.max(0, Number(l.valor ?? 0) - Number(l.valor_realizado ?? 0))
+    if (saldo <= 0) continue
+    const r = receber.get(l.workspace_id) ?? { aReceber: 0, vencido: 0, doCliente: 0, qtd: 0 }
+    r.aReceber += saldo
+    r.qtd += 1
+    if (l.vencimento && l.vencimento < hoje) r.vencido += saldo
+    if (l.contato_tipo === 'cliente' && l.contato_id === l.workspace_id) r.doCliente += saldo
+    receber.set(l.workspace_id, r)
+  }
   const perfil = new Map(((perfis ?? []) as { id: string; full_name: string | null; avatar_url: string | null }[]).map(p => [p.id, p]))
 
   const cards: ClienteCard[] = lista.map(ws => {
@@ -123,6 +148,7 @@ export default async function WorkspacesPage({
         return ult ? diasDesde(ult) : null
       })(),
       portal: { acessos: acessos.length, ultimoLogin },
+      financeiro: verFinanceiro ? (receber.get(id) ?? { aReceber: 0, vencido: 0, doCliente: 0, qtd: 0 }) : null,
       equipe: ((ws.equipe as string[] | null) ?? []).map(u => perfil.get(u)).filter(Boolean)
         .map(p => ({ full_name: p!.full_name, avatar_url: p!.avatar_url })),
     }
@@ -159,7 +185,7 @@ export default async function WorkspacesPage({
       </div>
 
       {cards.length > 0 ? (
-        <ClientesGrid orgSlug={orgSlug} clientes={cards} arquivados={archivedView} />
+        <ClientesGrid orgSlug={orgSlug} clientes={cards} arquivados={archivedView} verFinanceiro={verFinanceiro} />
       ) : (
         <div className="text-center py-24 bg-white rounded-xl border border-gray-200">
           <FolderOpen className="w-10 h-10 text-gray-300 mx-auto mb-3" />
