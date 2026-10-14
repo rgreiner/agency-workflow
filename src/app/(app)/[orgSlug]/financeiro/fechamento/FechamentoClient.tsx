@@ -3,14 +3,14 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Check, Loader2, Mail, Paperclip, Send, AlertTriangle, Plus, X, FileSpreadsheet, Download,
+  Check, Loader2, Mail, Paperclip, Send, AlertTriangle, Plus, X, FileSpreadsheet, Download, Unlock,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import {
   previewFechamento, enviarFechamento, salvarConfigContabil, abrirFechamentoManual,
-  baixarPlanilhaFechamento,
+  baixarPlanilhaFechamento, reabrirFechamento, type ConferenciaConta,
 } from '@/app/actions/contabil'
 
 export interface Fechamento {
@@ -46,9 +46,12 @@ const label = (c: string) => { const [y, m] = c.split('-'); return `${MESES[Numb
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500'
 
-export function FechamentoClient({ orgSlug, fechamentos, config, competenciaSugerida }: {
+export function FechamentoClient({ orgSlug, fechamentos, config, competenciaSugerida, conferencias = {} }: {
   orgSlug: string; fechamentos: Fechamento[]; config: ConfigContabil; competenciaSugerida: string
+  /** Banco × Flow no último dia de cada mês por enviar (mig. 351). */
+  conferencias?: Record<string, ConferenciaConta[]>
 }) {
+  const [reabrir, setReabrir] = useState<Fechamento | null>(null)
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [emails, setEmails] = useState<string[]>(config.contabil_emails.length ? config.contabil_emails : [''])
@@ -104,6 +107,16 @@ export function FechamentoClient({ orgSlug, fechamentos, config, competenciaSuge
     }
   }
 
+  function confirmarReabrir(f: Fechamento) {
+    setReabrir(null)
+    startTransition(async () => {
+      const r = await reabrirFechamento(orgSlug, f.competencia)
+      if (r?.error) { toast.error(r.error); return }
+      toast.success(`${label(f.competencia)} reaberto — corrija e reenvie.`)
+      router.refresh()
+    })
+  }
+
   function enviar(f: Fechamento) {
     const reenviar = f.status === 'enviado'
     setConfirmar(null)
@@ -130,13 +143,18 @@ export function FechamentoClient({ orgSlug, fechamentos, config, competenciaSuge
         <div className="space-y-3">
           {pendentes.map(f => {
             const p = preview[f.competencia]
+            const conf = conferencias[f.competencia] ?? []
+            const confOk = conf.every(c => c.ok)
             return (
               <div key={f.id} className="bg-white rounded-2xl border border-gray-200 p-5">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div>
-                    <h2 className="text-base font-semibold text-gray-900">{label(f.competencia)}</h2>
+                    <h2 className="text-base font-semibold text-gray-900">
+                      {label(f.competencia)}
+                      {f.status === 'reaberto' && <span className="ml-2 align-middle text-[11px] font-medium text-amber-800 bg-amber-100 rounded-full px-2 py-0.5">reaberto para correção</span>}
+                    </h2>
                     <p className="text-sm text-gray-500 mt-0.5">
-                      Confira antes de enviar — depois de sair, sai.
+                      Confira antes de enviar — depois de sair, o mês fica fechado.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -147,14 +165,35 @@ export function FechamentoClient({ orgSlug, fechamentos, config, competenciaSuge
                       </button>
                     )}
                     <BotaoBaixar onClick={() => baixarPlanilha(f)} carregando={baixando === f.competencia} />
-                    <button onClick={() => setConfirmar(f)} disabled={isPending || !config.contabil_emails.length}
-                      title={config.contabil_emails.length ? undefined : 'Configure o e-mail da contabilidade abaixo'}
+                    <button onClick={() => setConfirmar(f)} disabled={isPending || !config.contabil_emails.length || !confOk}
+                      title={!confOk ? 'O saldo ainda não fecha com o banco — veja a conferência abaixo'
+                        : config.contabil_emails.length ? undefined : 'Configure o e-mail da contabilidade abaixo'}
                       className="inline-flex items-center gap-1.5 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
                       {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                      Conferir e enviar
+                      {f.status === 'reaberto' ? 'Reenviar corrigido' : 'Conferir e enviar'}
                     </button>
                   </div>
                 </div>
+
+                {/* Conferência com o banco no último dia do mês — é ela que libera o envio. */}
+                {conf.length > 0 && (
+                  <div className={cn('mt-4 rounded-xl border px-3 py-2.5 space-y-1.5',
+                    confOk ? 'bg-emerald-50/60 border-emerald-100' : 'bg-red-50 border-red-200')}>
+                    <p className={cn('text-xs font-semibold', confOk ? 'text-emerald-800' : 'text-red-800')}>
+                      {confOk ? 'Saldos fecham com o banco no último dia do mês' : 'O saldo não fecha com o banco — o envio fica bloqueado até corrigir'}
+                    </p>
+                    {conf.map(c => (
+                      <a key={c.conta_id} href={`/${orgSlug}/financeiro/contas/${c.conta_id}`}
+                        className="flex items-center gap-2 text-sm hover:underline underline-offset-2">
+                        {c.ok ? <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> : <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />}
+                        <span className="font-medium text-gray-900">{c.conta}</span>
+                        <span className={cn('text-xs tabular-nums', c.ok ? 'text-gray-500' : 'text-red-700')}>
+                          {c.ok ? brl(c.saldo_flow) : c.motivo}
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                )}
 
                 {f.erro && (
                   <p className="mt-3 text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2">
@@ -289,9 +328,11 @@ export function FechamentoClient({ orgSlug, fechamentos, config, competenciaSuge
                 </span>
                 <div className="flex items-center gap-2 shrink-0">
                   <BotaoBaixar onClick={() => baixarPlanilha(f)} carregando={baixando === f.competencia} compacto />
-                  <button onClick={() => setConfirmar(f)} disabled={isPending || !config.contabil_emails.length}
+                  {/* Mês enviado está travado (mig. 351): corrigir começa por reabrir. */}
+                  <button onClick={() => setReabrir(f)} disabled={isPending}
+                    title="Destrava os lançamentos deste mês para correção; o reenvio trava de novo"
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors">
-                    <Send className="w-3.5 h-3.5" /> Reenviar corrigido
+                    <Unlock className="w-3.5 h-3.5" /> Reabrir para corrigir
                   </button>
                 </div>
               </div>
@@ -300,6 +341,14 @@ export function FechamentoClient({ orgSlug, fechamentos, config, competenciaSuge
         </section>
       )}
 
+      <ConfirmDialog
+        open={!!reabrir} loading={isPending}
+        title={`Reabrir ${reabrir ? label(reabrir.competencia) : ''}?`}
+        description="Os lançamentos pagos e recebidos deste mês voltam a poder ser alterados. Depois de corrigir, reenvie à contabilidade — o mês fecha de novo no reenvio."
+        confirmLabel="Reabrir"
+        onConfirm={() => reabrir && confirmarReabrir(reabrir)}
+        onCancel={() => setReabrir(null)}
+      />
       <ConfirmDialog
         open={!!confirmar} loading={isPending}
         title={`${confirmar?.status === 'enviado' ? 'Reenviar' : 'Enviar'} ${confirmar ? label(confirmar.competencia) : ''} à contabilidade`}

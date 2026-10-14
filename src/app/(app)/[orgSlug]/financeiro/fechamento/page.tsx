@@ -1,6 +1,7 @@
 import { assertFinanceAccess } from '@/lib/finance'
 import { unwrap, unwrapOne } from '@/lib/supabase/unwrap'
 import { FechamentoClient, type Fechamento, type ConfigContabil } from './FechamentoClient'
+import { conferirMes, type ConferenciaConta } from '@/app/actions/contabil'
 
 // Lê estado que muda por ação humana (confirmar/enviar) — nunca serve render cacheada.
 export const dynamic = 'force-dynamic'
@@ -34,6 +35,14 @@ export default async function FechamentoPage({ params }: { params: Promise<{ org
   const fechamentos = unwrap<Fechamento>(resFech, 'fechamentos')
   const cfgRow = unwrapOne<ConfigContabil>(resCfg, 'configuração da contabilidade')
 
+  // Conferência com o banco de cada mês ainda por enviar (ou reaberto): é ela
+  // que libera o botão de enviar.
+  const conferencias: Record<string, ConferenciaConta[]> = {}
+  await Promise.all(fechamentos.filter(f => f.status !== 'enviado').map(async f => {
+    const r = await conferirMes(orgSlug, f.competencia)
+    conferencias[f.competencia] = 'contas' in r ? r.contas : []
+  }))
+
   return (
     <FechamentoClient
       orgSlug={orgSlug}
@@ -44,6 +53,7 @@ export default async function FechamentoPage({ params }: { params: Promise<{ org
         contabil_ativo: cfgRow?.contabil_ativo ?? false,
       }}
       competenciaSugerida={competenciaAnterior()}
+      conferencias={conferencias}
     />
   )
 }

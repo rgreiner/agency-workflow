@@ -69,8 +69,17 @@ export async function enviarFechamento(
   const { data: fech } = await sb.from('fechamento_contabil')
     .select('id, status, enviado_em').eq('org_id', orgId).eq('competencia', competencia).maybeSingle()
   if (!fech) return { error: 'Fechamento não encontrado para esta competência.' }
-  const reenvio = fech.status === 'enviado'
-  if (reenvio && !opts?.reenviar) return { error: 'Este mês já foi enviado à contabilidade.' }
+  const reenvio = !!fech.enviado_em
+  if (fech.status === 'enviado' && !opts?.reenviar) return { error: 'Este mês já foi enviado à contabilidade.' }
+
+  // Só sai se cada conta bater com o banco no último dia do mês (mig. 351):
+  // o pacote de agosto/2026 foi com R$ 12 mil de diferença dentro.
+  const conf = await conferirMes(orgSlug, competencia)
+  if ('error' in conf) return { error: conf.error }
+  const ruins = conf.contas.filter(c => !c.ok)
+  if (ruins.length) {
+    return { error: `Não enviado — o saldo não fecha com o banco: ${ruins.map(c => `${c.conta} (${c.motivo})`).join('; ')}.` }
+  }
 
   const { data: cfg } = await sb.from('org_settings')
     .select('contabil_emails').eq('org_id', orgId).maybeSingle()
@@ -175,6 +184,38 @@ export async function salvarConfigContabil(
     return { error: 'A configuração não foi gravada. Recarregue e tente de novo.' }
   }
 
+  revalidatePath(`/${orgSlug}/financeiro/fechamento`)
+  return { ok: true }
+}
+
+export interface ConferenciaConta {
+  conta_id: string; conta: string; saldo_flow: number; saldo_banco: number | null
+  pendentes: number; ok: boolean; motivo: string | null
+}
+
+/** Banco × Flow no último dia do mês, por conta com OFX (mig. 351). */
+export async function conferirMes(orgSlug: string, competencia: string): Promise<{ contas: ConferenciaConta[] } | { error: string }> {
+  const { supabase, orgId } = await assertFinanceAccess(orgSlug)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('fin_conferencia_mes', { p_org: orgId, p_competencia: competencia })
+  if (error) return { error: error.message }
+  return {
+    contas: ((data ?? []) as ConferenciaConta[]).map(c => ({
+      ...c, saldo_flow: Number(c.saldo_flow), saldo_banco: c.saldo_banco == null ? null : Number(c.saldo_banco),
+    })),
+  }
+}
+
+/** Mês enviado fica travado; reabrir libera a correção. O reenvio trava de novo. */
+export async function reabrirFechamento(orgSlug: string, competencia: string) {
+  const { supabase, orgId } = await assertFinanceAccess(orgSlug)
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('reabrir_fechamento', {
+    p_user_id: user.id, p_org_id: orgId, p_competencia: competencia,
+  })
+  if (error) return { error: error.message }
   revalidatePath(`/${orgSlug}/financeiro/fechamento`)
   return { ok: true }
 }
