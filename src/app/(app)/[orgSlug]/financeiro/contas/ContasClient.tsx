@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, X, Check, Loader2, Pencil, Landmark, Power, Layers, Eye, EyeOff, Star, CreditCard, AlertTriangle } from 'lucide-react'
+import { Plus, X, Check, Loader2, Pencil, Landmark, Power, Layers, Eye, EyeOff, Star, CreditCard, AlertTriangle, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
@@ -34,6 +34,11 @@ export interface Conta {
   conciliarDesde?: string | null
   /** Mais de 15 dias parada. Vem do servidor: "hoje" no render seria impuro. */
   conciliarAtrasada?: boolean
+  /** Último OFX: até quando vai o extrato e o dia em que foi importado. */
+  ofxAte?: string | null
+  ofxImportadoEm?: string | null
+  /** Já houve OFX nesta conta e o último não foi importado hoje. */
+  ofxDesatualizado?: boolean
 }
 
 const TIPO_OPTIONS = [
@@ -286,6 +291,22 @@ function ContaCard({ conta: c, orgSlug, isPending, onEditar, onToggleAtivo, onTo
             {formatBRL(saldo)}
           </span>
         </Link>
+      )}
+
+      {/* Extrato em dia? Só para conta que já recebeu OFX — caixa e cartão sem
+          extrato não ganham um aviso que nunca apagaria. */}
+      {c.ofxImportadoEm && (
+        <div className="flex items-center justify-between gap-2 -mt-1">
+          <span className="text-[11px] text-gray-400 tabular-nums">
+            {c.ofxAte ? `OFX até ${formatDateBR(c.ofxAte)}` : 'OFX'} · importado {formatDateBR(c.ofxImportadoEm)}
+          </span>
+          {c.ofxDesatualizado && (
+            <Link href={`/${orgSlug}/financeiro/contas/${c.id}`}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 transition-colors active:scale-[0.97]">
+              <Upload className="w-3 h-3" /> Importe o OFX
+            </Link>
+          )}
+        </div>
       )}
 
       {/* ações */}

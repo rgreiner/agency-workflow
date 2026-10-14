@@ -29,14 +29,31 @@ export default async function ContasPage({
   // Ciclo do cartão e faturas abertas vêm de fora da view `contas_saldo`: recriar
   // uma view é onde já nasceu o P0 da 181 (o `create or replace` zera o
   // security_invoker). Duas leituras baratas custam menos que esse risco.
-  const [resCiclo, resFaturas, resPendentes] = await Promise.all([
+  const [resCiclo, resFaturas, resPendentes, resOfx] = await Promise.all([
     sb.from('contas_financeiras').select('id, fechamento_dia, vencimento_dia, limite').eq('org_id', org.id),
     sb.from('cartao_faturas').select('conta_id, vence, total, compras').eq('org_id', org.id).order('vence'),
     // Movimento do banco esperando conciliação. Mesma régua da fila
     // (`loadConciliacao`): status 'pendente'. Se divergir dela, o cartão vira
     // uma promessa que a tela seguinte não cumpre.
     sb.from('btg_movements').select('conta_id, data_mov').eq('org_id', org.id).eq('status', 'pendente'),
+    // Último OFX de cada conta: até quando vai o extrato e QUANDO subiu.
+    sb.from('ofx_arquivos').select('conta_id, periodo_fim, created_at').eq('org_id', org.id)
+      .order('created_at', { ascending: false }).limit(500),
   ])
+
+  // O aviso olha o DIA DA IMPORTAÇÃO, não o fim do extrato: o banco entrega o OFX
+  // até ontem (medido: o de 07/10 cobria até 06/10), então pelo fim do extrato o
+  // aviso nunca apagaria. Importou hoje = em dia. Dia no fuso de Brasília.
+  const diaBR = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+  const hojeBR = diaBR(new Date().toISOString())
+  interface OfxRow { conta_id: string | null; periodo_fim: string | null; created_at: string }
+  const ofx = new Map<string, { ate: string | null; importadoEm: string }>()
+  for (const o of ((resOfx?.data ?? []) as OfxRow[])) {
+    if (!o.conta_id) continue
+    const a = ofx.get(o.conta_id)
+    if (!a) ofx.set(o.conta_id, { ate: o.periodo_fim, importadoEm: diaBR(o.created_at) })
+    else if (o.periodo_fim && (!a.ate || o.periodo_fim > a.ate)) a.ate = o.periodo_fim
+  }
 
   interface PendRow { conta_id: string | null; data_mov: string }
   const pend = new Map<string, { n: number; maisAntigo: string }>()
@@ -68,6 +85,9 @@ export default async function ContasPage({
       const d = pend.get(c.id)?.maisAntigo
       return !!d && (Date.now() - new Date(`${d}T12:00:00`).getTime()) > 15 * 86_400_000
     })(),
+    ofxAte: ofx.get(c.id)?.ate ?? null,
+    ofxImportadoEm: ofx.get(c.id)?.importadoEm ?? null,
+    ofxDesatualizado: !!ofx.get(c.id) && ofx.get(c.id)!.importadoEm !== hojeBR,
     fechamentoDia: ciclo.get(c.id)?.fechamento_dia ?? null,
     vencimentoDia: ciclo.get(c.id)?.vencimento_dia ?? null,
     limite: ciclo.get(c.id)?.limite != null ? Number(ciclo.get(c.id)!.limite) : null,
