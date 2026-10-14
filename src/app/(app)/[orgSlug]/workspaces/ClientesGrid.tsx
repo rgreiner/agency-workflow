@@ -8,6 +8,7 @@ import { AvatarGroup } from '@/components/ui/Avatar'
 import { CopyButton } from '@/components/ui/CopyButton'
 import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon'
 import { UnarchiveButton } from '@/components/ui/UnarchiveButton'
+import { Select } from '@/components/ui/Select'
 import { fmtCpfCnpj, somenteDigitos } from '@/lib/telefone'
 
 export interface Contato { rotulo: string; valor: string; href: string }
@@ -104,23 +105,68 @@ function Numero({ valor, rotulo, alerta = false }: { valor: number; rotulo: stri
   )
 }
 
+type Ordem = 'nome' | 'atrasadas' | 'cliente' | 'abertas' | 'parados' | 'recentes'
+
+const ORDENS: { value: Ordem; label: string }[] = [
+  { value: 'nome', label: 'Nome (A–Z)' },
+  { value: 'atrasadas', label: 'Mais atrasadas' },
+  { value: 'cliente', label: 'Mais com o cliente' },
+  { value: 'abertas', label: 'Mais em aberto' },
+  { value: 'parados', label: 'Parados há mais tempo' },
+  { value: 'recentes', label: 'Mexidos mais recentemente' },
+]
+
+/** Preferência por pessoa (localStorage). Versionar a chave se os padrões mudarem. */
+const CHAVE_ORDEM = 'clientes-ordem-v1'
+
+/** Comparador por critério; empate cai no nome, para a ordem nunca "pular". */
+function comparar(ordem: Ordem) {
+  const nome = (a: ClienteCard, b: ClienteCard) => a.nome.localeCompare(b.nome, 'pt-BR')
+  // Sem movimento nenhum conta como o mais parado de todos.
+  const parado = (c: ClienteCard) => c.diasParado ?? Number.MAX_SAFE_INTEGER
+  switch (ordem) {
+    case 'atrasadas': return (a: ClienteCard, b: ClienteCard) => b.atrasadas - a.atrasadas || b.abertas - a.abertas || nome(a, b)
+    case 'cliente':   return (a: ClienteCard, b: ClienteCard) => b.comCliente - a.comCliente || nome(a, b)
+    case 'abertas':   return (a: ClienteCard, b: ClienteCard) => b.abertas - a.abertas || nome(a, b)
+    case 'parados':   return (a: ClienteCard, b: ClienteCard) => parado(b) - parado(a) || nome(a, b)
+    case 'recentes':  return (a: ClienteCard, b: ClienteCard) => parado(a) - parado(b) || nome(a, b)
+    default:          return nome
+  }
+}
+
 export function ClientesGrid({ orgSlug, clientes, arquivados }: { orgSlug: string; clientes: ClienteCard[]; arquivados: boolean }) {
   const [busca, setBusca] = useState('')
+  const [ordem, setOrdemState] = useState<Ordem>('nome')
+
+  // Lê a escolha salva depois de montar (no servidor não há localStorage).
+  useEffect(() => {
+    try {
+      const salva = localStorage.getItem(CHAVE_ORDEM) as Ordem | null
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (salva && ORDENS.some(o => o.value === salva)) setOrdemState(salva)
+    } catch { /* sem storage: fica no padrão */ }
+  }, [])
+
+  function setOrdem(v: string) {
+    setOrdemState(v as Ordem)
+    try { localStorage.setItem(CHAVE_ORDEM, v) } catch { /* ignora */ }
+  }
+
   const filtrados = useMemo(() => {
     const q = busca.trim().toLowerCase()
-    if (!q) return clientes
     const qd = somenteDigitos(q)
-    return clientes.filter(c =>
+    const base = !q ? clientes : clientes.filter(c =>
       c.nome.toLowerCase().includes(q) ||
       (c.razao ?? '').toLowerCase().includes(q) ||
       (c.cidade ?? '').toLowerCase().includes(q) ||
       (qd.length >= 3 && somenteDigitos(c.cnpj ?? '').includes(qd)))
-  }, [busca, clientes])
+    return [...base].sort(comparar(ordem))
+  }, [busca, clientes, ordem])
 
   return (
     <>
-      {clientes.length > 6 && (
-        <div className="relative mb-4 max-w-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
+        <div className="relative flex-1 max-w-sm">
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             value={busca}
@@ -129,7 +175,13 @@ export function ClientesGrid({ orgSlug, clientes, arquivados }: { orgSlug: strin
             className="w-full pl-9 pr-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
           />
         </div>
-      )}
+        <div className="sm:ml-auto flex items-center gap-2">
+          <span className="text-xs text-gray-500 shrink-0">Ordenar por</span>
+          <div className="w-56">
+            <Select value={ordem} onChange={setOrdem} options={ORDENS} />
+          </div>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtrados.map(c => {
