@@ -12,7 +12,7 @@ import { Select } from '@/components/ui/Select'
 import { formatBRL, formatDateBR, parseMoney } from '@/lib/midia'
 import {
   sincronizarBtg, conciliarMovimentoMulti, ignorarMovimento, desfazerConciliacaoBtg,
-  criarLancamentoConc, type ConciliacaoItem,
+  criarLancamentoConc, lancarEConciliar, type ConciliacaoItem,
 } from '@/app/actions/btg'
 
 export interface LancOption {
@@ -235,6 +235,14 @@ function PendingRow({ orgSlug, movement, candidatos, contas, categorias }: {
   const [expanded, setExpanded] = useState(!auto)
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  // Só se ignora o que se anula sozinho (aplicação/resgate da conta remunerada) —
+  // mesma regra do banco (eh_transferencia_interna, mig. 347). O resto mexeu no
+  // saldo e se lança: ignorar foi o que abriu o R$ 0,01 de 02/10.
+  const anulavel = /conta remunerada|na conta corrente/i.test(movement.descricao ?? '')
+  const [lancando, setLancando] = useState(false)
+  const [lcContato, setLcContato] = useState('')
+  const [lcDesc, setLcDesc] = useState(movement.descricao ?? '')
+  const [lcCat, setLcCat] = useState('')
 
   // Diferença de encargo: o banco quase nunca move exatamente a face do título
   // (juros de boleto atrasado, tarifa descontada, desconto concedido na hora).
@@ -311,6 +319,15 @@ function PendingRow({ orgSlug, movement, candidatos, contas, categorias }: {
       router.refresh()
     })
   }
+  function lancarConciliar() {
+    if (!lcCat) { toast.error('Escolha a categoria.'); return }
+    startTransition(async () => {
+      const r = await lancarEConciliar(orgSlug, movement.id, { contato_nome: lcContato, descricao: lcDesc, categoria: lcCat })
+      if (r?.error) { toast.error(r.error); return }
+      toast.success('Lançado e conciliado.')
+      router.refresh()
+    })
+  }
   function ignorar() {
     startTransition(async () => {
       const r = await ignorarMovimento(orgSlug, movement.id)
@@ -356,6 +373,29 @@ function PendingRow({ orgSlug, movement, candidatos, contas, categorias }: {
       </div>
 
       <div className="px-4 pb-4">
+        {lancando && (
+          <div className="mb-3 p-3 rounded-lg border border-orange-200 bg-orange-50/40 space-y-2">
+            <p className="text-xs font-medium text-gray-600">
+              Lançar {credito ? 'entrada' : 'saída'} de {formatBRL(movement.valor)} em {formatDateBR(movement.dataMov)} e conciliar
+              <span className="font-normal text-gray-400"> · conta, valor e data vêm do banco</span>
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <input value={lcContato} onChange={e => setLcContato(e.target.value)} placeholder={credito ? 'Cliente (opcional)' : 'Fornecedor (opcional)'}
+                className="h-9 px-3 text-sm bg-white border border-gray-200 rounded-lg focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none" />
+              <input value={lcDesc} onChange={e => setLcDesc(e.target.value)} placeholder="Descrição"
+                className="h-9 px-3 text-sm bg-white border border-gray-200 rounded-lg focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none" />
+              <Select size="sm" value={lcCat} onChange={setLcCat} placeholder="Categoria"
+                options={categorias.map(c => ({ value: c, label: c }))} />
+            </div>
+            <div className="flex items-center justify-end gap-1.5">
+              <button onClick={() => setLancando(false)} disabled={isPending} className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-700 transition">Cancelar</button>
+              <button onClick={lancarConciliar} disabled={isPending || !lcCat}
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 text-[#fff] hover:bg-emerald-700 disabled:opacity-40 transition active:scale-[0.97]">
+                {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Lançar e conciliar
+              </button>
+            </div>
+          </div>
+        )}
         {expanded && (
           <>
             <div className="flex items-center gap-2 mb-2">
@@ -470,10 +510,19 @@ function PendingRow({ orgSlug, movement, candidatos, contas, categorias }: {
                 Buscar outro
               </button>
             )}
-            <button onClick={ignorar} disabled={isPending}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-500 hover:bg-white disabled:opacity-40 transition">
-              <X className="w-3.5 h-3.5" /> Ignorar
-            </button>
+            {anulavel ? (
+              <button onClick={ignorar} disabled={isPending}
+                title="Aplicação/resgate da conta remunerada: entra e sai no mesmo dia, não mexe no saldo"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-500 hover:bg-white disabled:opacity-40 transition">
+                <X className="w-3.5 h-3.5" /> Ignorar
+              </button>
+            ) : (
+              <button onClick={() => setLancando(v => !v)} disabled={isPending}
+                title="Sem título no Flow? Cria o lançamento com o valor, a data e a conta do banco, já conciliado"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-white disabled:opacity-40 transition active:scale-[0.97]">
+                <Plus className="w-3.5 h-3.5" /> Lançar e conciliar
+              </button>
+            )}
             <button onClick={conciliar} disabled={isPending || !fecha}
               className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 text-[#fff] hover:bg-emerald-700 disabled:opacity-40 transition">
               {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}

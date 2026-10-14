@@ -112,7 +112,54 @@ export async function criarLancamentoConc(orgSlug: string, data: NovoLancamentoC
   return { id: id as string }
 }
 
-/** Movimento sem lançamento correspondente (ex.: transferência interna, rendimento). */
+/**
+ * "Lançar e conciliar": o movimento do banco que não tem título no Flow vira um,
+ * já conciliado, em um passo. É a saída para tudo que antes se "ignorava" —
+ * ignorar dinheiro que mexeu na conta abria diferença com o banco (mig. 347).
+ * O lançamento nasce na conta DO MOVIMENTO, com o valor DO MOVIMENTO.
+ */
+export async function lancarEConciliar(
+  orgSlug: string, movementId: string,
+  data: { contato_nome?: string | null; descricao?: string | null; categoria: string; centro_custo?: string | null },
+) {
+  const { supabase, orgId, userId } = await assertFinanceAccess(orgSlug)
+  if (!data.categoria?.trim()) return { error: 'Escolha a categoria.' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any
+  const { data: m } = await sb.from('btg_movements')
+    .select('id, tipo, valor, data_mov, conta_id, descricao, status').eq('id', movementId).eq('org_id', orgId).maybeSingle()
+  if (!m) return { error: 'Movimento não encontrado.' }
+  if (m.status !== 'pendente') return { error: 'Este movimento já foi tratado.' }
+  const tipo = m.tipo === 'credit' ? 'entrada' : 'saida'
+  // Sem centro escolhido, o da casa (mesma régua do rendimento/tarifa do OFX):
+  // lançamento sem centro deixa a rentabilidade por cliente cega.
+  const centro = data.centro_custo?.trim()
+    || ((await sb.rpc('fin_centro_padrao', { p_org: orgId })).data as string | null) || null
+  const { data: id, error } = await sb.rpc('create_lancamento', {
+    p_user_id: userId, p_org_id: orgId,
+    p_data: {
+      tipo, origem_tipo: 'manual', situacao: 'em_aberto',
+      contato_tipo: data.contato_nome?.trim() ? (tipo === 'entrada' ? 'cliente' : 'fornecedor') : null,
+      contato_nome: data.contato_nome?.trim() || null,
+      descricao: data.descricao?.trim() || m.descricao || null,
+      valor: String(m.valor), vencimento: m.data_mov, competencia: m.data_mov,
+      conta_id: m.conta_id, categoria: data.categoria,
+      centro_custo: centro,
+    },
+  })
+  if (error) return { error: error.message }
+  const { error: cErr } = await sb.rpc('conciliar_btg_multi', {
+    p_user_id: userId, p_movement_id: movementId,
+    p_itens: [{ lancamento_id: id, valor: Number(m.valor) }], p_modo: 'manual',
+  })
+  if (cErr) return { error: `Lançamento criado, mas a conciliação falhou: ${cErr.message}` }
+  revalidatePath(`/${orgSlug}/financeiro/conciliacao`)
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+  if (m.conta_id) revalidatePath(`/${orgSlug}/financeiro/contas/${m.conta_id}`)
+  return { id: id as string }
+}
+
+/** Movimento sem lançamento correspondente — só aplicação/resgate da conta remunerada (mig. 347). */
 export async function ignorarMovimento(orgSlug: string, movementId: string) {
   const { supabase, userId } = await assertFinanceAccess(orgSlug)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

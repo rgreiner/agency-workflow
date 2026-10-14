@@ -18,7 +18,7 @@ import {
   setLancamentoAnexos, promoverExtrato, updateLancamentosLote, descartarExtrato,
   impactoExcluirLancamento, impactoEncerrarDocumento, encerrarDocumento,
   type ImpactoEncerrar,
-  type FinanceCategoriaGrupo, type FinanceCentro, type Anexo, type ImpactoExclusao,
+  type FinanceCategoriaGrupo, type FinanceCentro, type Anexo, type ImpactoExclusao, type LancamentoInput,
 } from '@/app/actions/financeiro'
 import { categoriaNomes, isTransferenciaCategoria } from '@/lib/finance-categorias'
 import { canonizarCentro, opcoesDeCentro } from '@/lib/finance-centros'
@@ -1027,6 +1027,9 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
   const fileRef = useRef<HTMLInputElement>(null)
   /** Índice do documento que está esperando arquivo (null = anexo novo). */
   const anexoAlvo = useRef<number | null>(null)
+  // Edição de lançamento conciliado com o banco: o servidor pede confirmação
+  // (mudar valor/tipo/conta abre diferença com o extrato).
+  const [confirmarConciliado, setConfirmarConciliado] = useState<{ msg: string; data: LancamentoInput } | null>(null)
   const [modo, setModo] = useState('unico')          // unico | parcelado | recorrente
   const [parcelas, setParcelas] = useState('2')
 
@@ -1122,6 +1125,7 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
         : serie
           ? await createLancamentosSerie(orgSlug, data, modo, n)
           : await createLancamento(orgSlug, { ...data, anexos })
+      if (res && 'confirmar' in res && res.confirmar) { setConfirmarConciliado({ msg: res.confirmar, data }); return }
       if (res?.error) { setError(res.error); return }
       onClose(); router.refresh()
     })
@@ -1377,6 +1381,24 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
           )}
         </div>
       </form>
+      <ConfirmDialog
+        open={!!confirmarConciliado}
+        title="Lançamento conciliado com o banco"
+        description={confirmarConciliado?.msg ?? ''}
+        confirmLabel="Salvar mesmo assim"
+        loading={isPending}
+        onCancel={() => setConfirmarConciliado(null)}
+        onConfirm={() => {
+          if (!lancamento || !confirmarConciliado) return
+          const d = confirmarConciliado.data
+          startTransition(async () => {
+            const res = await updateLancamento(orgSlug, lancamento.id, d, true)
+            setConfirmarConciliado(null)
+            if (res?.error) { setError(res.error); return }
+            onClose(); router.refresh()
+          })
+        }}
+      />
     </Modal>
   )
 }

@@ -237,11 +237,36 @@ export async function createLancamentosSerie(orgSlug: string, data: LancamentoIn
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
 }
 
-export async function updateLancamento(orgSlug: string, lancamentoId: string, data: LancamentoInput) {
+export async function updateLancamento(
+  orgSlug: string, lancamentoId: string, data: LancamentoInput,
+  /** A pessoa já viu o aviso de que o lançamento está conciliado com o banco. */
+  confirmaConciliado = false,
+): Promise<{ error?: string; confirmar?: string } | void> {
   if (faltaCentro(data)) return { error: ERRO_CENTRO }
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
+
+  // Lançamento já conciliado com o banco: mexer em valor, tipo ou conta abre uma
+  // diferença entre o Flow e o extrato — que é exatamente o que o banco confirmou.
+  // Pede confirmação dizendo o que vai acontecer, em vez de deixar passar calado.
+  if (!confirmaConciliado) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sb = supabase as any
+    const [{ data: atual }, { count }] = await Promise.all([
+      sb.from('lancamentos').select('tipo, valor, conta_id').eq('id', lancamentoId).maybeSingle(),
+      sb.from('btg_conciliacao_itens').select('id', { count: 'exact', head: true }).eq('lancamento_id', lancamentoId),
+    ])
+    if (atual && (count ?? 0) > 0) {
+      const mudou: string[] = []
+      if (data.tipo && data.tipo !== atual.tipo) mudou.push('o tipo')
+      if (data.valor != null && String(data.valor) !== '' && Math.abs(Number(data.valor) - Number(atual.valor)) >= 0.005) mudou.push('o valor')
+      if ('conta_id' in data && (data.conta_id || null) !== (atual.conta_id || null)) mudou.push('a conta')
+      if (mudou.length) {
+        return { confirmar: `Este lançamento está conciliado com um movimento do banco. Mudar ${mudou.join(' e ')} faz o saldo do Flow deixar de bater com o extrato — o aviso vermelho vai acender na conta. Se o banco está certo, o caminho é desfazer a conciliação e conciliar de novo.` }
+      }
+    }
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any).rpc('update_lancamento', {
