@@ -1,7 +1,8 @@
 import { assertFinanceAccess } from '@/lib/finance'
 import { unwrap } from '@/lib/supabase/unwrap'
-import { formatBRL } from '@/lib/midia'
-import { ArrowDownCircle, ArrowUpCircle, Landmark } from 'lucide-react'
+import Link from 'next/link'
+import { formatBRL, formatDateBR } from '@/lib/midia'
+import { ArrowDownCircle, ArrowUpCircle, Landmark, AlertTriangle } from 'lucide-react'
 import { PainelAnalise, type AnaliseLanc } from './PainelAnalise'
 import type { CategoriaGrupoLike } from '@/lib/finance-categorias'
 import type { FinanceCentro } from '@/app/actions/financeiro'
@@ -46,7 +47,7 @@ export default async function PainelPage({ params }: { params: Promise<{ orgSlug
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any
-  const [resLanc, resContas, resSettings] = await Promise.all([
+  const [resLanc, resContas, resSettings, resDiv] = await Promise.all([
     sb.from('lancamentos')
       .select('tipo, situacao, valor, valor_realizado, vencimento, data_liquidacao, conta_id, categoria, centro_custo, competencia')
       .eq('org_id', orgId),
@@ -54,7 +55,12 @@ export default async function PainelPage({ params }: { params: Promise<{ orgSlug
       .select('id, nome, tipo, cor, saldo_atual, ativo')
       .eq('org_id', orgId).order('ordem', { ascending: true }),
     sb.from('org_settings').select('finance_categorias, finance_centros_custo').eq('org_id', orgId).maybeSingle(),
+    sb.rpc('fin_divergencias', { p_org: orgId, p_detalhe: true }),
   ])
+  // Conta cujo saldo não bate com o banco (fora a fila de conciliação, mig. 348):
+  // primeira coisa da tela. Nenhum número abaixo é confiável enquanto isso existir.
+  const divergentes = ((resDiv?.data ?? []) as { conta_id: string; conta: string; diferenca_real: number | string; desde: string | null }[])
+    .filter(d => Math.abs(Number(d.diferenca_real)) >= 0.01)
 
   // Lista vazia por falha não é lista vazia — numa tela de saldo isso vira decisão errada.
   const lanc = unwrap<LancRow>(resLanc, 'lançamentos')
@@ -112,6 +118,24 @@ export default async function PainelPage({ params }: { params: Promise<{ orgSlug
         <h1 className="text-lg font-semibold text-gray-900">Painel financeiro</h1>
         <p className="text-gray-500 text-sm mt-0.5">Visão geral — vencimentos, contas e faturamento</p>
       </div>
+
+      {divergentes.length > 0 && (
+        <div role="alert" className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 space-y-1.5">
+          <p className="flex items-center gap-2 text-sm font-semibold text-red-800">
+            <AlertTriangle className="w-4 h-4 text-red-600" />
+            {divergentes.length === 1 ? 'Uma conta não bate com o banco' : `${divergentes.length} contas não batem com o banco`}
+            <span className="font-normal text-red-700/80">— os saldos abaixo não são confiáveis até corrigir</span>
+          </p>
+          {divergentes.map(d => (
+            <Link key={d.conta_id} href={`/${orgSlug}/financeiro/contas/${d.conta_id}${d.desde ? `#dia-${d.desde}` : ''}`}
+              className="flex items-center gap-2 text-sm text-red-800 hover:underline underline-offset-2">
+              <strong className="font-semibold">{d.conta}</strong>
+              <span className="tabular-nums">{formatBRL(Math.abs(Number(d.diferenca_real)))} {Number(d.diferenca_real) > 0 ? 'a mais' : 'a menos'} no Flow</span>
+              {d.desde && <span className="text-red-700/80">desde {formatDateBR(d.desde)}</span>}
+            </Link>
+          ))}
+        </div>
+      )}
 
       {/* A receber / A pagar */}
       <div className="grid md:grid-cols-2 gap-4">

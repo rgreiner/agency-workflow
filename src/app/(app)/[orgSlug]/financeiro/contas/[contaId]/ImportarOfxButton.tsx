@@ -62,6 +62,23 @@ export function ImportarOfxButton({ orgSlug, contaId }: { orgSlug: string; conta
             { duration: 8000 },
           )
         }
+        // Conferência do saldo logo depois de importar. Diferença que a fila não
+        // explica é erro: aviso vermelho que só fecha na mão, com o dia em que
+        // começou — é o momento mais barato de achar a causa.
+        const c = res?.conferencia
+        if (c && Math.abs(c.real) >= 0.01) {
+          const br = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+          const dBR = (s: string) => s.split('-').reverse().join('/')
+          toast.error(
+            `O saldo do Flow não bate com o banco: ${br(Math.abs(c.real))} ${c.real > 0 ? 'a mais' : 'a menos'} no Flow` +
+            (c.desde ? `, desde ${dBR(c.desde)}.` : '.') + ' Veja o dia marcado no extrato.',
+            { duration: Infinity, closeButton: true },
+          )
+        } else if (c && c.pendentes > 0) {
+          toast.info(`${c.pendentes} movimento(s) para conciliar. Conciliados, o saldo fecha com o banco.`, { duration: 8000 })
+        } else if (c) {
+          toast.success('Saldo do Flow bate com o banco.')
+        }
         router.refresh()
       })
     } catch {

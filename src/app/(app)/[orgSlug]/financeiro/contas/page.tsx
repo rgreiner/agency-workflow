@@ -29,7 +29,7 @@ export default async function ContasPage({
   // Ciclo do cartão e faturas abertas vêm de fora da view `contas_saldo`: recriar
   // uma view é onde já nasceu o P0 da 181 (o `create or replace` zera o
   // security_invoker). Duas leituras baratas custam menos que esse risco.
-  const [resCiclo, resFaturas, resPendentes, resOfx] = await Promise.all([
+  const [resCiclo, resFaturas, resPendentes, resOfx, resDiv] = await Promise.all([
     sb.from('contas_financeiras').select('id, fechamento_dia, vencimento_dia, limite').eq('org_id', org.id),
     sb.from('cartao_faturas').select('conta_id, vence, total, compras').eq('org_id', org.id).order('vence'),
     // Movimento do banco esperando conciliação. Mesma régua da fila
@@ -39,7 +39,14 @@ export default async function ContasPage({
     // Último OFX de cada conta: até quando vai o extrato e QUANDO subiu.
     sb.from('ofx_arquivos').select('conta_id, periodo_fim, created_at').eq('org_id', org.id)
       .order('created_at', { ascending: false }).limit(500),
+    // Saldo do Flow × banco na data do último OFX, e desde quando diverge (mig. 347).
+    sb.rpc('fin_divergencias', { p_org: org.id, p_detalhe: true }),
   ])
+  // Só a diferença que a fila de conciliação NÃO explica (mig. 348) — a fila já
+  // tem o seu próprio aviso ("N a conciliar").
+  interface DivRow { conta_id: string; diferenca_real: number | string; desde: string | null; saldo_banco_data: string }
+  const div = new Map<string, DivRow>()
+  for (const d of ((resDiv?.data ?? []) as DivRow[])) if (Math.abs(Number(d.diferenca_real)) >= 0.01) div.set(d.conta_id, d)
 
   // O aviso olha o DIA DA IMPORTAÇÃO, não o fim do extrato: o banco entrega o OFX
   // até ontem (medido: o de 07/10 cobria até 06/10), então pelo fim do extrato o
@@ -85,6 +92,9 @@ export default async function ContasPage({
       const d = pend.get(c.id)?.maisAntigo
       return !!d && (Date.now() - new Date(`${d}T12:00:00`).getTime()) > 15 * 86_400_000
     })(),
+    divergencia: div.has(c.id)
+      ? { diferenca: Number(div.get(c.id)!.diferenca_real), desde: div.get(c.id)!.desde, data: div.get(c.id)!.saldo_banco_data }
+      : null,
     ofxAte: ofx.get(c.id)?.ate ?? null,
     ofxImportadoEm: ofx.get(c.id)?.importadoEm ?? null,
     ofxDesatualizado: !!ofx.get(c.id) && ofx.get(c.id)!.importadoEm !== hojeBR,

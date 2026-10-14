@@ -103,6 +103,15 @@ export default async function OrgLayout({
     ? await pendenciasDeTransicao(supabase as any, org.id)
     : { migrar: 0, vincular: 0 }
 
+  // Contas cujo saldo no Flow não bate com o banco NA DATA DO ÚLTIMO OFX, fora o que
+  // ainda está na fila de conciliação (migs. 347/348).
+  // Barato (sem o "desde"); acende o Financeiro no menu de qualquer tela.
+  const financeAlertas = access.financeiro
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ? (((await (supabase as any).rpc('fin_divergencias', { p_org: org.id })).data ?? []) as { diferenca_real: number }[])
+        .filter(d => Math.abs(Number(d.diferenca_real)) >= 0.01).length
+    : 0
+
   // Membros da org (p/ o chat) — exceto eu mesmo e quem foi arquivado: não se abre
   // conversa nova com quem saiu da agência.
   const { data: membersRaw } = await membrosAtivos(supabase, org.id, 'user_id, profiles!user_id(id, full_name, avatar_url)')
@@ -177,6 +186,7 @@ export default async function OrgLayout({
         canListaGlobal={access.listaGlobal}
         onboardingPendente={onboardingPendente}
         midiaTransicao={midiaTransicao}
+        financeAlertas={financeAlertas}
         painel={painel}
         prefs={sidebarPrefs}
       >

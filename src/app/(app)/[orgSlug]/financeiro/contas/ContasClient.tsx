@@ -34,6 +34,8 @@ export interface Conta {
   conciliarDesde?: string | null
   /** Mais de 15 dias parada. Vem do servidor: "hoje" no render seria impuro. */
   conciliarAtrasada?: boolean
+  /** Saldo do Flow ≠ banco na data do último OFX (Flow − banco), e desde quando. */
+  divergencia?: { diferenca: number; desde: string | null; data: string } | null
   /** Último OFX: até quando vai o extrato e o dia em que foi importado. */
   ofxAte?: string | null
   ofxImportadoEm?: string | null
@@ -289,6 +291,22 @@ function ContaCard({ conta: c, orgSlug, isPending, onEditar, onToggleAtivo, onTo
           <span className="block text-[11px] text-gray-400">Saldo atual</span>
           <span className={cn('block text-xl font-semibold tabular-nums', saldo < 0 ? 'text-red-600' : 'text-gray-900')}>
             {formatBRL(saldo)}
+          </span>
+        </Link>
+      )}
+
+      {/* Saldo diferente do banco: o aviso mais alto do card, de propósito.
+          Diferença que espera dias vira arqueologia (R$ 12 mil ficaram 6 semanas). */}
+      {c.divergencia && (
+        <Link href={`/${orgSlug}/financeiro/contas/${c.id}${c.divergencia.desde ? `#dia-${c.divergencia.desde}` : ''}`}
+          className="-mt-1 flex items-start gap-2 rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-red-800 hover:bg-red-100 transition-colors active:scale-[0.99]">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
+          <span className="text-xs leading-snug">
+            <strong className="font-semibold">Não bate com o banco: {formatBRL(Math.abs(c.divergencia.diferenca))}</strong>
+            <span className="block text-red-700/80">
+              Flow {c.divergencia.diferenca > 0 ? 'acima' : 'abaixo'} do extrato de {formatDateBR(c.divergencia.data)}
+              {c.divergencia.desde ? ` · desde ${formatDateBR(c.divergencia.desde)}` : ''}
+            </span>
           </span>
         </Link>
       )}

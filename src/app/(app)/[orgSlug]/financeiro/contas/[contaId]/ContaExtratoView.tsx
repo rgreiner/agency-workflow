@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, ChevronDown, ArrowDownCircle, ArrowUpCircle, Plug, Check, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
@@ -83,13 +83,15 @@ function Stat({ label, valor, cor }: { label: string; valor: string; cor?: strin
   )
 }
 
-export function ContaExtratoView({ orgSlug, movimentos, saldoInicial, saldoAtual, saldoBanco, saldoBancoData, temOfx, bancoPorDia = {}, today, pendentesCount = 0, slotConciliacao, slotIntegracao }: {
+export function ContaExtratoView({ orgSlug, movimentos, saldoInicial, saldoAtual, saldoBanco, saldoBancoData, temOfx, bancoPorDia = {}, divergencia = null, today, pendentesCount = 0, slotConciliacao, slotIntegracao }: {
   orgSlug: string
   movimentos: Mov[]; saldoInicial: number; saldoAtual: number
   saldoBanco: number | null; saldoBancoData: string | null
   temOfx: boolean; today: string
   /** Líquido do dia no banco (OFX), para apontar o dia em que o Flow diverge. */
   bancoPorDia?: Record<string, number>
+  /** Banco × Flow na data do extrato (mig. 347). null = conta sem OFX. */
+  divergencia?: { diferenca: number; real: number; pendentes: number; desde: string | null } | null
   /** Quantos movimentos do banco esperam ação. 0 = a conciliação vira uma linha
    *  discreta em vez de um bloco inteiro dizendo que não há nada pra fazer. */
   pendentesCount?: number
@@ -171,8 +173,23 @@ export function ContaExtratoView({ orgSlug, movimentos, saldoInicial, saldoAtual
   }, [movimentos, mes, saldoAteDia, divergencias])
 
   const resultadoMes = entradasMes - saidasMes
-  const diff = saldoBanco != null ? Math.round((saldoBanco - saldoAtual) * 100) / 100 : null
+  // Compara na MESMA data do extrato (vem do servidor). Sem isso, toda baixa feita
+  // depois do último OFX aparecia como diferença — e alarme falso ensina a não olhar.
+  const diff = divergencia ? divergencia.diferenca : null
   const bate = diff !== null && Math.abs(diff) < 0.01
+  // O que sobra depois de descontar a fila de conciliação: isso é erro e grita.
+  // O resto da diferença é só trabalho do dia (conciliar os pendentes).
+  const real = divergencia ? divergencia.real : null
+  const erro = real !== null && Math.abs(real) >= 0.01
+
+  // Link do card de Contas chega com #dia-AAAA-MM-DD: abre o mês e rola até o dia.
+  useEffect(() => {
+    const m = /^#dia-(\d{4}-\d{2}-\d{2})$/.exec(window.location.hash)
+    if (!m) return
+    // Fora do corpo do efeito: o hash só existe no navegador, depois da hidratação.
+    const t = setTimeout(() => irParaDia(m[1]), 0)
+    return () => clearTimeout(t)
+  }, [])
 
   return (
     <div className="p-6 space-y-4">
@@ -197,9 +214,9 @@ export function ContaExtratoView({ orgSlug, movimentos, saldoInicial, saldoAtual
               <p className="text-xs font-medium text-gray-400 mb-1">No banco</p>
               <p className="text-lg font-semibold text-gray-700 tabular-nums leading-none">{formatBRL(saldoBanco)}</p>
               <span className={cn('inline-flex items-center gap-1 mt-2 text-[11px] font-medium rounded-full px-2 py-0.5',
-                bate ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700')}>
+                bate ? 'bg-emerald-50 text-emerald-700' : erro ? 'bg-red-100 text-red-700' : 'bg-amber-50 text-amber-700')}>
                 {bate ? <Check className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-                {bate ? 'Bate com o Flow' : `Difere em ${formatBRL(Math.abs(diff ?? 0))}`}
+                {bate ? 'Bate com o Flow' : erro ? `Difere em ${formatBRL(Math.abs(real ?? 0))}` : `${divergencia?.pendentes ?? 0} a conciliar`}
               </span>
               {saldoBancoData && <p className="text-[11px] text-gray-400 mt-1">extrato de {formatDateBR(saldoBancoData)}</p>}
               {diasDivergentes.length > 0 && (
@@ -239,6 +256,26 @@ export function ContaExtratoView({ orgSlug, movimentos, saldoInicial, saldoAtual
           <Stat label="Movimentos" valor={String(dias.reduce((s, d) => s + d.itens.length, 0))} />
         </div>
       </div>
+
+      {/* Saldo diferente do banco: faixa no topo, vermelha, com o dia em que
+          começou. Fica até bater — é trabalho a fazer, não informação. */}
+      {erro && real !== null && (
+        <div role="alert" className="flex items-center gap-3 flex-wrap rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
+          <AlertTriangle className="w-5 h-5 shrink-0 text-red-600" />
+          <span className="flex-1 min-w-0">
+            <strong className="font-semibold">O saldo do Flow não bate com o banco: {formatBRL(Math.abs(real))}</strong>
+            {' '}({real > 0 ? 'Flow acima' : 'Flow abaixo'} do extrato de {saldoBancoData ? formatDateBR(saldoBancoData) : '—'}
+            {divergencia && divergencia.pendentes > 0 ? `, já descontados ${divergencia.pendentes} movimento(s) na fila de conciliação` : ''}).
+            {divergencia?.desde && <> A diferença começa em <strong className="font-semibold">{formatDateBR(divergencia.desde)}</strong>.</>}
+          </span>
+          {divergencia?.desde && (
+            <button type="button" onClick={() => irParaDia(divergencia.desde!)}
+              className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 text-[#fff] hover:bg-red-700 transition-colors active:scale-[0.97]">
+              Ir para {formatDateBR(divergencia.desde).slice(0, 5)}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Aviso OFX (some quando houver extrato bancário) */}
       {!temOfx && (

@@ -168,7 +168,18 @@ export async function importarOfx(
   }
   revalidatePath(`/${orgSlug}/financeiro/contas/${contaId}`)
   revalidatePath(`/${orgSlug}/financeiro/conciliacao`)
-  return { result: data as { inserted: number; skipped: number; futuros?: number; total: number } }
+
+  // Confere na hora: o saldo do Flow bate com o do banco na data deste extrato?
+  // (mig. 348 — já descontando o que entrou agora na fila de conciliação.)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: divs } = await (supabase as any).rpc('fin_divergencias', { p_org: orgId, p_detalhe: true })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = ((divs ?? []) as any[]).find(x => x.conta_id === contaId)
+  const conferencia = d ? {
+    real: Number(d.diferenca_real), pendentes: Number(d.n_pendentes ?? 0),
+    desde: (d.desde as string) ?? null, data: d.saldo_banco_data as string,
+  } : null
+  return { result: data as { inserted: number; skipped: number; futuros?: number; total: number }, conferencia }
 }
 
 /** Registra o OFX original que acabou de subir pro volume. A contabilidade quer o

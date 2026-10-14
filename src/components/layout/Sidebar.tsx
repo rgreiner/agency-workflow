@@ -84,6 +84,8 @@ interface SidebarProps {
   onboardingPendente?: number
   /** Pendências das telas transitórias da Mídia — 0 esconde o item. */
   midiaTransicao?: { migrar: number; vincular: number }
+  /** Contas cujo saldo no Flow não bate com o do banco — acende o Financeiro. */
+  financeAlertas?: number
   collapsed: boolean
   onCollapse: () => void
   onExpand?: () => void
@@ -197,8 +199,10 @@ function blocosDoGrupo(items: NavItem[]): { heading?: string; items: NavItem[] }
   return out
 }
 
-function NavGroup({ base, pathname, group, open, onToggle }: {
+function NavGroup({ base, pathname, group, open, onToggle, badges = {} }: {
   base: string; pathname: string; group: NavGroupDef; open: boolean
+  /** Contador vermelho por href (ex.: contas com saldo divergente do banco). */
+  badges?: Record<string, number>
   /** Ausente = grupo fixo, sem colapsar (modo que tem um grupo só). */
   onToggle?: () => void
 }) {
@@ -264,6 +268,12 @@ function NavGroup({ base, pathname, group, open, onToggle }: {
                       )}
                     >
                       <span className="truncate">{it.label}</span>
+                      {(badges[it.href] ?? 0) > 0 && (
+                        <span title="Saldo não bate com o banco"
+                          className="ml-auto shrink-0 min-w-4 h-4 px-1 rounded-full bg-red-600 text-[#fff] text-[10px] font-bold leading-4 text-center tabular-nums">
+                          {badges[it.href]}
+                        </span>
+                      )}
                     </Link>
                   )
                 })}
@@ -370,7 +380,7 @@ export function Sidebar({
   positionName, trabalharHref = 'views/atendimento', canMidias = false, canProducao = false, canFinance = false, canCadastros = false, canRh = false,
   canMidiaHub = false,
   canListaGlobal = false,
-  onboardingPendente = 0, midiaTransicao = { migrar: 0, vincular: 0 }, collapsed, onCollapse, onExpand, prefs, painel,
+  onboardingPendente = 0, midiaTransicao = { migrar: 0, vincular: 0 }, financeAlertas = 0, collapsed, onCollapse, onExpand, prefs, painel,
 }: SidebarProps) {
   const pathname = usePathname()
   const base = `/${orgSlug}`
@@ -628,6 +638,11 @@ export function Sidebar({
                   )}
                 >
                   <Icon className="w-4 h-4" />
+                  {/* Saldo divergente do banco acende o Financeiro de qualquer modo:
+                      diferença que espera dias vira arqueologia (R$ 12 mil, 6 semanas). */}
+                  {m === 'financeiro' && financeAlertas > 0 && (
+                    <span aria-label="Saldo diferente do banco" className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-gray-900" />
+                  )}
                 </button>
               ))}
             </div>
@@ -730,6 +745,7 @@ export function Sidebar({
                 // única lista atrás de um clique não economiza nada.
                 open={gruposDoModo.length === 1 ? true : openGroups.has(g.id)}
                 onToggle={gruposDoModo.length === 1 ? undefined : () => toggleGroup(g.id)}
+                badges={g.id === 'financeiro' ? { 'financeiro/contas': financeAlertas } : undefined}
               />
             ))}
           </div>

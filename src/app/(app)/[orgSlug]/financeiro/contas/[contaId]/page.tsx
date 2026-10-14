@@ -108,7 +108,21 @@ export default async function ContaPage({
   // remunerada vem em par e se anula sozinho).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ofxRaw = unwrap<any>(await sb.from('btg_movements')
-    .select('data_mov, tipo, valor').eq('org_id', orgId).eq('conta_id', contaId), 'movimentos do banco')
+    .select('data_mov, tipo, valor').eq('org_id', orgId).eq('conta_id', contaId)
+    // A fila de conciliação fica de fora: movimento pendente é trabalho do dia,
+    // tem o seu próprio bloco, e marcaria todo dia recém-importado como erro.
+    .neq('status', 'pendente'), 'movimentos do banco')
+  // Divergência oficial (mig. 347): banco × Flow NA MESMA DATA — a conta antiga
+  // comparava com o saldo de hoje e virava falso alarme a cada baixa nova.
+  const { data: divRaw } = await sb.rpc('fin_divergencias', { p_org: orgId, p_detalhe: true })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const divConta = ((divRaw ?? []) as any[]).find(d => d.conta_id === contaId)
+  const divergencia = divConta
+    ? {
+        diferenca: Number(divConta.diferenca), real: Number(divConta.diferenca_real),
+        pendentes: Number(divConta.n_pendentes ?? 0), desde: (divConta.desde as string) ?? null,
+      }
+    : null
   const bancoPorDia: Record<string, number> = {}
   for (const m of ofxRaw as { data_mov: string; tipo: string; valor: number | string }[]) {
     const v = Math.abs(Number(m.valor ?? 0)) * (m.tipo === 'debit' ? -1 : 1)
@@ -172,6 +186,7 @@ export default async function ContaPage({
         saldoBancoData={(conta.saldo_banco_data as string) ?? null}
         temOfx={temOfx}
         bancoPorDia={bancoPorDia}
+        divergencia={divergencia}
         today={today}
         pendentesCount={conc.pendentes.length}
         slotConciliacao={temOfx ? (

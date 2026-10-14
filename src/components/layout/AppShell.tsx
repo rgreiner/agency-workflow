@@ -43,6 +43,7 @@ interface Props {
   onboardingPendente?: number
   /** Pendências das telas transitórias da Mídia — 0 esconde o item. */
   midiaTransicao?: { migrar: number; vincular: number }
+  financeAlertas?: number
   /** Preferências da casca lidas do cookie no servidor. */
   prefs: SidebarPrefs
   /** Slot @painel: o que a página põe no corpo da sidebar (árvore de Docs). */
@@ -56,7 +57,7 @@ interface Props {
  * a própria Sidebar mostra um botão flutuante para reabrir.
  */
 export function AppShell({
-  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, trabalharHref, canMidias, canMidiaHub, canProducao, canFinance, canCadastros, canRh, canManage, canListaGlobal, onboardingPendente, midiaTransicao, prefs, painel, children,
+  orgSlug, orgName, userEmail, userAvatar, userName, workspaces, logoUrl, accentColor, positionName, trabalharHref, canMidias, canMidiaHub, canProducao, canFinance, canCadastros, canRh, canManage, canListaGlobal, onboardingPendente, midiaTransicao, financeAlertas, prefs, painel, children,
 }: Props) {
   // Recolhida: vem do cookie lido no servidor, então o HTML já chega recolhido.
   // Antes o localStorage era lido depois do paint e a sidebar "pulava" 240px.
@@ -93,6 +94,7 @@ export function AppShell({
         canListaGlobal={canListaGlobal}
         onboardingPendente={onboardingPendente}
         midiaTransicao={midiaTransicao}
+        financeAlertas={financeAlertas}
         prefs={prefs}
         painel={painel}
         collapsed={collapsed}
