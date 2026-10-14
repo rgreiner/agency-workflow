@@ -83,11 +83,13 @@ function Stat({ label, valor, cor }: { label: string; valor: string; cor?: strin
   )
 }
 
-export function ContaExtratoView({ orgSlug, movimentos, saldoInicial, saldoAtual, saldoBanco, saldoBancoData, temOfx, today, pendentesCount = 0, slotConciliacao, slotIntegracao }: {
+export function ContaExtratoView({ orgSlug, movimentos, saldoInicial, saldoAtual, saldoBanco, saldoBancoData, temOfx, bancoPorDia = {}, today, pendentesCount = 0, slotConciliacao, slotIntegracao }: {
   orgSlug: string
   movimentos: Mov[]; saldoInicial: number; saldoAtual: number
   saldoBanco: number | null; saldoBancoData: string | null
   temOfx: boolean; today: string
+  /** Líquido do dia no banco (OFX), para apontar o dia em que o Flow diverge. */
+  bancoPorDia?: Record<string, number>
   /** Quantos movimentos do banco esperam ação. 0 = a conciliação vira uma linha
    *  discreta em vez de um bloco inteiro dizendo que não há nada pra fazer. */
   pendentesCount?: number
@@ -129,17 +131,44 @@ export function ContaExtratoView({ orgSlug, movimentos, saldoInicial, saldoAtual
     return pts.slice(-45)
   }, [saldoAteDia])
 
+  // Dia a dia, banco × Flow — só onde há OFX (antes dele não há com o que
+  // comparar). Abaixo de R$ 1 é centavo de rendimento arredondado, não erro.
+  const divergencias = useMemo(() => {
+    const diasOfx = Object.keys(bancoPorDia)
+    if (diasOfx.length === 0) return new Map<string, { banco: number; flow: number; dif: number }>()
+    const inicio = diasOfx.sort()[0]
+    const flowPorDia = new Map<string, number>()
+    for (const m of movimentos) if (m.data && m.data >= inicio) flowPorDia.set(m.data, (flowPorDia.get(m.data) ?? 0) + m.valor)
+    const out = new Map<string, { banco: number; flow: number; dif: number }>()
+    for (const d of new Set([...diasOfx, ...flowPorDia.keys()])) {
+      const banco = bancoPorDia[d] ?? 0, flow = flowPorDia.get(d) ?? 0
+      const dif = Math.round((flow - banco) * 100) / 100
+      if (Math.abs(dif) >= 1) out.set(d, { banco, flow, dif })
+    }
+    return out
+  }, [bancoPorDia, movimentos])
+  const diasDivergentes = useMemo(() => [...divergencias.keys()].sort(), [divergencias])
+
+  function irParaDia(d: string) {
+    setMes(d.slice(0, 7))
+    // Espera o mês renderizar antes de rolar até o dia.
+    setTimeout(() => document.getElementById(`dia-${d}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60)
+  }
+
   const { dias, entradasMes, saidasMes } = useMemo(() => {
     const noMes = movimentos.filter(m => monthOf(m.data) === mes)
     let ent = 0, sai = 0
     for (const m of noMes) { if (m.valor > 0) ent += m.valor; else sai += -m.valor }
     const byDay = new Map<string, Mov[]>()
     for (const m of noMes) { const k = m.data as string; const arr = byDay.get(k) ?? []; arr.push(m); byDay.set(k, arr) }
+    // Dia em que o banco mexeu e o Flow não tem nada também precisa aparecer —
+    // é justamente o dia que se procura.
+    for (const d of divergencias.keys()) if (monthOf(d) === mes && !byDay.has(d)) byDay.set(d, [])
     const dias = [...byDay.entries()]
       .sort((a, b) => (a[0] < b[0] ? 1 : -1))
       .map(([data, itens]) => ({ data, itens, saldo: saldoAteDia.get(data) ?? null }))
     return { dias, entradasMes: ent, saidasMes: sai }
-  }, [movimentos, mes, saldoAteDia])
+  }, [movimentos, mes, saldoAteDia, divergencias])
 
   const resultadoMes = entradasMes - saidasMes
   const diff = saldoBanco != null ? Math.round((saldoBanco - saldoAtual) * 100) / 100 : null
@@ -173,6 +202,19 @@ export function ContaExtratoView({ orgSlug, movimentos, saldoInicial, saldoAtual
                 {bate ? 'Bate com o Flow' : `Difere em ${formatBRL(Math.abs(diff ?? 0))}`}
               </span>
               {saldoBancoData && <p className="text-[11px] text-gray-400 mt-1">extrato de {formatDateBR(saldoBancoData)}</p>}
+              {diasDivergentes.length > 0 && (
+                <div className="mt-2 flex flex-wrap lg:justify-end items-center gap-1">
+                  <span className="text-[11px] text-gray-400">{diasDivergentes.length === 1 ? 'Dia que não bate:' : 'Dias que não batem:'}</span>
+                  {diasDivergentes.slice(0, 6).map(d => (
+                    <button key={d} type="button" onClick={() => irParaDia(d)}
+                      title={`Diferença de ${formatBRL(divergencias.get(d)!.dif)} neste dia`}
+                      className="text-[11px] font-medium text-amber-800 bg-amber-100 hover:bg-amber-200 rounded-full px-2 py-0.5 tabular-nums transition-colors active:scale-[0.97]">
+                      {formatDateBR(d).slice(0, 5)}
+                    </button>
+                  ))}
+                  {diasDivergentes.length > 6 && <span className="text-[11px] text-gray-400">+{diasDivergentes.length - 6}</span>}
+                </div>
+              )}
             </div>
           ) : (
             <div className="lg:text-right lg:border-l lg:border-gray-100 lg:pl-6">
@@ -227,11 +269,23 @@ export function ContaExtratoView({ orgSlug, movimentos, saldoInicial, saldoAtual
       {/* Extrato por dia — grade real: o valor deixa de flutuar longe da descrição
           e as etiquetas ocupam o meio, que era só vão. */}
       <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-        {dias.map(dia => (
-          <div key={dia.data}>
-            <div className="flex items-center justify-between px-4 py-2 bg-gray-50/70 border-t border-gray-100 first:border-t-0">
-              <span className="text-xs font-medium text-gray-500">{formatDateBR(dia.data)}</span>
-              {dia.saldo != null && <span className="text-[11px] text-gray-400 tabular-nums">saldo do dia {formatBRL(dia.saldo)}</span>}
+        {dias.map(dia => {
+          const dv = divergencias.get(dia.data)
+          return (
+          <div key={dia.data} id={`dia-${dia.data}`} className="scroll-mt-24">
+            <div className={cn('flex items-center justify-between gap-3 flex-wrap px-4 py-2 border-t first:border-t-0',
+              dv ? 'bg-amber-50 border-amber-100' : 'bg-gray-50/70 border-gray-100')}>
+              <span className={cn('text-xs font-medium', dv ? 'text-amber-800' : 'text-gray-500')}>{formatDateBR(dia.data)}</span>
+              {dv && (
+                // Os três números juntos dizem o que procurar: o líquido do dia no
+                // banco, o do Flow, e quanto o Flow ficou acima/abaixo nesse dia.
+                <span className="inline-flex items-center gap-1.5 text-[11px] text-amber-800 tabular-nums">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>banco {formatBRL(dv.banco)} · Flow {formatBRL(dv.flow)}</span>
+                  <strong className="font-semibold">Flow {formatBRL(Math.abs(dv.dif))} {dv.dif > 0 ? 'acima' : 'abaixo'} do banco</strong>
+                </span>
+              )}
+              {dia.saldo != null && <span className={cn('text-[11px] tabular-nums', dv ? 'text-amber-700/70' : 'text-gray-400')}>saldo do dia {formatBRL(dia.saldo)}</span>}
             </div>
             {dia.itens.map((m, i) => (
               <div key={i}
@@ -260,7 +314,8 @@ export function ContaExtratoView({ orgSlug, movimentos, saldoInicial, saldoAtual
               </div>
             ))}
           </div>
-        ))}
+          )
+        })}
         {dias.length === 0 && (
           <p className="text-sm text-gray-400 px-4 py-12 text-center">
             Nenhum movimento realizado em {monthLabel(mes)}.

@@ -101,6 +101,20 @@ export default async function ContaPage({
     })
   }
 
+  // O que o BANCO movimentou em cada dia, pelo OFX. A tela compara com o que o
+  // Flow tem no mesmo dia e marca onde não bate — a diferença de saldo deixa de
+  // ser um número solto no topo e passa a ter data. Todos os status entram: um
+  // movimento "ignorado" ainda é dinheiro que mexeu na conta (o resgate da conta
+  // remunerada vem em par e se anula sozinho).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ofxRaw = unwrap<any>(await sb.from('btg_movements')
+    .select('data_mov, tipo, valor').eq('org_id', orgId).eq('conta_id', contaId), 'movimentos do banco')
+  const bancoPorDia: Record<string, number> = {}
+  for (const m of ofxRaw as { data_mov: string; tipo: string; valor: number | string }[]) {
+    const v = Math.abs(Number(m.valor ?? 0)) * (m.tipo === 'debit' ? -1 : 1)
+    bancoPorDia[m.data_mov] = (bancoPorDia[m.data_mov] ?? 0) + v
+  }
+
   // Integração bancária desta conta (migration 128) — o card mora aqui, não na listagem.
   const conn = await getBtgConnection(orgId)
   const btg = conn?.contaId === contaId ? {
@@ -157,6 +171,7 @@ export default async function ContaPage({
         saldoBanco={conta.saldo_banco != null ? Number(conta.saldo_banco) : null}
         saldoBancoData={(conta.saldo_banco_data as string) ?? null}
         temOfx={temOfx}
+        bancoPorDia={bancoPorDia}
         today={today}
         pendentesCount={conc.pendentes.length}
         slotConciliacao={temOfx ? (
