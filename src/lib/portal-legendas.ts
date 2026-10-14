@@ -145,3 +145,34 @@ function ordenar(pecas: PecaRef[]): PecaRef[] {
   return [...pecas].sort((a, b) =>
     mock(a.name) - mock(b.name) || a.name.localeCompare(b.name, 'pt-BR', { numeric: true }))
 }
+
+export interface ConferenciaLegendas {
+  /** Peças que o cliente vai ver junto de uma legenda. */
+  comLegenda: number
+  total: number
+  /** Arquivos da Preview sem bloco correspondente na Redação. */
+  semLegenda: string[]
+  /** Blocos com legenda na Redação que não acharam arte na Preview. */
+  legendaSemPeca: string[]
+  /** A Redação não tem nenhum "Legenda:" que dê para casar. */
+  nenhuma: boolean
+}
+
+/**
+ * O que o cliente vai ver na aprovação — para a equipe conferir ANTES de mandar.
+ * Mesma regra de `agruparPorLegenda`, contada do lado da agência.
+ */
+export function conferirLegendas(pecas: PecaRef[], texto: string): ConferenciaLegendas {
+  const grupos = agruparPorLegenda(pecas, texto)
+  if (!grupos) {
+    return { comLegenda: 0, total: pecas.length, semLegenda: pecas.map(p => p.name), legendaSemPeca: [], nenhuma: true }
+  }
+  const nome = new Map(pecas.map(p => [p.ref, p.name]))
+  const semLegenda = grupos.filter(g => !g.legenda).flatMap(g => g.refs.map(r => nome.get(r) ?? r))
+  const usados = new Set(grupos.filter(g => g.legenda).map(g => g.nome))
+  const legendaSemPeca = blocosDaRedacao(texto).filter(b => b.nome && !usados.has(b.nome)).map(b => b.nome)
+  return {
+    comLegenda: pecas.length - semLegenda.length, total: pecas.length,
+    semLegenda, legendaSemPeca, nenhuma: false,
+  }
+}

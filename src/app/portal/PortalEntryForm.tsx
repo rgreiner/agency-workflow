@@ -4,6 +4,10 @@ import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Paperclip, X, Loader2, CheckCircle2, Send } from 'lucide-react'
 import type { PortalAnexo } from '@/app/actions/portal'
+import { Select } from '@/components/ui/Select'
+
+/** Campos extras da demanda nova (mig. 344): campanha e data desejada. */
+export interface ExtrasDemanda { campanhaId: string | null; dataDesejada: string | null }
 
 interface Props {
   /** Título opcional (só na solicitação nova). Se `askTitulo`, é campo obrigatório. */
@@ -14,19 +18,27 @@ interface Props {
   submitLabel: string
   sucessoTitulo: string
   sucessoTexto: string
-  /** Recebe (titulo, mensagem, anexos) e faz a chamada. */
-  onSubmit: (titulo: string, mensagem: string, anexos: PortalAnexo[]) => Promise<{ error?: string }>
+  /** Recebe (titulo, mensagem, anexos[, extras]) e faz a chamada. */
+  onSubmit: (titulo: string, mensagem: string, anexos: PortalAnexo[], extras?: ExtrasDemanda) => Promise<{ error?: string }>
+  /** Demanda nova: campanhas do cliente para escolher (opcional) + data desejada. */
+  campanhas?: { id: string; nome: string }[]
+  askData?: boolean
+  /** Para onde o "voltar" do sucesso leva. */
+  voltarHref?: string
 }
 
 export function PortalEntryForm({
   askTitulo = false, tituloLabel = 'Assunto', mensagemLabel,
   mensagemPlaceholder, submitLabel, sucessoTitulo, sucessoTexto, onSubmit,
+  campanhas, askData = false, voltarHref = '/portal/painel',
 }: Props) {
   const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
   const [titulo, setTitulo] = useState('')
   const [mensagem, setMensagem] = useState('')
   const [anexos, setAnexos] = useState<PortalAnexo[]>([])
+  const [campanhaId, setCampanhaId] = useState('')
+  const [dataDesejada, setDataDesejada] = useState('')
   const [uploading, setUploading] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [ok, setOk] = useState(false)
@@ -58,7 +70,8 @@ export function PortalEntryForm({
     if (askTitulo && !titulo.trim()) { setErro('Preencha o assunto.'); return }
     if (!mensagem.trim()) { setErro('Escreva uma mensagem.'); return }
     startTransition(async () => {
-      const res = await onSubmit(titulo.trim(), mensagem.trim(), anexos)
+      const res = await onSubmit(titulo.trim(), mensagem.trim(), anexos,
+        { campanhaId: campanhaId || null, dataDesejada: dataDesejada || null })
       if (res.error) { setErro(res.error); return }
       setOk(true)
     })
@@ -71,10 +84,10 @@ export function PortalEntryForm({
         <h2 className="text-lg font-semibold text-gray-900">{sucessoTitulo}</h2>
         <p className="text-sm text-gray-500 mt-1 mb-6 leading-relaxed">{sucessoTexto}</p>
         <button
-          onClick={() => router.push('/portal/painel')}
+          onClick={() => router.push(voltarHref)}
           className="px-5 py-2.5 rounded-xl text-[#fff] text-sm font-medium bg-orange-600 hover:bg-orange-700 transition"
         >
-          Voltar ao painel
+          Voltar
         </button>
       </div>
     )
@@ -93,6 +106,33 @@ export function PortalEntryForm({
           />
         </div>
       )}
+
+      {(campanhas?.length || askData) ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {campanhas && campanhas.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Campanha <span className="font-normal text-gray-400">(opcional)</span></label>
+              <Select
+                value={campanhaId}
+                onChange={setCampanhaId}
+                placeholder="Não sei / outra"
+                options={[{ value: '', label: 'Não sei / outra' }, ...campanhas.map(c => ({ value: c.id, label: c.nome }))]}
+              />
+            </div>
+          )}
+          {askData && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Para quando? <span className="font-normal text-gray-400">(opcional)</span></label>
+              <input
+                type="date"
+                value={dataDesejada}
+                onChange={(e) => setDataDesejada(e.target.value)}
+                className="w-full px-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+          )}
+        </div>
+      ) : null}
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">{mensagemLabel}</label>

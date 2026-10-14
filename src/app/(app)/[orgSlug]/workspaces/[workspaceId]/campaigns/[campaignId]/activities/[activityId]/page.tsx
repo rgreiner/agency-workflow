@@ -13,6 +13,7 @@ import { MobileStatusBar } from './MobileStatusBar'
 import { AbasMobile } from './AbasMobile'
 import { AvisoTarefaArquivada } from './AvisoTarefaArquivada'
 import { RevisaoIA } from './RevisaoIA'
+import { LegendasPortalAviso } from './LegendasPortalAviso'
 import { etapaRevisavel, ETAPAS, type RevisaoEtapa } from '@/lib/ai/revisao-modelos'
 import { lerRevisaoConfigPublica } from '@/lib/ai/revisao-config'
 import { PortalFeedback, type PortalFeedbackItem } from './PortalFeedback'
@@ -670,6 +671,14 @@ export default async function ActivityPage({
                 etapaLabel={ETAPAS.find(e => e.key === etapaRev)!.label}
                 ultima={ultimaRevisao}
               />
+            )}
+
+            {/* Como a aprovação vai chegar ao portal: peças sem legenda (14/10). */}
+            {activity.drive_folder_id && activity.redacao_url && [
+              'design', 'edicao', 'finalizacao', 'validacao_de_criacao', 'revisao_interna',
+              'validacao_atendimento', 'aprovacao_cliente',
+            ].includes(activity.status) && (
+              <LegendasPortalAviso key={activity.status} activityId={activityId} titulo={activity.title} />
             )}
 
             {/* ── Campos ───────────────────────────────────────── */}

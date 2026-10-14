@@ -25,7 +25,9 @@ import {
 import { limiteEstourado, registrarTentativa, registrarBloqueio } from '@/lib/auth/rate-limit'
 import { sendMail } from '@/lib/email/send'
 import { emailLayout } from '@/lib/email/layout'
-import { uploadToSubfolder } from '@/lib/task-folders'
+import { uploadToSubfolder, listPreviewFiles, backendForRef } from '@/lib/task-folders'
+import { driveConfigured, readRedacaoText } from '@/lib/google-drive'
+import { conferirLegendas, type ConferenciaLegendas } from '@/lib/portal-legendas'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
 
@@ -147,23 +149,6 @@ export async function responderPendencia(
   })
   if (error) return { error: 'Não foi possível enviar sua resposta. Tente de novo.' }
   // A RPC notifica o time no sino — empurra o push na hora, não na varredura.
-  after(() => dispatchPushNotificacoes().catch(() => {}))
-  return {}
-}
-
-/** Abrir uma solicitação nova (vira briefing pro atendimento). */
-export async function criarSolicitacao(
-  titulo: string, mensagem: string, anexos: PortalAnexo[],
-): Promise<{ error?: string }> {
-  if (await emPreview()) return { error: MSG_PREVIEW }
-  const supabase = await createPortalClient()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any).rpc('portal_criar_solicitacao', {
-    p_titulo: titulo,
-    p_mensagem: mensagem,
-    p_anexos: anexos,
-  })
-  if (error) return { error: 'Não foi possível enviar sua solicitação. Tente de novo.' }
   after(() => dispatchPushNotificacoes().catch(() => {}))
   return {}
 }
@@ -600,4 +585,54 @@ export async function solicitarAlteracao(
     }
   })
   return {}
+}
+
+// ── Nova demanda (mig. 344) ───────────────────────────────────────────────────
+
+/**
+ * Cliente pede uma demanda nova: vira TAREFA EM BRIEFING no cliente dele (campanha
+ * escolhida ou "Solicitações do cliente"), com responsável e aviso ao atendimento.
+ */
+export async function solicitarDemanda(
+  titulo: string, mensagem: string, anexos: PortalAnexo[],
+  extras?: { campanhaId: string | null; dataDesejada: string | null },
+): Promise<{ error?: string }> {
+  if (await emPreview()) return { error: MSG_PREVIEW }
+  if (!titulo.trim() || !mensagem.trim()) return { error: 'Preencha o assunto e o que você precisa.' }
+  const data = extras?.dataDesejada && /^\d{4}-\d{2}-\d{2}$/.test(extras.dataDesejada) ? extras.dataDesejada : null
+  const supabase = await createPortalClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('portal_solicitar_demanda', {
+    p_titulo: titulo, p_mensagem: mensagem, p_campanha: extras?.campanhaId || null,
+    p_data_desejada: data, p_anexos: anexos,
+  })
+  if (error) return { error: 'Não foi possível enviar sua solicitação. Tente de novo.' }
+  after(() => dispatchPushNotificacoes().catch(() => {}))
+  return {}
+}
+
+// ── Aviso interno: peças sem legenda (14/10) ──────────────────────────────────
+
+/**
+ * Confere, para a EQUIPE, como a aprovação vai chegar ao cliente: quantas peças
+ * da Preview casam com uma legenda da Redação e quais vão sem. Lê com a sessão
+ * do membro (a RLS decide se ele enxerga a tarefa).
+ */
+export async function conferirLegendasPortal(
+  activityId: string,
+): Promise<{ ok: true; r: ConferenciaLegendas } | { ok: false; motivo: string }> {
+  const supabase = await createClient()
+  const { data: a } = await supabase
+    .from('activities').select('drive_folder_id, redacao_url').eq('id', activityId).maybeSingle()
+  if (!a?.drive_folder_id || !a.redacao_url) return { ok: false, motivo: 'sem_material' }
+  if (backendForRef(a.drive_folder_id) !== 'drive' || !driveConfigured()) return { ok: false, motivo: 'sem_drive' }
+  try {
+    const pecas = await listPreviewFiles(a.drive_folder_id)
+    if (pecas.length === 0) return { ok: false, motivo: 'sem_pecas' }
+    const { text } = await readRedacaoText(a.redacao_url)
+    return { ok: true, r: conferirLegendas(pecas, text) }
+  } catch (e) {
+    console.error('[portal] conferência de legendas falhou', e)
+    return { ok: false, motivo: 'falha' }
+  }
 }

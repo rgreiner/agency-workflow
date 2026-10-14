@@ -190,7 +190,7 @@ export default async function PortalPainelPage() {
               href="/portal/solicitar"
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-[#fff] bg-orange-600 hover:bg-orange-700 transition-colors active:scale-[0.97]"
             >
-              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Nova solicitação</span>
+              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Nova demanda</span>
             </Link>
           )}
           {!preview && <SenhaPortalButton temSenha={temSenha} />}

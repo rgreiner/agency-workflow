@@ -4,7 +4,7 @@ import { sessaoPortal } from '@/lib/auth/portal'
 import { createPortalClient } from '@/lib/supabase/portal'
 import { sairPortal } from '@/app/actions/portal'
 import { AutoRefresh } from '@/components/ui/AutoRefresh'
-import { LogOut, ArrowRight, MessageSquarePlus, CalendarDays } from 'lucide-react'
+import { LogOut, ArrowRight, MessageSquarePlus, CalendarDays, Plus } from 'lucide-react'
 import { PortalThemeToggle } from '../PortalThemeToggle'
 import { PortalNav } from '../PortalNav'
 import { FlowMark } from '@/components/brand/FlowMark'
@@ -126,6 +126,14 @@ export default async function PortalQuadroPage() {
         </div>
         <div className="flex items-center gap-1">
           <PortalNav atual="quadro" />
+          {!preview && (
+            <Link
+              href="/portal/solicitar?de=quadro"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-[#fff] bg-orange-600 hover:bg-orange-700 transition-colors active:scale-[0.97]"
+            >
+              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Nova demanda</span>
+            </Link>
+          )}
           <PortalThemeToggle />
           <form action={sairPortal}>
             <button type="submit" className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors">
