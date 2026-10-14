@@ -2,7 +2,53 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Plus, FolderOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { UnarchiveButton } from '@/components/ui/UnarchiveButton'
+import { ClientesGrid, type ClienteCard, type Contato } from './ClientesGrid'
+import { fmtTelefone, linkWhatsApp, somenteDigitos } from '@/lib/telefone'
+
+const COM_O_CLIENTE = new Set(['pendente_cliente', 'aprovacao_cliente'])
+
+/** Hoje no fuso de Brasília (YYYY-MM-DD) — "atrasada" é prazo antes de hoje. */
+function hojeBR(): string {
+  return new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10)
+}
+
+/** Dias inteiros desde um instante (para "mexido há X dias"). */
+function diasDesde(iso: string): number {
+  return Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 86400000))
+}
+
+/**
+ * Telefones e e-mails do cadastro (blocos com rótulo + os campos antigos), sem
+ * repetir o mesmo número/endereço. O WhatsApp só entra se o número tiver DDD.
+ */
+function contatosDe(ws: Record<string, unknown>): { whats: Contato[]; emails: Contato[] } {
+  const tels = [
+    ...((ws.telefones as { tipo?: string; numero?: string }[] | null) ?? []),
+    ...(ws.phone ? [{ tipo: (ws.contact_name as string) || 'Telefone', numero: ws.phone as string }] : []),
+  ]
+  const whats: Contato[] = []
+  const vistosT = new Set<string>()
+  for (const t of tels) {
+    const link = t.numero ? linkWhatsApp(t.numero) : null
+    const chave = somenteDigitos(t.numero ?? '').slice(-9)
+    if (!link || vistosT.has(chave)) continue
+    vistosT.add(chave)
+    whats.push({ rotulo: (t.tipo || 'Telefone').trim(), valor: fmtTelefone(t.numero!), href: link })
+  }
+  const mails = [
+    ...((ws.emails as { tipo?: string; email?: string }[] | null) ?? []),
+    ...(ws.finance_email ? [{ tipo: 'Financeiro', email: ws.finance_email as string }] : []),
+  ]
+  const emails: Contato[] = []
+  const vistosE = new Set<string>()
+  for (const e of mails) {
+    const em = (e.email ?? '').trim().toLowerCase()
+    if (!em.includes('@') || vistosE.has(em)) continue
+    vistosE.add(em)
+    emails.push({ rotulo: (e.tipo || 'E-mail').trim(), valor: em, href: `mailto:${em}` })
+  }
+  return { whats, emails }
+}
 
 export default async function WorkspacesPage({
   params,
@@ -15,17 +61,72 @@ export default async function WorkspacesPage({
   const { view } = await searchParams
   const archivedView = view === 'arquivados'
   const supabase = await createClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any
 
   const { data: org } = await supabase
     .from('organizations').select('id').eq('slug', orgSlug).single()
   if (!org) return null
 
-  const { data: workspaces } = await supabase
+  const { data: workspaces } = await sb
     .from('workspaces')
-    .select('*, campaigns(count)')
+    .select('id, name, description, color, legal_name, tax_id, address_city, address_state, phone, finance_email, contact_name, telefones, emails, equipe')
     .eq('org_id', org.id)
     .eq('archived', archivedView)
     .order('name', { ascending: true })
+  const lista = (workspaces ?? []) as Record<string, unknown>[]
+  const ids = lista.map(w => w.id as string)
+
+  // Números do card: campanhas, tarefas abertas/atrasadas/com o cliente, última
+  // movimentação e quem tem acesso ao portal. Tudo pela RLS do membro.
+  const equipeIds = [...new Set(lista.flatMap(w => (w.equipe as string[] | null) ?? []))]
+  const [{ data: camps }, { data: acts }, { data: portal }, { data: perfis }] = ids.length ? await Promise.all([
+    sb.from('campaigns').select('id, workspace_id, archived').in('workspace_id', ids),
+    sb.from('activities')
+      .select('status, due_date, updated_at, campaigns!inner(workspace_id, archived)')
+      .eq('archived', false).eq('campaigns.archived', false).in('campaigns.workspace_id', ids)
+      .limit(5000),
+    sb.from('portal_users').select('workspace_id, last_login_at')
+      .in('workspace_id', ids).eq('ativo', true).is('interno_user_id', null),
+    equipeIds.length
+      ? sb.from('profiles').select('id, full_name, avatar_url').in('id', equipeIds)
+      : Promise.resolve({ data: [] }),
+  ]) : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }]
+
+  const hoje = hojeBR()
+  const perfil = new Map(((perfis ?? []) as { id: string; full_name: string | null; avatar_url: string | null }[]).map(p => [p.id, p]))
+
+  const cards: ClienteCard[] = lista.map(ws => {
+    const id = ws.id as string
+    const minhas = ((acts ?? []) as { status: string; due_date: string | null; updated_at: string; campaigns: { workspace_id: string } }[])
+      .filter(a => a.campaigns.workspace_id === id)
+    const abertas = minhas.filter(a => a.status !== 'concluido')
+    const acessos = ((portal ?? []) as { workspace_id: string; last_login_at: string | null }[]).filter(p => p.workspace_id === id)
+    const ultimoLogin = acessos.map(p => p.last_login_at).filter(Boolean).sort().at(-1) ?? null
+    const { whats, emails } = contatosDe(ws)
+    return {
+      id,
+      nome: ws.name as string,
+      razao: (ws.legal_name as string) || null,
+      cnpj: (ws.tax_id as string) || null,
+      cidade: [ws.address_city, ws.address_state].filter(Boolean).map(s => String(s).trim())
+        .map((s, i) => (i === 0 ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s.toUpperCase())).join('/') || null,
+      cor: (ws.color as string) || '#9ca3af',
+      contatoNome: (ws.contact_name as string) || null,
+      whats, emails,
+      campanhas: ((camps ?? []) as { workspace_id: string; archived: boolean }[]).filter(c => c.workspace_id === id && !c.archived).length,
+      abertas: abertas.length,
+      atrasadas: abertas.filter(a => a.due_date && a.due_date < hoje).length,
+      comCliente: abertas.filter(a => COM_O_CLIENTE.has(a.status)).length,
+      diasParado: (() => {
+        const ult = minhas.map(a => a.updated_at).sort().at(-1)
+        return ult ? diasDesde(ult) : null
+      })(),
+      portal: { acessos: acessos.length, ultimoLogin },
+      equipe: ((ws.equipe as string[] | null) ?? []).map(u => perfil.get(u)).filter(Boolean)
+        .map(p => ({ full_name: p!.full_name, avatar_url: p!.avatar_url })),
+    }
+  })
 
   return (
     <div className="p-6">
@@ -37,64 +138,28 @@ export default async function WorkspacesPage({
         <div className="flex items-center gap-2 shrink-0">
           <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 text-sm">
             <Link href={`/${orgSlug}/workspaces`}
-              className={cn('px-2.5 py-1 rounded-md transition', !archivedView ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-700')}>
+              className={cn('px-2.5 py-1 rounded-md transition-colors', !archivedView ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-700')}>
               Ativos
             </Link>
             <Link href={`/${orgSlug}/workspaces?view=arquivados`}
-              className={cn('px-2.5 py-1 rounded-md transition', archivedView ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-700')}>
+              className={cn('px-2.5 py-1 rounded-md transition-colors', archivedView ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-700')}>
               Arquivados
             </Link>
           </div>
           {!archivedView && (
             <Link
               href={`/${orgSlug}/workspaces/new`}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition-colors"
             >
               <Plus className="w-4 h-4" />
-              Novo cliente
+              <span className="hidden sm:inline">Novo cliente</span>
             </Link>
           )}
         </div>
       </div>
 
-      {workspaces && workspaces.length > 0 ? (
-        <div className="grid grid-cols-3 gap-4">
-          {workspaces.map((ws) => {
-            const campaignCount = (ws.campaigns as unknown as { count: number }[])?.[0]?.count ?? 0
-            return (
-              <Link
-                key={ws.id}
-                href={`/${orgSlug}/workspaces/${ws.id}`}
-                className="bg-white rounded-xl border border-gray-200 p-6 hover:border-orange-300 hover:shadow-sm transition group"
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: ws.color + '20' }}
-                  >
-                    <FolderOpen className="w-5 h-5" style={{ color: ws.color }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-gray-900 group-hover:text-orange-600 transition truncate">
-                      {ws.name}
-                    </h3>
-                    {ws.description && (
-                      <p className="text-sm text-gray-500 mt-0.5 truncate">{ws.description}</p>
-                    )}
-                    <p className="text-xs text-gray-400 mt-2">
-                      {campaignCount} campanha{campaignCount !== 1 ? 's' : ''}
-                    </p>
-                  </div>
-                </div>
-                {archivedView && (
-                  <div className="mt-4 flex justify-end">
-                    <UnarchiveButton orgSlug={orgSlug} workspaceId={ws.id} />
-                  </div>
-                )}
-              </Link>
-            )
-          })}
-        </div>
+      {cards.length > 0 ? (
+        <ClientesGrid orgSlug={orgSlug} clientes={cards} arquivados={archivedView} />
       ) : (
         <div className="text-center py-24 bg-white rounded-xl border border-gray-200">
           <FolderOpen className="w-10 h-10 text-gray-300 mx-auto mb-3" />
@@ -107,7 +172,7 @@ export default async function WorkspacesPage({
           {!archivedView && (
             <Link
               href={`/${orgSlug}/workspaces/new`}
-              className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition"
+              className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition-colors"
             >
               <Plus className="w-4 h-4" />
               Novo cliente
