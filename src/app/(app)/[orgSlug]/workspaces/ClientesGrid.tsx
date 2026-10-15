@@ -248,7 +248,7 @@ export function ClientesGrid({ orgSlug, clientes, arquivados, verFinanceiro = fa
                   <Wallet className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                   {c.financeiro.aReceber > 0 ? (
                     <>
-                      <Link href={`/${orgSlug}/financeiro/lancamentos`}
+                      <Link href={`/${orgSlug}/financeiro/lancamentos?ver=a-receber&cliente=${c.id}`}
                         title={`${c.financeiro.qtd} lançamento(s) em aberto · ${brl(c.financeiro.doCliente)} pagos pelo próprio cliente; o resto é comissão paga por veículo ou fornecedor`}
                         className="text-gray-700 hover:text-orange-600 transition-colors">
                         A receber <b className="tabular-nums">{brl(c.financeiro.aReceber)}</b>

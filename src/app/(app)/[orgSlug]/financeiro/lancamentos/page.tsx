@@ -57,13 +57,27 @@ export default async function LancamentosPage({
   params, searchParams,
 }: {
   params: Promise<{ orgSlug: string }>
-  searchParams: Promise<{ ver?: string }>
+  searchParams: Promise<{ ver?: string; cliente?: string }>
 }) {
   const { orgSlug } = await params
   // Atalhos "Contas a pagar/receber" do menu: abrem já no recorte em aberto.
-  const { ver } = await searchParams
+  const { ver, cliente } = await searchParams
   const atalho = ver === 'a-pagar' || ver === 'a-receber' ? ver : undefined
   const { supabase, orgId } = await assertFinanceAccess(orgSlug)
+
+  // Vindo do card do cliente (?cliente=<id>): só os lançamentos ligados a ele
+  // (workspace_id). A view lancamentos_doc não traz a coluna, então os ids vêm
+  // de uma consulta à parte. O extrato importado não tem cliente e sai do recorte.
+  let filtroCliente: { id: string; nome: string; ids: string[] } | undefined
+  if (cliente && /^[0-9a-f-]{36}$/.test(cliente)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sbc = supabase as any
+    const [{ data: ws }, { data: ls }] = await Promise.all([
+      sbc.from('workspaces').select('id, name').eq('id', cliente).eq('org_id', orgId).maybeSingle(),
+      sbc.from('lancamentos').select('id').eq('org_id', orgId).eq('workspace_id', cliente).limit(5000),
+    ])
+    if (ws) filtroCliente = { id: ws.id, nome: ws.name, ids: ((ls ?? []) as { id: string }[]).map(l => l.id) }
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any
@@ -157,8 +171,9 @@ export default async function LancamentosPage({
     <LancamentosClient
       // key: ir de Lançamentos para o atalho é a mesma rota; sem a key o estado
       // inicial (filtro) não seria relido.
-      key={atalho ?? 'todos'}
+      key={`${atalho ?? 'todos'}-${filtroCliente?.id ?? ''}`}
       atalho={atalho}
+      filtroCliente={filtroCliente}
       orgSlug={orgSlug}
       lancamentos={lancamentos}
       importadas={importadas}

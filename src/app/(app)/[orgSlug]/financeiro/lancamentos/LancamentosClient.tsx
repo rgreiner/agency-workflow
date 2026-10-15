@@ -128,9 +128,11 @@ const parseBR = (s: string) => { const t = s.trim().replace(/\./g, '').replace('
 const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 
-export function LancamentosClient({ orgSlug, lancamentos, importadas = [], contas, contaPadrao = '', categorias, centros, today, sugestoesContato = [], atalho }: {
+export function LancamentosClient({ orgSlug, lancamentos, importadas = [], contas, contaPadrao = '', categorias, centros, today, sugestoesContato = [], atalho, filtroCliente }: {
   /** Atalho do menu: despesas (a-pagar) ou receitas (a-receber) em aberto, das atrasadas até o fim do mês. */
   atalho?: 'a-pagar' | 'a-receber'
+  /** Recorte por cliente (veio do card em Clientes): ids dos lançamentos ligados a ele. */
+  filtroCliente?: { id: string; nome: string; ids: string[] }
   orgSlug: string; lancamentos: Lancamento[]; importadas?: Lancamento[]; contas: ContaRef[]
   contaPadrao?: string; categorias: FinanceCategoriaGrupo[]; centros: FinanceCentro[]; today: string
   /** Nomes já em uso (cadastro + lançamentos) para o campo Contato sugerir. */
@@ -171,6 +173,9 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
     setNotas(prev => ({ ...prev, [id]: n }))
   }, [])
   const [query, setQuery] = useState('')
+  // Cliente: vale até a pessoa tirar (o X do chip ou "Limpar filtros").
+  const [cliente, setCliente] = useState(filtroCliente ?? null)
+  const idsCliente = useMemo(() => new Set(cliente?.ids ?? []), [cliente])
   // Recorte pelos cards de resumo (tipo + situação). null = tudo (card "Resultado").
   const [cardFilter, setCardFilter] = useState<null | 'rec_aberto' | 'rec_real' | 'desp_aberto' | 'desp_real'>(atalho === 'a-pagar' ? 'desp_aberto' : atalho === 'a-receber' ? 'rec_aberto' : null)
   const [creating, setCreating] = useState(false)
@@ -195,6 +200,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     return merged.filter(l => {
+      if (cliente && !idsCliente.has(l.id)) return false
       if (tipoFilter !== 'todos' && l.tipo !== tipoFilter) return false
       if (contaFilter && l.conta_id !== contaFilter) return false
       // Pendência é o que dá pra corrigir AQUI: a linha do Conta Azul é histórico
@@ -211,7 +217,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       if (q && !`${l.contato_nome ?? ''} ${l.descricao ?? ''} ${l.categoria ?? ''} ${l.doc_serie ?? ''} ${l.doc_numero ?? ''} ${textoBuscavel(l.anexos)}`.toLowerCase().includes(q)) return false
       return true
     })
-  }, [merged, tipoFilter, contaFilter, query, faltando, notas, today])
+  }, [merged, tipoFilter, contaFilter, query, faltando, notas, today, cliente, idsCliente])
 
   // Data efetiva: liquidação (se pago) ou vencimento (se em aberto).
   const effDate = (l: Lancamento) => (isPago(l.situacao) ? (l.data_liquidacao ?? l.vencimento) : l.vencimento)
@@ -219,7 +225,8 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
   // Com um filtro de pendência ativo, o período sai de cena: procurar o que falta
   // classificar só faz sentido olhando tudo. Lista e cards usam a MESMA régua —
   // senão o total do topo contradiz a lista logo abaixo dele.
-  const noRecorte = (l: Lancamento) => (faltando ? true : inPeriodo(l))
+  // Recorte por cliente idem: "o que compõe o a receber dele" é tudo, de qualquer mês.
+  const noRecorte = (l: Lancamento) => (faltando || cliente ? true : inPeriodo(l))
 
   // Tabela única (estilo extrato): só os itens do período selecionado, ordenados por data.
   const rows = useMemo(() => {
@@ -239,7 +246,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
     })
     return inView
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered, perStart, perEnd, cardFilter, faltando])
+  }, [filtered, perStart, perEnd, cardFilter, faltando, cliente])
 
   // ── Seleção para edição em lote ──────────────────────────────────────────
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
@@ -303,7 +310,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       total: r.real + r.aberto - d.real - d.aberto,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered, perStart, perEnd, faltando])
+  }, [filtered, perStart, perEnd, faltando, cliente])
 
   const revisarCount = lancamentos.filter(l => l.revisar).length
   const contaMap = useMemo(() => Object.fromEntries(contas.map(c => [c.id, c])), [contas])
@@ -335,8 +342,8 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
   }, [merged, tipoFilter, contaFilter, perStart, perEnd, notas, today])
 
   const contaFilterOptions = useMemo(() => [{ value: '', label: 'Todas as contas' }, ...contas.map(c => ({ value: c.id, label: c.nome }))], [contas])
-  const hasFilters = tipoFilter !== 'todos' || !!contaFilter || !!query.trim() || !!cardFilter || !!faltando
-  function limparFiltros() { setTipoFilter('todos'); setContaFilter(''); setQuery(''); setCardFilter(null); setFaltando(null) }
+  const hasFilters = tipoFilter !== 'todos' || !!contaFilter || !!query.trim() || !!cardFilter || !!faltando || !!cliente
+  function limparFiltros() { setTipoFilter('todos'); setContaFilter(''); setQuery(''); setCardFilter(null); setFaltando(null); setCliente(null) }
   // Card clicado vira o recorte; zera o segmento tipo p/ não conflitar (toggle no mesmo card = tudo).
   function toggleCard(key: 'rec_aberto' | 'rec_real' | 'desp_aberto' | 'desp_real') {
     setTipoFilter('todos')
@@ -386,6 +393,16 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar por contato, descrição ou categoria"
             className="w-full pl-9 pr-3 py-2 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent" />
         </div>
+        {cliente && (
+          <span className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 text-sm rounded-xl bg-orange-500/10 text-orange-700 border border-orange-500/20">
+            Cliente: <b className="font-medium">{cliente.nome}</b>
+            <span className="text-xs text-orange-600/80">· todos os vencimentos</span>
+            <button onClick={() => setCliente(null)} aria-label="Tirar filtro de cliente"
+              className="p-0.5 rounded-md hover:bg-orange-500/15 transition-colors">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </span>
+        )}
         {/* Recupera o histórico: lê os cupons já anexados que ainda não têm itens.
             Serve para a virada (17 cupons em 29/09) e para as compras do mês. */}
         <DetalharLote orgSlug={orgSlug} />
