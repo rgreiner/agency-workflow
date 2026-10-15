@@ -12,7 +12,9 @@ import { organizarAta, type AtaOrganizada } from '@/lib/ai/ata'
 import { iaDaOrg } from '@/lib/ai/provedor'
 import { mensagemErroRevisao } from '@/lib/ai/review'
 import { logSystemError } from '@/lib/system-error'
-import type { Reuniao, TarefaVinculavel, OrcamentoVinculavel } from '@/lib/reunioes'
+import { dataBR, type Reuniao, type TarefaVinculavel, type OrcamentoVinculavel } from '@/lib/reunioes'
+import { after } from 'next/server'
+import { dispatchPushNotificacoes } from '@/lib/push'
 import { ORCAMENTO_SITUACAO_LABELS } from '@/lib/midia'
 import { docNumero } from '@/lib/doc-series'
 
@@ -270,4 +272,38 @@ export async function enviarParaAnotacoes(
   rotas(orgSlug, workspaceId, reuniaoId)
   revalidatePath(`/${orgSlug}/inbox`)
   return { ok: true, todoId: todo.id as string }
+}
+
+const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+/**
+ * Leva o passo da ata para a tarefa vinculada como COMENTÁRIO: origem (reunião e
+ * data), o combinado e o rascunho do briefing. Lê do banco — o que vai é o que
+ * está salvo, não o que a tela tinha. Quem acompanha a tarefa é avisado como em
+ * qualquer comentário.
+ */
+export async function comentarPassoNaTarefa(
+  reuniaoId: string, passoId: string,
+): Promise<Resultado<object>> {
+  const user = await getUsuario()
+  if (!user) return { ok: false, error: 'Sessão expirada. Entre de novo.' }
+  const supabase = await createClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: p } = await (supabase as any).from('reuniao_passos')
+    .select('texto, rascunho, activity_id, reunioes(titulo, realizada_em)')
+    .eq('id', passoId).eq('reuniao_id', reuniaoId).maybeSingle()
+  if (!p?.activity_id) return { ok: false, error: 'O passo não está vinculado a uma tarefa.' }
+  const r = p.reunioes as { titulo: string; realizada_em: string } | null
+  const paragrafos = String(p.rascunho ?? '').trim().split(/\n{2,}/).filter(Boolean)
+    .map((t: string) => `<p>${escHtml(t).replace(/\n/g, '<br>')}</p>`).join('')
+  const html =
+    `<p><strong>Da reunião${r ? ` “${escHtml(r.titulo)}” (${dataBR(r.realizada_em)})` : ''}</strong></p>` +
+    `<p>${escHtml(String(p.texto ?? '').trim())}</p>` + paragrafos
+  const { error } = await supabase.rpc('add_comment_with_mentions', {
+    p_user_id: user.id, p_activity_id: p.activity_id, p_content: html,
+    p_mention_ids: [], p_mention_all: false, p_reply_to: null,
+  })
+  if (error) return { ok: false, error: error.message }
+  after(() => dispatchPushNotificacoes().catch(() => {}))
+  return { ok: true }
 }

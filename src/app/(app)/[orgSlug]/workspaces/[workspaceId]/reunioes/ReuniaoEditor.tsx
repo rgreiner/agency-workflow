@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
-  NotebookPen, Sparkles, Loader2, Plus, X, Trash2, Globe, ChevronDown, ExternalLink, ListPlus, Link2, Unlink, Search, Check, Undo2, Calculator, Inbox, History,
+  NotebookPen, Sparkles, Loader2, Plus, X, Trash2, Globe, ChevronDown, ExternalLink, ListPlus, Link2, Unlink, Search, Check, Undo2, Calculator, Inbox, History, Copy, MessageSquarePlus,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
@@ -13,11 +13,11 @@ import { Switch } from '@/components/ui/Switch'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import {
-  salvarReuniao, excluirReuniao, organizarReuniao, buscarTarefasCliente, buscarOrcamentosCliente, ajustarPasso, enviarParaAnotacoes,
+  salvarReuniao, excluirReuniao, organizarReuniao, buscarTarefasCliente, buscarOrcamentosCliente, ajustarPasso, enviarParaAnotacoes, comentarPassoNaTarefa,
 } from '@/app/actions/reunioes'
 import {
   passoResolvido,
-  type Reuniao, type PassoReuniao, type ResponsavelPasso, type TarefaVinculavel, type OrcamentoVinculavel, type LinkPasso, type Pendencia,
+  type Reuniao, type PassoReuniao, type ResponsavelPasso, type TarefaVinculavel, type OrcamentoVinculavel, type LinkPasso, type Pendencia, dataBR,
 } from '@/lib/reunioes'
 import { PendenciasChecklist } from '@/app/(app)/[orgSlug]/reunioes/PendenciasChecklist'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
@@ -72,6 +72,8 @@ export function ReuniaoEditor({
   const [achadas, setAchadas] = useState<TarefaVinculavel[]>([])
   const [achados, setAchados] = useState<OrcamentoVinculavel[]>([])
   const [buscando, setBuscando] = useState(false)
+  // Ao vincular a uma tarefa, levar o combinado + rascunho como comentário nela (15/10/2026).
+  const [comentarAoVincular, setComentarAoVincular] = useState(true)
   // Links feitos nesta tela, até o refresh trazer tarefas/orçamentos novos do servidor.
   const [linksLocais, setLinksLocais] = useState<Record<string, { tarefa?: LinkPasso; orcamento?: LinkPasso }>>({})
   const statusCfg = useStatusConfig()
@@ -213,7 +215,10 @@ export function ReuniaoEditor({
   }
 
   /** Grava o desfecho de um passo (salvando a ata antes, se preciso) e reflete na tela. */
-  function ajustar(i: number, patch: Patch, links: { tarefa?: LinkPasso | null; orcamento?: LinkPasso | null } = {}, aviso = '') {
+  function ajustar(
+    i: number, patch: Patch, links: { tarefa?: LinkPasso | null; orcamento?: LinkPasso | null } = {}, aviso = '',
+    depois?: (reuniaoId: string, passoId: string) => Promise<string | null>,
+  ) {
     startSalvar(async () => {
       // Passo novo ou editado precisa existir no banco antes do vínculo.
       const base = sujo || !ata.id || !ata.passos[i]?.id ? await gravar(ata, false) : ata
@@ -232,16 +237,48 @@ export function ReuniaoEditor({
       setAta(a => ({ ...a, passos: mudar(a.passos) }))
       setSalvo(JSON.stringify({ ...base, passos: mudar(base.passos) }))
       setVinculando(null)
-      if (aviso) toast.success(aviso)
+      const extra = depois ? await depois(base.id, pid) : null
+      if (aviso) toast.success(extra ? `${aviso} ${extra}` : aviso)
       // Ata nova ganhou id agora: a URL passa a ser a dela.
       if (!ata.id) router.replace(`/${orgSlug}/workspaces/${workspaceId}/reunioes/${base.id}`)
       else router.refresh()
     })
   }
 
-  const vincularTarefa = (t: TarefaVinculavel) => vinculando && ajustar(vinculando.i, { activityId: t.id }, {
-    tarefa: { titulo: t.titulo, href: `/${orgSlug}/workspaces/${workspaceId}/campaigns/${t.campaignId}/activities/${t.id}` },
-  }, 'Passo vinculado à tarefa.')
+  /** Comentário na tarefa com o combinado e o rascunho; devolve o complemento do aviso. */
+  async function comentar(reuniaoId: string, passoId: string): Promise<string | null> {
+    const r = await comentarPassoNaTarefa(reuniaoId, passoId)
+    if (!r.ok) { toast.error(`Vinculado, mas o comentário não entrou: ${r.error}`); return null }
+    return 'O briefing foi como comentário.'
+  }
+
+  const vincularTarefa = (t: TarefaVinculavel) => {
+    if (!vinculando) return
+    const levar = comentarAoVincular && !!ata.passos[vinculando.i]?.rascunho.trim()
+    ajustar(vinculando.i, { activityId: t.id }, {
+      tarefa: { titulo: t.titulo, href: `/${orgSlug}/workspaces/${workspaceId}/campaigns/${t.campaignId}/activities/${t.id}` },
+    }, 'Passo vinculado à tarefa.', levar ? comentar : undefined)
+  }
+
+  /** Tarefa já vinculada: manda o combinado + rascunho como comentário agora. */
+  function levarParaTarefa(i: number) {
+    const passo = ata.passos[i]
+    if (!ata.id || !passo?.id) return
+    startSalvar(async () => {
+      // Rascunho editado e não salvo: salva antes, pra ir o texto que está na tela.
+      if (sujo) { const ok = await gravar(ata, false); if (!ok) return }
+      const r = await comentarPassoNaTarefa(ata.id!, passo.id!)
+      if (!r.ok) { toast.error(r.error); return }
+      toast.success('Comentário adicionado na tarefa.')
+    })
+  }
+
+  async function copiarBriefing(p: PassoReuniao) {
+    const texto = [`Da reunião "${ata.titulo.trim() || 'sem título'}" (${dataBR(ata.realizadaEm)})`, p.texto.trim(), p.rascunho.trim()]
+      .filter(Boolean).join('\n\n')
+    try { await navigator.clipboard.writeText(texto); toast.success('Briefing copiado.') }
+    catch { toast.error('Não consegui copiar. Selecione o texto à mão.') }
+  }
   const vincularOrcamento = (o: OrcamentoVinculavel) => vinculando && ajustar(vinculando.i, { producaoId: o.id }, {
     orcamento: { titulo: `${o.numero} · ${o.titulo}`, href: `/${orgSlug}/producao/orcamento/${o.id}` },
   }, 'Passo vinculado ao orçamento.')
@@ -415,6 +452,13 @@ export function ReuniaoEditor({
                               Tarefa <ExternalLink className="w-3 h-3" />
                             </Link>
                           ) : <span className="text-xs font-medium px-2 py-1">Tarefa</span>}
+                          {podeEditar && p.rascunho.trim() && (
+                            <button type="button" disabled={salvando} title="Adicionar o combinado e o rascunho como comentário na tarefa"
+                              onClick={() => levarParaTarefa(i)}
+                              className="p-1 rounded-md text-green-600/70 hover:text-green-700 hover:bg-green-500/15 transition-colors disabled:opacity-50">
+                              <MessageSquarePlus className="w-3 h-3" />
+                            </button>
+                          )}
                           {podeEditar && (
                             <button type="button" disabled={salvando} title="Desvincular (a tarefa continua existindo)"
                               onClick={() => ajustar(i, { activityId: null }, { tarefa: null }, 'Vínculo desfeito. A tarefa continua existindo.')}
@@ -517,6 +561,15 @@ export function ReuniaoEditor({
                     placeholder="Tudo o que a reunião disse sobre este trabalho. Vai para o briefing da tarefa."
                     className={cn(inputCls, 'mt-2 resize-y leading-relaxed')} />
                 )}
+                {p.responsavel === 'agencia' && aberto && p.rascunho.trim() && (
+                  <div className="flex justify-end mt-1">
+                    <button type="button" onClick={() => copiarBriefing(p)}
+                      title="Copiar origem, combinado e rascunho para colar onde precisar"
+                      className="press inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors">
+                      <Copy className="w-3.5 h-3.5" /> Copiar briefing
+                    </button>
+                  </div>
+                )}
               </li>
             )
           })}
@@ -605,6 +658,13 @@ export function ReuniaoEditor({
               placeholder={abaAberta === 'orcamento' ? `Buscar orçamento de ${clienteNome} (título ou número)` : `Buscar nas tarefas de ${clienteNome}`}
               className={cn(inputCls, 'pl-10')} />
           </div>
+          {abaAberta === 'tarefa' && vinculando !== null && !!ata.passos[vinculando.i]?.rascunho.trim() && (
+            <label className="mt-3 flex items-center gap-2.5 text-sm text-gray-700 cursor-pointer select-none">
+              <input type="checkbox" checked={comentarAoVincular} onChange={e => setComentarAoVincular(e.target.checked)}
+                className="w-4 h-4 rounded accent-orange-600" />
+              Adicionar o rascunho do briefing como comentário na tarefa
+            </label>
+          )}
         </div>
         <ul className="px-3 pb-4 max-h-[50vh] overflow-y-auto">
           {(() => {
