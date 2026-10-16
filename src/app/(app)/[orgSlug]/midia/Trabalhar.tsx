@@ -11,7 +11,6 @@ import {
 import { cn } from '@/lib/utils'
 import { PRIORITY_CONFIG, COMPLEXITY_CONFIG, type ActivityPriority, type ActivityComplexity } from '@/types'
 import { MachinePath } from '@/components/ui/MachinePath'
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { lerLinhaComData } from '@/lib/checklist-datas'
 import { DATE_FILTERS, matchesDateFilter } from '@/lib/prazo-filtro'
@@ -210,22 +209,32 @@ export function Trabalhar({ orgSlug, itens, statusCfg, meuId }: {
   [itens, feitos, soEu, meuId, prazoFiltro, hoje])
   // A legenda conta ANTES de esconder o tipo: quem desligou "Rotina" ainda vê
   // quantas estão lá.
+  // Só entra na fila o que está PRONTO para a mídia (Rafael, 16/10). Entrega
+  // cuja tarefa ainda está com a criação (Briefing, Redação, Edição, Validação
+  // do atendimento…) vai para a coluna "Com a criação": acompanhar, não fazer.
+  const pendentes = base.filter(i => i.esperandoCriacao)
+  const prontos = base.filter(i => !i.esperandoCriacao)
   const porTipo = useMemo(() => {
     const m = new Map<Regiao, ItemFila[]>(TIPOS.map(t => [t.chave, []]))
-    for (const i of base) m.get(i.regiao)?.push(i)
+    for (const i of base) if (!i.esperandoCriacao) m.get(i.regiao)?.push(i)
     return m
   }, [base])
-  const lista = base.filter(i => !ocultos.includes(i.regiao))
+  const lista = prontos.filter(i => !ocultos.includes(i.regiao))
   const filtrando = soEu || !!prazoFiltro || ocultos.length > 0
   const atrasados = lista.filter(i => prazo(i.data).dias < 0).length
   const hojeCount = lista.filter(i => prazo(i.data).dias === 0).length
 
-  // O chip de status só informa quando o tipo mistura status (medido: não
-  // misturava; o chip repetia o rótulo). Entrega mostra sempre, ver Linha.
-  const variado = useMemo(() => new Set(
-    TIPOS.filter(t => t.chave === 'peca' || new Set(porTipo.get(t.chave)!.map(i => i.status)).size > 1)
-      .map(t => t.chave)),
-  [porTipo])
+  // O chip de status só aparece na linha que FOGE do status comum do tipo: 30
+  // rotinas com "Mídia" repetiam o mesmo chip; a única em Social é que informa.
+  const statusComum = useMemo(() => {
+    const m = new Map<Regiao, string | null>()
+    for (const t of TIPOS) {
+      const conta = new Map<string, number>()
+      for (const i of porTipo.get(t.chave)!) if (i.status) conta.set(i.status, (conta.get(i.status) ?? 0) + 1)
+      m.set(t.chave, [...conta].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null)
+    }
+    return m
+  }, [porTipo])
 
   const concluir = (chave: string) => setFeitos(prev => new Set([...prev, chave]))
   const alternarTipo = (t: Regiao) =>
@@ -249,12 +258,12 @@ export function Trabalhar({ orgSlug, itens, statusCfg, meuId }: {
     }
     linhas.push(
       <Linha key={i.chave} orgSlug={orgSlug} item={i} cfg={cfg} links={links} onFeito={concluir}
-        faixa={f} densa={i.regiao === 'rotina'} mostrarStatus={variado.has(i.regiao)} />,
+        faixa={f} densa={i.regiao === 'rotina'} mostrarStatus={!!i.status && i.status !== statusComum.get(i.regiao)} />,
     )
   }
 
   return (
-    <div className="p-6 max-w-5xl">
+    <div className="p-6 max-w-7xl">
       <Cabecalho orgSlug={orgSlug} atrasados={atrasados} hoje={hojeCount} total={lista.length}
         soEu={soEu} onEu={() => prefEu.set(!soEu)}
         links={links} onLinks={prefLinks.set}
@@ -279,8 +288,9 @@ export function Trabalhar({ orgSlug, itens, statusCfg, meuId }: {
         })}
       </div>
 
+      <div className="mt-4 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-6 lg:items-start">
       {lista.length === 0 ? (
-        <div className="text-center py-20 bg-white border border-gray-200 rounded-2xl mt-4">
+        <div className="text-center py-20 bg-white border border-gray-200 rounded-2xl">
           <PartyPopper className="w-8 h-8 text-emerald-600 mx-auto" />
           <p className="text-sm text-gray-600 mt-3">
             {filtrando ? 'Nada com esse filtro. Religue os tipos, limpe o prazo ou desligue o "Eu".'
@@ -288,12 +298,76 @@ export function Trabalhar({ orgSlug, itens, statusCfg, meuId }: {
           </p>
         </div>
       ) : (
-        <ul className="mt-4 bg-white border border-gray-200 rounded-xl divide-y divide-gray-100 overflow-hidden"
+        <ul className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100 overflow-hidden"
           aria-label="Fila da mídia, por data">
           {linhas}
         </ul>
       )}
+      <ComACriacao orgSlug={orgSlug} itens={pendentes} cfg={cfg} />
+      </div>
     </div>
+  )
+}
+
+const linkDaTarefa = (orgSlug: string, item: ItemFila) =>
+  item.activityId && item.workspaceId && item.campaignId
+    ? `/${orgSlug}/workspaces/${item.workspaceId}/campaigns/${item.campaignId}/activities/${item.activityId}?from=${encodeURIComponent(`/${orgSlug}/midia`)}`
+    : null
+
+/**
+ * Entregas pedidas que ainda não chegaram à mídia: a tarefa está com a criação.
+ * Fica ao lado da fila, só para acompanhar — sem botão de ação, porque não há o
+ * que a mídia fazer ainda. O que importa aqui é EM QUE ETAPA está (o status) e
+ * se o prazo do veículo já está apertando. Entra na fila sozinha quando a
+ * tarefa chega num status da mídia.
+ */
+function ComACriacao({ orgSlug, itens, cfg }: { orgSlug: string; itens: ItemFila[]; cfg: Map<string, StatusCfg> }) {
+  return (
+    <aside aria-label="Com a criação" className="lg:sticky lg:top-6">
+      <h2 className="flex items-baseline gap-2 px-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
+        Com a criação
+        <span className="font-normal tabular-nums text-gray-400">{itens.length}</span>
+      </h2>
+      <p className="px-1 mt-1 text-[11px] text-gray-500">
+        Pedidos que ainda não chegaram à mídia. Entram na fila quando a peça fica pronta.
+      </p>
+      {itens.length === 0 ? (
+        <p className="px-1 mt-3 text-xs text-gray-400">Nada esperando a criação.</p>
+      ) : (
+        <ul className="mt-2 bg-white border border-gray-200 rounded-xl divide-y divide-gray-100 overflow-hidden">
+          {itens.map(i => {
+            const st = i.status ? cfg.get(i.status) : null
+            const dias = prazo(i.data).dias
+            const href = linkDaTarefa(orgSlug, i)
+            const corpo = (
+              <>
+                <div className="flex items-baseline gap-2">
+                  <span className={cn('shrink-0 text-[11px] tabular-nums',
+                    dias < 0 ? 'font-medium text-red-700' : dias === 0 ? 'font-medium text-orange-700' : 'text-gray-500')}
+                    title={dias < 0 ? 'O prazo do veículo já passou' : undefined}>
+                    {dataCurta(i.data)}
+                  </span>
+                  <span className="min-w-0 truncate text-[13px] font-medium text-gray-900">{i.titulo}</span>
+                </div>
+                <div className="mt-1 flex items-center gap-2 min-w-0">
+                  {st && <span className={cn(CHIP, 'shrink-0')} style={{ backgroundColor: st.bg, color: st.txt }}>{st.label}</span>}
+                  <span className="min-w-0 truncate text-[11px] text-gray-500">{i.cliente}</span>
+                </div>
+              </>
+            )
+            return (
+              <li key={i.chave}>
+                {href ? (
+                  <Link href={href} className={cn('block px-3 py-2.5 transition-colors duration-150 hover:bg-gray-50/70', FOCO)}>
+                    {corpo}
+                  </Link>
+                ) : <div className="px-3 py-2.5">{corpo}</div>}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </aside>
   )
 }
 
@@ -408,33 +482,25 @@ function Linha({ orgSlug, item, cfg, links, faixa, densa = false, mostrarStatus 
   links: LinksVisiveis
   /** Rotina: repetitiva por natureza, lida como agenda — sem links nem status. */
   densa?: boolean
-  /** Só quando a região mistura status; senão o chip repete o título da coluna. */
+  /** Só quando o status foge do comum do tipo; senão o chip repete o óbvio. */
   mostrarStatus?: boolean
   onFeito: (chave: string) => void
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
-  const [confirmar, setConfirmar] = useState(false)
   const [desdobrar, setDesdobrar] = useState(false)
   const p = prazo(item.data)
   const st = item.status ? cfg.get(item.status) : null
   const prio = PRIORITY_CONFIG[item.prioridade as ActivityPriority]
   const compl = COMPLEXITY_CONFIG[item.complexidade as ActivityComplexity]
 
-  const linkTarefa = item.activityId && item.workspaceId && item.campaignId
-    ? `/${orgSlug}/workspaces/${item.workspaceId}/campaigns/${item.campaignId}/activities/${item.activityId}?from=${encodeURIComponent(`/${orgSlug}/midia`)}`
-    : null
+  const linkTarefa = linkDaTarefa(orgSlug, item)
 
+  // A fila só tem peça pronta: o que está com a criação mora em ComACriacao.
   function enviar() {
-    if (item.esperandoCriacao) { setConfirmar(true); return }
-    executarEnvio()
-  }
-
-  function executarEnvio() {
     start(async () => {
       const r = await mudarSituacaoEntrega(orgSlug, item.entregaId!, 'liberado')
       if (r?.error) { toast.error(r.error); return }
-      setConfirmar(false)
       const t = r.tarefa
       if (t?.recorreu) toast.success(`Enviado ao veículo. A rotina volta em ${fmt(t.novoPrazo)}.`)
       else if (t) toast.success('Enviado ao veículo e tarefa concluída.')
@@ -532,16 +598,10 @@ function Linha({ orgSlug, item, cfg, links, faixa, densa = false, mostrarStatus 
                 dá para agendar
               </span>
             )}
-            {/* Na entrega, o status da tarefa só interessa enquanto a peça está com
-                a criação; depois, o que a mídia precisa saber é que está pronta. */}
-            {st && mostrarStatus && !(item.tipo === 'entrega' && !item.esperandoCriacao) && (
+            {/* "material pronto" saiu: na fila TODA entrega está pronta, o chip
+                repetia a regra da tela. O status da tarefa da entrega também. */}
+            {st && mostrarStatus && item.tipo !== 'entrega' && (
               <span className={CHIP} style={{ backgroundColor: st.bg, color: st.txt }}>{st.label}</span>
-            )}
-            {item.tipo === 'entrega' && item.activityId && !item.esperandoCriacao && (
-              <span className={cn(CHIP, 'bg-emerald-50 text-emerald-700')}>material pronto</span>
-            )}
-            {item.esperandoCriacao && (
-              <span className={cn(CHIP, 'bg-amber-50 text-amber-700')}>com a criação</span>
             )}
             {item.tipo !== 'rotina' && prio?.preenchido && (
               <span className={cn(CHIP, 'inline-flex items-center gap-1', prio.bgColor, prio.color)}>
@@ -608,17 +668,6 @@ function Linha({ orgSlug, item, cfg, links, faixa, densa = false, mostrarStatus 
         <ModalDesdobrar orgSlug={orgSlug} item={item} onClose={() => setDesdobrar(false)} />
       )}
 
-      <ConfirmDialog
-        open={confirmar}
-        title="Concluir a tarefa junto?"
-        description={`A peça ainda está com a criação${st ? ` (${st.label})` : ''}. Marcar como enviado ao `
-          + `veículo também CONCLUI a tarefa — e isso não se desfaz por aqui.`}
-        confirmLabel="Enviei ao veículo"
-        cancelLabel="Cancelar"
-        loading={pending}
-        onConfirm={executarEnvio}
-        onCancel={() => setConfirmar(false)}
-      />
     </li>
   )
 }
