@@ -245,6 +245,19 @@ function LinhaConvite({ v, c, orgSlug, titulo, agencia, itens, onAplicar }: {
             {([['Prazo de produção', resposta.prazo_producao], ['Pagamento', resposta.pgto], ['Validade', resposta.validade], ['Nº da proposta', resposta.n_orc]] as const)
               .filter(([, val]) => val).map(([k, val]) => <div key={k}><dt className="text-gray-400">{k}</dt><dd className="text-gray-800">{val}</dd></div>)}
           </dl>
+          {resposta.itens.some(r => r.fotos?.length) && (
+            <div className="flex flex-wrap gap-2">
+              {resposta.itens.flatMap(r => (r.fotos ?? []).map(f => {
+                const src = `/api/cotacao/arquivo?convite=${v.id}&foto=${encodeURIComponent(f.chave)}`
+                return (
+                  <a key={f.chave} href={src} target="_blank" rel="noopener" title={c.itens.find(i => i.idx === r.idx)?.nome}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={src} alt="" className="w-20 h-20 rounded-xl object-cover border border-gray-200 hover:opacity-90 transition-opacity" />
+                  </a>
+                )
+              }))}
+            </div>
+          )}
           {resposta.observacao && <p className="text-xs text-gray-600 whitespace-pre-line">{resposta.observacao}</p>}
           {v.resposta_anexos.length > 0 && (
             <div className="flex flex-wrap gap-2">

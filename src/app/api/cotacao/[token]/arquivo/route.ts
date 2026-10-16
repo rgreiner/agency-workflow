@@ -21,6 +21,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
   const r = idx('r')
   if (r != null) return responderArquivo(cv.resposta_anexos[r])
 
+  // Foto do produto que ESTE fornecedor subiu (antes ou depois de enviar a proposta).
+  const foto = q.get('foto')
+  if (foto) {
+    if (!foto.startsWith(`cotacao-privado/${cv.org_id}/${cv.cotacao_id}/${cv.id}/`)) return new Response('Não encontrado', { status: 404 })
+    return responderArquivo({ chave: foto, nome: 'foto' })
+  }
+
   const item = idx('item')
   if (item != null) {
     // Só itens que foram pedidos nesta cotação.

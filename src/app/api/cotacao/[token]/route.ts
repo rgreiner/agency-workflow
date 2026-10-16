@@ -13,7 +13,7 @@
  */
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-import { aplicarResposta, type ArquivoRef, type ItemOrcBase, type Resposta } from '@/lib/cotacao'
+import { aplicarResposta, MAX_FOTOS_ITEM, type ArquivoRef, type ItemOrcBase, type Resposta } from '@/lib/cotacao'
 import { convitePorToken, cotacaoFechada, MAX_ARQUIVOS, type DadosFornecedor } from '@/lib/cotacao-server'
 import { somenteDigitos } from '@/lib/telefone'
 
@@ -52,6 +52,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
   // ── Proposta: só itens e faixas que foram pedidos; números saneados. ──
   const r = body.resposta ?? {}
+  const pasta = `cotacao-privado/${cv.org_id}/${cv.cotacao_id}/${cv.id}/`
   const itensIn = Array.isArray(r.itens) ? r.itens : []
   const itens = cv.itens.map(pedido => {
     const vin = itensIn.find(x => x && x.idx === pedido.idx)
@@ -60,11 +61,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       const p = Array.isArray(vin?.precos) ? vin.precos.find(x => x && x.quant === quant) : undefined
       return { quant, unit: naoFornece ? null : num(p?.unit), total: naoFornece ? null : num(p?.total) }
     })
-    return { idx: pedido.idx, nao_fornece: naoFornece, precos, obs: txt(vin?.obs, 1000) }
+    // Fotos do produto: só imagens que ele mesmo subiu por este link.
+    const fotos = (Array.isArray(vin?.fotos) ? vin.fotos : [])
+      .filter(a => a && typeof a.chave === 'string' && a.chave.startsWith(pasta) && !a.chave.includes('..') && /\.(png|jpe?g|webp)$/i.test(a.chave))
+      .slice(0, MAX_FOTOS_ITEM)
+      .map(a => ({ chave: a.chave, nome: txt(a.nome, 160) || 'foto' }))
+    return { idx: pedido.idx, nao_fornece: naoFornece, precos, obs: txt(vin?.obs, 1000), fotos }
   })
   const temPreco = itens.some(i => !i.nao_fornece && i.precos.some(p => p.unit || p.total))
   const anexosIn = (Array.isArray(body.anexos) ? body.anexos : []).slice(0, MAX_ARQUIVOS)
-  const pasta = `cotacao-privado/${cv.org_id}/${cv.cotacao_id}/${cv.id}/`
   const anexos = anexosIn
     .filter(a => a && typeof a.chave === 'string' && a.chave.startsWith(pasta) && !a.chave.includes('..'))
     .map(a => ({ chave: a.chave, nome: txt(a.nome, 160) || 'arquivo' }))

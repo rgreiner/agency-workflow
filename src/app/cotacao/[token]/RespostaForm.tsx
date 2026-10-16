@@ -1,17 +1,18 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Check, FileText, Loader2, Paperclip, Upload, X } from 'lucide-react'
+import { Camera, Check, FileText, Loader2, Paperclip, Upload, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDateBR, parseMoney } from '@/lib/midia'
-import { fmtBR, fmtBRUnit, type ArquivoRef, type CotacaoItem, type Resposta } from '@/lib/cotacao'
+import { fmtBR, fmtBRUnit, MAX_FOTOS_ITEM, type ArquivoRef, type CotacaoItem, type Resposta } from '@/lib/cotacao'
+import { downscaleImage } from '@/lib/image-resize'
 
 const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-base sm:text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white'
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 const cardCls = 'bg-white rounded-2xl border border-gray-200 p-5'
 
 type Preco = { quant: number; unit: string; total: string }
-type ItemState = { idx: number; nao_fornece: boolean; precos: Preco[]; obs: string }
+type ItemState = { idx: number; nao_fornece: boolean; precos: Preco[]; obs: string; fotos: ArquivoRef[] }
 
 const intBR = (n: number) => n.toLocaleString('pt-BR')
 
@@ -26,7 +27,7 @@ export function RespostaForm({
   const [estado, setEstado] = useState<ItemState[]>(() => itens.map(it => {
     const ant = respostaAnterior?.itens.find(r => r.idx === it.idx)
     return {
-      idx: it.idx, nao_fornece: !!ant?.nao_fornece, obs: ant?.obs ?? '',
+      idx: it.idx, nao_fornece: !!ant?.nao_fornece, obs: ant?.obs ?? '', fotos: ant?.fotos ?? [],
       precos: it.faixas.map(q => {
         const p = ant?.precos.find(x => x.quant === q)
         return { quant: q, unit: p?.unit ? fmtBRUnit(p.unit) : '', total: p?.total ? fmtBR(p.total) : '' }
@@ -40,7 +41,7 @@ export function RespostaForm({
   })
   const [dados, setDados] = useState(dadosIniciais)
   const [arquivos, setArquivos] = useState<ArquivoRef[]>(anexosAnteriores)
-  const [enviando, setEnviando] = useState<null | 'responder' | 'recusar' | 'upload'>(null)
+  const [enviando, setEnviando] = useState<null | 'responder' | 'recusar' | 'upload' | `foto-${number}`>(null)
   const [erro, setErro] = useState('')
   const [feito, setFeito] = useState<null | 'respondeu' | 'recusou'>(null)
   const [recusando, setRecusando] = useState(false)
@@ -81,13 +82,32 @@ export function RespostaForm({
     }
   }
 
+  /** Foto do produto: reduzida para WebP no aparelho antes de subir (celular manda 4–8 MB). */
+  async function subirFotos(ii: number, files: FileList | null) {
+    if (!files?.length) return
+    setErro(''); setEnviando(`foto-${ii}`)
+    try {
+      const livres = MAX_FOTOS_ITEM - estado[ii].fotos.length
+      for (const original of Array.from(files).filter(f => f.type.startsWith('image/')).slice(0, livres)) {
+        const file = await downscaleImage(original)
+        const fd = new FormData(); fd.set('file', file)
+        const r = await fetch(`/api/cotacao/${token}/upload`, { method: 'POST', body: fd })
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok) { setErro(j.error || 'Falha ao enviar a foto'); break }
+        setEstado(s => s.map((it, i) => i === ii ? { ...it, fotos: [...it.fotos, j as ArquivoRef] } : it))
+      }
+    } finally {
+      setEnviando(null)
+    }
+  }
+
   async function enviar(acao: 'responder' | 'recusar') {
     if (enviando) return
     setErro(''); setEnviando(acao)
     const resposta = {
       ...cond,
       itens: estado.map(it => ({
-        idx: it.idx, nao_fornece: it.nao_fornece, obs: it.obs,
+        idx: it.idx, nao_fornece: it.nao_fornece, obs: it.obs, fotos: it.fotos,
         precos: it.precos.map(p => ({ quant: p.quant, unit: parseMoney(p.unit) || null, total: parseMoney(p.total) || null })),
       })),
     }
@@ -185,6 +205,27 @@ export function RespostaForm({
               </div>
             )}
             <input value={st.obs} onChange={e => patchItem(ii, { obs: e.target.value })} placeholder="Observação sobre este item (opcional)" className={cn(inputCls, 'mt-3')} />
+            {!st.nao_fornece && (
+              <div className="flex flex-wrap items-center gap-2 mt-3">
+                {st.fotos.map((f, fi) => (
+                  <span key={f.chave} className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={`/api/cotacao/${token}/arquivo?foto=${encodeURIComponent(f.chave)}`} alt="" className="w-16 h-16 rounded-xl object-cover border border-gray-200" />
+                    <button type="button" aria-label="Remover foto" onClick={() => patchItem(ii, { fotos: st.fotos.filter((_, j) => j !== fi) })}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white border border-gray-200 text-gray-500 hover:text-red-500 flex items-center justify-center transition-colors">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                {st.fotos.length < MAX_FOTOS_ITEM && (
+                  <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-dashed border-gray-300 text-sm text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer active:scale-[0.97]">
+                    {enviando === `foto-${ii}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                    Foto do produto (opcional)
+                    <input type="file" accept="image/*" multiple hidden disabled={!!enviando} onChange={e => { subirFotos(ii, e.target.files); e.target.value = '' }} />
+                  </label>
+                )}
+              </div>
+            )}
           </div>
         )
       })}

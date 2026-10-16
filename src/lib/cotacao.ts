@@ -21,7 +21,11 @@ export interface CotacaoItem {
 }
 
 export interface RespostaPreco { quant: number; unit: number | null; total: number | null }
-export interface RespostaItem { idx: number; nao_fornece: boolean; precos: RespostaPreco[]; obs: string }
+export interface RespostaItem {
+  idx: number; nao_fornece: boolean; precos: RespostaPreco[]; obs: string
+  /** Fotos do produto que o fornecedor mandou (imagens em cotacao-privado/). */
+  fotos?: ArquivoRef[]
+}
 export interface Resposta {
   itens: RespostaItem[]
   prazo_producao: string
@@ -39,7 +43,21 @@ export interface OpcaoOrc {
   valor_unit: string; valor_total?: string; selecionado: boolean
   /** Opção que veio de uma resposta de cotação — é a chave para não duplicar. */
   cotacao_convite_id?: string
+  /** O que o fornecedor escreveu na proposta — vai junto para o PDF do orçamento. */
+  proposta?: PropostaOpcao
 }
+
+/** Detalhe da proposta guardado NA opção: o PDF (inclusive o do portal) lê só o orçamento. */
+export interface PropostaOpcao {
+  obs: string
+  prazo_producao: string
+  validade: string
+  observacao: string
+  /** Chaves das fotos do produto (cotacao-privado/…). */
+  fotos: string[]
+}
+
+export const MAX_FOTOS_ITEM = 3
 export interface ItemOrcBase { nome: string; opcoes: OpcaoOrc[] }
 
 export const MAX_FAIXAS = 4
@@ -96,6 +114,10 @@ export function aplicarResposta<T extends ItemOrcBase>(
     if (i < 0) continue
     const antes = out[i].opcoes
     const escolhida = antes.find(o => o.cotacao_convite_id === conviteId && o.selecionado)?.quant
+    const proposta: PropostaOpcao = {
+      obs: r.obs ?? '', prazo_producao: resposta.prazo_producao ?? '', validade: resposta.validade ?? '',
+      observacao: resposta.observacao ?? '', fotos: (r.fotos ?? []).map(f => f.chave),
+    }
     const novas: OpcaoOrc[] = r.nao_fornece ? [] : r.precos.flatMap(p => {
       const v = precoResolvido(p)
       if (!v) return []
@@ -103,7 +125,7 @@ export function aplicarResposta<T extends ItemOrcBase>(
       return [{
         fornecedor_id: fornecedorId, n_orc: resposta.n_orc ?? '', pgto: resposta.pgto ?? '',
         quant, valor_unit: fmtBRUnit(v.unit), valor_total: fmtBR(v.total),
-        selecionado: escolhida === quant, cotacao_convite_id: conviteId,
+        selecionado: escolhida === quant, cotacao_convite_id: conviteId, proposta,
       }]
     })
     const mantidas = antes.filter(o => o.cotacao_convite_id !== conviteId && !(novas.length && vazia(o)))

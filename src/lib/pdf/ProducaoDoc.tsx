@@ -24,6 +24,10 @@ const t = StyleSheet.create({
   itemNome: { fontFamily: 'Helvetica-Bold', color: '#111827' },
   itemBloco: { marginBottom: 10 },
   orcImg: { width: 96, height: 68, objectFit: 'cover', borderRadius: 3, marginRight: 8 },
+  // Proposta do fornecedor (pedido de cotação) logo abaixo das faixas dele.
+  proposta: { flexDirection: 'row', paddingVertical: 4, paddingHorizontal: 4, borderBottomWidth: 0.5, borderBottomColor: '#e5e7eb' },
+  propostaFoto: { width: 54, height: 40, objectFit: 'cover', borderRadius: 2, marginRight: 4 },
+  propostaTexto: { fontSize: 7.5, color: '#6b7280', lineHeight: 1.35 },
   notaItem: { flexDirection: 'row', marginBottom: 3 },
 })
 
@@ -225,7 +229,18 @@ function Orcamento({ d }: { d: Extract<ProducaoDocData, { tipo: 'orcamento' }> }
               <Text style={[{ width: '17%' }, t.right, ...(o.selecionado ? [s.forte] : [])]}>{brl(o.total)}</Text>
               <Text style={{ width: 14, textAlign: 'right', color: '#059669' }}>{o.selecionado ? '✓' : ''}</Text>
             </View>
-          ))}
+          )).flatMap((linha, j) => {
+            const pr = it.opcoes[j].proposta
+            if (!pr) return [linha]
+            return [linha, (
+              <View key={`p${j}`} style={t.proposta}>
+                {pr.fotos.map((f, k) => <Image key={k} src={f} style={t.propostaFoto} />)}
+                <View style={{ flex: 1 }}>
+                  {pr.linhas.map((l, k) => <Text key={k} style={t.propostaTexto}>{l}</Text>)}
+                </View>
+              </View>
+            )]
+          })}
         </View>
       ))}
 

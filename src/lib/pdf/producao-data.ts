@@ -47,7 +47,11 @@ export interface FeeParcela { vencimento: string | null; valor: number }
 export interface PagamentoParcela { vencimento: string | null; valor: number }
 export interface PropostaItem { tipoLabel: string; nome: string; quantidade: string; total: number }
 export interface PedidoItem { nome: string; descricao: string; nOrc: string; quant: string; valor: number; total: number }
-export interface OrcOpcao { fornecedor: string; nOrc: string; pgto: string; quant: string; valorUnit: number; total: number; selecionado: boolean }
+export interface OrcOpcao {
+  fornecedor: string; nOrc: string; pgto: string; quant: string; valorUnit: number; total: number; selecionado: boolean
+  /** Proposta do fornecedor (pedido de cotação): impressa uma vez, depois da última faixa dele. */
+  proposta: { linhas: string[]; fotos: string[] } | null
+}
 export interface OrcItem { nome: string; descricao: string; imagem: string | null; opcoes: OrcOpcao[] }
 export interface OrcTotais { faturar: number; honorariosPct: number; honorarios: number; total: number }
 export interface LegalNote { text: string; highlight?: boolean }
@@ -187,14 +191,21 @@ export async function loadProducaoDoc(supabase: any, orgId: string, producaoId: 
     nome: it?.nome ?? '', descricao: it?.descricao ?? '',
     // Do volume e em PNG — a URL exige cookie e o arquivo é WebP (ver lib/pdf/imagem).
     imagem: await imagemParaPdf(it?.imagem),
-    opcoes: (Array.isArray(it?.opcoes) ? it.opcoes : []).map((o: any) => {
+    opcoes: await Promise.all((Array.isArray(it?.opcoes) ? it.opcoes : []).map(async (o: any, j: number, todas: any[]) => {
       const { valorUnit, total } = valoresItem(o?.quant, o?.valor_unit, o?.valor_total)
+      // Condição de pagamento escrita pelo fornecedor ("Cartão até 2x, boleto ou pix 5%…")
+      // não cabe na coluna: vai para o bloco da proposta dele.
+      const pgto = String(o?.pgto ?? '')
+      const pgtoLongo = !!o?.proposta && pgto.length > 16
       return {
         fornecedor: o?.fornecedor_id ? (fornMap.get(o.fornecedor_id) ?? '—') : '—',
-        nOrc: o?.n_orc ?? '', pgto: o?.pgto ?? '', quant: o?.quant ?? '',
+        nOrc: o?.n_orc ?? '', pgto: pgtoLongo ? '' : pgto, quant: o?.quant ?? '',
         valorUnit, total, selecionado: !!o?.selecionado,
+        // Várias faixas do mesmo fornecedor (500/1000/2000) = a proposta sai uma vez só.
+        proposta: o?.proposta && todas[j + 1]?.cotacao_convite_id !== o.cotacao_convite_id
+          ? await propostaParaPdf(o.proposta, pgtoLongo ? pgto : '') : null,
       }
-    }),
+    })),
   })))
   // Totais = a mesma conta da tela: soma só das opções ESCOLHIDAS (item sem escolha
   // soma zero) + honorários sobre ela. Recalculado dos itens, não lido de p.valor,
@@ -204,6 +215,20 @@ export async function loadProducaoDoc(supabase: any, orgId: string, producaoId: 
   const honorarios = Math.round(faturar * honorariosPct) / 100
   const totais: OrcTotais = { faturar, honorariosPct, honorarios, total: faturar + honorarios }
   return { ...base, tipo: 'orcamento', orcamento: { itens, notas: nfNotes, totais } }
+}
+
+/** Texto e fotos da proposta do fornecedor. O contato dele fica de fora (é da agência). */
+async function propostaParaPdf(p: any, pagamento: string): Promise<OrcOpcao['proposta']> {
+  const t = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+  const prazo = [
+    t(p?.prazo_producao) && `Produção: ${t(p.prazo_producao)}`,
+    t(p?.validade) && `Validade: ${t(p.validade)}`,
+    t(pagamento) && `Pagamento: ${t(pagamento).replace(/\s*\n\s*/g, ' ')}`,
+  ].filter(Boolean).join('  ·  ')
+  const linhas = [t(p?.obs), prazo, t(p?.observacao)].filter(Boolean) as string[]
+  const chaves: string[] = Array.isArray(p?.fotos) ? p.fotos.filter((c: unknown) => typeof c === 'string' && c.startsWith('cotacao-privado/')) : []
+  const fotos = (await Promise.all(chaves.slice(0, 3).map(c => imagemParaPdf(`/uploads/${c}`)))).filter(Boolean) as string[]
+  return linhas.length || fotos.length ? { linhas, fotos } : null
 }
 
 /**
