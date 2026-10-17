@@ -43,15 +43,16 @@ ou de tentar alcançar o servidor.
 - **Migration ANTES do código que a usa.** Arquivo `.sql` cru por stdin via SSH; achar o
   container do Postgres **pelo schema** (o que tem a tabela `activities`), nunca pelo
   nome — o hash muda a cada redeploy. Terminar com `notify pgrst, 'reload schema'`.
-- ⚠️ **`revoke ... from public` NÃO fecha nada neste banco.** Há
-  `ALTER DEFAULT PRIVILEGES ... GRANT EXECUTE ON FUNCTIONS TO anon, authenticated`:
-  **toda função nova nasce chamável por `anon` e `authenticated`**, e revogar de PUBLIC
-  não toca nesses dois grants. Helper interno fecha assim:
-  `revoke execute on function f(args) from public, anon, authenticated;`
-  E **confira no banco depois de aplicar**, nunca confie no que a migration diz que fez:
+- ⚠️ **Privilégio padrão de função (mig. 354, 17/10/2026): nasce FECHADA para `anon` e `portal`.**
+  Até a 354 havia `ALTER DEFAULT PRIVILEGES ... GRANT EXECUTE ON FUNCTIONS TO anon, authenticated`
+  e o Postgres ainda dava EXECUTE a PUBLIC: toda função nova nascia chamável sem login (abriu
+  3 P0 — migs. 167, 183, 244–247). Agora o padrão é só `authenticated`. Função de página
+  pública (convite, cotação, proposta) precisa de `grant execute on function f(args) to anon;`
+  e função do portal do cliente, `... to portal;` — EXPLÍCITO. Helper interno continua fechando
+  com `revoke execute on function f(args) from public, anon, authenticated;`.
+  **Confira no banco depois de aplicar**, nunca confie no que a migration diz que fez:
   `select has_function_privilege('anon','f(args)','execute');`
-  (13/09/2026: uma função SECURITY DEFINER que devolvia os títulos de todas as orgs ficou
-  chamável sem login por causa disso; a 167 e a 183 já descreviam a armadilha.)
+  Funções criadas ANTES da 354 mantêm os grants que tinham — o revoke por função segue valendo.
 - **PostgREST é estrito: 1 assinatura por RPC.** Parâmetro novo exige DROP + CREATE, nunca
   overload. View sempre com `security_invoker = true`.
 - **Medir em produção antes de teorizar.** Diagnóstico read-only por SSH responde em um
