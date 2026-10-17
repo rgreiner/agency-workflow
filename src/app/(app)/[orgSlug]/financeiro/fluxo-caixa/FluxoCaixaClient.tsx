@@ -105,10 +105,10 @@ export function FluxoCaixaClient({ orgSlug, rows, catRows, categorias }: {
         <div className="mt-8 text-center py-20 bg-white rounded-xl border border-gray-200">
           <BarChart3 className="w-10 h-10 text-gray-300 mx-auto mb-3" />
           <h3 className="text-gray-900 font-medium">Nenhum dado ainda</h3>
-          <p className="text-gray-500 text-sm mt-1 mb-4">Importe o extrato da Conta Azul para ver o fluxo de caixa.</p>
-          <Link href={`/${orgSlug}/financeiro/importar`}
+          <p className="text-gray-500 text-sm mt-1 mb-4">Importe o OFX das contas ou registre lançamentos para ver o fluxo de caixa.</p>
+          <Link href={`/${orgSlug}/financeiro/contas`}
             className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 transition">
-            <Upload className="w-4 h-4" /> Importar extrato
+            <Upload className="w-4 h-4" /> Ir para Contas
           </Link>
         </div>
       </div>
