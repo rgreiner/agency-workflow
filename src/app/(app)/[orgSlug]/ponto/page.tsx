@@ -43,10 +43,14 @@ export default async function PontoPage({ params }: { params: Promise<{ orgSlug:
   // a tela precisa dizer o que já foi enviado, senão só sabe cobrar.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: estado } = await (supabase as any).rpc('rh_ponto_estado')
+  // Intervalo mínimo de 1h vale para quem tem jornada acima de 6h (mig. 352/353).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: intervaloObrigatorio } = await (supabase as any).rpc('rh_intervalo_obrigatorio', { p_colaborador_id: colab.id })
 
   const lista = ((dias ?? []) as PontoDia[])
   const diaHoje = lista.find(d => d.data === hoje) ?? null
 
   return <PontoClient orgSlug={orgSlug} colaboradorId={colab.id} nome={colab.nome} hoje={hoje} diaHoje={diaHoje}
-    recentes={lista.filter(d => d.data !== hoje)} pedidos={estado?.pedidos_pendentes ?? []} />
+    recentes={lista.filter(d => d.data !== hoje)} pedidos={estado?.pedidos_pendentes ?? []}
+    intervaloObrigatorio={intervaloObrigatorio !== false} />
 }

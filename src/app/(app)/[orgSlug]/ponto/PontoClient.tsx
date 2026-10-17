@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Clock, LogIn, Coffee, Undo2, Loader2, FileText, Check, FileSignature, Paperclip, X, ChevronRight, Hourglass } from 'lucide-react'
@@ -42,8 +42,10 @@ const dataBR = (d: string) => {
   return `${DOW[new Date(y, m - 1, dd).getDay()]} ${d.slice(8, 10)}/${d.slice(5, 7)}`
 }
 
-export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes, pedidos = [] }: {
+export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes, pedidos = [], intervaloObrigatorio = true }: {
   orgSlug: string; colaboradorId: string; nome: string; hoje: string; diaHoje: PontoDia | null; recentes: PontoDia[]
+  /** Jornada contratada acima de 6h: o retorno do almoço só depois de 1h (mig. 352). */
+  intervaloObrigatorio?: boolean
   /** Pedidos dela aguardando o RH (mig. 303) — o dia pedido não cobra de novo. */
   pedidos?: PedidoPendente[]
 }) {
@@ -68,6 +70,26 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes, p
     ? { label: 'Bater entrada', dica: null, icon: LogIn }
     : dentro ? { label: 'Bater saída', dica: 'pausa ou fim do dia', icon: Coffee }
              : { label: 'Bater retorno', dica: null, icon: Undo2 }
+
+  // ── Intervalo mínimo de 1h (regra do Rafael, 17/10) ──────────────────────
+  // O banco recusa o retorno antes de 1h enquanto o almoço não foi feito; a tela
+  // mostra a hora em que ele fica liberado, em vez de deixar clicar e dar erro.
+  const minDoDia = (t: string) => { const [h, m] = t.slice(0, 5).split(':').map(Number); return h * 60 + m }
+  const almocoFeito = horas.some((h, i) => i % 2 === 1 && i + 1 < horas.length && minDoDia(horas[i + 1]) - minDoDia(h) >= 60)
+  const liberaMin = intervaloObrigatorio && !dentro && horas.length >= 2 && !almocoFeito
+    ? minDoDia(horas[horas.length - 1]) + 60 : null
+  const agoraBR = () => { const t = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hour12: false }); return minDoDia(t) }
+  const [agoraMin, setAgoraMin] = useState<number | null>(null)
+  useEffect(() => {
+    if (liberaMin == null) return
+    const tick = () => setAgoraMin(agoraBR())
+    const t0 = setTimeout(tick, 0)
+    const id = setInterval(tick, 15_000)
+    return () => { clearTimeout(t0); clearInterval(id) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liberaMin])
+  const bloqueado = liberaMin != null && agoraMin != null && agoraMin < liberaMin
+  const liberaStr = liberaMin != null ? `${String(Math.floor(liberaMin / 60) % 24).padStart(2, '0')}:${String(liberaMin % 60).padStart(2, '0')}` : ''
 
   function bater() {
     const indice = horas.length
@@ -142,17 +164,25 @@ export function PontoClient({ orgSlug, colaboradorId, nome, diaHoje, recentes, p
           </>
         )}
 
-        <button type="button" onClick={bater} disabled={pending}
+        {bloqueado && (
+          <p className="flex items-center justify-center gap-1.5 text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mb-3">
+            <Coffee className="w-4 h-4 shrink-0" />
+            Intervalo de almoço: retorno liberado às <b className="font-semibold tabular-nums">{liberaStr}</b> (mínimo de 1h).
+          </p>
+        )}
+        <button type="button" onClick={bater} disabled={pending || bloqueado}
           className="w-full inline-flex items-center justify-center gap-2.5 px-4 h-14 sm:h-12 bg-orange-600 text-[#fff] rounded-xl hover:bg-orange-700 disabled:opacity-60 transition-colors">
           {pending ? <Loader2 className="w-5 h-5 animate-spin" /> : <proxima.icon className="w-5 h-5" />}
           <span className="flex flex-col items-start text-left leading-tight">
             {/* Até 6s de GPS: o rótulo diz que está indo, não parece travado. */}
-            <span className="text-base font-semibold">{pending ? 'Registrando…' : proxima.label}</span>
+            <span className="text-base font-semibold">{pending ? 'Registrando…' : bloqueado ? `Retorno liberado às ${liberaStr}` : proxima.label}</span>
             {proxima.dica && !pending && <span className="text-[11px] text-[#fff]/80">{proxima.dica}</span>}
           </span>
         </button>
         <p className="text-[11px] text-gray-400 text-center mt-2">
-          Pode pausar quantas vezes precisar. Só o almoço (o maior intervalo do dia) precisa ter no mínimo 1h.
+          {intervaloObrigatorio
+            ? 'O almoço tem no mínimo 1h: o retorno só é aceito depois disso. Depois do almoço, pode pausar quantas vezes precisar.'
+            : 'Pode pausar quantas vezes precisar.'}
           Hora além da jornada <b className="text-amber-700">só é computada depois de aprovada</b> pelo gestor.
         </p>
 
