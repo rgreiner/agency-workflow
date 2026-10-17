@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.claude
+.agents
+.impeccable
+brand
+docs
+supabase
+scripts
+*.md
+!README.md
+tsconfig.tsbuildinfo
+.env*

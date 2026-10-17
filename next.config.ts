@@ -52,6 +52,13 @@ const nextConfig: NextConfig = {
    */
   images: { unoptimized: true },
 
+  /**
+   * `standalone` só no build do Dockerfile (NEXT_OUTPUT=standalone): a imagem
+   * leva apenas o servidor e as dependências que ele usa. Fora dele (dev, build
+   * local) fica o modo normal, que roda com `next start`.
+   */
+  ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" as const } : {}),
+
   async headers() {
     return [
       {
