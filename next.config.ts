@@ -44,6 +44,14 @@ const nextConfig: NextConfig = {
    */
   deploymentId: process.env.SOURCE_COMMIT || undefined,
 
+  /**
+   * Otimizador de imagens DESLIGADO: o Flow não usa next/image, mas o endereço
+   * /_next/image respondia mesmo assim — e era nele a falha crítica de execução
+   * remota de código do Next 16.2 (auditoria de 17/10/2026). Com `unoptimized`,
+   * o servidor devolve 404 nesse endereço.
+   */
+  images: { unoptimized: true },
+
   async headers() {
     return [
       {
