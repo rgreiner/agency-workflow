@@ -61,20 +61,71 @@ export default async function OrgLayout({
   const access = computeAccess(membership)
   const positionName = access.positionName
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('full_name, avatar_url, drive_mac_user, drive_google_email, drive_lang')
-    .eq('id', user.id)
-    .single()
-
-  const { data: workspacesRaw } = await supabase
-    .from('workspaces')
-    .select('id, name, color, campaigns(id, name)')
-    .order('name', { referencedTable: 'campaigns' })
-    .eq('org_id', org.id)
-    .eq('archived', false)
-    .eq('campaigns.archived', false)
-    .order('name')
+  // Tudo daqui em diante depende só da org e do acesso — sai em PARALELO.
+  // Antes eram 9 consultas em fila (cada uma esperando a anterior), refeitas a
+  // cada navegação e a cada atualização automática da Lista/tarefa; medido em
+  // 16/10/2026: ~13 transações/s no banco com pouca gente usando.
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const sbx = supabase as any
+  const [
+    { data: profile },
+    { data: workspacesRaw },
+    { data: rawSettings },
+    { data: trilhaRaw },
+    midiaTransicao,
+    divRes,
+    { data: membersRaw },
+    { data: statusRows },
+    { data: pautaRows },
+  ] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('full_name, avatar_url, drive_mac_user, drive_google_email, drive_lang')
+      .eq('id', user.id)
+      .single(),
+    supabase
+      .from('workspaces')
+      .select('id, name, color, campaigns(id, name)')
+      .order('name', { referencedTable: 'campaigns' })
+      .eq('org_id', org.id)
+      .eq('archived', false)
+      .eq('campaigns.archived', false)
+      .order('name'),
+    sbx
+      .from('org_settings')
+      .select('logo_url, accent_color, status_overrides')
+      .eq('org_id', org.id)
+      .single() as Promise<{ data: { logo_url: string | null; accent_color: string; status_overrides: unknown[] } | null }>,
+    // Trilha de primeiros passos: o item na sidebar só existe enquanto houver
+    // etapa pendente — quem já entendeu não fica olhando pra ele.
+    sbx.rpc('onboarding_trilha', { p_org_id: org.id }) as Promise<{ data: { concluido: boolean }[] | null }>,
+    // Telas transitórias da Mídia (migrar rotinas, vincular entregas): o item só
+    // existe enquanto houver o que fazer. Só para quem opera o Hub.
+    access.midiaHub
+      ? pendenciasDeTransicao(sbx, org.id)
+      : Promise.resolve({ migrar: 0, vincular: 0 }),
+    // Contas cujo saldo no Flow não bate com o banco NA DATA DO ÚLTIMO OFX, fora o
+    // que ainda está na fila de conciliação (migs. 347/348). Acende o Financeiro.
+    access.financeiro
+      ? (sbx.rpc('fin_divergencias', { p_org: org.id }) as Promise<{ data: { diferenca_real: number }[] | null }>)
+      : Promise.resolve({ data: [] as { diferenca_real: number }[] }),
+    // Membros da org (p/ o chat) — quem foi arquivado não entra.
+    membrosAtivos(supabase, org.id, 'user_id, profiles!user_id(id, full_name, avatar_url)'),
+    // Cadastro de status da org (migration 168) — fonte única do app inteiro.
+    sbx
+      .from('org_status')
+      .select('valor, label, grupo, bg, txt, ordem, papel')
+      .eq('org_id', org.id)
+      .order('ordem') as Promise<{ data: import('@/types').OrgStatusRow[] | null }>,
+    // Sugestões que compõem o título da pauta (migration 285).
+    sbx
+      .from('org_pauta_opcao')
+      .select('campo, valor')
+      .eq('org_id', org.id)
+      .order('campo')
+      .order('ordem') as Promise<{ data: { campo: string; valor: string }[] | null }>,
+  ])
+  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   const workspaces = (workspacesRaw ?? []).map(ws => ({
     id: ws.id,
@@ -82,63 +133,15 @@ export default async function OrgLayout({
     color: ws.color,
     campaigns: (ws.campaigns as unknown as { id: string; name: string }[]) ?? [],
   }))
+  const onboardingPendente = (trilhaRaw ?? []).filter(e => !e.concluido).length
+  const financeAlertas = (divRes.data ?? []).filter(d => Math.abs(Number(d.diferenca_real)) >= 0.01).length
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: rawSettings } = await (supabase as any)
-    .from('org_settings')
-    .select('logo_url, accent_color, status_overrides')
-    .eq('org_id', org.id)
-    .single() as { data: { logo_url: string | null; accent_color: string; status_overrides: unknown[] } | null }
-
-  // Trilha de primeiros passos: o item na sidebar só existe enquanto houver
-  // etapa pendente — quem já entendeu não fica olhando pra ele.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: trilhaRaw } = await (supabase as any).rpc('onboarding_trilha', { p_org_id: org.id })
-  const onboardingPendente = ((trilhaRaw ?? []) as { concluido: boolean }[]).filter(e => !e.concluido).length
-
-  // Telas transitórias da Mídia (migrar rotinas, vincular entregas): o item só
-  // existe enquanto houver o que fazer. Uma consulta a mais, e só para quem opera o Hub.
-  const midiaTransicao = access.midiaHub
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ? await pendenciasDeTransicao(supabase as any, org.id)
-    : { migrar: 0, vincular: 0 }
-
-  // Contas cujo saldo no Flow não bate com o banco NA DATA DO ÚLTIMO OFX, fora o que
-  // ainda está na fila de conciliação (migs. 347/348).
-  // Barato (sem o "desde"); acende o Financeiro no menu de qualquer tela.
-  const financeAlertas = access.financeiro
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ? (((await (supabase as any).rpc('fin_divergencias', { p_org: org.id })).data ?? []) as { diferenca_real: number }[])
-        .filter(d => Math.abs(Number(d.diferenca_real)) >= 0.01).length
-    : 0
-
-  // Membros da org (p/ o chat) — exceto eu mesmo e quem foi arquivado: não se abre
-  // conversa nova com quem saiu da agência.
-  const { data: membersRaw } = await membrosAtivos(supabase, org.id, 'user_id, profiles!user_id(id, full_name, avatar_url)')
+  // Conversa nova não se abre com quem saiu da agência nem comigo mesmo.
   const chatMembers = ((membersRaw ?? []) as { profiles: { id: string; full_name: string | null; avatar_url: string | null } | { id: string; full_name: string | null; avatar_url: string | null }[] | null }[])
     .map(m => (Array.isArray(m.profiles) ? m.profiles[0] : m.profiles))
     .filter((p): p is { id: string; full_name: string | null; avatar_url: string | null } => !!p && p.id !== user.id)
     .map(p => ({ id: p.id, name: p.full_name ?? 'Sem nome', avatarUrl: p.avatar_url ?? null }))
     .sort(porNome(m => m.name))
-
-  // Cadastro de status da org (migration 168) — fonte única do app inteiro.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: statusRows } = await (supabase as any)
-    .from('org_status')
-    .select('valor, label, grupo, bg, txt, ordem, papel')
-    .eq('org_id', org.id)
-    .order('ordem') as { data: import('@/types').OrgStatusRow[] | null }
-
-  // Sugestões que compõem o título da pauta (migration 285). Consulta pequena e
-  // no mesmo lugar do cadastro de status: o form de nova atividade e o modal de
-  // entrega da mídia leem daqui, sem prop drilling.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: pautaRows } = await (supabase as any)
-    .from('org_pauta_opcao')
-    .select('campo, valor')
-    .eq('org_id', org.id)
-    .order('campo')
-    .order('ordem') as { data: { campo: string; valor: string }[] | null }
 
   const orgSettings = {
     orgId:           org.id,

@@ -34,10 +34,14 @@ export function InboxNavItem({ orgSlug, compact = false }: { orgSlug: string; co
   }, [orgSlug])
 
   // Carrega ao montar, a cada 30s, e ao navegar (ex.: após marcar lidas na página).
+  // Aba escondida não consulta (cada aba aberta consultava a cada 30 s, mesmo em
+  // segundo plano); ao voltar a ficar visível, atualiza na hora.
   useEffect(() => {
     load()
-    const t = setInterval(load, 30_000)
-    return () => clearInterval(t)
+    const t = setInterval(() => { if (document.visibilityState === 'visible') load() }, 30_000)
+    const aoVoltar = () => { if (document.visibilityState === 'visible') load() }
+    document.addEventListener('visibilitychange', aoVoltar)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', aoVoltar) }
   }, [load])
   useEffect(() => { load() }, [pathname, load])
 
