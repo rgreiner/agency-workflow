@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Clock, FileText, Check, X, Ban, CalendarX, Paperclip, Timer } from 'lucide-react'
 import { toast } from 'sonner'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { decidirExtra, decidirJustificativa } from '@/app/actions/rh-ponto'
 import { MarcacoesEditor, validarMarcacoes } from '@/components/ponto/MarcacoesEditor'
 import { DicaPresenca } from '@/components/rh/DicaPresenca'
@@ -29,6 +30,9 @@ export interface ExtraPend {
   /** Carga LÍQUIDA do dia (rh_esperado_min): já desconta abono/feriado — a
    *  mesma régua do fechamento. O saldo exibido é minutos − esperado. */
   esperado_min: number
+  /** Jornada >6h com maior intervalo <1h (CLT art. 71): o extra costuma vir do almoço não feito. */
+  intervalo_ok?: boolean | null
+  intervalo_maior_min?: number | null
   rh_colaborador: Colab | null
 }
 export interface JustPend {
@@ -125,6 +129,10 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
   const setAbono = (id: string, k: 'ausIni' | 'ausFim', v: string) =>
     setAbonos(p => ({ ...p, [id]: { ...(p[id] ?? { ausIni: '', ausFim: '' }), [k]: v } }))
 
+  // Extra de dia com almoço abaixo de 1h: aprovar paga hora extra por intervalo
+  // não feito. Não bloqueia (pode ser decisão consciente), mas pede confirmação.
+  const [extraSemAlmoco, setExtraSemAlmoco] = useState<ExtraPend | null>(null)
+
   function extra(id: string, status: string) {
     start(async () => {
       const r = await decidirExtra(orgSlug, id, status)
@@ -172,6 +180,17 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
 
   return (
     <div className="p-6 max-w-4xl">
+      <ConfirmDialog
+        open={!!extraSemAlmoco}
+        title="Aprovar extra de dia sem almoço?"
+        description={extraSemAlmoco
+          ? `${extraSemAlmoco.rh_colaborador?.nome ?? 'A pessoa'} teve almoço de ${hStr(extraSemAlmoco.intervalo_maior_min ?? 0)} em ${dataBR(extraSemAlmoco.data)} — a CLT exige 1h em jornada acima de 6h. Aprovar paga como hora extra o tempo do intervalo que não foi feito. Se ela só esqueceu de bater, rejeite e peça a justificativa "esqueci".`
+          : ''}
+        confirmLabel="Aprovar mesmo assim"
+        loading={pending}
+        onCancel={() => setExtraSemAlmoco(null)}
+        onConfirm={() => { const e = extraSemAlmoco; setExtraSemAlmoco(null); if (e) extra(e.id, 'aprovado') }}
+      />
       <div className="mb-6">
         <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-1"><Clock className="w-5 h-5 text-orange-600" /> Ponto — aprovações</h1>
         <p className="text-gray-500 text-sm">Horas extras (aprova o gestor) e justificativas (decide o RH).</p>
@@ -212,11 +231,24 @@ export function PontoGestaoClient({ orgSlug, extras, justificativas, jornadaPadr
                           <div className="text-sm font-medium text-gray-900">{e.rh_colaborador?.nome ?? '—'}</div>
                           <div className="text-xs text-gray-500 tabular-nums">{dataBR(e.data)} · extra <b className="text-emerald-600">{saldoStr(extraMin)}</b>{e.acima_10h && <span className="text-red-500"> · acima de 10h</span>}</div>
                         </div>
-                        <button onClick={() => extra(e.id, 'aprovado')} disabled={pending}
+                        <button onClick={() => e.intervalo_ok === false ? setExtraSemAlmoco(e) : extra(e.id, 'aprovado')} disabled={pending}
                           className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 text-[#fff] hover:bg-emerald-700 disabled:opacity-50 transition"><Check className="w-3.5 h-3.5" /> Aprovar</button>
                         <button onClick={() => extra(e.id, 'rejeitado')} disabled={pending}
                           className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition"><X className="w-3.5 h-3.5" /> Rejeitar</button>
                       </div>
+                      {/* Almoço abaixo de 1h numa jornada >6h (CLT art. 71). O dia já
+                          vinha marcado (intervalo_ok), mas esta tela — onde se decide
+                          pagar — não mostrava; os 44 min da Isadora em 14/10 eram
+                          o almoço de 7 min virando "hora extra". */}
+                      {e.intervalo_ok === false && (
+                        <div className="mt-2 flex items-start gap-1.5 rounded-lg bg-red-50 border border-red-100 px-2.5 py-1.5 text-[11px] text-red-800">
+                          <Ban className="w-3.5 h-3.5 shrink-0 mt-px text-red-600" />
+                          <span>
+                            <b className="font-semibold">Almoço de {hStr(e.intervalo_maior_min ?? 0)}</b> — a CLT exige 1h em jornada acima de 6h.
+                            {' '}Se a pessoa esqueceu de bater, o caminho é a justificativa &ldquo;esqueci&rdquo;; aprovar paga como extra o intervalo que não foi feito.
+                          </span>
+                        </div>
+                      )}
                       <div className="mt-2 rounded-lg bg-gray-50 px-2.5 py-1.5 text-[11px] tabular-nums">
                         <div className="flex flex-wrap gap-x-2 gap-y-0.5">
                           <span className="w-14 shrink-0 text-gray-400 font-medium">Previsto</span>

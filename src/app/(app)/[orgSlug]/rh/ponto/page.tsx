@@ -16,7 +16,7 @@ export default async function PontoGestaoPage({ params }: { params: Promise<{ or
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const extrasRaw = unwrap<ExtraRow>(await (supabase as any)
     .from('rh_ponto')
-    .select('id, data, minutos, saldo_min, acima_10h, colaborador_id, motivo, rh_colaborador!colaborador_id(nome), rh_marcacao(hora, seq)')
+    .select('id, data, minutos, saldo_min, acima_10h, colaborador_id, motivo, intervalo_ok, intervalo_maior_min, rh_colaborador!colaborador_id(nome), rh_marcacao(hora, seq)')
     .eq('org_id', orgId).eq('extra_status', 'pendente')
     .order('data', { ascending: false }), 'horas extras')
 
