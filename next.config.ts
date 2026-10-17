@@ -42,7 +42,12 @@ const nextConfig: NextConfig = {
    * SOURCE_COMMIT é o SHA que o Coolify injeta a cada build. Ausente (dev, build
    * local), fica undefined e nada muda.
    */
-  deploymentId: process.env.SOURCE_COMMIT || undefined,
+  deploymentId: process.env.SOURCE_COMMIT
+    // No build do Dockerfile o Coolify não repassa o SOURCE_COMMIT (só ao container
+    // rodando): sem esta saída o id sumia e a aba antiga voltava a falhar muda.
+    // O standalone grava a config no server.js, então o id gerado no build é o
+    // mesmo em execução — e muda a cada deploy, que é o que importa.
+    || (process.env.NEXT_OUTPUT === "standalone" ? `build-${Date.now().toString(36)}` : undefined),
 
   /**
    * Otimizador de imagens DESLIGADO: o Flow não usa next/image, mas o endereço
