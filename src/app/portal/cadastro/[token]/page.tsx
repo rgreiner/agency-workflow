@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { conviteInfoPortal } from '@/lib/auth/portal'
 import { PortalThemeToggle } from '../../PortalThemeToggle'
@@ -5,6 +6,27 @@ import { FlowMark } from '@/components/brand/FlowMark'
 import { CadastroForm } from './CadastroForm'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * Prévia do link (WhatsApp, e-mail): o cliente precisa entender, antes de tocar,
+ * que é o cadastro DELE para acompanhar os trabalhos. openGraph é sobrescrito
+ * inteiro entre segmentos, então siteName/type/locale vão de novo aqui; a imagem
+ * vem do opengraph-image da raiz (arquivo tem prioridade sobre o objeto).
+ */
+export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
+  const { token } = await params
+  const info = await conviteInfoPortal(token)
+  const title = info ? `Seu acesso ao painel ${info.cliente}` : 'Link de cadastro expirado'
+  const description = info
+    ? `A ${info.agencia} convidou você para acompanhar os trabalhos da ${info.cliente}: o que aguarda sua aprovação, orçamentos, datas de entrega e atas. Crie seu acesso em 1 minuto.`
+    : 'Este link de cadastro não vale mais. Peça um novo ao seu atendimento.'
+  return {
+    title: { absolute: title },
+    description,
+    openGraph: { title, description, siteName: 'Flow', type: 'website', locale: 'pt_BR' },
+    twitter: { card: 'summary_large_image', title, description },
+  }
+}
 
 /**
  * Cadastro pelo link que a agência mandou (mig. 342): nome, e-mail e senha, e o
