@@ -121,9 +121,7 @@ export function AprovacaoClient({ activityId, titulo, campanha, pecas, grupos = 
     }
     if (p.mime === 'application/pdf') {
       return (
-        <object data={urlPeca(activityId, p)} type="application/pdf" className="w-full h-[70vh] bg-gray-100">
-          <p className="p-6 text-sm text-gray-500">Seu navegador não abre PDF aqui. Use o botão Baixar.</p>
-        </object>
+        <PdfSobDemanda url={urlPeca(activityId, p)} nome={p.name} tamanho={p.size} />
       )
     }
     if (p.mime === DOCX_MIME || p.name.toLowerCase().endsWith('.docx')) {
@@ -251,12 +249,7 @@ export function AprovacaoClient({ activityId, titulo, campanha, pecas, grupos = 
                   src={urlPeca(activityId, p)} />
               )}
               {isPdf && (
-                <object data={urlPeca(activityId, p)} type="application/pdf"
-                  className="w-full h-[70vh] bg-gray-100">
-                  <p className="p-6 text-sm text-gray-500">
-                    Seu navegador não abre PDF aqui — use o botão Baixar.
-                  </p>
-                </object>
+                <PdfSobDemanda url={urlPeca(activityId, p)} nome={p.name} tamanho={p.size} />
               )}
               {isDoc && <DocxPreview activityId={activityId} pecaRef={p.ref} q={p.q} />}
 
@@ -371,6 +364,39 @@ export function AprovacaoClient({ activityId, titulo, campanha, pecas, grupos = 
         </div>
       )}
     </>
+  )
+}
+
+/**
+ * PDF só carrega quando o cliente pede (23/10). Embutido direto, o navegador
+ * baixava o arquivo inteiro ao abrir a página — medido: 18 MB e 104 MB numa
+ * tarefa da Comil, enquanto as imagens da mesma tela somavam 4 MB.
+ */
+function PdfSobDemanda({ url, nome, tamanho }: { url: string; nome: string; tamanho: number }) {
+  const [aberto, setAberto] = useState(false)
+  const mb = tamanho > 0 ? `${(tamanho / 1e6).toFixed(tamanho > 10e6 ? 0 : 1).replace('.', ',')} MB` : ''
+  if (aberto) {
+    return (
+      <object data={url} type="application/pdf" className="w-full h-[70vh] bg-gray-100">
+        <p className="p-6 text-sm text-gray-500">Seu navegador não abre PDF aqui. Use o botão Baixar.</p>
+      </object>
+    )
+  }
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 py-10 px-4 bg-gray-50 text-center">
+      <FileText className="w-10 h-10 text-gray-400" />
+      <p className="text-sm text-gray-700 font-medium break-all">{nome}</p>
+      <div className="flex flex-wrap justify-center gap-2">
+        <button type="button" onClick={() => setAberto(true)}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-100 transition-colors active:scale-[0.97]">
+          Ver o PDF aqui{mb ? ` (${mb})` : ''}
+        </button>
+        <a href={url} target="_blank" rel="noopener"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors">
+          Abrir em outra aba
+        </a>
+      </div>
+    </div>
   )
 }
 
