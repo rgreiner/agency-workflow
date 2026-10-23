@@ -8,6 +8,7 @@ import mammoth from 'mammoth'
 import { sessaoPortal } from '@/lib/auth/portal'
 import { createPortalClient } from '@/lib/supabase/portal'
 import { listPreviewFiles, readFolderFile } from '@/lib/task-folders'
+import { pecaDaQuery } from '@/lib/portal-pecas'
 
 export const runtime = 'nodejs'
 
@@ -19,27 +20,39 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ activityId: string }> },
 ) {
-  if (!(await sessaoPortal())) return Response.json({ error: 'Sessão expirada' }, { status: 401 })
+  const claims = await sessaoPortal()
+  if (!claims) return Response.json({ error: 'Sessão expirada' }, { status: 401 })
 
   const { activityId } = await params
-  const ref = new URL(request.url).searchParams.get('ref')
+  const url = new URL(request.url)
+  const ref = url.searchParams.get('ref')
   if (!ref) return Response.json({ error: 'Peça não informada' }, { status: 400 })
 
-  const supabase = await createPortalClient()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any).rpc('portal_aprovacao', { p_activity_id: activityId })
-  const pastaRef = (data as { pasta_ref?: string | null } | null)?.pasta_ref
-  if (error || !pastaRef) return Response.json({ error: 'Não encontrado' }, { status: 404 })
-
   try {
-    const pecas = await listPreviewFiles(pastaRef)
-    const peca = pecas.find((p) => p.ref === ref)
-    if (!peca) return Response.json({ error: 'Não encontrado' }, { status: 404 })
-    if (!isDocx(peca.name, peca.mime)) {
+    // Assinada pela tela (lib/portal-pecas): vai direto. Senão, as 2 travas antigas.
+    let peca: { ref: string; name: string; mime: string } | null = null
+    const assinada = pecaDaQuery(claims.portalSub, activityId, url.searchParams)
+    if (assinada) {
+      peca = { ref: assinada.ref, name: '', mime: assinada.mime }
+    } else {
+      const supabase = await createPortalClient()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc('portal_aprovacao', { p_activity_id: activityId })
+      const pastaRef = (data as { pasta_ref?: string | null } | null)?.pasta_ref
+      if (error || !pastaRef) return Response.json({ error: 'Não encontrado' }, { status: 404 })
+      peca = (await listPreviewFiles(pastaRef)).find((p) => p.ref === ref) ?? null
+      if (!peca) return Response.json({ error: 'Não encontrado' }, { status: 404 })
+    }
+    // Assinada não traz o nome: confere pelo arquivo lido (o Drive às vezes manda
+    // .docx com tipo genérico, e o nome é que decide).
+    if (!assinada && !isDocx(peca.name, peca.mime)) {
       return Response.json({ error: 'Pré-visualização de texto só para .docx' }, { status: 415 })
     }
 
     const file = await readFolderFile(peca.ref)
+    if (!isDocx(file.name, file.mime)) {
+      return Response.json({ error: 'Pré-visualização de texto só para .docx' }, { status: 415 })
+    }
     const { value: html } = await mammoth.convertToHtml({ buffer: file.buffer })
     return Response.json({ html })
   } catch {

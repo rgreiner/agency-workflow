@@ -477,7 +477,7 @@ export async function listFolderFiles(folderId: string): Promise<FolderFile[]> {
   do {
     const r: drive_v3.Schema$FileList = (await drive.files.list({
       q: `'${folderId}' in parents and trashed = false and mimeType != '${FOLDER_MIME}'`,
-      fields: 'nextPageToken, files(id, name, mimeType, size, webViewLink)',
+      fields: 'nextPageToken, files(id, name, mimeType, size, webViewLink, modifiedTime)',
       pageSize: 200, orderBy: 'name',
       supportsAllDrives: true, includeItemsFromAllDrives: true, pageToken,
     })).data
@@ -489,6 +489,8 @@ export async function listFolderFiles(folderId: string): Promise<FolderFile[]> {
         mime: f.mimeType ?? 'application/octet-stream',
         size: Number(f.size ?? 0),
         link: f.webViewLink ?? undefined,
+        // Versão = última alteração: a peça trocada no Drive muda a chave do cache.
+        versao: f.modifiedTime ?? undefined,
       })
     }
     pageToken = r.nextPageToken ?? undefined

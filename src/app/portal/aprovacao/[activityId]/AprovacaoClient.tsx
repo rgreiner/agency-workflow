@@ -9,7 +9,8 @@ import {
 import { registrarDecisao, type ComentarioPeca } from '@/app/actions/portal'
 import type { GrupoPeca } from '@/lib/portal-legendas'
 
-export interface Peca { ref: string; name: string; mime: string; size: number }
+/** `q` = query assinada pela tela (lib/portal-pecas): a rota vai direto ao arquivo. */
+export interface Peca { ref: string; name: string; mime: string; size: number; q?: string }
 
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
@@ -24,8 +25,8 @@ interface Props {
   decidido: string | null
 }
 
-const urlPeca = (activityId: string, ref: string, download = false) =>
-  `/api/portal/peca/${activityId}?ref=${encodeURIComponent(ref)}${download ? '&download=1' : ''}`
+const urlPeca = (activityId: string, p: { ref: string; q?: string }, download = false) =>
+  `/api/portal/peca/${activityId}?${p.q ?? `ref=${encodeURIComponent(p.ref)}`}${download ? '&download=1' : ''}`
 
 export function AprovacaoClient({ activityId, titulo, campanha, pecas, grupos = null, decidido }: Props) {
   const router = useRouter()
@@ -111,22 +112,22 @@ export function AprovacaoClient({ activityId, titulo, campanha, pecas, grupos = 
       return (
         <button onClick={() => setZoom(p)} className="block w-full h-full bg-gray-100">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={urlPeca(activityId, p.ref)} alt={p.name} className="w-full h-full max-h-[70vh] object-contain" />
+          <img src={urlPeca(activityId, p)} alt={p.name} loading="lazy" decoding="async" className="w-full h-full max-h-[70vh] object-contain" />
         </button>
       )
     }
     if (p.mime.startsWith('video/')) {
-      return <video controls preload="metadata" className="w-full max-h-[70vh] bg-black" src={urlPeca(activityId, p.ref)} />
+      return <video controls preload="metadata" className="w-full max-h-[70vh] bg-black" src={urlPeca(activityId, p)} />
     }
     if (p.mime === 'application/pdf') {
       return (
-        <object data={urlPeca(activityId, p.ref)} type="application/pdf" className="w-full h-[70vh] bg-gray-100">
+        <object data={urlPeca(activityId, p)} type="application/pdf" className="w-full h-[70vh] bg-gray-100">
           <p className="p-6 text-sm text-gray-500">Seu navegador não abre PDF aqui. Use o botão Baixar.</p>
         </object>
       )
     }
     if (p.mime === DOCX_MIME || p.name.toLowerCase().endsWith('.docx')) {
-      return <DocxPreview activityId={activityId} pecaRef={p.ref} />
+      return <DocxPreview activityId={activityId} pecaRef={p.ref} q={p.q} />
     }
     return <p className="p-6 text-sm text-gray-500 text-center">{p.name}</p>
   }
@@ -152,7 +153,7 @@ export function AprovacaoClient({ activityId, titulo, campanha, pecas, grupos = 
               {visual(p)}
               <div className="flex items-center gap-2 px-3 py-2 bg-white border-t border-gray-100">
                 <span className="flex-1 min-w-0 truncate text-xs text-gray-500">{p.name}</span>
-                <a href={urlPeca(activityId, p.ref, true)} title="Baixar"
+                <a href={urlPeca(activityId, p, true)} title="Baixar"
                   className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
                   <Download className="w-3.5 h-3.5" />
                 </a>
@@ -241,23 +242,23 @@ export function AprovacaoClient({ activityId, titulo, campanha, pecas, grupos = 
               {isImg && (
                 <button onClick={() => setZoom(p)} className="block w-full bg-gray-100">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={urlPeca(activityId, p.ref)} alt={p.name}
+                  <img src={urlPeca(activityId, p)} alt={p.name} loading="lazy" decoding="async"
                     className="w-full max-h-[70vh] object-contain" />
                 </button>
               )}
               {isVid && (
                 <video controls preload="metadata" className="w-full max-h-[70vh] bg-black"
-                  src={urlPeca(activityId, p.ref)} />
+                  src={urlPeca(activityId, p)} />
               )}
               {isPdf && (
-                <object data={urlPeca(activityId, p.ref)} type="application/pdf"
+                <object data={urlPeca(activityId, p)} type="application/pdf"
                   className="w-full h-[70vh] bg-gray-100">
                   <p className="p-6 text-sm text-gray-500">
                     Seu navegador não abre PDF aqui — use o botão Baixar.
                   </p>
                 </object>
               )}
-              {isDoc && <DocxPreview activityId={activityId} pecaRef={p.ref} />}
+              {isDoc && <DocxPreview activityId={activityId} pecaRef={p.ref} q={p.q} />}
 
               {/* Barra da peça */}
               <div className="flex items-center gap-2 px-3.5 py-2.5 border-t border-gray-100">
@@ -284,7 +285,7 @@ export function AprovacaoClient({ activityId, titulo, campanha, pecas, grupos = 
                 )}
 
                 <a
-                  href={urlPeca(activityId, p.ref, true)}
+                  href={urlPeca(activityId, p, true)}
                   className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-lg px-2.5 py-1.5 transition-colors"
                 >
                   <Download className="w-3.5 h-3.5" /> Baixar
@@ -365,7 +366,7 @@ export function AprovacaoClient({ activityId, titulo, campanha, pecas, grupos = 
             <X className="w-6 h-6" />
           </button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={urlPeca(activityId, zoom.ref)} alt={zoom.name}
+          <img src={urlPeca(activityId, zoom)} alt={zoom.name}
             className="max-w-full max-h-full object-contain" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
@@ -378,7 +379,7 @@ export function AprovacaoClient({ activityId, titulo, campanha, pecas, grupos = 
  * (mammoth no servidor) só quando o cliente abre — 10 roteiros não convertem
  * todos no load. O estilo do texto vem de arbitrary variants (sem plugin prose).
  */
-function DocxPreview({ activityId, pecaRef }: { activityId: string; pecaRef: string }) {
+function DocxPreview({ activityId, pecaRef, q }: { activityId: string; pecaRef: string; q?: string }) {
   const [aberto, setAberto] = useState(false)
   const [html, setHtml] = useState<string | null>(null)
   const [carregando, setCarregando] = useState(false)
@@ -392,7 +393,7 @@ function DocxPreview({ activityId, pecaRef }: { activityId: string; pecaRef: str
     setErro(null)
     try {
       const res = await fetch(
-        `/api/portal/peca-texto/${activityId}?ref=${encodeURIComponent(pecaRef)}`,
+        `/api/portal/peca-texto/${activityId}?${q ?? `ref=${encodeURIComponent(pecaRef)}`}`,
       )
       const json = await res.json()
       if (!res.ok) { setErro(json.error || 'Não deu pra abrir.'); return }

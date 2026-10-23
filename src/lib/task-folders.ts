@@ -124,12 +124,18 @@ export async function inspectTaskFolder(taskRef: string): Promise<drive.TaskFold
  * Devolve [] se a tarefa não tem pasta ou não tem Preview.
  */
 export async function listPreviewFiles(taskRef: string): Promise<drive.FolderFile[]> {
-  const info = await inspectTaskFolder(taskRef)
-  const preview = info.sub['Preview']
-  if (!preview?.id) return []
-  return backendForRef(preview.id) === 's3'
-    ? s3.listFolderFilesS3(preview.id)
-    : drive.listFolderFiles(preview.id)
+  if (backendForRef(taskRef) === 's3') {
+    const info = await s3.inspectTaskFolderS3(taskRef)
+    const preview = info.sub['Preview']
+    return preview?.id ? s3.listFolderFilesS3(preview.id) : []
+  }
+  // Drive: SÓ subpastas + Preview (2 chamadas). O inspectTaskFolder também monta o
+  // caminho completo subindo pasta por pasta até a raiz — 6 chamadas em sequência,
+  // 2,6 a 4,1 s medidos em 20/10 — que aqui ninguém usa. Era isso que travava o
+  // portal: cada peça na tela repetia a subida inteira.
+  const subs = await drive.listSubfolders(taskRef)
+  const preview = subs.find(s => s.name.trim().toLowerCase() === 'preview')
+  return preview ? drive.listFolderFiles(preview.id) : []
 }
 
 /** Baixa uma peça pela ref devolvida por `listPreviewFiles`. */
