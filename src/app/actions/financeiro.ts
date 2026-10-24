@@ -960,3 +960,39 @@ export async function carregarMovimentosDrill(orgSlug: string, f: FiltroDrill) {
   linhas.sort((a, b) => (b.data ?? '').localeCompare(a.data ?? ''))
   return { linhas }
 }
+
+export interface EventoHistorico {
+  id: string
+  tipo: 'prorrogacao' | 'nota'
+  texto: string
+  de: string | null
+  para: string | null
+  autor: string
+  criado_em: string
+}
+
+/**
+ * Histórico do título fora da edição normal: prorrogações e anotações (hoje,
+ * feitas pelos funcionários digitais via /api/agente/v1 — mig. 357). RLS de
+ * financeiro (fin_can) decide quem lê.
+ */
+export async function historicoDoLancamento(orgSlug: string, lancamentoId: string): Promise<{ eventos: EventoHistorico[]; error?: string }> {
+  const { supabase } = await assertFinanceAccess(orgSlug)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any
+  const { data, error } = await sb.from('lancamento_historico')
+    .select('id, tipo, texto, de, para, por, criado_em')
+    .eq('lancamento_id', lancamentoId)
+    .order('criado_em', { ascending: false })
+  if (error) return { eventos: [], error: 'Não foi possível carregar o histórico' }
+  const linhas = (data ?? []) as (Omit<EventoHistorico, 'autor'> & { por: string | null })[]
+  const ids = [...new Set(linhas.map(l => l.por).filter(Boolean))] as string[]
+  const nomes = new Map<string, string>()
+  if (ids.length) {
+    const { data: perfis } = await sb.from('profiles').select('id, full_name').in('id', ids)
+    for (const p of (perfis ?? []) as { id: string; full_name: string | null }[]) nomes.set(p.id, p.full_name ?? '')
+  }
+  return {
+    eventos: linhas.map(({ por, ...l }) => ({ ...l, autor: (por && nomes.get(por)) || 'Sistema' })),
+  }
+}

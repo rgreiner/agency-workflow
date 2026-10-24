@@ -31,6 +31,8 @@ import { NotaCelula, NotaFiscalBloco } from './NotaFiscal'
 import { FORMA_OPTIONS } from '../faturamento/ClassificacaoFields'
 import { notasDosLancamentos, type NotaDoLancamento } from '@/app/actions/nfse'
 import { Modal } from '@/components/ui/Modal'
+import { historicoDoLancamento, type EventoHistorico } from '@/app/actions/financeiro'
+import { HistoricoLancamento } from './Historico'
 
 export interface Lancamento {
   id: string
@@ -990,6 +992,18 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
   // Transferência entre contas: totalmente read-only (editar um lado desalinharia o
   // saldo). Só se exclui e refaz — a RPC update_lancamento recusa a edição.
   const isTransferencia = !!lancamento?.transferencia_id
+  // Aba Histórico: só lançamento do Flow já gravado (importado/novo não tem histórico).
+  const temHistorico = !!lancamento && !imported
+  const [aba, setAba] = useState<'dados' | 'historico'>('dados')
+  const [historico, setHistorico] = useState<{ eventos: EventoHistorico[]; carregando: boolean; erro: string }>({ eventos: [], carregando: temHistorico, erro: '' })
+  useEffect(() => {
+    if (!temHistorico || !lancamento) return
+    let vivo = true
+    historicoDoLancamento(orgSlug, lancamento.id)
+      .then(r => { if (vivo) setHistorico({ eventos: r.eventos, carregando: false, erro: r.error ?? '' }) })
+      .catch(() => { if (vivo) setHistorico({ eventos: [], carregando: false, erro: 'Não foi possível carregar o histórico' }) })
+    return () => { vivo = false }
+  }, [temHistorico, lancamento, orgSlug])
   const vencRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
     if (foco !== 'vencimento') return
@@ -1155,7 +1169,28 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
         <button aria-label="Fechar" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X className="w-5 h-5" /></button>
       </div>
 
-      <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+      {temHistorico && (
+        <div className="flex gap-1 px-6 pt-3 border-b border-gray-100" role="tablist">
+          {([['dados', 'Dados'], ['historico', 'Histórico']] as const).map(([v, label]) => (
+            <button
+              key={v} type="button" role="tab" aria-selected={aba === v}
+              onClick={() => setAba(v)}
+              className={cn('px-3 py-2 text-sm -mb-px border-b-2 transition-colors active:scale-[0.97]',
+                aba === v ? 'border-orange-500 text-gray-900 font-medium' : 'border-transparent text-gray-500 hover:text-gray-800')}
+            >
+              {label}
+              {v === 'historico' && historico.eventos.length > 0 && (
+                <span className="ml-1.5 rounded-full bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-600">{historico.eventos.length}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {aba === 'historico' && <HistoricoLancamento {...historico} />}
+
+      {/* Escondido, não desmontado: voltar para Dados mantém o que foi digitado. */}
+      <form onSubmit={handleSubmit} className={cn('px-6 py-5 space-y-4', aba === 'historico' && 'hidden')}>
         {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
         {isTransferencia && <p className="text-xs text-gray-600 bg-gray-100 rounded-lg px-3 py-2">Transferência entre contas (os dois lados são ligados). Não é editável — para corrigir, <strong>exclua e refaça</strong>.</p>}
         {imported && <p className="text-xs text-sky-800 bg-sky-50 rounded-lg px-3 py-2">Linha importada da <strong>Conta Azul</strong>. Ao salvar, ela vira um lançamento do Flow (editável) e passa a ser a versão oficial — a linha importada some, mesmo após reimportar o extrato.</p>}
