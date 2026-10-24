@@ -43,7 +43,10 @@ export async function updateSession(request: NextRequest) {
   // Proposta de trabalho: o CANDIDATO abre sem conta — ele ainda não é do time.
   // O token é a credencial, validado na página e em /api/proposta/<token>.
   const isProposta = path.startsWith('/proposta/') || path.startsWith('/api/proposta/')
-  const isPublic = isAuthPage || isConvite || isCron || isPortal || isRest || isPwaAsset || isSenha || isCotacao || isProposta
+  // API dos funcionários digitais: o Bearer do agente é a credencial (validado em
+  // cada rota), e o link de arquivo que ele manda ao cliente é assinado e expira.
+  const isAgente = path.startsWith('/api/agente/')
+  const isPublic = isAuthPage || isConvite || isCron || isPortal || isRest || isPwaAsset || isSenha || isCotacao || isProposta || isAgente
 
   if (!claims && !isPublic) {
     const url = request.nextUrl.clone()

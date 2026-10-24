@@ -92,6 +92,21 @@ export async function mintToken({ sub, email }: Claims): Promise<string> {
   return `${data}.${await assinar(data)}`;
 }
 
+// ── Agentes (Digitais) ────────────────────────────────────────────────────────
+// O funcionário digital é uma usuária do Flow sem senha. A rota /api/agente/v1
+// troca o token dele (agente_tokens) por um JWT CURTO dessa usuária — o mesmo
+// formato do login, só que de 5 min e nunca em cookie: vive o tempo da chamada.
+
+const AGENTE_MAX_AGE_SEG = 5 * 60;
+
+export async function mintAgenteToken({ sub, email }: Claims): Promise<string> {
+  const agora = Math.floor(Date.now() / 1000);
+  const header = b64urlJson({ alg: "HS256", typ: "JWT" });
+  const payload = b64urlJson({ role: "authenticated", sub, email, iat: agora, exp: agora + AGENTE_MAX_AGE_SEG });
+  const data = `${header}.${payload}`;
+  return `${data}.${await assinar(data)}`;
+}
+
 // ── Cron ──────────────────────────────────────────────────────────────────────
 // As tarefas agendadas rodavam como `anon`, e era por isso que as RPCs que elas
 // chamam (sync do extrato, abrir fechamento) não podiam exigir autorização —
