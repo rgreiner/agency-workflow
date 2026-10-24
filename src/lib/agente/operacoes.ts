@@ -176,20 +176,24 @@ export async function titulos(a: AgenteFlow, tipo: string, id: string, situacao?
 
 /**
  * Quem não está no cadastro prova quem é com CNPJ + um documento DA PRÓPRIA
- * empresa (nº de NF, boleto ou valor exato de um título em aberto). Nada de
- * "parecido": o número tem que bater inteiro.
+ * empresa (nº de NF ou de boleto de um título dela). Nada de "parecido": o
+ * número tem que bater inteiro. Zeros à esquerda não contam — a NFS-e nacional
+ * recomeçou do 1 em 2026, então "019" e "19" são a NF 19 (decisão do Rafael,
+ * 24/10). Mínimo de 2 dígitos significativos.
  */
+const numeroDoc = (s: string | null | undefined) => soDigitos(s).replace(/^0+/, '')
+
 export async function verificar(a: AgenteFlow, cnpj: string, documento: string): Promise<ContatoFlow | null> {
   const alvo = soDigitos(cnpj)
-  const doc = soDigitos(documento)
+  const doc = numeroDoc(documento)
   if (alvo.length !== 14 && alvo.length !== 11) throw new ErroAgente('CNPJ/CPF inválido')
-  if (doc.length < 3) throw new ErroAgente('documento inválido')
+  if (doc.length < 2) throw new ErroAgente('documento inválido')
   const c = unico((await todosCadastros(a)).filter(([, x]) => soDigitos(x.tax_id) === alvo).map(([t, x]) => contatoDe(t, x)))
   if (!c) return null
   const linhas = await lancamentosDoContato(a, c, false)
   const ts = await montarTitulos(a, linhas)
-  const bate = ts.some(t => soDigitos(t.nf_numero) === doc)
-    || linhas.some(l => (l.anexos ?? []).some(x => soDigitos(x.numero) === doc))
+  const bate = ts.some(t => numeroDoc(t.nf_numero) === doc)
+    || linhas.some(l => (l.anexos ?? []).some(x => numeroDoc(x.numero) === doc))
   return bate ? c : null
 }
 
