@@ -23,6 +23,12 @@ export interface ContatoFlow {
   nome: string
   empresa: string
   cnpj: string | null
+  /**
+   * Mesmo telefone/e-mail cadastrado em MAIS de uma empresa (ex.: T2D, Di Napoli
+   * e Kyoto, do mesmo grupo, com um financeiro só). Cada cadastro é autorização
+   * própria, então a pessoa responde por todas. O contato principal é o 1º.
+   */
+  grupo?: ContatoFlow[]
 }
 
 export interface TituloFlow {
@@ -87,18 +93,31 @@ function unico(achados: ContatoFlow[]): ContatoFlow | null {
   return ids.size === 1 ? achados[0] : null
 }
 
+/**
+ * Telefone/e-mail: o dado está EXATO em cada cadastro achado, então todos valem
+ * (financeiro de grupo). Diferente do CNPJ do `verificar`, onde dois cadastros
+ * com o mesmo documento seria erro de cadastro — lá continua `unico`.
+ */
+function doGrupo(achados: ContatoFlow[]): ContatoFlow | null {
+  const vistos = new Map<string, ContatoFlow>()
+  for (const c of achados) vistos.set(`${c.tipo}:${c.id}`, c)
+  const todos = [...vistos.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+  if (!todos.length) return null
+  return todos.length === 1 ? todos[0] : { ...todos[0], grupo: todos }
+}
+
 export async function identificar(a: AgenteFlow, canal: string, endereco: string): Promise<ContatoFlow | null> {
   const todos = await todosCadastros(a)
   if (canal === 'email') {
     const alvo = endereco.trim().toLowerCase()
     if (!alvo.includes('@')) throw new ErroAgente('e-mail inválido')
-    return unico(todos.filter(([, c]) =>
+    return doGrupo(todos.filter(([, c]) =>
       [c.finance_email, ...(c.emails ?? []).map(e => e.email)].some(e => e?.trim().toLowerCase() === alvo),
     ).map(([t, c]) => contatoDe(t, c)))
   }
   const alvo = chaveTelefone(endereco)
   if (!alvo) throw new ErroAgente('telefone inválido')
-  return unico(todos.filter(([, c]) =>
+  return doGrupo(todos.filter(([, c]) =>
     [c.phone, ...(c.telefones ?? []).map(t => t.numero)].some(n => chaveTelefone(n) === alvo),
   ).map(([t, c]) => contatoDe(t, c)))
 }
