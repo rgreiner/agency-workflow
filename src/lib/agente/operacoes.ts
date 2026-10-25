@@ -332,3 +332,44 @@ export async function registrarEnvioAgente(a: AgenteFlow, tituloId: string, buck
   if (error) throw new ErroAgente(error.message)
   return { ok: true as const }
 }
+
+// ── Documento do fornecedor recebido por e-mail (mig. 362) ──────────────────
+
+/** PP/MX em aberto de um fornecedor/veículo, dizendo o que já tem de NF/boleto dele. */
+export async function documentosFornecedor(a: AgenteFlow, tipo: string, id: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new ErroAgente('contato inválido')
+  const { data, error } = await a.supabase.rpc('fin_documentos_fornecedor', { p_org: a.orgId, p_contato_tipo: tipo, p_contato_id: id })
+  if (error) throw new ErroAgente(error.message)
+  return data as {
+    lancamento_id: string; documento: string | null; descricao: string; valor: number; vencimento: string | null
+    tem_nf: boolean; tem_boleto: boolean; numeros: string | null
+  }[]
+}
+
+const MAX_PDF = 10 * 1024 * 1024
+
+/**
+ * Grava o PDF no volume (mesmo lugar do upload da tela) e ACRESCENTA ao título
+ * como documento do fornecedor. Só PDF; nada é removido ou trocado.
+ */
+export async function anexarDocumento(a: AgenteFlow, b: { titulo_id: string; tipo: string; numero: string; nome: string; conteudo_base64: string }) {
+  await lancamento(a, b.titulo_id)
+  if (b.tipo !== 'NF' && b.tipo !== 'Boleto') throw new ErroAgente('tipo deve ser NF ou Boleto')
+  const buf = Buffer.from(b.conteudo_base64 || '', 'base64')
+  if (!buf.length || buf.length > MAX_PDF) throw new ErroAgente('arquivo vazio ou maior que 10 MB')
+  if (buf.subarray(0, 5).toString('latin1') !== '%PDF-') throw new ErroAgente('só PDF')
+  const { writeFile, mkdir } = await import('node:fs/promises')
+  const path = await import('node:path')
+  const { randomUUID } = await import('node:crypto')
+  const nomeArq = `${randomUUID()}.pdf`
+  const dir = path.join(process.env.UPLOAD_DIR || '/app/uploads', 'lancamentos')
+  await mkdir(dir, { recursive: true })
+  await writeFile(path.join(dir, nomeArq), buf)
+  const base = (process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.oneaone.com.br').replace(/\/$/, '')
+  const { data, error } = await a.supabase.rpc('fin_anexar_documento_fornecedor', {
+    p_lancamento_id: b.titulo_id,
+    p_anexo: { url: `${base}/uploads/lancamentos/${nomeArq}`, nome: (b.nome || 'documento.pdf').slice(0, 200), tipo: b.tipo, numero: (b.numero || '').slice(0, 40) },
+  })
+  if (error) throw new ErroAgente(error.message)
+  return data as { ok: true; repetido?: boolean }
+}
