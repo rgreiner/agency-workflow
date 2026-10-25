@@ -273,10 +273,14 @@ interface ItemRegua {
 }
 
 /** Degraus da régua devidos hoje, com o telefone do financeiro do cliente. */
-export async function regua(a: AgenteFlow): Promise<ItemRegua[]> {
+export async function regua(a: AgenteFlow): Promise<(ItemRegua & { pix_copia_cola: string | null })[]> {
   const { data, error } = await a.supabase.rpc('fin_regua_whatsapp', { p_org: a.orgId })
   if (error) throw new Error(error.message)
-  return (data ?? []) as ItemRegua[]
+  // Pix com o valor em toda cobrança (decisão do Rafael: sempre oferecer o Pix).
+  const pix = await criarBuscadorPix(a.supabase)(a.orgId)
+  return ((data ?? []) as ItemRegua[]).map(i => ({
+    ...i, pix_copia_cola: pixDoTitulo(pix, Number(i.valor), i.lancamento_id.replace(/-/g, '').slice(0, 25)) || null,
+  }))
 }
 
 /** Cobranças do mês com NF e boleto prontos, ainda não enviadas — já com os links de 72 h. */
@@ -290,8 +294,9 @@ export async function documentos(a: AgenteFlow, base: string) {
       const x = (anexos ?? []).find(an => an.tipo === tipo && an.url && caminhoDoAnexo(an.url))
       return x?.url ? linkAssinado(base, caminhoDoAnexo(x.url)!) : null
     }
+    // Boleto é opcional até a integração com o BTG: sem ele, vai NF + Pix.
     const nf = link('NF'), boleto = link('Boleto')
-    if (!nf || !boleto) return []
+    if (!nf) return []
     const nfNumero = l.nf_numero ?? (anexos ?? []).find(x => x.tipo === 'NF' && x.numero)?.numero ?? null
     return [{
       ...l, nf_numero: nfNumero, nf_url: nf, boleto_url: boleto,
