@@ -311,3 +311,24 @@ export async function registrarEnvio(a: AgenteFlow, tituloId: string, bucket: st
   if (error) throw new ErroAgente(error.message)
   return { ok: true as const }
 }
+
+// ── NF de fornecedor/veículo que não chegou (mig. 361) ───────────────────────
+
+/** PP e MX/PI sem a NF do fornecedor, no degrau de cobrança de hoje (e-mail → WhatsApp → lembrete). */
+export async function nfFornecedor(a: AgenteFlow) {
+  const { data, error } = await a.supabase.rpc('fin_nf_fornecedor_pendente', { p_org: a.orgId })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as {
+    lancamento_id: string; contato_tipo: 'fornecedor' | 'veiculo'; contato_id: string; fornecedor: string
+    contato_nome: string | null; email: string | null; telefone: string | null; documento: string | null
+    descricao: string; valor: number; vencimento: string; dias: number; bucket: string; canal: 'email' | 'whatsapp'
+  }[]
+}
+
+/** Registro genérico de envio do agente (e-mail ou WhatsApp), para não repetir o degrau. */
+export async function registrarEnvioAgente(a: AgenteFlow, tituloId: string, bucket: string, canal: string, destino: string) {
+  await lancamento(a, tituloId)
+  const { error } = await a.supabase.rpc('fin_registrar_envio_agente', { p_lancamento_id: tituloId, p_bucket: bucket, p_canal: canal, p_destino: destino })
+  if (error) throw new ErroAgente(error.message)
+  return { ok: true as const }
+}
