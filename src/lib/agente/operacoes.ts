@@ -252,3 +252,57 @@ export async function anotar(a: AgenteFlow, tituloId: string, texto: string) {
   if (error) throw new ErroAgente(error.message)
   return { ok: true as const }
 }
+
+// ── Rotina diária (mig. 359): régua e documentos do mês pelo WhatsApp ────────
+
+/** Hoje é dia útil (seg–sex, fora de rh_feriado)? E qual é o 1º dia útil do mês? */
+export async function agenda(a: AgenteFlow) {
+  const { data: hoje, error: e0 } = await a.supabase.rpc('fin_hoje')
+  if (e0) throw new Error(e0.message)
+  const [util, primeiro] = await Promise.all([
+    a.supabase.rpc('fin_dia_util', { p_org: a.orgId, p_data: hoje }),
+    a.supabase.rpc('fin_primeiro_dia_util', { p_org: a.orgId, p_mes: hoje }),
+  ])
+  if (util.error || primeiro.error) throw new Error((util.error ?? primeiro.error)!.message)
+  return { hoje: hoje as string, dia_util: !!util.data, primeiro_dia_util: primeiro.data as string }
+}
+
+interface ItemRegua {
+  lancamento_id: string; bucket: string; passo: number; workspace_id: string; cliente: string
+  contato_nome: string; telefone: string; descricao: string; valor: number; vencimento: string; dias: number
+}
+
+/** Degraus da régua devidos hoje, com o telefone do financeiro do cliente. */
+export async function regua(a: AgenteFlow): Promise<ItemRegua[]> {
+  const { data, error } = await a.supabase.rpc('fin_regua_whatsapp', { p_org: a.orgId })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as ItemRegua[]
+}
+
+/** Cobranças do mês com NF e boleto prontos, ainda não enviadas — já com os links de 72 h. */
+export async function documentos(a: AgenteFlow, base: string) {
+  const { data, error } = await a.supabase.rpc('fin_documentos_whatsapp', { p_org: a.orgId })
+  if (error) throw new Error(error.message)
+  const linhas = (data ?? []) as (Omit<ItemRegua, 'bucket' | 'passo' | 'dias'> & { nf_numero: string | null; anexos: Anexo[] })[]
+  const pix = await criarBuscadorPix(a.supabase)(a.orgId)
+  return linhas.flatMap(({ anexos, ...l }) => {
+    const link = (tipo: string) => {
+      const x = (anexos ?? []).find(an => an.tipo === tipo && an.url && caminhoDoAnexo(an.url))
+      return x?.url ? linkAssinado(base, caminhoDoAnexo(x.url)!) : null
+    }
+    const nf = link('NF'), boleto = link('Boleto')
+    if (!nf || !boleto) return []
+    const nfNumero = l.nf_numero ?? (anexos ?? []).find(x => x.tipo === 'NF' && x.numero)?.numero ?? null
+    return [{
+      ...l, nf_numero: nfNumero, nf_url: nf, boleto_url: boleto,
+      pix_copia_cola: pixDoTitulo(pix, Number(l.valor), l.lancamento_id.replace(/-/g, '').slice(0, 25)) || null,
+    }]
+  })
+}
+
+export async function registrarEnvio(a: AgenteFlow, tituloId: string, bucket: string, telefone: string) {
+  await lancamento(a, tituloId)
+  const { error } = await a.supabase.rpc('fin_registrar_envio_whatsapp', { p_lancamento_id: tituloId, p_bucket: bucket, p_telefone: telefone })
+  if (error) throw new ErroAgente(error.message)
+  return { ok: true as const }
+}

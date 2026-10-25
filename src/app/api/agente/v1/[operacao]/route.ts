@@ -8,7 +8,7 @@
  */
 import { NextResponse } from 'next/server'
 import { autenticarAgente } from '@/lib/agente/auth'
-import { ErroAgente, anotar, cobranca, identificar, prorrogar, titulos, verificar } from '@/lib/agente/operacoes'
+import { ErroAgente, agenda, anotar, cobranca, documentos, identificar, prorrogar, registrarEnvio, regua, titulos, verificar } from '@/lib/agente/operacoes'
 import { logSystemError } from '@/lib/system-error'
 
 export const runtime = 'nodejs'
@@ -34,6 +34,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ operaca
       case 'anotar':
         if (!str(b.titulo_id)) throw new ErroAgente('na v1 a anotação vai sempre num título (titulo_id)')
         dados = await anotar(agente, str(b.titulo_id), str(b.texto)); break
+      case 'agenda': dados = await agenda(agente); break
+      case 'regua': dados = await regua(agente); break
+      case 'documentos': dados = await documentos(agente, base); break
+      case 'registrar-envio': dados = await registrarEnvio(agente, str(b.titulo_id), str(b.bucket), str(b.telefone)); break
       default:
         return NextResponse.json({ ok: false, erro: `operação ${operacao} não existe na v1` }, { status: 501 })
     }
