@@ -503,3 +503,30 @@ export async function empresa(a: AgenteFlow) {
     pagamento: data?.payment_info ?? null, pix_chave: data?.pix_chave ?? null, pix_nome: data?.pix_nome ?? null,
   }
 }
+
+/**
+ * Busca contatos por nome/razão social (cliente, fornecedor, veículo) com os
+ * telefones e e-mails cadastrados — para o agente achar "a Gi do financeiro do
+ * É O Amor" quando o Rafael pede para falar com ela.
+ */
+export async function buscarContatos(a: AgenteFlow, termo: string) {
+  const t = termo.trim()
+  if (t.length < 2) throw new ErroAgente('termo curto demais')
+  const padrao = `%${t.replace(/[%_]/g, '')}%`
+  const tipos: TipoContato[] = ['cliente', 'fornecedor', 'veiculo']
+  const listas = await Promise.all(tipos.map(async tipo => {
+    const extra = tipo === 'cliente' ? ', phone, finance_email' : ''
+    const { data, error } = await a.supabase.from(TABELA[tipo])
+      .select(`id, name, legal_name, telefones, emails${extra}`)
+      .eq('org_id', a.orgId).eq('archived', false)
+      .or(`name.ilike.${padrao},legal_name.ilike.${padrao}`).limit(5)
+    if (error) throw new Error(error.message)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return ((data ?? []) as any[]).map(c => ({
+      tipo, id: c.id as string, nome: c.name as string, empresa: (c.legal_name || c.name) as string,
+      telefones: [...(c.telefones ?? []), ...(c.phone ? [{ tipo: 'Principal', numero: c.phone }] : [])] as { tipo?: string; numero?: string }[],
+      emails: [...(c.emails ?? []), ...(c.finance_email ? [{ tipo: 'Financeiro', email: c.finance_email }] : [])] as { tipo?: string; email?: string }[],
+    }))
+  }))
+  return listas.flat().slice(0, 8)
+}
