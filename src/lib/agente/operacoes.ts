@@ -10,6 +10,9 @@ import 'server-only'
 import { criarBuscadorPix, pixDoTitulo } from '@/lib/pix/cobranca'
 import { caminhoDoAnexo, linkAssinado } from './arquivo'
 import type { AgenteFlow } from './auth'
+import { notaIdDoAnexo } from '@/lib/fiscal/anexo'
+import { danfsePdf, lerNotaParaPdf } from '@/lib/pdf/danfse-render'
+import { lerAnexosFaturamento } from '@/lib/email/faturamento'
 
 export class ErroAgente extends Error {
   constructor(message: string, public status = 400) { super(message) }
@@ -44,7 +47,7 @@ export interface TituloFlow {
   prorrogacoes: number
 }
 
-interface Anexo { url?: string; nome?: string; tipo?: string; numero?: string }
+interface Anexo { url?: string; nome?: string; tipo?: string; numero?: string; emitente?: string }
 
 interface Cadastro {
   id: string; name: string; legal_name: string | null; trade_name?: string | null; tax_id: string | null
@@ -575,4 +578,38 @@ export async function clientesSemFinanceiro(a: AgenteFlow) {
   return ((lista.data ?? []) as { id: string; cliente: string; em_aberto: number }[]).map((c) => ({
     ...c, link: slug ? `${base}/${slug}/workspaces/${c.id}` : null,
   }))
+}
+
+/**
+ * Comissões de PP/MX (mig. 368): as que esperam a NFS-e do Rafael (a_emitir) e
+ * as já emitidas que ainda não foram ao fornecedor/veículo (a_enviar).
+ */
+export async function comissoesNf(a: AgenteFlow) {
+  const { data, error } = await a.supabase.rpc('fin_comissoes_nf', { p_org: a.orgId })
+  if (error) throw new ErroAgente(error.message)
+  return data as {
+    a_emitir: { titulo_id: string; documento: string | null; fornecedor: string; valor: number; vencimento: string | null }[]
+    a_enviar: { titulo_id: string; documento: string | null; fornecedor: string; contato_nome: string | null; email: string; valor: number; vencimento: string | null; nota_numero: string | null }[]
+  }
+}
+
+/**
+ * Os PDFs da AGÊNCIA no título, para mandar ao fornecedor: a NFS-e emitida pelo
+ * Flow (DANFSe gerado na hora, com o estado atual da nota) e o boleto da agência,
+ * se houver. Documento do fornecedor não vai — ele já tem.
+ */
+export async function comissaoDocumentos(a: AgenteFlow, tituloId: string) {
+  const l = await lancamento(a, tituloId)
+  const daAgencia = (l.anexos ?? []).filter(x => x.emitente === 'agencia' && x.url)
+  const arquivos: { nome: string; base64: string }[] = []
+  for (const x of daAgencia) {
+    const notaId = notaIdDoAnexo(x.url!)
+    if (notaId) {
+      const nota = await lerNotaParaPdf(notaId, a.supabase)
+      if (nota && !nota.cancelada) arquivos.push({ nome: x.nome || `${nota.baseNome}.pdf`, base64: (await danfsePdf(nota)).toString('base64') })
+      continue
+    }
+    for (const f of await lerAnexosFaturamento([x as never])) arquivos.push({ nome: f.filename, base64: f.content.toString('base64') })
+  }
+  return { arquivos }
 }

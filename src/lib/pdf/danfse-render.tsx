@@ -2,6 +2,7 @@ import 'server-only'
 import { renderToBuffer } from '@react-pdf/renderer'
 import QRCode from 'qrcode'
 import { createClient } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { desempacotar } from '@/lib/fiscal/dps'
 import { lerDanfse, linkConsulta } from './danfse-data'
 import { DanfseDoc } from './DanfseDoc'
@@ -26,8 +27,14 @@ export interface NotaParaPdf {
   chave: string
 }
 
-export async function lerNotaParaPdf(notaId: string): Promise<NotaParaPdf | null> {
-  const supabase = await createClient()
+export async function lerNotaParaPdf(
+  notaId: string,
+  // A API de agentes passa o cliente da usuária do agente (não há cookie ali).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  cliente?: SupabaseClient<any>,
+): Promise<NotaParaPdf | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase: SupabaseClient<any> = cliente ?? await createClient()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: nota } = await (supabase as any).from('nota_fiscal')
     .select('numero, chave, status, xml_gz_b64, cancel_motivo, substituida_por')
