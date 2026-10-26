@@ -402,3 +402,79 @@ export async function atualizarDespesa(a: AgenteFlow, b: { titulo_id: string; va
   if (error) throw new ErroAgente(error.message)
   return data as { ok: true; mudancas?: string[]; sem_mudanca?: boolean }
 }
+
+// ── Despesa que o Rafael manda para a Flávia (mig. 364) ─────────────────────
+// Mesmo leitor da tela "Lançar despesa" (lerNfFornecedor): o agente não tem um
+// leitor paralelo — o que a tela lê, a Flávia lê igual.
+
+const MIME_DESPESA: Record<string, string> = { 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
+
+/** Opções para classificar: categorias de despesa, centros e contas (com a padrão). */
+export async function opcoesDespesa(a: AgenteFlow) {
+  const { categoriaNomes } = await import('@/lib/finance-categorias')
+  const [cfg, contas] = await Promise.all([
+    a.supabase.from('org_settings').select('finance_categorias, finance_centros_custo').eq('org_id', a.orgId).maybeSingle(),
+    a.supabase.from('contas_financeiras').select('id, nome, ativo, favorita').eq('org_id', a.orgId),
+  ])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const centros = ((cfg.data?.finance_centros_custo ?? []) as any[]).filter(c => !c.arquivado)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ativas = ((contas.data ?? []) as any[]).filter(c => c.ativo)
+  return {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    categorias: categoriaNomes((cfg.data?.finance_categorias ?? []) as any, 'saida'),
+    centros: centros.map(c => String(c.nome)),
+    centro_padrao: (centros.find(c => c.padrao)?.nome as string | undefined) ?? null,
+    contas: ativas.map(c => ({ id: c.id as string, nome: c.nome as string })),
+    conta_padrao: ((ativas.find(c => c.favorita) ?? ativas[0])?.id as string | undefined) ?? null,
+  }
+}
+
+/** Lê o(s) documento(s) com o leitor da tela, guarda no volume e devolve a leitura + os anexos prontos. */
+export async function lerDespesa(a: AgenteFlow, arquivos: { base64: string; mime: string; nome: string }[]) {
+  const { lerNfFornecedor } = await import('@/lib/ai/nf-fornecedor')
+  const { chaveNome } = await import('@/lib/nomes')
+  const opcoes = await opcoesDespesa(a)
+  const validos = arquivos.slice(0, 5).filter(f => MIME_DESPESA[f.mime])
+  if (!validos.length) return { opcoes, lido: null, anexos: [] }
+  const bufs = validos.map(f => ({ bytes: Buffer.from(f.base64, 'base64'), mimeType: f.mime }))
+  if (bufs.some(b => !b.bytes.length || b.bytes.length > MAX_PDF)) throw new ErroAgente('arquivo vazio ou maior que 10 MB')
+
+  const { writeFile, mkdir } = await import('node:fs/promises')
+  const path = await import('node:path')
+  const { randomUUID } = await import('node:crypto')
+  const dir = path.join(process.env.UPLOAD_DIR || '/app/uploads', 'lancamentos')
+  await mkdir(dir, { recursive: true })
+  const base = (process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.oneaone.com.br').replace(/\/$/, '')
+  const anexos = []
+  for (let i = 0; i < validos.length; i++) {
+    const nomeArq = `${randomUUID()}.${MIME_DESPESA[validos[i].mime]}`
+    await writeFile(path.join(dir, nomeArq), bufs[i].bytes)
+    anexos.push({ url: `${base}/uploads/lancamentos/${nomeArq}`, nome: (validos[i].nome || nomeArq).slice(0, 200), tipo: 'Outro', numero: '' })
+  }
+
+  const lido = await lerNfFornecedor(a.orgId, bufs, opcoes.categorias)
+  if (!lido) return { opcoes, lido: null, anexos }
+  const { data: forns } = await a.supabase.from('fornecedores').select('id, name, legal_name, tax_id').eq('org_id', a.orgId).eq('archived', false)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lista = (forns ?? []) as any[]
+  let achado = lido.cnpj ? lista.find(f => String(f.tax_id ?? '').replace(/\D/g, '') === lido.cnpj) : null
+  if (!achado && lido.emitente) {
+    const k = chaveNome(lido.emitente)
+    achado = lista.find(f => chaveNome(f.legal_name ?? '') === k || chaveNome(f.name ?? '') === k) ?? null
+  }
+  // O tipo do anexo segue o que foi lido (cupom/NF → NF; boleto → Boleto).
+  const tipoAnexo = lido.numero ? 'NF' : 'Outro'
+  return {
+    opcoes,
+    lido: { ...lido, fornecedor_id: achado?.id ?? null, fornecedor_nome: achado?.name ?? null },
+    anexos: anexos.map(x => ({ ...x, tipo: tipoAnexo, numero: lido.numero ?? '' })),
+  }
+}
+
+/** Lança a despesa aprovada (mesmas réguas da tela). */
+export async function lancarDespesa(a: AgenteFlow, d: Record<string, unknown>) {
+  const { data, error } = await a.supabase.rpc('fin_lancar_despesa_agente', { p_org: a.orgId, p_data: d })
+  if (error) throw new ErroAgente(error.message)
+  return { lancamento_id: data as string }
+}
