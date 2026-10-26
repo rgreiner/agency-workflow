@@ -673,3 +673,13 @@ export async function cancelarNotaFiscal(a: AgenteFlow, notaId: string, motivo: 
   }
   return { ok: true as const }
 }
+
+/** Rescisões em andamento (mig. 370): só datas e cargo, nada de CPF/salário. */
+export async function rescisoes(a: AgenteFlow) {
+  const { data, error } = await a.supabase.rpc('fin_rescisoes', { p_org: a.orgId })
+  if (error) throw new ErroAgente(error.message)
+  return data as {
+    colaborador_id: string; nome: string; cargo: string | null; status: string; aviso_modo: string | null
+    aviso_ini: string | null; aviso_fim: string | null; demissao: string | null; ultimo_dia: string | null; dias_uteis_ate_ultimo: number | null
+  }[]
+}
