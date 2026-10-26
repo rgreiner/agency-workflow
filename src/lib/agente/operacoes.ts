@@ -530,3 +530,31 @@ export async function buscarContatos(a: AgenteFlow, termo: string) {
   }))
   return listas.flat().slice(0, 8)
 }
+
+/**
+ * Detalhe de títulos para a MESA do Rafael decidir sem abrir o Flow: documento
+ * (PP/MX), contato, cliente da PP, valor, vencimento, situação e o que já está anexado.
+ */
+export async function titulosDetalhe(a: AgenteFlow, ids: string[]) {
+  const validos = ids.filter(id => /^[0-9a-f-]{36}$/i.test(id)).slice(0, 30)
+  if (!validos.length) return []
+  const { data, error } = await a.supabase.from('lancamentos_doc')
+    .select('id, org_id, doc_serie, doc_numero, tipo, contato_tipo, contato_nome, descricao, valor, vencimento, situacao, anexos, origem_tipo')
+    .in('id', validos)
+  if (error) throw new Error(error.message)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const linhas = ((data ?? []) as any[]).filter(l => l.org_id === a.orgId)
+  return Promise.all(linhas.map(async l => {
+    const cliente = l.origem_tipo === 'producao' || l.origem_tipo === 'midia'
+      ? ((await a.supabase.rpc('fin_cliente_do_titulo', { p_lancamento_id: l.id })).data as { cliente?: string } | null)?.cliente ?? null
+      : null
+    return {
+      id: l.id as string,
+      documento: [l.doc_serie, l.doc_numero].filter(Boolean).join(' ') || null,
+      tipo: l.tipo as string, contato_tipo: l.contato_tipo as string | null, contato_nome: l.contato_nome as string | null,
+      cliente, descricao: l.descricao as string | null, valor: Math.abs(Number(l.valor)), vencimento: l.vencimento as string | null,
+      situacao: l.situacao as string,
+      anexos: ((l.anexos ?? []) as Anexo[]).map(x => ({ tipo: x.tipo ?? 'Outro', numero: x.numero ?? '', nome: x.nome ?? '', emitente: (x as { emitente?: string }).emitente ?? null })),
+    }
+  }))
+}
