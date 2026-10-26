@@ -1,6 +1,7 @@
 import { AlertTriangle, Clock } from 'lucide-react'
 import { convitePorToken, cotacaoFechada, type DadosFornecedor } from '@/lib/cotacao-server'
 import { formatDateBR } from '@/lib/midia'
+import { fmtCpfCnpj } from '@/lib/telefone'
 import { RespostaForm } from './RespostaForm'
 
 export const dynamic = 'force-dynamic'
@@ -26,6 +27,8 @@ export default async function CotacaoPage({ params }: { params: Promise<{ token:
   if (!cv) return <Aviso titulo="Link inválido" texto="Este link de cotação não existe ou foi substituído. Peça um novo à agência." />
 
   const contato = [cv.responsavel, cv.responsavel_email].filter(Boolean).join(' · ')
+  const cli = cv.cliente
+  const comissao = Number(cv.comissao_pct ?? 0) || 0
   if (cotacaoFechada(cv)) {
     return <Aviso icone="relogio" titulo="Cotação encerrada"
       texto={`O prazo para esta cotação terminou${cv.prazo_resposta ? ` em ${formatDateBR(cv.prazo_resposta)}` : ''}.${contato ? ` Se ainda quiser enviar, fale com ${contato}.` : ''}`} />
@@ -48,6 +51,34 @@ export default async function CotacaoPage({ params }: { params: Promise<{ token:
         <div className="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-sm text-gray-600">
           {cv.prazo_resposta && <span>Responder até <b className="text-gray-900">{formatDateBR(cv.prazo_resposta)}</b></span>}
           {contato && <span>Dúvidas: {contato}</span>}
+        </div>
+      </div>
+
+      {/* Fornecedores pediram: alguns conferem o cadastro do cliente antes de cotar, e a
+          comissão da agência entra na conta do preço. */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-5 mb-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+        {cli?.nome && (
+          <div>
+            <p className="text-xs font-medium text-gray-400 mb-1">Cliente</p>
+            <p className="font-medium text-gray-900">{cli.nome}</p>
+            {cli.razao && cli.razao !== cli.nome && <p className="text-gray-600">{cli.razao}</p>}
+            {cli.cnpj && <p className="text-gray-600 tabular-nums">CNPJ {fmtCpfCnpj(cli.cnpj)}</p>}
+            {(cli.endereco || cli.cidade) && <p className="text-gray-500">{[cli.endereco, [cli.cidade, cli.uf].filter(Boolean).join('/')].filter(Boolean).join(' · ')}</p>}
+          </div>
+        )}
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs font-medium text-gray-400 mb-1">Faturamento</p>
+            <p className="text-gray-900">{cv.faturar === 'contra_agencia'
+              ? <>Nota fiscal em nome da agência (<b>{cv.agencia}</b>)</>
+              : <>Nota fiscal em nome do cliente{cli?.razao || cli?.nome ? <> (<b>{cli.razao || cli.nome}</b>)</> : ''}</>}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-400 mb-1">Comissão da agência</p>
+            {comissao > 0
+              ? <p className="text-gray-900"><b>{comissao.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%</b> sobre o valor do pedido. A agência emite a nota fiscal da comissão para o seu CNPJ.</p>
+              : <p className="text-gray-900">Sem comissão da agência neste pedido.</p>}
+          </div>
         </div>
       </div>
 

@@ -88,6 +88,10 @@ export interface ConvitePublico {
   aberto_em: string | null
   /** Itens do orçamento como estão gravados (para aplicar a proposta e servir a imagem). */
   detalhe_itens: ({ nome: string; imagem?: string } & Record<string, unknown>)[] | null
+  /** Mig. 370: para quem é, contra quem faturar e a comissão da agência. */
+  cliente: { nome: string | null; razao: string | null; cnpj: string | null; cidade: string | null; uf: string | null; endereco: string | null } | null
+  faturar: string | null
+  comissao_pct: number | string | null
 }
 
 export interface DadosFornecedor { contato: string; cnpj: string; email: string; whatsapp: string }

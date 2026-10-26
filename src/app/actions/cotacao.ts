@@ -36,6 +36,18 @@ export interface NovaCotacao {
   tag: string
 }
 
+/** O que o e-mail diz do pedido: título, para quem é e a comissão da agência. */
+type DocEmail = { titulo: string; cliente: string; comissao: number }
+async function docDoOrcamento(supabase: Sb, producaoId: string): Promise<DocEmail> {
+  const { data } = await db(supabase).from('producao')
+    .select('titulo, bv_pct, workspace:workspace_id(name, legal_name)').eq('id', producaoId).single()
+  return {
+    titulo: data?.titulo ?? 'Orçamento',
+    cliente: data?.workspace?.legal_name || data?.workspace?.name || '',
+    comissao: Number(data?.bv_pct ?? 0) || 0,
+  }
+}
+
 async function contexto(orgSlug: string) {
   const user = await getUsuario()
   if (!user) return null
@@ -73,7 +85,7 @@ export async function criarCotacao(orgSlug: string, producaoId: string, input: N
   }).select('id').single()
   if (e1 || !cot) return { error: e1?.code === '42501' ? 'Só gerente ou admin pode pedir cotação.' : 'Não foi possível criar a cotação.' }
 
-  const r = await convidar(ctx, cot.id, ids, prod.titulo, itens, input.prazo || null)
+  const r = await convidar(ctx, cot.id, ids, await docDoOrcamento(supabase, producaoId), itens, input.prazo || null)
   if (r.error) return r
 
   const tag = input.tag.trim().slice(0, 60)
@@ -89,20 +101,20 @@ export async function adicionarFornecedores(orgSlug: string, cotacaoId: string, 
   const ctx = await contexto(orgSlug)
   if (!ctx) return { error: 'Não autenticado' }
   const { data: cot } = await db(ctx.supabase).from('cotacoes')
-    .select('id, itens, prazo_resposta, producao_id, producao:producao_id(titulo)').eq('id', cotacaoId).single()
+    .select('id, itens, prazo_resposta, producao_id').eq('id', cotacaoId).single()
   if (!cot) return { error: 'Cotação não encontrada' }
   const { data: ja } = await db(ctx.supabase).from('cotacao_convites').select('fornecedor_id').eq('cotacao_id', cotacaoId)
   const existentes = new Set(((ja ?? []) as { fornecedor_id: string }[]).map(x => x.fornecedor_id))
   const novos = [...new Set(fornecedorIds)].filter(id => !existentes.has(id))
   if (!novos.length) return { error: 'Esses fornecedores já foram convidados.' }
-  const r = await convidar(ctx, cotacaoId, novos, cot.producao?.titulo ?? 'Orçamento', cot.itens, cot.prazo_resposta)
+  const r = await convidar(ctx, cotacaoId, novos, await docDoOrcamento(ctx.supabase, cot.producao_id), cot.itens, cot.prazo_resposta)
   revalidatePath(`/${orgSlug}/producao/orcamento/${cot.producao_id}`)
   return r
 }
 
 async function convidar(
   ctx: NonNullable<Awaited<ReturnType<typeof contexto>>>, cotacaoId: string, ids: string[],
-  titulo: string, itens: CotacaoItem[], prazo: string | null,
+  doc: DocEmail, itens: CotacaoItem[], prazo: string | null,
 ): Promise<{ error?: string; enviados?: number; semEmail?: number }> {
   const { supabase, org, user } = ctx
   const { data: forns } = await db(supabase).from('fornecedores').select('id, name, emails').eq('org_id', org.id).in('id', ids)
@@ -117,7 +129,7 @@ async function convidar(
   const nomes = new Map(lista.map(f => [f.id, f.name]))
   for (const c of convites as { id: string; token: string; email_para: string | null; fornecedor_id: string }[]) {
     if (!c.email_para) continue
-    const ok = await enviarEmail(supabase, user.id, { para: c.email_para, fornecedor: nomes.get(c.fornecedor_id) ?? '', agencia: org.name, titulo, itens, prazo, token: c.token })
+    const ok = await enviarEmail(supabase, user.id, { para: c.email_para, fornecedor: nomes.get(c.fornecedor_id) ?? '', agencia: org.name, doc, itens, prazo, token: c.token })
     if (ok) {
       enviados++
       await db(supabase).from('cotacao_convites').update({ email_enviado_em: new Date().toISOString() }).eq('id', c.id)
@@ -128,7 +140,7 @@ async function convidar(
 
 async function enviarEmail(
   supabase: Sb, userId: string,
-  o: { para: string; fornecedor: string; agencia: string; titulo: string; itens: CotacaoItem[]; prazo: string | null; token: string },
+  o: { para: string; fornecedor: string; agencia: string; doc: DocEmail; itens: CotacaoItem[]; prazo: string | null; token: string },
 ): Promise<boolean> {
   const dominio = remetenteDominio()
   const lista = o.itens.map(it =>
@@ -137,13 +149,16 @@ async function enviarEmail(
   const { error } = await sendMail({
     from: dominio ? `${o.agencia} <flow@${dominio}>` : undefined,
     to: o.para,
-    subject: `Pedido de cotação — ${o.titulo}`,
+    subject: `Pedido de cotação — ${o.doc.titulo}`,
     html: emailLayout({
       brand: o.agencia,
       heading: 'Pedido de cotação',
       bodyHtml: `<p>Olá${o.fornecedor ? `, ${esc(o.fornecedor)}` : ''}!</p>
-<p>A <b>${esc(o.agencia)}</b> está cotando <b>${esc(o.titulo)}</b> e gostaria da sua proposta${o.prazo ? ` até <b>${dataBR(o.prazo)}</b>` : ''}.</p>
+<p>A <b>${esc(o.agencia)}</b> está cotando <b>${esc(o.doc.titulo)}</b>${o.doc.cliente ? ` para o cliente <b>${esc(o.doc.cliente)}</b>` : ''} e gostaria da sua proposta${o.prazo ? ` até <b>${dataBR(o.prazo)}</b>` : ''}.</p>
 <ul style="padding-left:18px;margin:16px 0">${lista}</ul>
+<p>${o.doc.comissao > 0
+  ? `Comissão da agência: <b>${o.doc.comissao.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%</b> sobre o valor do pedido.`
+  : 'Sem comissão da agência neste pedido.'}</p>
 <p>No link abaixo você vê os detalhes e os anexos e preenche os valores — por unidade ou total. Se preferir, anexe o seu orçamento em PDF.</p>`,
       cta: { label: 'Enviar minha proposta', url: urlCotacao(o.token) },
       footerNote: 'Este link é exclusivo da sua empresa. Dá para corrigir a proposta pelo mesmo link até o prazo.',
@@ -162,13 +177,13 @@ export async function reenviarConvite(orgSlug: string, conviteId: string): Promi
   if (!ctx) return { error: 'Não autenticado' }
   const { supabase, org, user } = ctx
   const { data: cv } = await db(supabase).from('cotacao_convites')
-    .select('id, token, fornecedor:fornecedor_id(name, emails), cotacao:cotacao_id(itens, prazo_resposta, producao_id, producao:producao_id(titulo))')
+    .select('id, token, fornecedor:fornecedor_id(name, emails), cotacao:cotacao_id(itens, prazo_resposta, producao_id)')
     .eq('id', conviteId).single()
   if (!cv) return { error: 'Convite não encontrado' }
   const para = primeiroEmail(cv.fornecedor?.emails)
   if (!para) return { error: 'Fornecedor sem e-mail no cadastro.' }
   const ok = await enviarEmail(supabase, user.id, {
-    para, fornecedor: cv.fornecedor?.name ?? '', agencia: org.name, titulo: cv.cotacao?.producao?.titulo ?? 'Orçamento',
+    para, fornecedor: cv.fornecedor?.name ?? '', agencia: org.name, doc: await docDoOrcamento(supabase, cv.cotacao?.producao_id),
     itens: cv.cotacao?.itens ?? [], prazo: cv.cotacao?.prazo_resposta ?? null, token: cv.token,
   })
   if (!ok) return { error: 'O e-mail não saiu — o erro ficou registrado em Configurações → Erros.' }
