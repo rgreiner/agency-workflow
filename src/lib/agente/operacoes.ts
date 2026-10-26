@@ -478,3 +478,11 @@ export async function lancarDespesa(a: AgenteFlow, d: Record<string, unknown>) {
   if (error) throw new ErroAgente(error.message)
   return { lancamento_id: data as string }
 }
+
+/** Cliente da PP/MX (para repassar a NF/boleto do fornecedor) — mig. 366. */
+export async function clienteDoTitulo(a: AgenteFlow, tituloId: string) {
+  await lancamento(a, tituloId)
+  const { data, error } = await a.supabase.rpc('fin_cliente_do_titulo', { p_lancamento_id: tituloId })
+  if (error) throw new ErroAgente(error.message)
+  return data as { workspace_id: string; cliente: string; email: string | null; contato_nome: string | null; documento: string | null } | null
+}

@@ -8,7 +8,7 @@
  */
 import { NextResponse } from 'next/server'
 import { autenticarAgente } from '@/lib/agente/auth'
-import { ErroAgente, agenda, anexarDocumento, anotar, atualizarDespesa, despesasAbertas, lancarDespesa, lerDespesa, opcoesDespesa, cobranca, documentos, documentosFornecedor, identificar, nfFornecedor, prorrogar, registrarEnvio, registrarEnvioAgente, regua, titulos, verificar } from '@/lib/agente/operacoes'
+import { ErroAgente, agenda, clienteDoTitulo, anexarDocumento, anotar, atualizarDespesa, despesasAbertas, lancarDespesa, lerDespesa, opcoesDespesa, cobranca, documentos, documentosFornecedor, identificar, nfFornecedor, prorrogar, registrarEnvio, registrarEnvioAgente, regua, titulos, verificar } from '@/lib/agente/operacoes'
 import { logSystemError } from '@/lib/system-error'
 
 export const runtime = 'nodejs'
@@ -53,6 +53,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ operaca
       case 'ler-despesa':
         dados = await lerDespesa(agente, Array.isArray(b.arquivos) ? (b.arquivos as { base64: string; mime: string; nome: string }[]) : []); break
       case 'lancar-despesa': dados = await lancarDespesa(agente, (b.dados ?? {}) as Record<string, unknown>); break
+      case 'cliente-do-titulo': dados = await clienteDoTitulo(agente, str(b.titulo_id)); break
       default:
         return NextResponse.json({ ok: false, erro: `operação ${operacao} não existe na v1` }, { status: 501 })
     }
