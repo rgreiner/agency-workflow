@@ -27,6 +27,8 @@ export interface ConviteView {
   email_para: string | null; telefone: string | null
   email_enviado_em: string | null; whatsapp_em: string | null; aberto_em: string | null
   respondido_em: string | null; recusado_em: string | null
+  /** Lembretes automáticos já enviados (mig. 372). */
+  lembretes: number
   resposta: (Resposta & { recusa?: string }) | { recusa?: string } | null
   resposta_anexos: ArquivoRef[]
   dados_fornecedor: { contato: string; cnpj: string; email: string; whatsapp: string } | null
@@ -232,6 +234,7 @@ function LinhaConvite({ v, c, orgSlug, titulo, agencia, itens, onAplicar }: {
           <span className="truncate">{v.fornecedor}</span>
         </button>
         <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium', STATUS[st].cls)}>{STATUS[st].label}</span>
+        {v.lembretes > 0 && !v.respondido_em && <span className="text-[11px] text-gray-400" title="Lembretes automáticos por e-mail (dias úteis, 9h, até o prazo)">{v.lembretes} lembrete{v.lembretes === 1 ? '' : 's'}</span>}
         {menor && menor.length > 0 && <span className="text-xs text-gray-500">a partir de {formatBRL(Math.min(...menor))}</span>}
         <span className="flex-1" />
         {falta && (

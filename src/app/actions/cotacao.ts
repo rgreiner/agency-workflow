@@ -3,10 +3,10 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
-import { sendMail, remetenteDominio } from '@/lib/email/send'
-import { emailLayout } from '@/lib/email/layout'
+import { sendMail } from '@/lib/email/send'
+import { assuntoCotacao, htmlCotacao, remetenteCotacao } from '@/lib/email/cotacao'
 import { logSystemError } from '@/lib/system-error'
-import { novoToken, urlCotacao } from '@/lib/cotacao-server'
+import { novoToken } from '@/lib/cotacao-server'
 import { MAX_FAIXAS, type ArquivoRef, type CotacaoItem } from '@/lib/cotacao'
 
 /**
@@ -19,8 +19,6 @@ type Sb = Awaited<ReturnType<typeof createClient>>
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = (s: Sb) => s as any
 
-const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
-const dataBR = (d: string | null) => (d ? d.split('-').reverse().join('/') : '')
 const primeiroEmail = (emails: unknown): string | null => {
   const lista = Array.isArray(emails) ? emails as { email?: string }[] : []
   return lista.map(e => (e.email ?? '').trim()).find(e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) ?? null
@@ -142,27 +140,10 @@ async function enviarEmail(
   supabase: Sb, userId: string,
   o: { para: string; fornecedor: string; agencia: string; doc: DocEmail; itens: CotacaoItem[]; prazo: string | null; token: string },
 ): Promise<boolean> {
-  const dominio = remetenteDominio()
-  const lista = o.itens.map(it =>
-    `<li style="margin-bottom:6px"><b>${esc(it.nome)}</b>${it.faixas.length && !(it.faixas.length === 1 && it.faixas[0] === 1)
-      ? ` — ${it.faixas.map(n => n.toLocaleString('pt-BR')).join(' / ')} un.` : ''}</li>`).join('')
+  const dados = { fornecedor: o.fornecedor, agencia: o.agencia, titulo: o.doc.titulo, cliente: o.doc.cliente, comissao: o.doc.comissao, itens: o.itens, prazo: o.prazo, token: o.token }
   const { error } = await sendMail({
-    from: dominio ? `${o.agencia} <flow@${dominio}>` : undefined,
-    to: o.para,
-    subject: `Pedido de cotação — ${o.doc.titulo}`,
-    html: emailLayout({
-      brand: o.agencia,
-      heading: 'Pedido de cotação',
-      bodyHtml: `<p>Olá${o.fornecedor ? `, ${esc(o.fornecedor)}` : ''}!</p>
-<p>A <b>${esc(o.agencia)}</b> está cotando <b>${esc(o.doc.titulo)}</b>${o.doc.cliente ? ` para o cliente <b>${esc(o.doc.cliente)}</b>` : ''} e gostaria da sua proposta${o.prazo ? ` até <b>${dataBR(o.prazo)}</b>` : ''}.</p>
-<ul style="padding-left:18px;margin:16px 0">${lista}</ul>
-<p>${o.doc.comissao > 0
-  ? `Comissão da agência: <b>${o.doc.comissao.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%</b> sobre o valor do pedido.`
-  : 'Sem comissão da agência neste pedido.'}</p>
-<p>No link abaixo você vê os detalhes e os anexos e preenche os valores — por unidade ou total. Se preferir, anexe o seu orçamento em PDF.</p>`,
-      cta: { label: 'Enviar minha proposta', url: urlCotacao(o.token) },
-      footerNote: 'Este link é exclusivo da sua empresa. Dá para corrigir a proposta pelo mesmo link até o prazo.',
-    }),
+    from: remetenteCotacao(o.agencia), to: o.para,
+    subject: assuntoCotacao(dados, 'convite'), html: htmlCotacao(dados, 'convite'),
   })
   if (error) {
     await logSystemError(supabase, { userId, context: 'cotacao: envio de e-mail', error: `${o.para}: ${error}` })

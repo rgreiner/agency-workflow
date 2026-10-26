@@ -43,7 +43,7 @@ export default async function EditarOrcamentoPage({
   const sb = supabase as any
   const [{ data: cots }, { data: forns }, { data: org }, { data: quemDecidiu }, { count: contatosPortal }] = await Promise.all([
     sb.from('cotacoes')
-      .select('id, created_at, prazo_resposta, encerrada, origem, mensagem, anexos, itens, convites:cotacao_convites(id, fornecedor_id, token, email_para, email_enviado_em, whatsapp_em, aberto_em, respondido_em, recusado_em, resposta, resposta_anexos, dados_fornecedor, fornecedor:fornecedor_id(name, telefones))')
+      .select('id, created_at, prazo_resposta, encerrada, origem, mensagem, anexos, itens, convites:cotacao_convites(id, fornecedor_id, token, lembretes, email_para, email_enviado_em, whatsapp_em, aberto_em, respondido_em, recusado_em, resposta, resposta_anexos, dados_fornecedor, fornecedor:fornecedor_id(name, telefones))')
       .eq('producao_id', producaoId).order('created_at', { ascending: false }),
     sb.from('fornecedores').select('id, name, tipo, tags, emails, telefones').eq('org_id', p.org_id).eq('archived', false).order('name'),
     sb.from('organizations').select('name').eq('id', p.org_id).single(),
@@ -62,7 +62,7 @@ export default async function EditarOrcamentoPage({
       id: v.id, fornecedor_id: v.fornecedor_id, fornecedor: v.fornecedor?.name ?? '—', url: urlCotacao(v.token),
       email_para: v.email_para, telefone: telefoneDe(v.fornecedor ?? {}),
       email_enviado_em: v.email_enviado_em, whatsapp_em: v.whatsapp_em, aberto_em: v.aberto_em,
-      respondido_em: v.respondido_em, recusado_em: v.recusado_em,
+      respondido_em: v.respondido_em, recusado_em: v.recusado_em, lembretes: v.lembretes ?? 0,
       resposta: v.resposta, resposta_anexos: v.resposta_anexos ?? [], dados_fornecedor: v.dados_fornecedor,
     })),
   }))
