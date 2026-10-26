@@ -198,7 +198,8 @@ export async function loadProducaoDoc(supabase: any, orgId: string, producaoId: 
       const pgto = String(o?.pgto ?? '')
       const pgtoLongo = !!o?.proposta && pgto.length > 16
       return {
-        fornecedor: o?.fornecedor_id ? (fornMap.get(o.fornecedor_id) ?? '—') : '—',
+        // Opção proposta pelo fornecedor ("Couchê 120g") sai colada ao nome dele.
+        fornecedor: (o?.fornecedor_id ? (fornMap.get(o.fornecedor_id) ?? '—') : '—') + (o?.variante ? ` · ${o.variante}` : ''),
         nOrc: o?.n_orc ?? '', pgto: pgtoLongo ? '' : pgto, quant: o?.quant ?? '',
         valorUnit, total, selecionado: !!o?.selecionado,
         // Várias faixas do mesmo fornecedor (500/1000/2000) = a proposta sai uma vez só.

@@ -231,8 +231,12 @@ function LinhaConvite({ v, c, orgSlug, titulo, agencia, itens, onAplicar }: {
                 const linhas = r.precos.map(p => ({ p, v: precoResolvido(p) })).filter(x => x.v)
                 if (!linhas.length) return <tr key={r.idx} className="text-gray-400"><td className="py-1">{nome}</td><td colSpan={3} className="py-1 text-right">sem valor</td></tr>
                 return linhas.map(({ p, v }, j) => (
-                  <tr key={`${r.idx}-${p.quant}`} className="border-t border-gray-50">
-                    <td className="py-1 text-gray-800">{j === 0 ? nome : ''}{j === 0 && r.obs && <span className="block text-xs text-gray-500">{r.obs}</span>}</td>
+                  <tr key={`${r.idx}-${p.variante ?? ''}-${p.quant}`} className="border-t border-gray-50">
+                    <td className="py-1 text-gray-800">
+                      {j === 0 ? nome : ''}{j === 0 && r.obs && <span className="block text-xs text-gray-500">{r.obs}</span>}
+                      {/* Opção do fornecedor (material/formato): rótulo na primeira linha dela. */}
+                      {p.variante && (j === 0 || linhas[j - 1].p.variante !== p.variante) && <span className="block text-xs font-medium text-orange-700">{p.variante}</span>}
+                    </td>
                     <td className="py-1 text-right tabular-nums">{p.quant.toLocaleString('pt-BR')}</td>
                     <td className="py-1 text-right tabular-nums">{formatBRL(v!.unit)}</td>
                     <td className="py-1 text-right tabular-nums font-medium">{formatBRL(v!.total)}</td>

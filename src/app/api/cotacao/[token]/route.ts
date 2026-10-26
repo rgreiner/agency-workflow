@@ -13,7 +13,7 @@
  */
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-import { aplicarResposta, MAX_FOTOS_ITEM, type ArquivoRef, type ItemOrcBase, type Resposta } from '@/lib/cotacao'
+import { aplicarResposta, MAX_FOTOS_ITEM, MAX_LINHAS_ITEM, MAX_QUANT, type ArquivoRef, type ItemOrcBase, type Resposta } from '@/lib/cotacao'
 import { convitePorToken, cotacaoFechada, MAX_ARQUIVOS, type DadosFornecedor } from '@/lib/cotacao-server'
 import { somenteDigitos } from '@/lib/telefone'
 
@@ -50,17 +50,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
   if (body.acao !== 'responder') return NextResponse.json({ error: 'Ação inválida' }, { status: 400 })
 
-  // ── Proposta: só itens e faixas que foram pedidos; números saneados. ──
+  // ── Proposta: só itens que foram pedidos; quantidades e opções são do fornecedor
+  //    (ele pode trocar, somar faixas e propor variações), com números saneados. ──
   const r = body.resposta ?? {}
   const pasta = `cotacao-privado/${cv.org_id}/${cv.cotacao_id}/${cv.id}/`
   const itensIn = Array.isArray(r.itens) ? r.itens : []
   const itens = cv.itens.map(pedido => {
     const vin = itensIn.find(x => x && x.idx === pedido.idx)
     const naoFornece = !!vin?.nao_fornece
-    const precos = pedido.faixas.map(quant => {
-      const p = Array.isArray(vin?.precos) ? vin.precos.find(x => x && x.quant === quant) : undefined
-      return { quant, unit: naoFornece ? null : num(p?.unit), total: naoFornece ? null : num(p?.total) }
-    })
+    const vistos = new Set<string>()
+    const precos = naoFornece ? [] : (Array.isArray(vin?.precos) ? vin.precos : [])
+      .map(p => {
+        const quant = typeof p?.quant === 'number' && Number.isInteger(p.quant) && p.quant > 0 && p.quant <= MAX_QUANT ? p.quant : null
+        return { quant, unit: num(p?.unit), total: num(p?.total), variante: txt(p?.variante, 80) }
+      })
+      // Linha sem quantidade ou sem preço não é proposta; a mesma opção+quantidade vale uma vez.
+      .filter((p): p is { quant: number; unit: number | null; total: number | null; variante: string } => {
+        if (p.quant == null || (!p.unit && !p.total)) return false
+        const k = `${p.variante.toLowerCase()}|${p.quant}`
+        if (vistos.has(k)) return false
+        vistos.add(k); return true
+      })
+      .slice(0, MAX_LINHAS_ITEM)
     // Fotos do produto: só imagens que ele mesmo subiu por este link.
     const fotos = (Array.isArray(vin?.fotos) ? vin.fotos : [])
       .filter(a => a && typeof a.chave === 'string' && a.chave.startsWith(pasta) && !a.chave.includes('..') && /\.(png|jpe?g|webp)$/i.test(a.chave))

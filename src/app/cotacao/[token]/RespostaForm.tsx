@@ -1,20 +1,25 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Camera, Check, FileText, Loader2, Paperclip, Upload, X } from 'lucide-react'
+import { Camera, Check, FileText, Loader2, Paperclip, Plus, Upload, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDateBR, parseMoney } from '@/lib/midia'
-import { fmtBR, fmtBRUnit, MAX_FOTOS_ITEM, type ArquivoRef, type CotacaoItem, type Resposta } from '@/lib/cotacao'
+import { fmtBR, fmtBRUnit, MAX_FOTOS_ITEM, MAX_LINHAS_ITEM, type ArquivoRef, type CotacaoItem, type Resposta } from '@/lib/cotacao'
 import { downscaleImage } from '@/lib/image-resize'
 
 const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-base sm:text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white'
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 const cardCls = 'bg-white rounded-2xl border border-gray-200 p-5'
 
-type Preco = { quant: number; unit: string; total: string }
-type ItemState = { idx: number; nao_fornece: boolean; precos: Preco[]; obs: string; fotos: ArquivoRef[] }
+/** Linha de preço: quantidade é do fornecedor (vem preenchida com a pedida, mas ele troca). */
+type Linha = { quant: string; unit: string; total: string }
+/** Opção do fornecedor para o item (material, formato…). A primeira, sem nome, é a pedida. */
+type Grupo = { variante: string; linhas: Linha[] }
+type ItemState = { idx: number; nao_fornece: boolean; grupos: Grupo[]; obs: string; fotos: ArquivoRef[] }
 
-const intBR = (n: number) => n.toLocaleString('pt-BR')
+const qtd = (s: string) => { const n = parseInt((s ?? '').replace(/\D/g, ''), 10); return Number.isFinite(n) && n > 0 ? n : 0 }
+const linhaVazia = (quant = ''): Linha => ({ quant, unit: '', total: '' })
+const nLinhas = (it: ItemState) => it.grupos.reduce((n, g) => n + g.linhas.length, 0)
 
 export function RespostaForm({
   token, mensagem, itens, anexosAgencia, respostaAnterior, anexosAnteriores, dados: dadosIniciais, jaRespondeu, jaRecusou, prazo,
@@ -26,13 +31,16 @@ export function RespostaForm({
 }) {
   const [estado, setEstado] = useState<ItemState[]>(() => itens.map(it => {
     const ant = respostaAnterior?.itens.find(r => r.idx === it.idx)
-    return {
-      idx: it.idx, nao_fornece: !!ant?.nao_fornece, obs: ant?.obs ?? '', fotos: ant?.fotos ?? [],
-      precos: it.faixas.map(q => {
-        const p = ant?.precos.find(x => x.quant === q)
-        return { quant: q, unit: p?.unit ? fmtBRUnit(p.unit) : '', total: p?.total ? fmtBR(p.total) : '' }
-      }),
+    // Resposta anterior volta como ele deixou; senão, as quantidades pedidas numa opção só.
+    const grupos: Grupo[] = []
+    for (const p of ant?.precos ?? []) {
+      const v = p.variante ?? ''
+      let g = grupos.find(x => x.variante === v)
+      if (!g) { g = { variante: v, linhas: [] }; grupos.push(g) }
+      g.linhas.push({ quant: String(p.quant), unit: p.unit ? fmtBRUnit(p.unit) : '', total: p.total ? fmtBR(p.total) : '' })
     }
+    if (!grupos.length) grupos.push({ variante: '', linhas: it.faixas.map(q => linhaVazia(String(q))) })
+    return { idx: it.idx, nao_fornece: !!ant?.nao_fornece, obs: ant?.obs ?? '', fotos: ant?.fotos ?? [], grupos }
   }))
   const [cond, setCond] = useState({
     n_orc: respostaAnterior?.n_orc ?? '', pgto: respostaAnterior?.pgto ?? '',
@@ -54,15 +62,26 @@ export function RespostaForm({
     fetch(`/api/cotacao/${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'abrir' }) }).catch(() => {})
   }, [token])
 
-  const patchPreco = (ii: number, pi: number, campo: 'unit' | 'total', v: string) => setEstado(s => s.map((it, i) => i !== ii ? it : {
-    ...it,
-    precos: it.precos.map((p, j) => {
-      if (j !== pi) return p
-      const n = parseMoney(v)
-      if (campo === 'unit') return { ...p, unit: v, total: n ? fmtBR(n * p.quant) : '' }
-      return { ...p, total: v, unit: n && p.quant ? fmtBRUnit(n / p.quant) : '' }
+  const patchGrupos = (ii: number, fn: (g: Grupo[]) => Grupo[]) => setEstado(s => s.map((it, i) => i !== ii ? it : { ...it, grupos: fn(it.grupos) }))
+  // Unitário ↔ total pela quantidade da linha; trocar a quantidade mantém o unitário.
+  const patchLinha = (ii: number, gi: number, li: number, campo: keyof Linha, v: string) => patchGrupos(ii, gs => gs.map((g, j) => j !== gi ? g : {
+    ...g,
+    linhas: g.linhas.map((l, k) => {
+      if (k !== li) return l
+      if (campo === 'quant') { const q = qtd(v), u = parseMoney(l.unit); return { ...l, quant: v, total: q && u ? fmtBR(q * u) : l.total } }
+      const n = parseMoney(v), q = qtd(l.quant)
+      if (campo === 'unit') return { ...l, unit: v, total: n && q ? fmtBR(n * q) : '' }
+      return { ...l, total: v, unit: n && q ? fmtBRUnit(n / q) : '' }
     }),
   }))
+  const addLinha = (ii: number, gi: number) => patchGrupos(ii, gs => gs.map((g, j) => j === gi ? { ...g, linhas: [...g.linhas, linhaVazia()] } : g))
+  const delLinha = (ii: number, gi: number, li: number) => patchGrupos(ii, gs => gs
+    .map((g, j) => j === gi ? { ...g, linhas: g.linhas.filter((_, k) => k !== li) } : g)
+    .filter((g, j) => g.linhas.length || j === 0)
+    .map(g => g.linhas.length ? g : { ...g, linhas: [linhaVazia()] }))
+  // Nova opção já nasce com as mesmas quantidades — é o caso comum (mesmo item, outro papel).
+  const addGrupo = (ii: number) => patchGrupos(ii, gs => [...gs, { variante: '', linhas: gs[0].linhas.map(l => linhaVazia(l.quant)) }])
+  const delGrupo = (ii: number, gi: number) => patchGrupos(ii, gs => gs.filter((_, j) => j !== gi))
   const patchItem = (ii: number, patch: Partial<ItemState>) => setEstado(s => s.map((it, i) => i === ii ? { ...it, ...patch } : it))
 
   async function subir(files: FileList | null) {
@@ -108,7 +127,9 @@ export function RespostaForm({
       ...cond,
       itens: estado.map(it => ({
         idx: it.idx, nao_fornece: it.nao_fornece, obs: it.obs, fotos: it.fotos,
-        precos: it.precos.map(p => ({ quant: p.quant, unit: parseMoney(p.unit) || null, total: parseMoney(p.total) || null })),
+        precos: it.grupos.flatMap(g => g.linhas.map(l => ({
+          variante: g.variante.trim(), quant: qtd(l.quant), unit: parseMoney(l.unit) || null, total: parseMoney(l.total) || null,
+        }))),
       })),
     }
     try {
@@ -188,20 +209,50 @@ export function RespostaForm({
             </label>
 
             {!st.nao_fornece && (
-              <div className="mt-3 space-y-2">
-                <div className="hidden sm:grid grid-cols-[6rem_1fr_1fr] gap-2 text-[11px] font-medium text-gray-400 px-1">
-                  <span>Quantidade</span><span>Valor unitário (R$)</span><span>Total (R$)</span>
-                </div>
-                {st.precos.map((p, pi) => (
-                  <div key={p.quant} className="grid grid-cols-2 sm:grid-cols-[6rem_1fr_1fr] gap-2 items-center">
-                    <span className="col-span-2 sm:col-span-1 text-sm font-medium text-gray-900 sm:px-1">{intBR(p.quant)} un.</span>
-                    <input inputMode="decimal" aria-label={`Valor unitário para ${intBR(p.quant)}`} placeholder="Unitário" value={p.unit}
-                      onChange={e => patchPreco(ii, pi, 'unit', e.target.value)} className={cn(inputCls, 'text-right')} />
-                    <input inputMode="decimal" aria-label={`Total para ${intBR(p.quant)}`} placeholder="Total" value={p.total}
-                      onChange={e => patchPreco(ii, pi, 'total', e.target.value)} className={cn(inputCls, 'text-right')} />
+              <div className="mt-3 space-y-3">
+                {st.grupos.map((g, gi) => (
+                  <div key={gi} className={cn('space-y-2', st.grupos.length > 1 && 'rounded-xl border border-gray-200 p-3')}>
+                    {(st.grupos.length > 1 || g.variante) && (
+                      <div className="flex items-center gap-2">
+                        <input value={g.variante} onChange={e => patchGrupos(ii, gs => gs.map((x, j) => j === gi ? { ...x, variante: e.target.value } : x))}
+                          placeholder={gi === 0 ? 'Opção 1 (ex.: Couchê 120g)' : `Opção ${gi + 1} (ex.: Sulfite 90g)`}
+                          aria-label={`Nome da opção ${gi + 1}`} className={cn(inputCls, 'font-medium')} />
+                        {gi > 0 && (
+                          <button type="button" aria-label={`Remover opção ${gi + 1}`} onClick={() => delGrupo(ii, gi)}
+                            className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-gray-50 transition-colors"><X className="w-4 h-4" /></button>
+                        )}
+                      </div>
+                    )}
+                    <div className="grid grid-cols-[4.5rem_1fr_1fr_1.75rem] sm:grid-cols-[7rem_1fr_1fr_2rem] gap-1.5 sm:gap-2 text-[11px] font-medium text-gray-400 px-1">
+                      <span>Quant.</span><span>Unitário (R$)</span><span>Total (R$)</span><span />
+                    </div>
+                    {g.linhas.map((l, li) => (
+                      <div key={li} className="grid grid-cols-[4.5rem_1fr_1fr_1.75rem] sm:grid-cols-[7rem_1fr_1fr_2rem] gap-1.5 sm:gap-2 items-center">
+                        <input inputMode="numeric" aria-label="Quantidade" placeholder="Quant." value={l.quant}
+                          onChange={e => patchLinha(ii, gi, li, 'quant', e.target.value)} className={cn(inputCls, 'text-right px-2 sm:px-3')} />
+                        <input inputMode="decimal" aria-label="Valor unitário" placeholder="Unitário" value={l.unit}
+                          onChange={e => patchLinha(ii, gi, li, 'unit', e.target.value)} className={cn(inputCls, 'text-right px-2 sm:px-3')} />
+                        <input inputMode="decimal" aria-label="Total" placeholder="Total" value={l.total}
+                          onChange={e => patchLinha(ii, gi, li, 'total', e.target.value)} className={cn(inputCls, 'text-right px-2 sm:px-3')} />
+                        <button type="button" aria-label="Remover quantidade" onClick={() => delLinha(ii, gi, li)}
+                          className="p-1 sm:p-2 rounded-lg text-gray-400 hover:text-red-500 transition-colors"><X className="w-4 h-4" /></button>
+                      </div>
+                    ))}
+                    {nLinhas(st) < MAX_LINHAS_ITEM && (
+                      <button type="button" onClick={() => addLinha(ii, gi)}
+                        className="inline-flex items-center gap-1 text-sm text-orange-700 hover:text-orange-800 transition-colors">
+                        <Plus className="w-3.5 h-3.5" /> Outra quantidade
+                      </button>
+                    )}
                   </div>
                 ))}
-                <p className="text-xs text-gray-400">Preencha o unitário ou o total — o outro é calculado.</p>
+                {nLinhas(st) + st.grupos[0].linhas.length <= MAX_LINHAS_ITEM && (
+                  <button type="button" onClick={() => addGrupo(ii)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-dashed border-gray-300 text-sm text-gray-600 hover:bg-gray-50 transition-colors active:scale-[0.97]">
+                    <Plus className="w-4 h-4" /> Outra opção (material, formato, acabamento)
+                  </button>
+                )}
+                <p className="text-xs text-gray-400">Pode trocar as quantidades e incluir outras. Preencha o unitário ou o total — o outro é calculado.</p>
               </div>
             )}
             <input value={st.obs} onChange={e => patchItem(ii, { obs: e.target.value })} placeholder="Observação sobre este item (opcional)" className={cn(inputCls, 'mt-3')} />

@@ -20,7 +20,15 @@ export interface CotacaoItem {
   temImagem?: boolean
 }
 
-export interface RespostaPreco { quant: number; unit: number | null; total: number | null }
+export interface RespostaPreco {
+  quant: number; unit: number | null; total: number | null
+  /** Opção do fornecedor para o mesmo item (material, formato, acabamento). Vazio = a pedida. */
+  variante?: string
+}
+
+/** Limites do que o fornecedor pode montar por item (quantidades × opções). */
+export const MAX_LINHAS_ITEM = 16
+export const MAX_QUANT = 10_000_000
 export interface RespostaItem {
   idx: number; nao_fornece: boolean; precos: RespostaPreco[]; obs: string
   /** Fotos do produto que o fornecedor mandou (imagens em cotacao-privado/). */
@@ -43,6 +51,8 @@ export interface OpcaoOrc {
   valor_unit: string; valor_total?: string; selecionado: boolean
   /** Opção que veio de uma resposta de cotação — é a chave para não duplicar. */
   cotacao_convite_id?: string
+  /** Variação proposta pelo fornecedor (ex.: "Couchê 120g"). */
+  variante?: string
   /** O que o fornecedor escreveu na proposta — vai junto para o PDF do orçamento. */
   proposta?: PropostaOpcao
 }
@@ -113,7 +123,10 @@ export function aplicarResposta<T extends ItemOrcBase>(
     const i = alvo(out, pedido)
     if (i < 0) continue
     const antes = out[i].opcoes
-    const escolhida = antes.find(o => o.cotacao_convite_id === conviteId && o.selecionado)?.quant
+    // Mantém escolhida a mesma linha (opção + quantidade) depois de um reenvio.
+    const chave = (variante: string | undefined, quant: string) => `${(variante ?? '').trim().toLowerCase()}|${quant}`
+    const antiga = antes.find(o => o.cotacao_convite_id === conviteId && o.selecionado)
+    const escolhida = antiga ? chave(antiga.variante, antiga.quant) : null
     const proposta: PropostaOpcao = {
       obs: r.obs ?? '', prazo_producao: resposta.prazo_producao ?? '', validade: resposta.validade ?? '',
       observacao: resposta.observacao ?? '', fotos: (r.fotos ?? []).map(f => f.chave),
@@ -122,10 +135,12 @@ export function aplicarResposta<T extends ItemOrcBase>(
       const v = precoResolvido(p)
       if (!v) return []
       const quant = String(p.quant || 1)
+      const variante = (p.variante ?? '').trim()
       return [{
         fornecedor_id: fornecedorId, n_orc: resposta.n_orc ?? '', pgto: resposta.pgto ?? '',
         quant, valor_unit: fmtBRUnit(v.unit), valor_total: fmtBR(v.total),
-        selecionado: escolhida === quant, cotacao_convite_id: conviteId, proposta,
+        selecionado: escolhida === chave(variante, quant), cotacao_convite_id: conviteId, proposta,
+        ...(variante ? { variante } : {}),
       }]
     })
     const mantidas = antes.filter(o => o.cotacao_convite_id !== conviteId && !(novas.length && vazia(o)))

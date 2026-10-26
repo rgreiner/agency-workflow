@@ -19,6 +19,8 @@ export interface Opcao {
   fornecedor_id: string; n_orc: string; pgto: string; quant: string; valor_unit: string; valor_total?: string; selecionado: boolean
   /** Veio da proposta de um fornecedor no pedido de cotação (mig. 310). */
   cotacao_convite_id?: string
+  /** Variação que o fornecedor propôs (ex.: "Couchê 120g"). */
+  variante?: string
 }
 export interface ItemOrc { nome: string; descricao: string; job: string; opcoes: Opcao[]; imagem?: string }
 export interface OrcamentoValues {
@@ -225,6 +227,7 @@ export function OrcamentoForm({
                         </td>
                         <td className="px-1 py-1 relative"><Combobox size="sm" value={o.fornecedor_id} onChange={v => setOpcao(ii, oi, 'fornecedor_id', v)} options={fornecedorOptions} placeholder="Fornecedor"
                           onCreate={async nome => { const id = await criarFornecedor(nome); if (id) setOpcao(ii, oi, 'fornecedor_id', id) }} />
+                          {o.variante && <span className="block mt-0.5 px-1 text-[11px] font-medium text-orange-700 truncate" title={o.variante}>{o.variante}</span>}
                           {o.cotacao_convite_id && <span title="Valor enviado pelo fornecedor no pedido de cotação" className="absolute -top-0.5 right-2 px-1 rounded bg-orange-100 text-orange-700 text-[9px] font-semibold uppercase tracking-wide pointer-events-none">cotação</span>}</td>
                         <td className="px-1 py-1"><input inputMode="numeric" value={o.quant} onChange={e => setOpcaoQuant(ii, oi, e.target.value)} className={cn(cellCls, 'text-right')} /></td>
                         <td className="px-1 py-1"><input inputMode="decimal" value={o.valor_unit} onChange={e => setOpcaoUnit(ii, oi, e.target.value)} placeholder="0,00" className={cn(cellCls, 'text-right')} /></td>
