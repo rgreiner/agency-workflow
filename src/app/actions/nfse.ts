@@ -6,8 +6,9 @@ import { getUsuario } from '@/lib/auth/server'
 import { assertFinanceAccess } from '@/lib/finance'
 import { certificadoParaUso, certificadoPublico } from '@/lib/fiscal/certificado'
 import { chamarNfse } from '@/lib/fiscal/nfse-conexao'
-import { montarDps, assinarDps, assinarXml, chavesDoPfx, empacotar, desempacotar, type DadosDps } from '@/lib/fiscal/dps'
-import { montarCancelamento, MOTIVO_MIN } from '@/lib/fiscal/evento'
+import { montarDps, assinarDps, chavesDoPfx, empacotar, desempacotar, type DadosDps } from '@/lib/fiscal/dps'
+import { MOTIVO_MIN } from '@/lib/fiscal/evento'
+import { cancelarNotaNaReceita, mensagemDaReceita } from '@/lib/fiscal/cancelamento'
 import { logSystemError } from '@/lib/system-error'
 import { chaveNome } from '@/lib/nomes'
 import { buscarCep, buscarCnpj } from '@/app/actions/lookup'
@@ -194,19 +195,6 @@ export async function xmlDaNota(orgSlug: string, notaId: string): Promise<{ xml?
 }
 
 interface RespostaOk { tipoAmbiente?: number; chaveAcesso?: string; nfseXmlGZipB64?: string; idDps?: string }
-interface RespostaErro { erros?: { Codigo?: string; Descricao?: string; Complemento?: string }[] }
-
-/** Junta os erros da Receita numa frase que a pessoa consegue agir. */
-function mensagemDaReceita(corpo: string): string {
-  try {
-    const j = JSON.parse(corpo) as RespostaErro & { erro?: { codigo?: string; descricao?: string } }
-    const lista = j.erros ?? (j.erro ? [{ Codigo: j.erro.codigo, Descricao: j.erro.descricao }] : [])
-    if (lista.length === 0) return 'A Receita recusou a nota sem detalhar o motivo.'
-    return lista.map(e => `${e.Descricao ?? ''}${e.Complemento ? ` (${e.Complemento})` : ''}`.trim() || e.Codigo).join(' · ')
-  } catch {
-    return 'A Receita recusou a nota.'
-  }
-}
 
 export interface DadosParaEmitir {
   valor: number
@@ -763,70 +751,10 @@ export async function cancelarNota(
   const { supabase, orgId } = await assertFinanceAccess(orgSlug)
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb = supabase as any
-
-  const texto = (motivo.xMotivo ?? '').trim()
-  if (texto.length < MOTIVO_MIN) {
-    return { error: `O motivo precisa de pelo menos ${MOTIVO_MIN} caracteres — a Receita recusa textos curtos.` }
-  }
-
-  const { data: nota } = await sb.from('nota_fiscal')
-    .select('id, chave, status, ambiente, lancamento_id').eq('id', notaId).maybeSingle()
-  if (!nota) return { error: 'Nota não encontrada.' }
-  if (nota.status !== 'autorizada') return { error: 'Esta nota já está cancelada.' }
-
-  const cert = await certificadoParaUso(orgId)
-  if (!cert) return { error: 'Nenhum certificado digital cadastrado.' }
-  if (cert.ambiente !== nota.ambiente) {
-    return { error: `A nota foi emitida em ${nota.ambiente === 'producao' ? 'produção' : 'produção restrita'} e o certificado está apontando para o outro ambiente. Troque o ambiente antes de cancelar.` }
-  }
-  const info = await certificadoPublico(orgId)
-  const cnpjAutor = String(info?.cnpj ?? '').replace(/\D/g, '')
-  if (cnpjAutor.length !== 14) return { error: 'Não foi possível ler o CNPJ do certificado.' }
-
-  try {
-    const { xml, id } = montarCancelamento({
-      chave: nota.chave,
-      cnpjAutor,
-      ambiente: cert.ambiente === 'producao' ? 1 : 2,
-      cMotivo: motivo.cMotivo,
-      xMotivo: texto,
-    })
-    const { key, certB64 } = await chavesDoPfx(cert.pfx, cert.senha)
-    const assinado = assinarXml(xml, { interna: 'infPedReg', raiz: 'pedRegEvento', id, key, certB64 })
-
-    const r = await chamarNfse(orgId, {
-      caminho: `/sefinnacional/nfse/${nota.chave}/eventos`,
-      metodo: 'POST',
-      corpo: JSON.stringify({ pedidoRegistroEventoXmlGZipB64: empacotar(assinado) }),
-      timeoutMs: 60_000,
-    })
-    if ('erro' in r) return { error: 'Certificado indisponível.' }
-    if (r.erroRede) return { error: `Não foi possível falar com a Receita (${r.erroRede}).` }
-    if (r.status !== 200 && r.status !== 201) return { error: mensagemDaReceita(r.corpo) }
-
-    await sb.from('nota_fiscal').update({
-      status: 'cancelada',
-      cancelado_em: new Date().toISOString(),
-      cancel_cod: motivo.cMotivo,
-      cancel_motivo: texto,
-      evento_gz_b64: empacotar(assinado),
-    }).eq('id', notaId)
-
-    // O lançamento volta a não ter nota — a não ser que outra, válida, já esteja
-    // pendurada nele.
-    if (nota.lancamento_id) {
-      const { data: outra } = await sb.from('nota_fiscal')
-        .select('id').eq('lancamento_id', nota.lancamento_id).eq('status', 'autorizada').maybeSingle()
-      if (!outra) await sb.from('lancamentos').update({ nf_emitida: false }).eq('id', nota.lancamento_id)
-    }
-    revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
-    return { ok: true }
-  } catch (error) {
-    try { await logSystemError(supabase, { userId: user.id, context: 'fiscal:nfse-cancelamento', error }) } catch { /* best-effort */ }
-    return { error: 'Falha ao cancelar a nota. O time técnico foi avisado.' }
-  }
+  const r = await cancelarNotaNaReceita(supabase, orgId, user.id, notaId, motivo)
+  if (r.error) return { error: r.error }
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+  return { ok: true }
 }
 
 export interface LinhaConferencia {

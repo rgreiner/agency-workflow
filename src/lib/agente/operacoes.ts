@@ -623,3 +623,53 @@ export async function reguaComissao(a: AgenteFlow) {
     com_rafael: { titulo_id: string; documento: string | null; fornecedor: string; valor: number; vencimento: string; dias: number; motivo: string }[]
   }
 }
+
+// ── NFS-e emitidas pelo Flow: consulta e cancelamento (só depois do Sim do Rafael) ──
+
+/**
+ * Notas autorizadas de um título ou de um cliente, dizendo até quando ainda dá para
+ * cancelar (regra da casa: só dentro do mês da competência).
+ */
+export async function notasFiscais(a: AgenteFlow, filtro: { titulo_id?: string; cliente_id?: string }) {
+  let ids: string[] = []
+  if (filtro.titulo_id) {
+    await lancamento(a, filtro.titulo_id)
+    ids = [filtro.titulo_id]
+  } else if (filtro.cliente_id && /^[0-9a-f-]{36}$/i.test(filtro.cliente_id)) {
+    const { data, error } = await a.supabase.from('lancamentos').select('id')
+      .eq('org_id', a.orgId).eq('workspace_id', filtro.cliente_id).limit(1000)
+    if (error) throw new ErroAgente(error.message)
+    ids = ((data ?? []) as { id: string }[]).map(l => l.id)
+  } else {
+    throw new ErroAgente('informe titulo_id ou cliente_id')
+  }
+  if (!ids.length) return []
+  const { data, error } = await a.supabase.from('nota_fiscal')
+    .select('id, lancamento_id, numero, status, ambiente, valor, competencia, emitido_em, tomador_nome')
+    .eq('org_id', a.orgId).in('lancamento_id', ids).order('emitido_em')
+  if (error) throw new ErroAgente(error.message)
+  const { data: ls } = await a.supabase.from('lancamentos')
+    .select('id, descricao, vencimento, situacao').in('id', ids)
+  const porId = new Map(((ls ?? []) as { id: string; descricao: string | null; vencimento: string | null; situacao: string }[]).map(l => [l.id, l]))
+  const { limiteDeCancelamento, podeCancelarAinda } = await import('@/lib/fiscal/cancelamento')
+  return ((data ?? []) as { id: string; lancamento_id: string; numero: string | null; status: string; ambiente: string; valor: number | null; competencia: string | null; emitido_em: string; tomador_nome: string | null }[]).map(n => ({
+    nota_id: n.id, numero: n.numero, status: n.status, ambiente: n.ambiente,
+    valor: n.valor != null ? Number(n.valor) : null, competencia: n.competencia, tomador: n.tomador_nome,
+    titulo_id: n.lancamento_id, titulo: porId.get(n.lancamento_id)?.descricao ?? null,
+    vencimento: porId.get(n.lancamento_id)?.vencimento ?? null, situacao_titulo: porId.get(n.lancamento_id)?.situacao ?? null,
+    cancelavel_ate: limiteDeCancelamento(n.competencia, n.emitido_em),
+    cancelavel: n.status === 'autorizada' && podeCancelarAinda(n.competencia, n.emitido_em),
+  }))
+}
+
+/** Cancela na Receita uma NFS-e emitida pelo Flow. Quem chama já tem o Sim do Rafael. */
+export async function cancelarNotaFiscal(a: AgenteFlow, notaId: string, motivo: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(notaId)) throw new ErroAgente('nota inválida')
+  const { cancelarNotaNaReceita } = await import('@/lib/fiscal/cancelamento')
+  const r = await cancelarNotaNaReceita(a.supabase, a.orgId, a.userId, notaId, { cMotivo: '9', xMotivo: motivo })
+  if (r.error) throw new ErroAgente(r.error)
+  if (r.lancamentoId) {
+    await a.supabase.rpc('lancamento_anotar', { p_lancamento_id: r.lancamentoId, p_texto: `NFS-e cancelada — ${motivo} — via ${a.nome}` })
+  }
+  return { ok: true as const }
+}
