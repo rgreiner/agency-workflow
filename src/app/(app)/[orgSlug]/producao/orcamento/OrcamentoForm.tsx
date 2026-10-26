@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Check, Loader2, Plus, Trash2, CircleCheck, Circle, Send } from 'lucide-react'
+import { ArrowLeft, Check, Loader2, Plus, Trash2, CircleCheck, Circle, Send, FileUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Select } from '@/components/ui/Select'
@@ -69,7 +69,7 @@ export function OrcamentoForm({
   initial?: Partial<OrcamentoValues>; submitLabel?: string
   onSubmit: (fd: FormData) => Promise<{ error?: string } | void>
   /** Só na edição: o pedido de cotação sai de orçamento já gravado. */
-  cotacao?: { orcamentoId: string; agencia: string; cotacoes: CotacaoView[]; fornecedores: FornecedorCotacaoOpt[]; abrir?: boolean }
+  cotacao?: { orcamentoId: string; agencia: string; cotacoes: CotacaoView[]; fornecedores: FornecedorCotacaoOpt[]; abrir?: 'cotacao' | 'importar' }
   /** Card "Painel do cliente" (mig. 342) — só na edição. */
   portalSlot?: React.ReactNode
 }) {
@@ -85,7 +85,7 @@ export function OrcamentoForm({
   const [error, setError] = useState('')
   // O pedido de cotação guarda a POSIÇÃO do item; só sai com os itens iguais ao gravado.
   const assinaturaItens = (its: ItemOrc[]) => JSON.stringify(its.map(i => [i.nome, i.descricao, i.imagem ?? '']))
-  const [itensGravados] = useState(() => assinaturaItens(form.itens))
+  const [itensGravados, setItensGravados] = useState(() => assinaturaItens(form.itens))
   // Clique no comparativo: acha a opção daquela proposta (mesmo fornecedor, variação e
   // quantidade) no item e alterna a escolha — igual ao círculo da tabela de opções.
   const escolherCotacao = (conviteId: string, pedido: CotacaoItem, variante: string, quant: number) => {
@@ -203,6 +203,12 @@ export function OrcamentoForm({
             orgSlug={orgSlug} orcamentoId={cotacao.orcamentoId} titulo={form.titulo} agencia={cotacao.agencia}
             itens={form.itens} itensSalvos={assinaturaItens(form.itens) === itensGravados}
             cotacoes={cotacao.cotacoes} fornecedores={cotacao.fornecedores} onAplicar={aplicarCotacao} onEscolher={escolherCotacao} abrir={cotacao.abrir}
+            onImportado={novos => {
+              // O servidor já gravou: o formulário passa a refletir o orçamento gravado.
+              const its = novos as ItemOrc[]
+              setForm(f => ({ ...f, itens: its }))
+              setItensGravados(assinaturaItens(its))
+            }}
           />
         )}
 
@@ -303,12 +309,16 @@ export function OrcamentoForm({
 
         <div className="flex justify-end gap-2 pb-10">
           <button type="button" onClick={() => router.back()} className="px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 transition">Cancelar</button>
-          {!cotacao && (
+          {!cotacao && (<>
             <button type="button" disabled={isPending} onClick={e => handleSubmit(e, `/${orgSlug}/producao/orcamento/{id}?cotacao=1`)}
               className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 disabled:opacity-50 transition">
               <Send className="w-4 h-4" /> {submitLabel} e pedir cotação
             </button>
-          )}
+            <button type="button" disabled={isPending} onClick={e => handleSubmit(e, `/${orgSlug}/producao/orcamento/{id}?importar=1`)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 disabled:opacity-50 transition">
+              <FileUp className="w-4 h-4" /> {submitLabel} e ler propostas (PDF)
+            </button>
+          </>)}
           <button aria-label="Salvar" type="submit" disabled={isPending} className="inline-flex items-center gap-2 px-5 py-2.5 bg-orange-600 text-[#fff] text-sm font-medium rounded-xl hover:bg-orange-700 disabled:opacity-50 transition">
             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{submitLabel}
           </button>

@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
-  Send, Mail, Link2, Loader2, Paperclip, X, Upload, ChevronDown, ChevronRight, ArrowDownToLine, Lock, LockOpen, UserPlus, Search,
+  Send, Mail, Link2, FileUp, Loader2, Paperclip, X, Upload, ChevronDown, ChevronRight, ArrowDownToLine, Lock, LockOpen, UserPlus, Search,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
@@ -18,6 +18,7 @@ import {
   type ArquivoRef, type CotacaoItem, type ItemOrcBase, type Resposta, type ConviteStatus,
 } from '@/lib/cotacao'
 import { CotacaoComparativo } from './CotacaoComparativo'
+import { ImportarPropostas } from './ImportarPropostas'
 import { criarCotacao, adicionarFornecedores, reenviarConvite, marcarWhatsapp, encerrarCotacao } from '@/app/actions/cotacao'
 
 export interface FornecedorCotacaoOpt { id: string; name: string; tipo: string | null; tags: string[]; email: string | null; telefone: string | null }
@@ -33,6 +34,8 @@ export interface ConviteView {
 export interface CotacaoView {
   id: string; created_at: string; prazo_resposta: string | null; encerrada: boolean
   mensagem: string | null; anexos: ArquivoRef[]; itens: CotacaoItem[]; convites: ConviteView[]
+  /** link = pedido enviado; importada = propostas recebidas por fora e lidas do PDF (mig. 371). */
+  origem: 'link' | 'importada'
 }
 
 const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
@@ -51,7 +54,7 @@ const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').to
 const hojeMais = (dias: number) => { const d = new Date(); d.setDate(d.getDate() + dias); return d.toLocaleDateString('en-CA') }
 
 export function CotacaoPainel({
-  orgSlug, orcamentoId, titulo, agencia, itens, itensSalvos, cotacoes, fornecedores, onAplicar, onEscolher, abrir = false,
+  orgSlug, orcamentoId, titulo, agencia, itens, itensSalvos, cotacoes, fornecedores, onAplicar, onEscolher, onImportado, abrir,
 }: {
   orgSlug: string; orcamentoId: string; titulo: string; agencia: string
   /** Itens do formulário agora (para trazer resposta e para montar o pedido). */
@@ -63,26 +66,40 @@ export function CotacaoPainel({
   onAplicar: (conviteId: string, fornecedorId: string, pedidos: CotacaoItem[], resposta: Resposta) => void
   /** Escolhe (ou desmarca) no orçamento a opção vinda da proposta — clique no comparativo. */
   onEscolher: (conviteId: string, pedido: CotacaoItem, variante: string, quant: number) => void
-  /** Veio do "Gravar e pedir cotação": abre o envio direto. */
-  abrir?: boolean
+  /** Proposta lida de PDF gravada: o formulário troca os itens pelos do servidor. */
+  onImportado: (itens: unknown[]) => void
+  /** Veio do "Gravar e pedir cotação" / "Gravar e ler propostas": abre direto. */
+  abrir?: 'cotacao' | 'importar'
 }) {
-  const [modal, setModal] = useState<null | { modo: 'nova' } | { modo: 'adicionar'; cotacaoId: string }>(abrir && !cotacoes.length ? { modo: 'nova' } : null)
+  const [modal, setModal] = useState<null | { modo: 'nova' } | { modo: 'adicionar'; cotacaoId: string }>(abrir === 'cotacao' && !cotacoes.length ? { modo: 'nova' } : null)
+  const [importar, setImportar] = useState(abrir === 'importar')
   const [verAntigas, setVerAntigas] = useState(false)
   const pendentes = cotacoes.some(c => !c.encerrada && c.convites.some(v => !v.respondido_em && !v.recusado_em))
+  const responderam = cotacoes.reduce((n, c) => n + c.convites.filter(v => v.respondido_em).length, 0)
+  // Comparativo junta TODAS as rodadas (link e PDF): é o que se quer comparar.
+  const [vista, setVista] = useState<'comparativo' | 'lista'>(responderam >= 2 ? 'comparativo' : 'lista')
 
-  const [atual, ...antigas] = cotacoes
+  const importada = cotacoes.find(c => c.origem === 'importada')
+  const [atual, ...antigas] = cotacoes.filter(c => c.origem !== 'importada')
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-5">
       {pendentes && <AutoRefresh intervalMs={60000} />}
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-gray-900">Cotação com fornecedores</h3>
-          {!atual && (
+          {!atual && !importada && (
             <p className="text-xs text-gray-500 mt-0.5 max-w-lg">
-              Cada fornecedor recebe um link (e-mail ou WhatsApp) e preenche a proposta. O valor entra aqui como opção do item.
+              Cada fornecedor recebe um link (e-mail ou WhatsApp) e preenche a proposta — ou, se a proposta chegou em PDF, a IA lê. O valor entra aqui como opção do item.
             </p>
           )}
         </div>
+        <div className="flex items-center gap-2 shrink-0">
+        <button type="button" onClick={() => setImportar(true)} disabled={!itensSalvos}
+          title={itensSalvos ? 'Proposta que chegou por e-mail/WhatsApp: a IA lê e você confere' : 'Salve o orçamento antes'}
+          className={cn('inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors active:scale-[0.97]',
+            !itensSalvos && 'opacity-50 cursor-not-allowed')}>
+          <FileUp className="w-3.5 h-3.5" /> Ler propostas (PDF)
+        </button>
         <button type="button" onClick={() => setModal({ modo: 'nova' })} disabled={!itensSalvos}
           title={itensSalvos ? undefined : 'Salve o orçamento antes de pedir cotação'}
           className={cn('inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl transition-colors active:scale-[0.97] shrink-0',
@@ -90,11 +107,27 @@ export function CotacaoPainel({
             !itensSalvos && 'opacity-50 cursor-not-allowed')}>
           <Send className="w-3.5 h-3.5" /> {atual ? 'Nova cotação' : 'Pedir cotação'}
         </button>
+        </div>
       </div>
-      {!itensSalvos && <p className="text-xs text-amber-700 mt-2">Há alterações não salvas — salve o orçamento antes de pedir cotação.</p>}
+      {!itensSalvos && <p className="text-xs text-amber-700 mt-2">Há alterações não salvas — salve o orçamento antes de pedir cotação ou ler propostas.</p>}
 
-      {atual && <Rodada c={atual} orgSlug={orgSlug} titulo={titulo} agencia={agencia} itens={itens} onAplicar={onAplicar} onEscolher={onEscolher}
+      {responderam > 0 && (
+        <div className="mt-4 inline-flex p-0.5 rounded-lg bg-gray-100 text-xs">
+          {([['comparativo', 'Comparativo'], ['lista', 'Por fornecedor']] as const).map(([k, rotulo]) => (
+            <button key={k} type="button" onClick={() => setVista(k)}
+              className={cn('px-3 py-1 rounded-md font-medium transition-colors', vista === k ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800')}>
+              {rotulo}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {vista === 'comparativo' && responderam > 0 ? <CotacaoComparativo cotacoes={cotacoes} itens={itens} onEscolher={onEscolher} /> : <>
+      {atual && <Rodada c={atual} orgSlug={orgSlug} titulo={titulo} agencia={agencia} itens={itens} onAplicar={onAplicar} 
         onAdicionar={() => setModal({ modo: 'adicionar', cotacaoId: atual.id })} />}
+
+      {importada && <Rodada c={importada} orgSlug={orgSlug} titulo={titulo} agencia={agencia} itens={itens} onAplicar={onAplicar}
+        onAdicionar={() => setImportar(true)} />}
 
       {antigas.length > 0 && (
         <div className="mt-4 border-t border-gray-100 pt-3">
@@ -102,10 +135,16 @@ export function CotacaoPainel({
             {verAntigas ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />} Cotações anteriores ({antigas.length})
           </button>
           {verAntigas && antigas.map(c => (
-            <Rodada key={c.id} c={c} orgSlug={orgSlug} titulo={titulo} agencia={agencia} itens={itens} onAplicar={onAplicar} onEscolher={onEscolher}
+            <Rodada key={c.id} c={c} orgSlug={orgSlug} titulo={titulo} agencia={agencia} itens={itens} onAplicar={onAplicar} 
               onAdicionar={() => setModal({ modo: 'adicionar', cotacaoId: c.id })} />
           ))}
         </div>
+      )}
+      </>}
+
+      {importar && (
+        <ImportarPropostas orgSlug={orgSlug} orcamentoId={orcamentoId} itens={itens} fornecedores={fornecedores}
+          onClose={() => setImportar(false)} onImportado={onImportado} />
       )}
 
       {modal && (
@@ -120,23 +159,27 @@ export function CotacaoPainel({
   )
 }
 
-function Rodada({ c, orgSlug, titulo, agencia, itens, onAplicar, onEscolher, onAdicionar }: {
+function Rodada({ c, orgSlug, titulo, agencia, itens, onAplicar, onAdicionar }: {
   c: CotacaoView; orgSlug: string; titulo: string; agencia: string
   itens: ItemOrcBase[]
   onAplicar: (conviteId: string, fornecedorId: string, pedidos: CotacaoItem[], resposta: Resposta) => void
-  onEscolher: (conviteId: string, pedido: CotacaoItem, variante: string, quant: number) => void
   onAdicionar: () => void
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const responderam = c.convites.filter(v => v.respondido_em).length
-  // Com 2+ propostas o que se quer é comparar; a lista continua para status e reenvio.
-  const [vista, setVista] = useState<'comparativo' | 'lista'>(responderam >= 2 ? 'comparativo' : 'lista')
+  const importada = c.origem === 'importada'
   const convites = [...c.convites].sort((a, b) => ORDEM.indexOf(statusConvite(a)) - ORDEM.indexOf(statusConvite(b)) || a.fornecedor.localeCompare(b.fornecedor, 'pt-BR'))
 
   return (
     <div className="mt-4">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-500">
+        {importada ? <>
+          <span className="font-medium text-gray-800">Recebidas por fora (lidas do PDF)</span>
+          <span>{responderam} proposta{responderam === 1 ? '' : 's'}</span>
+          <span className="flex-1" />
+          <button type="button" onClick={onAdicionar} className={btnSec}><FileUp className="w-3.5 h-3.5" /> Ler mais</button>
+        </> : <>
         <span>Enviada em {formatDateBR(c.created_at.slice(0, 10))}</span>
         {c.prazo_resposta && <span>Prazo {formatDateBR(c.prazo_resposta)}</span>}
         <span className="font-medium text-gray-800">{responderam} de {c.convites.length} responderam</span>
@@ -155,24 +198,12 @@ function Rodada({ c, orgSlug, titulo, agencia, itens, onAplicar, onEscolher, onA
           })}>
           {c.encerrada ? <LockOpen className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />} {c.encerrada ? 'Reabrir' : 'Encerrar'}
         </button>
+        </>}
       </div>
 
-      {responderam > 0 && (
-        <div className="mt-3 inline-flex p-0.5 rounded-lg bg-gray-100 text-xs">
-          {([['comparativo', 'Comparativo'], ['lista', 'Por fornecedor']] as const).map(([k, rotulo]) => (
-            <button key={k} type="button" onClick={() => setVista(k)}
-              className={cn('px-3 py-1 rounded-md font-medium transition-colors', vista === k ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800')}>
-              {rotulo}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {vista === 'comparativo' && responderam > 0 ? <CotacaoComparativo c={c} itens={itens} onEscolher={onEscolher} /> : (
       <ul className="mt-3 divide-y divide-gray-100 border border-gray-100 rounded-xl">
         {convites.map(v => <LinhaConvite key={v.id} v={v} c={c} orgSlug={orgSlug} titulo={titulo} agencia={agencia} itens={itens} onAplicar={onAplicar} />)}
       </ul>
-      )}
     </div>
   )
 }

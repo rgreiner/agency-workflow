@@ -15,28 +15,43 @@ import type { CotacaoView, ConviteView } from './CotacaoPainel'
  * dentro da célula. Clicar escolhe a opção no orçamento — a mesma ação do círculo
  * na tabela de opções.
  */
-export function CotacaoComparativo({ c, itens, onEscolher }: {
-  c: CotacaoView
+export function CotacaoComparativo({ cotacoes, itens, onEscolher }: {
+  /** Todas as rodadas do orçamento — link e PDF lido entram na mesma tabela. */
+  cotacoes: CotacaoView[]
   itens: ItemOrcBase[]
   onEscolher: (conviteId: string, pedido: CotacaoItem, variante: string, quant: number) => void
 }) {
-  const respostas = c.convites
+  const respostas = cotacoes.flatMap(c => c.convites
     .filter(v => v.respondido_em && v.resposta && 'itens' in v.resposta)
-    .map(v => ({ v, r: v.resposta as Resposta }))
+    .map(v => ({ v, r: v.resposta as Resposta, pedidos: c.itens })))
     .sort((a, b) => menorTotal(a.r) - menorTotal(b.r))
   if (!respostas.length) return <p className="mt-3 text-sm text-gray-400">Ainda ninguém respondeu.</p>
+
+  // Itens de todas as rodadas, juntados pelo NOME (cada rodada tem a sua posição).
+  const k = (s: string) => (s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim()
+  const pedidosUnicos: CotacaoItem[] = []
+  for (const c of cotacoes) for (const p of c.itens) if (!pedidosUnicos.some(x => k(x.nome) === k(p.nome))) pedidosUnicos.push(p)
+  /** Preços do convite para o item (achando o idx dele na rodada daquele convite). */
+  const precos = (e: { r: Resposta; pedidos: CotacaoItem[] }, pedido: CotacaoItem) => {
+    const meu = e.pedidos.find(p => k(p.nome) === k(pedido.nome))
+    return meu ? precosDoItem(e.r, meu.idx) : []
+  }
+  const naoFornece = (e: { r: Resposta; pedidos: CotacaoItem[] }, pedido: CotacaoItem) => {
+    const meu = e.pedidos.find(p => k(p.nome) === k(pedido.nome))
+    return !!meu && !!e.r.itens.find(i => i.idx === meu.idx)?.nao_fornece
+  }
 
   const escolhida = (v: ConviteView, variante: string, quant: number) =>
     itens.some(it => it.opcoes.some(o => o.selecionado && o.cotacao_convite_id === v.id && String(o.quant) === String(quant) && (o.variante ?? '') === variante))
 
   return (
     <div className="mt-3 space-y-5">
-      {c.itens.map(pedido => {
+      {pedidosUnicos.map(pedido => {
         // Quantidades que ALGUÉM cotou para este item (o fornecedor pode ter trocado as pedidas).
-        const quants = [...new Set(respostas.flatMap(({ r }) => precosDoItem(r, pedido.idx).map(p => p.quant)))].sort((a, b) => a - b)
+        const quants = [...new Set(respostas.flatMap(e => precos(e, pedido).map(p => p.quant)))].sort((a, b) => a - b)
         if (!quants.length) return null
         return (
-          <div key={pedido.idx}>
+          <div key={k(pedido.nome)}>
             <p className="text-sm font-medium text-gray-900 mb-1.5">{pedido.nome}</p>
             <div className="overflow-x-auto border border-gray-100 rounded-xl">
               <table className="w-full text-sm" style={{ minWidth: 120 + respostas.length * 150 }}>
@@ -48,9 +63,8 @@ export function CotacaoComparativo({ c, itens, onEscolher }: {
                 </thead>
                 <tbody>
                   {quants.map(q => {
-                    const celulas = respostas.map(({ v, r }) => ({
-                      v, linhas: precosDoItem(r, pedido.idx).filter(p => p.quant === q),
-                      naoFornece: !!r.itens.find(i => i.idx === pedido.idx)?.nao_fornece,
+                    const celulas = respostas.map(e => ({
+                      v: e.v, linhas: precos(e, pedido).filter(p => p.quant === q), naoFornece: naoFornece(e, pedido),
                     }))
                     const menor = Math.min(...celulas.flatMap(cl => cl.linhas.map(l => l.unit)))
                     return (
