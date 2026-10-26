@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Check, Loader2, Plus, Trash2, CircleCheck, Circle, Send } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 import { Select } from '@/components/ui/Select'
 import { Combobox } from '@/components/ui/Combobox'
 import { MaisOpcoes } from '@/components/ui/MaisOpcoes'
@@ -85,6 +86,24 @@ export function OrcamentoForm({
   // O pedido de cotação guarda a POSIÇÃO do item; só sai com os itens iguais ao gravado.
   const assinaturaItens = (its: ItemOrc[]) => JSON.stringify(its.map(i => [i.nome, i.descricao, i.imagem ?? '']))
   const [itensGravados] = useState(() => assinaturaItens(form.itens))
+  // Clique no comparativo: acha a opção daquela proposta (mesmo fornecedor, variação e
+  // quantidade) no item e alterna a escolha — igual ao círculo da tabela de opções.
+  const escolherCotacao = (conviteId: string, pedido: CotacaoItem, variante: string, quant: number) => {
+    const n = (x: string) => (x ?? '').trim().toLowerCase()
+    const achar = (its: ItemOrc[]) => {
+      const ordem = [pedido.idx, ...its.map((_, i) => i).filter(i => i !== pedido.idx)]
+      for (const ii of ordem) {
+        const it = its[ii]
+        if (!it || n(it.nome) !== n(pedido.nome)) continue
+        const oi = it.opcoes.findIndex(o => o.cotacao_convite_id === conviteId && String(o.quant) === String(quant) && n(o.variante ?? '') === n(variante))
+        if (oi >= 0) return [ii, oi] as const
+      }
+      return null
+    }
+    const pos = achar(form.itens)
+    if (!pos) { toast.error('Essa proposta não está nas opções do item — use "Trazer para o orçamento" na lista.'); return }
+    toggleOpcao(pos[0], pos[1])
+  }
   const aplicarCotacao = (conviteId: string, fornecedorId: string, pedidos: CotacaoItem[], resposta: Resposta) =>
     setForm(f => ({ ...f, itens: aplicarResposta(f.itens, conviteId, fornecedorId, pedidos, resposta) as ItemOrc[] }))
 
@@ -183,7 +202,7 @@ export function OrcamentoForm({
           <CotacaoPainel
             orgSlug={orgSlug} orcamentoId={cotacao.orcamentoId} titulo={form.titulo} agencia={cotacao.agencia}
             itens={form.itens} itensSalvos={assinaturaItens(form.itens) === itensGravados}
-            cotacoes={cotacao.cotacoes} fornecedores={cotacao.fornecedores} onAplicar={aplicarCotacao} abrir={cotacao.abrir}
+            cotacoes={cotacao.cotacoes} fornecedores={cotacao.fornecedores} onAplicar={aplicarCotacao} onEscolher={escolherCotacao} abrir={cotacao.abrir}
           />
         )}
 

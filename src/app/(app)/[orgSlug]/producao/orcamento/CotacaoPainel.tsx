@@ -17,6 +17,7 @@ import {
   parseFaixas, precoResolvido, respostaAplicada, statusConvite, textoWhatsApp, MAX_FAIXAS,
   type ArquivoRef, type CotacaoItem, type ItemOrcBase, type Resposta, type ConviteStatus,
 } from '@/lib/cotacao'
+import { CotacaoComparativo } from './CotacaoComparativo'
 import { criarCotacao, adicionarFornecedores, reenviarConvite, marcarWhatsapp, encerrarCotacao } from '@/app/actions/cotacao'
 
 export interface FornecedorCotacaoOpt { id: string; name: string; tipo: string | null; tags: string[]; email: string | null; telefone: string | null }
@@ -50,7 +51,7 @@ const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').to
 const hojeMais = (dias: number) => { const d = new Date(); d.setDate(d.getDate() + dias); return d.toLocaleDateString('en-CA') }
 
 export function CotacaoPainel({
-  orgSlug, orcamentoId, titulo, agencia, itens, itensSalvos, cotacoes, fornecedores, onAplicar, abrir = false,
+  orgSlug, orcamentoId, titulo, agencia, itens, itensSalvos, cotacoes, fornecedores, onAplicar, onEscolher, abrir = false,
 }: {
   orgSlug: string; orcamentoId: string; titulo: string; agencia: string
   /** Itens do formulário agora (para trazer resposta e para montar o pedido). */
@@ -60,6 +61,8 @@ export function CotacaoPainel({
   cotacoes: CotacaoView[]
   fornecedores: FornecedorCotacaoOpt[]
   onAplicar: (conviteId: string, fornecedorId: string, pedidos: CotacaoItem[], resposta: Resposta) => void
+  /** Escolhe (ou desmarca) no orçamento a opção vinda da proposta — clique no comparativo. */
+  onEscolher: (conviteId: string, pedido: CotacaoItem, variante: string, quant: number) => void
   /** Veio do "Gravar e pedir cotação": abre o envio direto. */
   abrir?: boolean
 }) {
@@ -90,7 +93,7 @@ export function CotacaoPainel({
       </div>
       {!itensSalvos && <p className="text-xs text-amber-700 mt-2">Há alterações não salvas — salve o orçamento antes de pedir cotação.</p>}
 
-      {atual && <Rodada c={atual} orgSlug={orgSlug} titulo={titulo} agencia={agencia} itens={itens} onAplicar={onAplicar}
+      {atual && <Rodada c={atual} orgSlug={orgSlug} titulo={titulo} agencia={agencia} itens={itens} onAplicar={onAplicar} onEscolher={onEscolher}
         onAdicionar={() => setModal({ modo: 'adicionar', cotacaoId: atual.id })} />}
 
       {antigas.length > 0 && (
@@ -99,7 +102,7 @@ export function CotacaoPainel({
             {verAntigas ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />} Cotações anteriores ({antigas.length})
           </button>
           {verAntigas && antigas.map(c => (
-            <Rodada key={c.id} c={c} orgSlug={orgSlug} titulo={titulo} agencia={agencia} itens={itens} onAplicar={onAplicar}
+            <Rodada key={c.id} c={c} orgSlug={orgSlug} titulo={titulo} agencia={agencia} itens={itens} onAplicar={onAplicar} onEscolher={onEscolher}
               onAdicionar={() => setModal({ modo: 'adicionar', cotacaoId: c.id })} />
           ))}
         </div>
@@ -117,15 +120,18 @@ export function CotacaoPainel({
   )
 }
 
-function Rodada({ c, orgSlug, titulo, agencia, itens, onAplicar, onAdicionar }: {
+function Rodada({ c, orgSlug, titulo, agencia, itens, onAplicar, onEscolher, onAdicionar }: {
   c: CotacaoView; orgSlug: string; titulo: string; agencia: string
   itens: ItemOrcBase[]
   onAplicar: (conviteId: string, fornecedorId: string, pedidos: CotacaoItem[], resposta: Resposta) => void
+  onEscolher: (conviteId: string, pedido: CotacaoItem, variante: string, quant: number) => void
   onAdicionar: () => void
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const responderam = c.convites.filter(v => v.respondido_em).length
+  // Com 2+ propostas o que se quer é comparar; a lista continua para status e reenvio.
+  const [vista, setVista] = useState<'comparativo' | 'lista'>(responderam >= 2 ? 'comparativo' : 'lista')
   const convites = [...c.convites].sort((a, b) => ORDEM.indexOf(statusConvite(a)) - ORDEM.indexOf(statusConvite(b)) || a.fornecedor.localeCompare(b.fornecedor, 'pt-BR'))
 
   return (
@@ -151,9 +157,22 @@ function Rodada({ c, orgSlug, titulo, agencia, itens, onAplicar, onAdicionar }: 
         </button>
       </div>
 
+      {responderam > 0 && (
+        <div className="mt-3 inline-flex p-0.5 rounded-lg bg-gray-100 text-xs">
+          {([['comparativo', 'Comparativo'], ['lista', 'Por fornecedor']] as const).map(([k, rotulo]) => (
+            <button key={k} type="button" onClick={() => setVista(k)}
+              className={cn('px-3 py-1 rounded-md font-medium transition-colors', vista === k ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800')}>
+              {rotulo}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {vista === 'comparativo' && responderam > 0 ? <CotacaoComparativo c={c} itens={itens} onEscolher={onEscolher} /> : (
       <ul className="mt-3 divide-y divide-gray-100 border border-gray-100 rounded-xl">
         {convites.map(v => <LinhaConvite key={v.id} v={v} c={c} orgSlug={orgSlug} titulo={titulo} agencia={agencia} itens={itens} onAplicar={onAplicar} />)}
       </ul>
+      )}
     </div>
   )
 }
