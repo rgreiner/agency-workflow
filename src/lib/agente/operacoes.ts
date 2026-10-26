@@ -486,3 +486,20 @@ export async function clienteDoTitulo(a: AgenteFlow, tituloId: string) {
   if (error) throw new ErroAgente(error.message)
   return data as { workspace_id: string; cliente: string; email: string | null; contato_nome: string | null; documento: string | null } | null
 }
+
+/**
+ * Dados oficiais da agência que o agente pode informar (razão social, CNPJ,
+ * endereço, banco/agência/conta e Pix) — vêm das Configurações da org, sem cópia.
+ */
+export async function empresa(a: AgenteFlow) {
+  const { data, error } = await a.supabase.from('org_settings')
+    .select('agency_info, payment_info, pix_chave, pix_nome').eq('org_id', a.orgId).maybeSingle()
+  if (error) throw new Error(error.message)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const info = (data?.agency_info ?? {}) as any
+  const cnpj = /(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})/.exec(String(info.cnpjFone ?? ''))?.[1] ?? null
+  return {
+    nome: info.nome ?? null, razao: info.razao ?? null, cnpj, endereco: info.endereco ?? null, cidade: info.cidade ?? null,
+    pagamento: data?.payment_info ?? null, pix_chave: data?.pix_chave ?? null, pix_nome: data?.pix_nome ?? null,
+  }
+}
