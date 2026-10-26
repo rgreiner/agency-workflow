@@ -193,7 +193,7 @@ export async function updateActivityStatus(
   comment: string,
   /** A pessoa confirmou que segue com os apontamentos da Revisão IA. */
   aceitarRevisao = false,
-): Promise<{ error?: string; revisao?: 'confirmar'; erros?: { trecho: string; correcao: string; tipo?: string }[]; falhou?: boolean; semLeitura?: boolean } | undefined> {
+): Promise<{ error?: string; revisao?: 'confirmar'; erros?: { trecho: string; correcao: string; tipo?: string }[]; falhou?: boolean; semLeitura?: boolean; aviso?: string } | undefined> {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
@@ -207,7 +207,7 @@ export async function updateActivityStatus(
   const v = await checarAvanco(supabase, user.id, activityId, fromStatus, newStatus, aceitarRevisao)
   if (!v.ok) {
     return v.motivo === 'confirmar'
-      ? { error: v.mensagem, revisao: 'confirmar', erros: v.erros, falhou: v.falhou, semLeitura: v.semLeitura }
+      ? { error: v.mensagem, revisao: 'confirmar', erros: v.erros, falhou: v.falhou, semLeitura: v.semLeitura, aviso: v.aviso }
       : { error: v.mensagem }
   }
 
@@ -635,11 +635,55 @@ export async function toggleCommentReaction(path: string, commentId: string, emo
  * Design); sem ele, a etapa atual. O resultado fica em activity_revisao (mig. 312)
  * com a impressão digital do material — sem comentário, o painel já mostra.
  */
-export async function revisarTarefa(path: string, activityId: string, etapaAlvo?: RevisaoEtapa): Promise<
+type ResultadoRevisao =
   | { ok: true; errors: { trecho: string; correcao: string; tipo?: string }[]; model: string; truncated: boolean; parcial: boolean; naoLidas: string[]; partes: number; reaproveitada: boolean }
   | { ok: false; aviso: string }
   | { error: string }
-> {
+
+/** Núcleo: revisa UMA etapa, grava o resultado vigente e o histórico. */
+async function revisarEtapa(
+  supabase: Awaited<ReturnType<typeof createClient>>, userId: string, activityId: string,
+  etapa: RevisaoEtapa, cfg: Awaited<ReturnType<typeof lerRevisaoConfig>>,
+): Promise<ResultadoRevisao> {
+  const anterior = (await revisoesDaTarefa(supabase, activityId)).get(etapa) ?? null
+  try {
+    const out = await revisarAtividade(supabase, activityId, userId, etapa, cfg, anterior)
+    if (!out.ok) {
+      // Pasta/Doc vazio conta como revisado; havia arquivos mas nada foi lido não
+      // (nao_lido pede confirmação para avançar).
+      const status = out.naoLido ? 'nao_lido' : 'vazio'
+      await salvarRevisao(supabase, activityId, userId, etapa, { status, apontamentos: null, fonte: out.fonte, texto: null })
+      await registrarHistorico(supabase, activityId, userId, etapa, { evento: 'revisao', status })
+      return { ok: false, aviso: out.vazio }
+    }
+    await salvarRevisao(supabase, activityId, userId, etapa, {
+      status: out.errors.length ? 'errors' : 'clean', apontamentos: out.errors.length ? out.errors : null,
+      fonte: out.fonte, texto: out.texto,
+    })
+    await registrarHistorico(supabase, activityId, userId, etapa, {
+      evento: 'revisao', status: out.errors.length ? 'errors' : 'clean', apontamentos: out.errors,
+      modelo: out.model, parcial: out.parcial, partes: out.partes ?? null, naoLidas: out.naoLidas ?? null,
+    })
+    return { ok: true, errors: out.errors, model: out.model, truncated: out.truncated, parcial: out.parcial, naoLidas: out.naoLidas ?? [], partes: out.partes ?? 1, reaproveitada: !!out.reaproveitada }
+  } catch (e) {
+    console.error('[revisao] falhou', e)
+    await logSystemError(supabase, { userId, context: `review:${etapa}`, error: e, activityId })
+    // Falha da IA não prende a tarefa: para avançar, a pessoa confirma que segue sem.
+    // Mantém a impressão digital/texto anteriores (a próxima tentativa compara com eles).
+    await salvarRevisao(supabase, activityId, userId, etapa, { status: 'failed', apontamentos: null }).catch(() => {})
+    await registrarHistorico(supabase, activityId, userId, etapa, { evento: 'revisao', status: 'failed' }).catch(() => {})
+    return { error: mensagemErroRevisao(e, cfg.provider) }
+  }
+}
+
+/**
+ * Botão "Revisar" da tarefa: roda a Revisão IA AGORA e devolve os apontamentos
+ * para a pessoa decidir antes de mover o status. `etapaAlvo` revisa uma etapa já
+ * passada cujo material mudou (ex.: texto da Redação editado com a tarefa em
+ * Design); sem ele, a etapa atual. O resultado fica em activity_revisao (mig. 312)
+ * com a impressão digital do material — sem comentário, o painel já mostra.
+ */
+export async function revisarTarefa(path: string, activityId: string, etapaAlvo?: RevisaoEtapa): Promise<ResultadoRevisao> {
   const supabase = await createClient()
   const user = await getUsuario()
   if (!user) return { error: 'Não autenticado' }
@@ -658,39 +702,36 @@ export async function revisarTarefa(path: string, activityId: string, etapaAlvo?
   const pos = await posicaoNaOrg(supabase, orgId)
   if (pos(etapa) > pos(act.status as string)) return { error: 'Esta etapa ainda não chegou.' }
 
-  const anterior = (await revisoesDaTarefa(supabase, activityId)).get(etapa) ?? null
-  try {
-    const out = await revisarAtividade(supabase, activityId, user.id, etapa, cfg, anterior)
-    // Sem material para revisar (pasta vazia, Doc vazio) conta como revisado.
-    if (!out.ok) {
-      // Pasta/Doc vazio conta como revisado; havia arquivos mas nada foi lido não
-      // (nao_lido pede confirmação para avançar).
-      const status = out.naoLido ? 'nao_lido' : 'vazio'
-      await salvarRevisao(supabase, activityId, user.id, etapa, { status, apontamentos: null, fonte: out.fonte, texto: null })
-      await registrarHistorico(supabase, activityId, user.id, etapa, { evento: 'revisao', status })
-      revalidatePath(path)
-      return { ok: false, aviso: out.vazio }
-    }
-    await salvarRevisao(supabase, activityId, user.id, etapa, {
-      status: out.errors.length ? 'errors' : 'clean', apontamentos: out.errors.length ? out.errors : null,
-      fonte: out.fonte, texto: out.texto,
-    })
-    await registrarHistorico(supabase, activityId, user.id, etapa, {
-      evento: 'revisao', status: out.errors.length ? 'errors' : 'clean', apontamentos: out.errors,
-      modelo: out.model, parcial: out.parcial, partes: out.partes ?? null, naoLidas: out.naoLidas ?? null,
-    })
-    revalidatePath(path)
-    return { ok: true, errors: out.errors, model: out.model, truncated: out.truncated, parcial: out.parcial, naoLidas: out.naoLidas ?? [], partes: out.partes ?? 1, reaproveitada: !!out.reaproveitada }
-  } catch (e) {
-    console.error('[revisao] falhou', e)
-    await logSystemError(supabase, { userId: user.id, context: `review:${etapa}`, error: e, activityId })
-    // Falha da IA não prende a tarefa: para avançar, a pessoa confirma que segue sem.
-    // Mantém a impressão digital/texto anteriores (a próxima tentativa compara com eles).
-    await salvarRevisao(supabase, activityId, user.id, etapa, { status: 'failed', apontamentos: null }).catch(() => {})
-    await registrarHistorico(supabase, activityId, user.id, etapa, { evento: 'revisao', status: 'failed' }).catch(() => {})
-    revalidatePath(path)
-    return { error: mensagemErroRevisao(e, cfg.provider) }
-  }
+  const r = await revisarEtapa(supabase, user.id, activityId, etapa, cfg)
+  revalidatePath(path)
+  return r
+}
+
+/**
+ * "Revisar tudo" da Validação de Criação (26/10/2026: a Revisão Interna saiu, a
+ * revisão é 100% IA): Redação, Preview e Final de uma vez — as três, liguem ou
+ * não as etapas individuais. O que não mudou desde a última revisão volta na hora.
+ */
+export async function revisarTudo(path: string, activityId: string): Promise<
+  { error: string } | { resultados: Record<RevisaoEtapa, ResultadoRevisao> }
+> {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+
+  const { data: act } = await supabase
+    .from('activities').select('status, campaigns(workspaces(org_id))').eq('id', activityId).single()
+  if (!act) return { error: 'Tarefa não encontrada' }
+  const orgId = (act as unknown as { campaigns: { workspaces: { org_id: string } | null } | null })
+    .campaigns?.workspaces?.org_id
+  if (!orgId) return { error: 'Tarefa não encontrada' }
+  const cfg = await lerRevisaoConfig(orgId)
+  if (!cfg.enabled) return { error: 'A Revisão IA está desligada.' }
+
+  const etapas: RevisaoEtapa[] = ['redacao', 'design', 'finalizacao']
+  const lista = await Promise.all(etapas.map(e => revisarEtapa(supabase, user.id, activityId, e, cfg)))
+  revalidatePath(path)
+  return { resultados: Object.fromEntries(etapas.map((e, i) => [e, lista[i]])) as Record<RevisaoEtapa, ResultadoRevisao> }
 }
 
 /** Etapas (já passadas ou a atual) cujo material mudou depois da revisão — aviso da tarefa. */

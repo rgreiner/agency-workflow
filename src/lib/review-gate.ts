@@ -6,7 +6,7 @@ import { backendForRef } from '@/lib/task-folders'
 import { listarPecasRevisaoS3, versoesPecasS3 } from '@/lib/s3-folders'
 import { reviewText, reviewTextAlteracoes, reviewArtwork, type ReviewError, type ContextoRevisao } from '@/lib/ai/review'
 import type { RevisaoConfig } from '@/lib/ai/revisao-config'
-import { etapaRevisavel, ETAPAS, type RevisaoEtapa } from '@/lib/ai/revisao-modelos'
+import { etapaRevisavel, ETAPAS, STATUS_REVISAO_COMPLETA, type RevisaoEtapa } from '@/lib/ai/revisao-modelos'
 import { iaDaOrg, iaDisponivel } from '@/lib/ai/provedor'
 import { stripHtml } from '@/lib/html'
 import { STATUS_CONFIG } from '@/types'
@@ -289,7 +289,7 @@ async function contextoDaTarefa(supabase: SupabaseClient<Database>, activityId: 
 export type VeredictoAvanco =
   | { ok: true; nota?: string }
   | { ok: false; motivo: 'precisa_revisar'; mensagem: string }
-  | { ok: false; motivo: 'confirmar'; mensagem: string; erros: ReviewError[]; falhou: boolean; semLeitura?: boolean }
+  | { ok: false; motivo: 'confirmar'; mensagem: string; erros: ReviewError[]; falhou: boolean; semLeitura?: boolean; aviso?: string }
 
 /** Como a tarefa se refere ao material de cada etapa nos avisos. */
 export const MATERIAL: Record<RevisaoEtapa, string> = {
@@ -325,6 +325,10 @@ export async function checarAvanco(
   const cfg = await iaDaOrg(orgId)
   // Sem IA que responda não dá pra exigir revisão — o botão nem funcionaria.
   if (!cfg?.enabled || !iaDisponivel(cfg)) return { ok: true }
+
+  if (from === STATUS_REVISAO_COMPLETA && cfg.stages.validacao !== false) {
+    return checarRevisaoCompleta(supabase, userId, activityId, aceitar)
+  }
 
   const etapaAtual = etapaRevisavel(from)
   if (!etapaAtual || !cfg.stages[etapaAtual]) return { ok: true }
@@ -377,6 +381,70 @@ export async function checarAvanco(
       ? `Seguiu sem a revisão de ${labels} (a IA não respondeu).`
       : `Seguiu com ${erros.length} ${erros.length === 1 ? 'apontamento' : 'apontamentos'} da revisão de ${labels}.`,
   }
+}
+
+/**
+ * Sair da Validação de Criação exige "Revisar tudo" (26/10/2026: a Revisão
+ * Interna saiu; a revisão é 100% IA). Vale a mesma régua das etapas: cada uma
+ * das três (Redação, Preview, Final) revisada DEPOIS da entrada na Validação e
+ * com o material igual ao revisado; apontamentos, falha ou nada lido pedem
+ * "Concordo, seguir". Pasta vazia passa (não há o que revisar).
+ */
+async function checarRevisaoCompleta(
+  supabase: SB, userId: string, activityId: string, aceitar: boolean,
+): Promise<VeredictoAvanco> {
+  const etapas: RevisaoEtapa[] = ['redacao', 'design', 'finalizacao']
+  const [revs, m, { data: entrada }] = await Promise.all([
+    revisoesDaTarefa(supabase, activityId),
+    material(supabase, activityId),
+    supabase.from('activity_history').select('changed_at').eq('activity_id', activityId).eq('to_status', STATUS_REVISAO_COMPLETA)
+      .order('changed_at', { ascending: false }).limit(1).maybeSingle(),
+  ])
+  const desde = (entrada as { changed_at?: string } | null)?.changed_at
+  const faltam: string[] = []
+  for (const e of etapas) {
+    const rev = revs.get(e)
+    if (!rev || (desde && new Date(rev.revisado_em) < new Date(desde)) || (m && await materialMudou(m, rev))) {
+      faltam.push(ETAPAS.find(x => x.key === e)!.label)
+    }
+  }
+  if (faltam.length) {
+    return { ok: false, motivo: 'precisa_revisar', mensagem: `Use "Revisar tudo" na tarefa antes de avançar (falta: ${faltam.join(', ')}).` }
+  }
+
+  const pendentes = etapas.map(e => ({ e, rev: revs.get(e)! }))
+    .filter(x => x.rev.status === 'errors' || x.rev.status === 'failed' || x.rev.status === 'nao_lido')
+  if (!pendentes.length) return { ok: true }
+
+  const nome = (e: RevisaoEtapa) => ETAPAS.find(x => x.key === e)!.label
+  const erros = pendentes.filter(x => x.rev.status === 'errors').flatMap(x => x.rev.apontamentos)
+  const semRevisao = pendentes.filter(x => x.rev.status !== 'errors')
+  const aviso = semRevisao.length
+    ? `Sem revisão da IA: ${semRevisao.map(x => `${nome(x.e)} (${x.rev.status === 'nao_lido' ? 'nada pôde ser lido' : 'a IA não respondeu'})`).join(', ')}.`
+    : undefined
+  const falhou = !erros.length
+  const semLeitura = falhou && semRevisao.every(x => x.rev.status === 'nao_lido')
+  if (!aceitar) {
+    return {
+      ok: false, motivo: 'confirmar', erros, falhou, semLeitura, aviso,
+      mensagem: erros.length
+        ? `A revisão completa tem ${erros.length} ${erros.length === 1 ? 'apontamento' : 'apontamentos'}. Abra a tarefa para confirmar que segue assim.`
+        : `Parte do material não foi revisada pela IA. Abra a tarefa para confirmar que segue assim.`,
+    }
+  }
+  for (const x of pendentes) {
+    const semRev = x.rev.status !== 'errors'
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from('activity_revisao').update({ status: semRev ? 'seguiu_sem_revisao' : 'overridden' })
+      .eq('activity_id', activityId).eq('etapa', x.e)
+    await registrarHistorico(supabase, activityId, userId, x.e, {
+      evento: 'seguiu', status: x.rev.status, apontamentos: semRev ? null : x.rev.apontamentos,
+    })
+  }
+  const partes: string[] = []
+  if (erros.length) partes.push(`${erros.length} ${erros.length === 1 ? 'apontamento' : 'apontamentos'} da revisão completa`)
+  if (semRevisao.length) partes.push(`sem revisão de ${semRevisao.map(x => nome(x.e)).join(' e ')}`)
+  return { ok: true, nota: `Seguiu com ${partes.join(' e ')}.` }
 }
 
 /** Posição de cada status na ordem da org (cadastro org_status). Desconhecido = fim. */

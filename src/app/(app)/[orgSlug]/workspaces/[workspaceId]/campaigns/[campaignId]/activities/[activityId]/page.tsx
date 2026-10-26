@@ -13,8 +13,9 @@ import { MobileStatusBar } from './MobileStatusBar'
 import { AbasMobile } from './AbasMobile'
 import { AvisoTarefaArquivada } from './AvisoTarefaArquivada'
 import { RevisaoIA } from './RevisaoIA'
+import { RevisaoCompleta } from './RevisaoCompleta'
 import { LegendasPortalAviso } from './LegendasPortalAviso'
-import { etapaRevisavel, ETAPAS, type RevisaoEtapa } from '@/lib/ai/revisao-modelos'
+import { etapaRevisavel, ETAPAS, STATUS_REVISAO_COMPLETA, type RevisaoEtapa } from '@/lib/ai/revisao-modelos'
 import { lerRevisaoConfigPublica } from '@/lib/ai/revisao-config'
 import { PortalFeedback, type PortalFeedbackItem } from './PortalFeedback'
 import { AutoRefresh } from '@/components/ui/AutoRefresh'
@@ -66,6 +67,12 @@ function BriefingLink({ href, label, title }: { href: string; label: string; tit
       <ExternalLink className="w-3.5 h-3.5 text-orange-400 shrink-0" />
     </a>
   )
+}
+
+/** Rótulo de status que não existe mais no cadastro (acentos dos conhecidos). */
+const STATUS_EXCLUIDOS: Record<string, string> = { revisao_interna: 'Revisão interna' }
+function nomeStatusExcluido(valor: string): string {
+  return STATUS_EXCLUIDOS[valor] ?? valor.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
 }
 
 export default async function ActivityPage({
@@ -255,20 +262,25 @@ export default async function ActivityPage({
   const etapaRev = etapaRevisavel(activity.status)
   const posStatus = (v: string) => { const i = statusConfig.findIndex(s => s.value === v); return i === -1 ? Number.MAX_SAFE_INTEGER : i }
   let etapasLigadas: RevisaoEtapa[] = []
+  // Validação de Criação com "Revisar tudo" obrigatório (26/10/2026).
+  let completaLigada = false
   if (orgId) {
     try {
       const c = await lerRevisaoConfigPublica(orgId)
-      if (c.enabled) etapasLigadas = ETAPAS.map(e => e.key).filter(e => c.stages[e])
+      if (c.enabled) {
+        etapasLigadas = ETAPAS.map(e => e.key).filter(e => c.stages[e])
+        completaLigada = activity.status === STATUS_REVISAO_COMPLETA && c.stages.validacao !== false
+      }
     } catch (e) { console.error('[revisao] config', e) }
   }
   const revisoes = new Map<string, { status: string; apontamentos: Record<string, string>[] | null; revisado_em: string }>()
   let entradaEtapa: string | null = null
-  if (etapasLigadas.length) {
+  if (etapasLigadas.length || completaLigada) {
     const [{ data: revs }, { data: ent }] = await Promise.all([
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (supabase as any).from('activity_revisao').select('etapa, status, apontamentos, revisado_em').eq('activity_id', activityId),
-      etapaRev
-        ? supabase.from('activity_history').select('changed_at').eq('activity_id', activityId).eq('to_status', etapaRev)
+      etapaRev || completaLigada
+        ? supabase.from('activity_history').select('changed_at').eq('activity_id', activityId).eq('to_status', etapaRev ?? STATUS_REVISAO_COMPLETA)
             .order('changed_at', { ascending: false }).limit(1).maybeSingle()
         : Promise.resolve({ data: null }),
     ])
@@ -290,7 +302,20 @@ export default async function ActivityPage({
   const revAtual = etapaRev ? revisoes.get(etapaRev) : undefined
   const ultimaRevisao = revAtual && (!entradaEtapa || new Date(revAtual.revisado_em) >= new Date(entradaEtapa)) ? resultado(revAtual) : null
   // Etapas já passadas, ligadas e com revisão registrada: candidatas ao aviso de mudança.
-  const etapasAnteriores = etapasLigadas.filter(e => e !== etapaRev && posStatus(e) < posStatus(activity.status) && revisoes.has(e))
+  // Na Validação com "Revisar tudo" o aviso sai: o bloco da revisão completa cobre as três.
+  const etapasAnteriores = completaLigada ? [] : etapasLigadas.filter(e => e !== etapaRev && posStatus(e) < posStatus(activity.status) && revisoes.has(e))
+  // Revisão completa: só vale o que foi revisado DEPOIS da entrada na Validação.
+  const ultimaCompleta: Partial<Record<RevisaoEtapa, NonNullable<ReturnType<typeof resultado>>>> = {}
+  if (completaLigada) {
+    for (const e of ['redacao', 'design', 'finalizacao'] as RevisaoEtapa[]) {
+      const r = revisoes.get(e)
+      if (!r || (entradaEtapa && new Date(r.revisado_em) < new Date(entradaEtapa))) continue
+      ultimaCompleta[e] = resultado(r) ?? { tipo: 'aviso' as const, texto:
+        r.status === 'vazio' ? 'Nada para revisar (pasta ou Doc vazio).'
+          : r.status === 'failed' ? 'A IA não respondeu nesta parte.'
+          : 'Seguiu sem revisão da IA.' }
+    }
+  }
 
 
   const priorityCfg  = PRIORITY_CONFIG[activity.priority as ActivityPriority]
@@ -347,10 +372,15 @@ export default async function ActivityPage({
               <span>moveu de</span>
               {fromCfg
                 ? <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: fromCfg.bg, color: fromCfg.text }}>{fromCfg.label}</span>
-                : <span className="text-gray-500">início</span>
+                : item.from
+                  // Status que saiu do cadastro (ex.: Revisão interna, 26/10/2026): nome em cinza.
+                  ? <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-500">{nomeStatusExcluido(item.from)}</span>
+                  : <span className="text-gray-500">início</span>
               }
               <ArrowRight className="w-3 h-3 text-gray-300 shrink-0" />
-              {toCfg && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: toCfg.bg, color: toCfg.text }}>{toCfg.label}</span>}
+              {toCfg
+                ? <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: toCfg.bg, color: toCfg.text }}>{toCfg.label}</span>
+                : item.to && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-500">{nomeStatusExcluido(item.to)}</span>}
             </div>
             {item.comment && (
               <p className="text-[11px] text-gray-500 mt-1 italic whitespace-pre-wrap break-words">"{item.comment}"</p>
@@ -651,6 +681,14 @@ export default async function ActivityPage({
             <FocusTracker activityId={activityId} origem={modal ? 'modal' : 'pagina'} />
 
             {/* Revisão por IA sob demanda — antes de mover o status */}
+            {completaLigada && (
+              <RevisaoCompleta
+                key={`completa-${entradaEtapa ?? ''}`}
+                activityId={activityId}
+                path={path}
+                ultima={ultimaCompleta}
+              />
+            )}
             {etapasAnteriores.map(e => (
               <RevisaoIA
                 key={`${e}-${revisoes.get(e)?.revisado_em ?? ''}`}

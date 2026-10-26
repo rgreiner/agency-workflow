@@ -6,7 +6,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { linhaApontamento } from '@/lib/ai/revisao-modelos'
 
 type Apontamento = { trecho: string; correcao: string; tipo?: string }
-type Resultado = { error?: string; revisao?: 'confirmar'; erros?: Apontamento[]; falhou?: boolean; semLeitura?: boolean } | undefined
+type Resultado = { error?: string; revisao?: 'confirmar'; erros?: Apontamento[]; falhou?: boolean; semLeitura?: boolean; aviso?: string } | undefined
 
 /**
  * Mover o status passando pela Revisão IA: quando o servidor pede confirmação
@@ -14,7 +14,7 @@ type Resultado = { error?: string; revisao?: 'confirmar'; erros?: Apontamento[];
  * pessoa concordar, repete o pedido com `aceitar`. Cancelar = `{ cancelado }`.
  */
 export function useAvancoRevisado() {
-  const [pedido, setPedido] = useState<{ erros: Apontamento[]; falhou: boolean; semLeitura: boolean } | null>(null)
+  const [pedido, setPedido] = useState<{ erros: Apontamento[]; falhou: boolean; semLeitura: boolean; aviso?: string } | null>(null)
   const resolver = useRef<((ok: boolean) => void) | null>(null)
 
   function responder(ok: boolean) {
@@ -28,7 +28,7 @@ export function useAvancoRevisado() {
     if (r?.revisao !== 'confirmar') return r
     const ok = await new Promise<boolean>(res => {
       resolver.current = res
-      setPedido({ erros: r.erros ?? [], falhou: !!r.falhou, semLeitura: !!r.semLeitura })
+      setPedido({ erros: r.erros ?? [], falhou: !!r.falhou, semLeitura: !!r.semLeitura, aviso: r.aviso })
     })
     if (!ok) return { cancelado: true }
     return chamar(true)
@@ -51,6 +51,7 @@ export function useAvancoRevisado() {
       onConfirm={() => responder(true)}
       onCancel={() => responder(false)}
     >
+      {pedido?.aviso && <p className="mt-3 text-sm text-amber-700">{pedido.aviso}</p>}
       {!!n && (
         <ul className="mt-3 space-y-1 text-sm text-gray-700 max-h-48 overflow-y-auto">
           {pedido!.erros.map((e, i) => <li key={i}>{linhaApontamento(e)}</li>)}

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { toast } from 'sonner'
-import { FileText, Palette, PackageCheck, Sparkles, KeyRound, Loader2, FlaskConical } from 'lucide-react'
+import { FileText, Palette, PackageCheck, Sparkles, KeyRound, Loader2, FlaskConical, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { Switch } from '@/components/ui/Switch'
@@ -143,6 +143,22 @@ export function RevisaoClient({ orgSlug, initial, geminiNoServidor }: { orgSlug:
               </li>
             )
           })}
+          <li className="flex items-start gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3">
+            <ShieldCheck className={cn('w-4 h-4 mt-0.5 shrink-0', salvo.stages.validacao !== false ? 'text-orange-500' : 'text-gray-300')} />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-gray-900">Validação de Criação — Revisar tudo</p>
+              <p className="text-xs text-gray-500 mt-0.5">Para sair da Validação, revisa Redação, Preview e Final de uma vez. Substitui a Revisão Interna.</p>
+            </div>
+            <Switch
+              checked={salvo.stages.validacao !== false}
+              label="Revisar tudo na Validação de Criação"
+              disabled={salvando || !salvo.enabled}
+              onChange={v => salvarRapido(
+                { enabled: salvo.enabled, stages: { ...salvo.stages, validacao: v } },
+                v ? 'Revisar tudo obrigatório na Validação de Criação.' : 'Validação de Criação sem revisão completa.',
+              )}
+            />
+          </li>
         </ul>
       </div>
 

@@ -8,7 +8,16 @@
  */
 export type RevisaoProvider = 'anthropic' | 'gemini'
 export type RevisaoEtapa = 'redacao' | 'design' | 'finalizacao'
-export type RevisaoEtapas = Record<RevisaoEtapa, boolean>
+export type RevisaoEtapas = Record<RevisaoEtapa, boolean> & {
+  /**
+   * Validação de Criação exige "Revisar tudo" (Redação + Preview + Final) para
+   * avançar — 26/10/2026: a Revisão Interna saiu, 100% da revisão é a IA.
+   */
+  validacao?: boolean
+}
+
+/** Status onde o "Revisar tudo" é obrigatório para avançar. */
+export const STATUS_REVISAO_COMPLETA = 'validacao_de_criacao'
 
 export const ETAPAS: { key: RevisaoEtapa; label: string; desc: string }[] = [
   { key: 'redacao',     label: 'Redação',     desc: 'Revisa o texto do Doc de Redação.' },
@@ -43,7 +52,7 @@ export const PROVEDORES: {
   },
 ]
 
-export const DEFAULT_ETAPAS: RevisaoEtapas = { redacao: true, design: true, finalizacao: true }
+export const DEFAULT_ETAPAS: RevisaoEtapas = { redacao: true, design: true, finalizacao: true, validacao: true }
 
 export function modeloPadrao(p: RevisaoProvider): string {
   return PROVEDORES.find(x => x.value === p)!.modelos[0].value

@@ -28,7 +28,17 @@ export function useStatusConfig(): StatusConfig[] {
  */
 export function StatusBadge({ status, className }: { status: string; className?: string }) {
   const cfg = useStatusConfig().find(s => s.value === status)
-  if (!cfg) return null
+  // Status excluído do cadastro (ex.: Revisão interna, 26/10/2026) ainda aparece no
+  // histórico das tarefas antigas: mostra o nome em cinza em vez de sumir.
+  if (!cfg) {
+    if (!status) return null
+    const nome = status.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
+    return (
+      <span className={cn('inline-flex items-center text-xs font-semibold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500', className)}>
+        {nome}
+      </span>
+    )
+  }
   return (
     <span
       className={cn('inline-flex items-center text-xs font-semibold px-2.5 py-0.5 rounded-full', className)}
