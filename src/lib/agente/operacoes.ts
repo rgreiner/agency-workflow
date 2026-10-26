@@ -558,3 +558,21 @@ export async function titulosDetalhe(a: AgenteFlow, ids: string[]) {
     }
   }))
 }
+
+/**
+ * Clientes com cobrança automática que ficam FORA da régua por não ter telefone
+ * marcado como Financeiro (mig. 367) — a lista de de-para do Rafael, com o link
+ * do cadastro no Flow.
+ */
+export async function clientesSemFinanceiro(a: AgenteFlow) {
+  const [lista, org] = await Promise.all([
+    a.supabase.rpc('fin_clientes_sem_financeiro', { p_org: a.orgId }),
+    a.supabase.from('organizations').select('slug').eq('id', a.orgId).maybeSingle(),
+  ])
+  if (lista.error) throw new ErroAgente(lista.error.message)
+  const base = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://flow.oneaone.com.br').replace(/\/$/, '')
+  const slug = (org.data as { slug: string } | null)?.slug
+  return ((lista.data ?? []) as { id: string; cliente: string; em_aberto: number }[]).map((c) => ({
+    ...c, link: slug ? `${base}/${slug}/workspaces/${c.id}` : null,
+  }))
+}
