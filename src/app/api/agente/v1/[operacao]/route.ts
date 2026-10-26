@@ -8,7 +8,7 @@
  */
 import { NextResponse } from 'next/server'
 import { autenticarAgente } from '@/lib/agente/auth'
-import { ErroAgente, agenda, buscarContatos, titulosDetalhe, clientesSemFinanceiro, comissoesNf, comissaoDocumentos, clienteDoTitulo, empresa, anexarDocumento, anotar, atualizarDespesa, despesasAbertas, lancarDespesa, lerDespesa, opcoesDespesa, cobranca, documentos, documentosFornecedor, identificar, nfFornecedor, prorrogar, registrarEnvio, registrarEnvioAgente, regua, titulos, verificar } from '@/lib/agente/operacoes'
+import { ErroAgente, agenda, buscarContatos, titulosDetalhe, clientesSemFinanceiro, comissoesNf, comissaoDocumentos, reguaComissao, clienteDoTitulo, empresa, anexarDocumento, anotar, atualizarDespesa, despesasAbertas, lancarDespesa, lerDespesa, opcoesDespesa, cobranca, documentos, documentosFornecedor, identificar, nfFornecedor, prorrogar, registrarEnvio, registrarEnvioAgente, regua, titulos, verificar } from '@/lib/agente/operacoes'
 import { logSystemError } from '@/lib/system-error'
 
 export const runtime = 'nodejs'
@@ -57,6 +57,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ operaca
       case 'empresa': dados = await empresa(agente); break
       case 'buscar-contatos': dados = await buscarContatos(agente, str(b.termo)); break
       case 'clientes-sem-financeiro': dados = await clientesSemFinanceiro(agente); break
+      case 'regua-comissao': dados = await reguaComissao(agente); break
       case 'comissoes-nf': dados = await comissoesNf(agente); break
       case 'comissao-documentos': dados = await comissaoDocumentos(agente, str(b.titulo_id)); break
       case 'titulos-detalhe': dados = await titulosDetalhe(agente, Array.isArray(b.ids) ? (b.ids as string[]) : []); break
