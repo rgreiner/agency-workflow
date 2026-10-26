@@ -8,7 +8,7 @@
  */
 import { NextResponse } from 'next/server'
 import { autenticarAgente } from '@/lib/agente/auth'
-import { ErroAgente, agenda, anexarDocumento, anotar, cobranca, documentos, documentosFornecedor, identificar, nfFornecedor, prorrogar, registrarEnvio, registrarEnvioAgente, regua, titulos, verificar } from '@/lib/agente/operacoes'
+import { ErroAgente, agenda, anexarDocumento, anotar, atualizarDespesa, despesasAbertas, cobranca, documentos, documentosFornecedor, identificar, nfFornecedor, prorrogar, registrarEnvio, registrarEnvioAgente, regua, titulos, verificar } from '@/lib/agente/operacoes'
 import { logSystemError } from '@/lib/system-error'
 
 export const runtime = 'nodejs'
@@ -43,6 +43,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ operaca
       case 'documentos-fornecedor': dados = await documentosFornecedor(agente, str(b.contato_tipo), str(b.contato_id)); break
       case 'anexar-documento':
         dados = await anexarDocumento(agente, { titulo_id: str(b.titulo_id), tipo: str(b.tipo), numero: str(b.numero), nome: str(b.nome), conteudo_base64: str(b.conteudo_base64) }); break
+      case 'despesas-abertas': dados = await despesasAbertas(agente); break
+      case 'atualizar-despesa':
+        dados = await atualizarDespesa(agente, {
+          titulo_id: str(b.titulo_id), valor: typeof b.valor === 'number' ? b.valor : null, vencimento: str(b.vencimento) || null,
+          tipo: str(b.tipo), numero: str(b.numero), nome: str(b.nome), conteudo_base64: str(b.conteudo_base64),
+        }); break
       default:
         return NextResponse.json({ ok: false, erro: `operação ${operacao} não existe na v1` }, { status: 501 })
     }

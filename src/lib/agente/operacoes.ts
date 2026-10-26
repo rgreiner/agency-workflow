@@ -348,14 +348,9 @@ export async function documentosFornecedor(a: AgenteFlow, tipo: string, id: stri
 
 const MAX_PDF = 10 * 1024 * 1024
 
-/**
- * Grava o PDF no volume (mesmo lugar do upload da tela) e ACRESCENTA ao título
- * como documento do fornecedor. Só PDF; nada é removido ou trocado.
- */
-export async function anexarDocumento(a: AgenteFlow, b: { titulo_id: string; tipo: string; numero: string; nome: string; conteudo_base64: string }) {
-  await lancamento(a, b.titulo_id)
-  if (b.tipo !== 'NF' && b.tipo !== 'Boleto') throw new ErroAgente('tipo deve ser NF ou Boleto')
-  const buf = Buffer.from(b.conteudo_base64 || '', 'base64')
+/** Grava o PDF no volume (mesmo lugar do upload da tela) e devolve a URL pública. */
+async function gravarPdf(base64: string): Promise<string> {
+  const buf = Buffer.from(base64 || '', 'base64')
   if (!buf.length || buf.length > MAX_PDF) throw new ErroAgente('arquivo vazio ou maior que 10 MB')
   if (buf.subarray(0, 5).toString('latin1') !== '%PDF-') throw new ErroAgente('só PDF')
   const { writeFile, mkdir } = await import('node:fs/promises')
@@ -366,10 +361,44 @@ export async function anexarDocumento(a: AgenteFlow, b: { titulo_id: string; tip
   await mkdir(dir, { recursive: true })
   await writeFile(path.join(dir, nomeArq), buf)
   const base = (process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.oneaone.com.br').replace(/\/$/, '')
+  return `${base}/uploads/lancamentos/${nomeArq}`
+}
+
+/**
+ * Grava o PDF no volume (mesmo lugar do upload da tela) e ACRESCENTA ao título
+ * como documento do fornecedor. Só PDF; nada é removido ou trocado.
+ */
+export async function anexarDocumento(a: AgenteFlow, b: { titulo_id: string; tipo: string; numero: string; nome: string; conteudo_base64: string }) {
+  await lancamento(a, b.titulo_id)
+  if (b.tipo !== 'NF' && b.tipo !== 'Boleto') throw new ErroAgente('tipo deve ser NF ou Boleto')
+  const url = await gravarPdf(b.conteudo_base64)
   const { data, error } = await a.supabase.rpc('fin_anexar_documento_fornecedor', {
     p_lancamento_id: b.titulo_id,
-    p_anexo: { url: `${base}/uploads/lancamentos/${nomeArq}`, nome: (b.nome || 'documento.pdf').slice(0, 200), tipo: b.tipo, numero: (b.numero || '').slice(0, 40) },
+    p_anexo: { url, nome: (b.nome || 'documento.pdf').slice(0, 200), tipo: b.tipo, numero: (b.numero || '').slice(0, 40) },
   })
   if (error) throw new ErroAgente(error.message)
   return data as { ok: true; repetido?: boolean }
+}
+
+// ── Conta da agência recebida por e-mail (mig. 363) ─────────────────────────
+
+/** Contas a pagar em aberto (60 dias para trás, 75 para a frente) para casar com a guia/boleto. */
+export async function despesasAbertas(a: AgenteFlow) {
+  const { data, error } = await a.supabase.rpc('fin_despesas_abertas', { p_org: a.orgId })
+  if (error) throw new Error(error.message)
+  return data as { lancamento_id: string; descricao: string; contato_nome: string | null; categoria: string | null; valor: number; vencimento: string; anexos: string | null }[]
+}
+
+/** Atualiza valor/vencimento e (opcional) anexa o PDF numa conta a pagar em aberto. Só depois do Sim. */
+export async function atualizarDespesa(a: AgenteFlow, b: { titulo_id: string; valor?: number | null; vencimento?: string | null; tipo?: string; numero?: string; nome?: string; conteudo_base64?: string }) {
+  await lancamento(a, b.titulo_id)
+  if (b.vencimento && !/^\d{4}-\d{2}-\d{2}$/.test(b.vencimento)) throw new ErroAgente('vencimento inválido (AAAA-MM-DD)')
+  const anexo = b.conteudo_base64
+    ? { url: await gravarPdf(b.conteudo_base64), nome: (b.nome || 'documento.pdf').slice(0, 200), tipo: b.tipo === 'NF' ? 'NF' : b.tipo === 'Outro' ? 'Outro' : 'Boleto', numero: (b.numero || '').slice(0, 40) }
+    : null
+  const { data, error } = await a.supabase.rpc('fin_atualizar_despesa_agente', {
+    p_lancamento_id: b.titulo_id, p_valor: b.valor ?? null, p_vencimento: b.vencimento || null, p_anexo: anexo,
+  })
+  if (error) throw new ErroAgente(error.message)
+  return data as { ok: true; mudancas?: string[]; sem_mudanca?: boolean }
 }
