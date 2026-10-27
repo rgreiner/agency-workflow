@@ -233,7 +233,7 @@ export function EletronicaForm({
                           return <th key={d} className="px-0.5 py-1 w-7 text-center"><div className="text-gray-600">{d}</div><div>{wd}</div></th>
                         })}
                         <th className="px-1 py-1 w-12 text-right">Exib.</th>
-                        <th className="px-1 py-1 w-28 text-right">Vl. unit.</th>
+                        <th className="px-1 py-1 min-w-[6.5rem] text-right whitespace-nowrap">Vl. unit.</th>
                         <th className="px-1 py-1 w-16 text-right">Desc%</th>
                         <th className="px-1 py-1 w-28 text-right">Total</th>
                         <th className="w-6" />
@@ -249,8 +249,8 @@ export function EletronicaForm({
                             return <td key={d} className="px-0.5 py-1"><input value={it.dias[d] ?? ''} onChange={e => setItemDia(pi, ii, d, e.target.value)} className="w-7 h-7 text-center text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-orange-500" /></td>
                           })}
                           <td className="px-1 py-1 text-right font-medium">{exibOf(it)}</td>
-                          <td className="px-1 py-1"><input inputMode="decimal" value={it.valor_unitario} onChange={e => setItem(pi, ii, 'valor_unitario', e.target.value)} placeholder="0,00" className={cn(cellCls, 'text-right')} /></td>
-                          <td className="px-1 py-1"><input inputMode="decimal" value={it.desconto} onChange={e => setItem(pi, ii, 'desconto', e.target.value)} className={cn(cellCls, 'text-right')} /></td>
+                          <td className="px-1 py-1"><input inputMode="decimal" value={it.valor_unitario} onChange={e => setItem(pi, ii, 'valor_unitario', e.target.value)} placeholder="0,00" className={cn(cellCls, 'text-right min-w-[6.5rem] tabular-nums')} /></td>
+                          <td className="px-1 py-1"><input inputMode="decimal" value={it.desconto} onChange={e => setItem(pi, ii, 'desconto', e.target.value)} className={cn(cellCls, 'text-right min-w-[4rem] tabular-nums')} /></td>
                           <td className="px-1 py-1 text-right font-medium whitespace-nowrap">{formatBRL(totalItem(it))}</td>
                           <td className="px-1 py-1 text-right">{p.itens.length > 1 && <button aria-label="Remover" type="button" onClick={() => delItem(pi, ii)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-3.5 h-3.5" /></button>}</td>
                         </tr>
