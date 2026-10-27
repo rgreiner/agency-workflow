@@ -336,6 +336,34 @@ export async function registrarEnvioAgente(a: AgenteFlow, tituloId: string, buck
   return { ok: true as const }
 }
 
+// ── Documento cancelado: avisar o veículo/fornecedor (mig. 384) ─────────────
+
+/**
+ * MX/PP canceladas com lançamento removido, ainda sem o aviso em algum canal
+ * (e-mail e WhatsApp, cada um uma vez). O lançamento já não existe: o rastro é
+ * documento_cancelamentos, com a foto do que foi removido.
+ */
+export async function cancelamentos(a: AgenteFlow) {
+  const { data, error } = await a.supabase.rpc('fin_cancelamentos_avisar', { p_org: a.orgId })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as {
+    id: string; origem_tipo: 'midia' | 'producao'; documento: string | null; titulo: string | null; cliente: string | null
+    contato_tipo: 'veiculo' | 'fornecedor'; contato_id: string; contato: string; contato_nome: string | null
+    email: string | null; telefone: string | null; valor: number
+    lancamentos: { descricao: string; valor: number; vencimento: string | null }[]
+    cancelado_em: string; email_feito: boolean; whats_feito: boolean
+  }[]
+}
+
+/** Marca o aviso de cancelamento como enviado naquele canal (não repete). */
+export async function cancelamentoAvisado(a: AgenteFlow, id: string, canal: string, destino: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new ErroAgente('cancelamento inválido')
+  if (canal !== 'email' && canal !== 'whatsapp') throw new ErroAgente('canal inválido')
+  const { error } = await a.supabase.rpc('fin_cancelamento_avisado', { p_id: id, p_canal: canal, p_destino: destino })
+  if (error) throw new ErroAgente(error.message)
+  return { ok: true as const }
+}
+
 // ── Documento do fornecedor recebido por e-mail (mig. 362) ──────────────────
 
 /** PP/MX em aberto de um fornecedor/veículo, dizendo o que já tem de NF/boleto dele. */

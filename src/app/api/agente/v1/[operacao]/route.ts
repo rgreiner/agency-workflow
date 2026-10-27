@@ -8,7 +8,7 @@
  */
 import { NextResponse } from 'next/server'
 import { autenticarAgente } from '@/lib/agente/auth'
-import { ErroAgente, agenda, buscarContatos, titulosDetalhe, clientesSemFinanceiro, comissoesNf, comissaoDocumentos, reguaComissao, notasFiscais, cancelarNotaFiscal, rescisoes, btgConciliado, desfazerEnvio, folhaSituacao, folhaFechar, folhaEnviar, dpAgenda, contatosNomes, resumoMesa, recebimentosComparados, clienteDoTitulo, empresa, anexarDocumento, anotar, atualizarDespesa, despesasAbertas, lancarDespesa, lerDespesa, opcoesDespesa, cobranca, documentos, documentosFornecedor, identificar, nfFornecedor, prorrogar, registrarEnvio, registrarEnvioAgente, regua, titulos, verificar } from '@/lib/agente/operacoes'
+import { ErroAgente, agenda, cancelamentos, cancelamentoAvisado, buscarContatos, titulosDetalhe, clientesSemFinanceiro, comissoesNf, comissaoDocumentos, reguaComissao, notasFiscais, cancelarNotaFiscal, rescisoes, btgConciliado, desfazerEnvio, folhaSituacao, folhaFechar, folhaEnviar, dpAgenda, contatosNomes, resumoMesa, recebimentosComparados, clienteDoTitulo, empresa, anexarDocumento, anotar, atualizarDespesa, despesasAbertas, lancarDespesa, lerDespesa, opcoesDespesa, cobranca, documentos, documentosFornecedor, identificar, nfFornecedor, prorrogar, registrarEnvio, registrarEnvioAgente, regua, titulos, verificar } from '@/lib/agente/operacoes'
 import { logSystemError } from '@/lib/system-error'
 
 export const runtime = 'nodejs'
@@ -47,6 +47,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ operaca
       case 'folha-fechar': dados = await folhaFechar(agente, str(b.competencia), Array.isArray(b.pessoas) ? (b.pessoas as unknown[]).map(str).filter(Boolean) : [], b.sem_envio === true); break
       case 'folha-enviar': dados = await folhaEnviar(agente, str(b.run_id), { vr: typeof b.vr === 'number' ? b.vr : null, vt: typeof b.vt === 'number' ? b.vt : null, corpo: str(b.corpo) }); break
       case 'nf-fornecedor': dados = await nfFornecedor(agente); break
+      case 'cancelamentos': dados = await cancelamentos(agente); break
+      case 'cancelamento-avisado': dados = await cancelamentoAvisado(agente, str(b.id), str(b.canal), str(b.destino)); break
       case 'registrar-envio-agente': dados = await registrarEnvioAgente(agente, str(b.titulo_id), str(b.bucket), str(b.canal), str(b.destino)); break
       case 'documentos-fornecedor': dados = await documentosFornecedor(agente, str(b.contato_tipo), str(b.contato_id)); break
       case 'anexar-documento':
