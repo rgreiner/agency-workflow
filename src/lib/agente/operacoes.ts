@@ -744,3 +744,16 @@ export async function dpAgenda(a: AgenteFlow) {
   if (error) throw new ErroAgente(error.message)
   return data
 }
+
+/** Todos os contatos ativos (só tipo, id, nome e razão) — para o de-para das conversas importadas. */
+export async function contatosNomes(a: AgenteFlow) {
+  const tipos: TipoContato[] = ['cliente', 'fornecedor', 'veiculo']
+  const listas = await Promise.all(tipos.map(async tipo => {
+    const { data, error } = await a.supabase.from(TABELA[tipo])
+      .select('id, name, legal_name').eq('org_id', a.orgId).eq('archived', false).limit(2000)
+    if (error) throw new Error(error.message)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return ((data ?? []) as any[]).map(c => ({ tipo, id: c.id as string, nome: c.name as string, empresa: (c.legal_name || c.name) as string }))
+  }))
+  return listas.flat()
+}
