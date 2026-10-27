@@ -814,7 +814,7 @@ type Linha = { id: string; doc_serie: string | null; doc_numero: number | null; 
   categoria: string | null; anexos: Anexo[] | null }
 
 const item = (l: Linha, hoje: string) => ({
-  documento: doc(l), contato: l.contato_nome ?? '(sem contato)', contato_tipo: l.contato_tipo, descricao: l.descricao,
+  id: l.id, documento: doc(l), contato: l.contato_nome ?? '(sem contato)', contato_tipo: l.contato_tipo, descricao: l.descricao,
   valor: Math.abs(Number(l.valor)), vencimento: l.vencimento, situacao: l.situacao,
   dias_atraso: l.vencimento && l.vencimento < hoje && l.situacao === 'em_aberto'
     ? Math.round((Date.parse(hoje) - Date.parse(l.vencimento)) / 86_400_000) : 0,
@@ -913,5 +913,56 @@ export async function financeiroConsulta(a: AgenteFlow, consulta: string, p: Rec
     return { n: sem.length, itens: sem.slice(0, 60).map(l => item(l, hoje)) }
   }
 
-  throw new ErroAgente('consulta desconhecida (a_receber, a_pagar, caixa, realizado, buscar, nf_pendentes)')
+  if (consulta === 'previsao_mes') {
+    // "Quanto do que está em aberto vira caixa até o fim do mês?" — títulos a receber vencidos
+    // ou vencendo até o último dia do mês, com a promessa registrada e o último contato de cobrança.
+    const fim = somaDias(`${somaDias(`${hoje.slice(0, 7)}-01`, 32).slice(0, 7)}-01`, -1)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- builder reatribuído estoura a inferência do supabase-js
+    let q: any = a.supabase.from('lancamentos_doc').select(LANC).eq('org_id', a.orgId).eq('tipo', 'entrada')
+      .eq('situacao', 'em_aberto').is('transferencia_id', null).lte('vencimento', fim)
+    if (!p.incluir_sem_contato) q = q.not('contato_nome', 'is', null)
+    const [abertos, recebidos] = await Promise.all([
+      q.order('vencimento').limit(300),
+      a.supabase.from('lancamentos_doc').select('valor').eq('org_id', a.orgId).eq('tipo', 'entrada').eq('situacao', 'recebido')
+        .is('transferencia_id', null).gte('data_liquidacao', `${hoje.slice(0, 7)}-01`).lte('data_liquidacao', hoje),
+    ])
+    if (abertos.error) throw new ErroAgente(abertos.error.message)
+    const ls = (abertos.data ?? []) as unknown as Linha[]
+    const ids = ls.map(l => l.id)
+    const [prom, avisos] = ids.length ? await Promise.all([
+      a.supabase.from('lancamentos').select('id, promessa_data, promessa_obs').in('id', ids),
+      a.supabase.from('cobranca_avisos').select('lancamento_id, bucket, canal, sent_at').in('lancamento_id', ids).order('sent_at', { ascending: false }),
+    ]) : [{ data: [] }, { data: [] }]
+    const pm = new Map(((prom.data ?? []) as { id: string; promessa_data: string | null; promessa_obs: string | null }[]).map(x => [x.id, x]))
+    const ult = new Map<string, { bucket: string; canal: string; sent_at: string }>()
+    for (const x of (avisos.data ?? []) as { lancamento_id: string; bucket: string; canal: string; sent_at: string }[]) if (!ult.has(x.lancamento_id)) ult.set(x.lancamento_id, x)
+    const itens = ls.map(l => {
+      const pr = pm.get(l.id), av = ult.get(l.id)
+      const i = item(l, hoje)
+      const grupo = pr?.promessa_data ? (pr.promessa_data <= fim ? 'prometido_no_mes' : 'prometido_depois')
+        : i.dias_atraso > 0 ? 'vencido_sem_promessa' : 'a_vencer'
+      return { ...i, grupo, promessa: pr?.promessa_data ?? null, promessa_obs: pr?.promessa_obs ?? null,
+        ultimo_contato: av ? `${av.sent_at.slice(0, 10)} · ${av.canal} · ${av.bucket}` : null }
+    })
+    const soma = (g: string) => Math.round(itens.filter(i => i.grupo === g).reduce((s2, i) => s2 + i.valor, 0) * 100) / 100
+    const recebido = Math.round(((recebidos.data ?? []) as { valor: number }[]).reduce((s2, x) => s2 + Math.abs(Number(x.valor)), 0) * 100) / 100
+    return {
+      hoje, fim_do_mes: fim, recebido_no_mes: recebido,
+      prometido_no_mes: soma('prometido_no_mes'), a_vencer: soma('a_vencer'),
+      vencido_sem_promessa: soma('vencido_sem_promessa'), prometido_depois: soma('prometido_depois'),
+      itens: itens.slice(0, 80),
+    }
+  }
+
+  throw new ErroAgente('consulta desconhecida (a_receber, a_pagar, caixa, realizado, buscar, nf_pendentes, previsao_mes)')
+}
+
+
+/** Promessa de pagamento num título a receber (silencia a régua até a data). data null = tira a promessa. */
+export async function registrarPromessa(a: AgenteFlow, tituloId: string, data: string | null, obs: string | null) {
+  await lancamento(a, tituloId)
+  if (data !== null && !/^\d{4}-\d{2}-\d{2}$/.test(data)) throw new ErroAgente('data inválida (AAAA-MM-DD)')
+  const { error } = await a.supabase.rpc('set_lancamento_promessa', { p_user_id: a.userId, p_lancamento_id: tituloId, p_data: data, p_obs: obs })
+  if (error) throw new ErroAgente(error.message)
+  return { ok: true as const }
 }
