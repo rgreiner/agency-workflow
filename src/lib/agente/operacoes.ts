@@ -683,3 +683,9 @@ export async function rescisoes(a: AgenteFlow) {
     aviso_ini: string | null; aviso_fim: string | null; demissao: string | null; ultimo_dia: string | null; dias_uteis_ate_ultimo: number | null
   }[]
 }
+
+export async function btgConciliado(a: AgenteFlow) {
+  const { data, error } = await a.supabase.rpc('fin_btg_conciliado', { p_org: a.orgId })
+  if (error) throw new ErroAgente(error.message)
+  return data as { ok: boolean; motivo: string | null; extrato_ate: string | null; exigido_ate: string; pendentes: number }
+}
