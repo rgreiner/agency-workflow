@@ -602,7 +602,7 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
   const [encerrar, setEncerrar] = useState<ImpactoEncerrar | null>(null)
   const [confirmDescarte, setConfirmDescarte] = useState(false)
   const paid = isPago(l.situacao)
-  const overdue = !paid && !!l.vencimento && l.vencimento < today
+  const overdue = !paid && l.situacao !== 'renegociado' && !!l.vencimento && l.vencimento < today
   const isSaida = l.tipo === 'saida'
   const imported = l.source === 'importado'
   // Documento anexado vale como "tem NF"/"tem boleto" — é prova, não promessa.
@@ -616,7 +616,10 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
   const jaBaixado = Math.min(val(l), Number(l.valor_realizado ?? 0))
   const parcial = !paid && jaBaixado > 0
   const falta = val(l) - jaBaixado
-  const status = paid
+  // Renegociado (mig. 384): saiu do em aberto porque virou acordo parcelado — não é recebido nem atraso.
+  const status = l.situacao === 'renegociado'
+    ? { label: 'Renegociado', cls: 'bg-gray-100 text-gray-600' }
+    : paid
     ? { label: isSaida ? 'Pago' : 'Recebido', cls: 'bg-emerald-50 text-emerald-700' }
     : parcial
       // Continua vermelho se além de parcial estiver vencido — o atraso não some.

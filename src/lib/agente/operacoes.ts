@@ -966,3 +966,13 @@ export async function registrarPromessa(a: AgenteFlow, tituloId: string, data: s
   if (error) throw new ErroAgente(error.message)
   return { ok: true as const }
 }
+
+/** Acordo parcelado (mig. 384): os títulos viram 'renegociado' e nascem N parcelas sem juros. */
+export async function renegociar(a: AgenteFlow, titulos: string[], parcelas: number, primeiroVenc: string, obs: string | null) {
+  const ids = titulos.filter(id => /^[0-9a-f-]{36}$/i.test(id))
+  if (!ids.length) throw new ErroAgente('informe os títulos')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(primeiroVenc)) throw new ErroAgente('primeiro vencimento inválido (AAAA-MM-DD)')
+  const { data, error } = await a.supabase.rpc('fin_renegociar', { p_org: a.orgId, p_titulos: ids, p_parcelas: parcelas, p_primeiro_venc: primeiroVenc, p_obs: obs })
+  if (error) throw new ErroAgente(error.message)
+  return data
+}
