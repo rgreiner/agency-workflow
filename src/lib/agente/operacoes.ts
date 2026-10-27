@@ -757,3 +757,10 @@ export async function contatosNomes(a: AgenteFlow) {
   }))
   return listas.flat()
 }
+
+/** Totais do caixa para a mesa (mig. 381): em atraso, recebido hoje, semana a receber × a pagar. */
+export async function resumoMesa(a: AgenteFlow) {
+  const { data, error } = await a.supabase.rpc('fin_resumo_mesa', { p_org: a.orgId })
+  if (error) throw new ErroAgente(error.message)
+  return data
+}

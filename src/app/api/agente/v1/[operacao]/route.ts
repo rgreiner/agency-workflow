@@ -8,7 +8,7 @@
  */
 import { NextResponse } from 'next/server'
 import { autenticarAgente } from '@/lib/agente/auth'
-import { ErroAgente, agenda, buscarContatos, titulosDetalhe, clientesSemFinanceiro, comissoesNf, comissaoDocumentos, reguaComissao, notasFiscais, cancelarNotaFiscal, rescisoes, btgConciliado, desfazerEnvio, folhaSituacao, folhaFechar, folhaEnviar, dpAgenda, contatosNomes, clienteDoTitulo, empresa, anexarDocumento, anotar, atualizarDespesa, despesasAbertas, lancarDespesa, lerDespesa, opcoesDespesa, cobranca, documentos, documentosFornecedor, identificar, nfFornecedor, prorrogar, registrarEnvio, registrarEnvioAgente, regua, titulos, verificar } from '@/lib/agente/operacoes'
+import { ErroAgente, agenda, buscarContatos, titulosDetalhe, clientesSemFinanceiro, comissoesNf, comissaoDocumentos, reguaComissao, notasFiscais, cancelarNotaFiscal, rescisoes, btgConciliado, desfazerEnvio, folhaSituacao, folhaFechar, folhaEnviar, dpAgenda, contatosNomes, resumoMesa, clienteDoTitulo, empresa, anexarDocumento, anotar, atualizarDespesa, despesasAbertas, lancarDespesa, lerDespesa, opcoesDespesa, cobranca, documentos, documentosFornecedor, identificar, nfFornecedor, prorrogar, registrarEnvio, registrarEnvioAgente, regua, titulos, verificar } from '@/lib/agente/operacoes'
 import { logSystemError } from '@/lib/system-error'
 
 export const runtime = 'nodejs'
@@ -41,6 +41,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ operaca
       case 'desfazer-envio': dados = await desfazerEnvio(agente, str(b.titulo_id), str(b.bucket)); break
       case 'dp-agenda': dados = await dpAgenda(agente); break
       case 'contatos-nomes': dados = await contatosNomes(agente); break
+      case 'resumo-mesa': dados = await resumoMesa(agente); break
       case 'folha-situacao': dados = await folhaSituacao(agente); break
       case 'folha-fechar': dados = await folhaFechar(agente, str(b.competencia), Array.isArray(b.pessoas) ? (b.pessoas as unknown[]).map(str).filter(Boolean) : [], b.sem_envio === true); break
       case 'folha-enviar': dados = await folhaEnviar(agente, str(b.run_id), { vr: typeof b.vr === 'number' ? b.vr : null, vt: typeof b.vt === 'number' ? b.vt : null, corpo: str(b.corpo) }); break
