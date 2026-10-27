@@ -8,7 +8,8 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Select, MultiSelect } from '@/components/ui/Select'
 import { DatePicker } from '@/components/ui/DatePicker'
-import { setMidiaSituacao, setMidiaArchived, duplicarMidia } from '@/app/actions/midia'
+import { setMidiaSituacao, setMidiaArchived, duplicarMidia, impactoCancelarMidia } from '@/app/actions/midia'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { setViewPrefs } from '@/app/actions/prefs'
 import {
   MIDIA_TIPO_OPTIONS, MIDIA_SITUACAO_OPTIONS, MIDIA_SITUACAO_COLORS, labelOf, formatBRL,
@@ -133,8 +134,36 @@ export function MidiasClient({
     toast.success(`Filtro "${nome}" salvo.`)
   }
 
+  // Cancelar MX já faturada/lançada mexe no financeiro (mig. 385): o lançamento sem
+  // movimento sai e a Flávia avisa o veículo. A tela diz isso ANTES de gravar.
+  const [cancelar, setCancelar] = useState<{ id: string; texto: string } | null>(null)
+  function gravarSituacao(id: string, situacao: string) {
+    startTransition(async () => {
+      const r = await setMidiaSituacao(orgSlug, id, situacao)
+      if (r?.error) { toast.error(r.error); return }
+      if (situacao === 'cancelado' && cancelar) toast.success('Cancelada. A Flávia vai avisar o veículo.')
+      setCancelar(null)
+      router.refresh()
+    })
+  }
   function changeSituacao(id: string, situacao: string) {
-    startTransition(async () => { await setMidiaSituacao(orgSlug, id, situacao); router.refresh() })
+    if (situacao !== 'cancelado') { gravarSituacao(id, situacao); return }
+    startTransition(async () => {
+      const imp = await impactoCancelarMidia(orgSlug, id)
+      if ('error' in imp) { toast.error(imp.error ?? 'Não foi possível conferir o financeiro.'); return }
+      if (!imp.avisa_financeiro) { gravarSituacao(id, situacao); return }
+      const veic = imp.veiculo ?? 'o veículo'
+      const partes = [
+        imp.lancamentos - imp.movimentados > 0
+          ? `${imp.lancamentos - imp.movimentados === 1 ? 'O lançamento em aberto' : `Os ${imp.lancamentos - imp.movimentados} lançamentos em aberto`} desta MX sai${imp.lancamentos - imp.movimentados === 1 ? '' : 'em'} do financeiro.`
+          : imp.lancamentos === 0 ? 'Ela sai da fila do Faturamento.' : '',
+        imp.movimentados > 0
+          ? `${imp.movimentados === 1 ? '1 lançamento já foi recebido, conciliado ou tem NFS-e' : `${imp.movimentados} lançamentos já foram recebidos, conciliados ou têm NFS-e`} — fica, e o Rafael decide na mesa da Flávia.`
+          : '',
+        `A Flávia avisa ${veic} por e-mail e WhatsApp, depois do Sim do Rafael.`,
+      ].filter(Boolean)
+      setCancelar({ id, texto: partes.join(' ') })
+    })
   }
   function archive(m: MidiaRow) {
     startTransition(async () => { await setMidiaArchived(orgSlug, m.id, !m.archived); router.refresh() })
@@ -151,6 +180,16 @@ export function MidiasClient({
 
   return (
     <div className="p-6">
+      <ConfirmDialog
+        open={!!cancelar}
+        title="Cancelar esta MX?"
+        description={cancelar?.texto ?? ''}
+        confirmLabel="Cancelar a MX"
+        cancelLabel="Voltar"
+        loading={isPending}
+        onConfirm={() => cancelar && gravarSituacao(cancelar.id, 'cancelado')}
+        onCancel={() => setCancelar(null)}
+      />
       <div className="flex items-center justify-between gap-3 mb-5">
         <div>
           <h1 className="text-lg font-semibold text-gray-900">{title}</h1>

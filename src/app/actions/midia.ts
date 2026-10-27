@@ -102,6 +102,17 @@ export async function setMidiaSituacao(orgSlug: string, midiaId: string, situaca
   revalidarMidia(orgSlug)
 }
 
+/** O que cancelar esta MX vai fazer no financeiro (mig. 385) — para a tela confirmar antes. */
+export async function impactoCancelarMidia(orgSlug: string, midiaId: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('impacto_cancelar_midia', { p_user_id: user.id, p_midia_id: midiaId })
+  if (error) return { error: error.message }
+  return data as { faturada: boolean; lancamentos: number; valor: number; movimentados: number; veiculo: string | null; avisa_financeiro: boolean }
+}
+
 /**
  * Duplica a mídia. Muito do trabalho é repetitivo (mesmo cliente, veículo,
  * localizações e valores, só muda a bisemana), então copiar é o caminho normal.
