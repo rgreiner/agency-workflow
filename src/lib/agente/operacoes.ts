@@ -764,3 +764,10 @@ export async function resumoMesa(a: AgenteFlow) {
   if (error) throw new ErroAgente(error.message)
   return data
 }
+
+/** Recebimentos do mês × mesmo mês do ano anterior, por dia (mig. 382) — gráfico da mesa. */
+export async function recebimentosComparados(a: AgenteFlow) {
+  const { data, error } = await a.supabase.rpc('fin_recebimentos_comparados', { p_org: a.orgId })
+  if (error) throw new ErroAgente(error.message)
+  return data
+}
