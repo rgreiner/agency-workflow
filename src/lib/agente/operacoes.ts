@@ -737,3 +737,10 @@ export async function folhaEnviar(a: AgenteFlow, runId: string, dados: { vr: num
   if (r.error) throw new ErroAgente(r.error)
   return { ok: true as const, destinatarios: r.destinatarios ?? [] }
 }
+
+/** Férias programadas e admissões recentes (mig. 380): nome, datas e cargo — sem CPF nem salário. */
+export async function dpAgenda(a: AgenteFlow) {
+  const { data, error } = await a.supabase.rpc('fin_dp_agenda', { p_org: a.orgId })
+  if (error) throw new ErroAgente(error.message)
+  return data
+}
