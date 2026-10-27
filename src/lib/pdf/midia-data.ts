@@ -44,11 +44,51 @@ export interface MidiaDocData {
   precos: { prazoLabel: string; faturamentoLabel: string; valor: number }
   totais: { veiculacao: number; producao: number; total: number; comissaoVeiculacao: number; comissaoProducao: number; comissoes: number }
   legal: { titulo: string; itens: { text: string; highlight?: boolean }[]; textoProprio: string }
+  /** Observação do documento (negociação especial, substituição…): vai impressa. */
+  observacao: string
+  /** Eletrônica: peças (A, B…) e o mapa de veiculação por mês — é com ele que o veículo encaixa. */
+  pecas: { peca: string; tipo: string; descricao: string; duracao: string }[]
+  periodos: MapaPeriodo[]
+  /** Impressa: uma linha por inserção (formato, edição, data base, valor). */
+  insercoes: { formato: string; mesAno: string; edicao: string; insercoes: string; abrangencia: string; determinacao: string; dataBase: string | null; valor: number; desconto: number; total: number }[]
   datas: { local: string; emissao: string | null; primeira: string | null; ultima: string | null }
   assinaturas: { esquerda: string; direita: string }
 }
 
+export interface MapaPeriodo {
+  titulo: string                  // "Outubro/2026"
+  dias: { n: number; sem: string }[]
+  itens: { peca: string; programa: string; porDia: (number | null)[]; exib: number; unitario: number; desconto: number; total: number }[]
+  exib: number; total: number
+}
+
+const SEMANA = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/** Mapa da Eletrônica: mesma conta do form (exibições × unitário × (1 − desc%)). */
+function mapaDosPeriodos(det: any): MapaPeriodo[] {
+  const periodos = Array.isArray(det?.periodos) ? det.periodos : []
+  return periodos.map((p: any) => {
+    const ano = Number(p?.ano) || new Date().getFullYear()
+    const mes = Number(p?.mes) || 1
+    const nDias = new Date(Date.UTC(ano, mes, 0)).getUTCDate()
+    const dias = Array.from({ length: nDias }, (_, i) => ({ n: i + 1, sem: SEMANA[new Date(Date.UTC(ano, mes - 1, i + 1)).getUTCDay()] }))
+    const itens = (Array.isArray(p?.itens) ? p.itens : []).map((it: any) => {
+      const porDia = dias.map(d => { const v = parseInt(String(it?.dias?.[String(d.n)] ?? ''), 10); return v > 0 ? v : null })
+      const exib = porDia.reduce((t: number, v) => t + (v ?? 0), 0)
+      const unitario = parseMoney(String(it?.valor_unitario ?? ''))
+      const desconto = parseMoney(String(it?.desconto ?? ''))
+      return { peca: String(it?.peca ?? ''), programa: String(it?.programa ?? ''), porDia, exib, unitario, desconto,
+        total: Math.round(exib * unitario * (1 - desconto / 100) * 100) / 100 }
+    }).filter((it: { exib: number; programa: string }) => it.exib > 0 || it.programa.trim())
+    return {
+      titulo: `${MESES[mes - 1] ?? mes}/${ano}`, dias, itens,
+      exib: itens.reduce((t: number, i: { exib: number }) => t + i.exib, 0),
+      total: itens.reduce((t: number, i: { total: number }) => t + i.total, 0),
+    }
+  }).filter((p: MapaPeriodo) => p.itens.length > 0)
+}
+
 export async function loadMidiaDoc(supabase: any, orgId: string, midiaId: string): Promise<MidiaDocData | null> {
   const { data: m } = await supabase.from('midias').select('*').eq('id', midiaId).single()
   if (!m) return null
@@ -125,6 +165,7 @@ export async function loadMidiaDoc(supabase: any, orgId: string, midiaId: string
     // Só os pares que EXISTEM: campo vazio vira buraco e empurra o documento.
     pares: [
       m.praca ? { label: 'Praça', valor: String(m.praca) } : null,
+      det.revista ? { label: 'Revista', valor: String(det.revista) } : null,
       det.especie ? { label: 'Espécie', valor: String(det.especie) } : null,
       mesAno ? { label: 'Mês', valor: mesAno } : null,
       det.bisemana && det.bisemana !== 'outro' ? { label: 'Bisemana', valor: String(det.bisemana) } : null,
@@ -168,6 +209,20 @@ export async function loadMidiaDoc(supabase: any, orgId: string, midiaId: string
       itens: !tl || tl === padrao ? midiaNotes : [],
       textoProprio: !tl || tl === padrao ? '' : m.texto_legal,
     },
+    observacao: String(m.observacao ?? '').trim(),
+    pecas: (Array.isArray(det.pecas) ? det.pecas : [])
+      .map((p: any) => ({ peca: String(p?.peca ?? ''), tipo: String(p?.tipo ?? ''), descricao: String(p?.descricao ?? ''), duracao: String(p?.duracao ?? '') }))
+      .filter((p: { peca: string; tipo: string; descricao: string }) => p.peca.trim() || p.tipo.trim() || p.descricao.trim()),
+    periodos: mapaDosPeriodos(det),
+    insercoes: (Array.isArray(det.insercoes) ? det.insercoes : []).map((r: any) => {
+      const valorR = parseMoney(String(r?.valor ?? '')), descR = parseMoney(String(r?.desconto ?? ''))
+      return {
+        formato: String(r?.formato ?? ''), mesAno: r?.mes ? `${MESES[Number(r.mes) - 1] ?? r.mes}/${r?.ano ?? ''}` : '',
+        edicao: String(r?.edicao ?? ''), insercoes: String(r?.insercoes ?? ''), abrangencia: cap(String(r?.abrangencia ?? '')),
+        determinacao: String(r?.determinacao ?? ''), dataBase: r?.data_base ?? null,
+        valor: valorR, desconto: descR, total: Math.round(valorR * (1 - descR / 100) * 100) / 100,
+      }
+    }).filter((r: { formato: string; valor: number }) => r.formato.trim() || r.valor > 0),
     datas: {
       local: agency.cidade,
       emissao: m.emissao ?? null, primeira: m.primeira_veiculacao ?? null, ultima: m.ultima_veiculacao ?? null,

@@ -4,9 +4,9 @@
 
 import { Text, View } from '@react-pdf/renderer'
 import {
-  s, Cabecalho, Linha, Secao, TabLinha, Assinaturas, Rodape, FolhaA4, brl, brlUnit, dataBR, agoraBR,
+  s, Cabecalho, Linha, Secao, TabLinha, Assinaturas, Rodape, FolhaA4, brl, brlUnit, dataBR, agoraBR, CINZA, CINZA_CLARO,
 } from './kit'
-import type { MidiaDocData } from './midia-data'
+import type { MidiaDocData, MapaPeriodo } from './midia-data'
 
 export function MidiaDoc({ d }: { d: MidiaDocData }) {
   const identificacao = `Flow | Autorização de Mídia ${d.tipoLabel} nº ${d.numero ?? ''}`
@@ -47,12 +47,23 @@ export function MidiaDoc({ d }: { d: MidiaDocData }) {
 
       <View style={s.colunas}>
         <View style={s.colEsq}>
+          {/* Sem localizações (Eletrônica), a coluna da esquerda ficava vazia ao lado
+              de Exibição/Preços: as peças moram aqui e a assinatura cabe na 1ª página. */}
+          {d.localizacoes.length === 0 && d.pecas.length > 0 && <TabelaPecas pecas={d.pecas} compacta />}
           {d.localizacoes.length > 0 && (
             <>
               <Secao titulo="Localizações" />
               {d.localizacoes.map((l, i) => (
                 <Text key={i} style={s.item}>{[l.endereco, l.cidade].filter(Boolean).join(' - ')}</Text>
               ))}
+              {/* A coluna direita (produção/exibição/preços) é a mais alta: embaixo das
+                  localizações sobra espaço, e a observação não empurra a assinatura. */}
+              {!!d.observacao && (
+                <View style={{ marginTop: 8 }}>
+                  <Secao titulo="Observações" />
+                  <Text style={s.fraco}>{d.observacao}</Text>
+                </View>
+              )}
             </>
           )}
         </View>
@@ -95,6 +106,20 @@ export function MidiaDoc({ d }: { d: MidiaDocData }) {
         </View>
       </View>
 
+      {/* Eletrônica/Impressa: o que o veículo precisa para ENCAIXAR a mídia (peças,
+          dia a dia, inserções). Sem isto a autorização era só valor e prazo (ME 1578). */}
+      {d.localizacoes.length > 0 && d.pecas.length > 0 && <TabelaPecas pecas={d.pecas} />}
+      {d.periodos.map(p => <MapaVeiculacao key={p.titulo} p={p} />)}
+      {d.insercoes.length > 0 && <TabelaInsercoes linhas={d.insercoes} />}
+
+      {/* Observação do documento (negociação especial, substituição de outra PI). */}
+      {!!d.observacao && d.localizacoes.length === 0 && (
+        <View style={{ marginTop: 10 }} wrap={false}>
+          <Secao titulo="Observações" />
+          <Text style={s.fraco}>{d.observacao}</Text>
+        </View>
+      )}
+
       {/* Texto legal em largura inteira: é a condição que as duas partes assinam. */}
       <View style={{ marginTop: 10 }}>
         <Secao titulo="Texto Legal" />
@@ -123,5 +148,93 @@ export function MidiaDoc({ d }: { d: MidiaDocData }) {
       <Assinaturas esquerda={d.assinaturas.esquerda} direita={d.assinaturas.direita} />
       <Rodape identificacao={identificacao} geradoEm={agoraBR()} />
     </FolhaA4>
+  )
+}
+
+// ── Tabelas da Eletrônica e da Impressa ─────────────────────────────────────
+
+const t = {
+  cab: { flexDirection: 'row' as const, borderBottomWidth: 1, borderBottomColor: '#d1d5db', paddingBottom: 2, color: CINZA_CLARO, fontFamily: 'Helvetica-Bold' },
+  lin: { flexDirection: 'row' as const, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', paddingVertical: 2.5 },
+}
+
+function TabelaPecas({ pecas, compacta = false }: { pecas: MidiaDocData['pecas']; compacta?: boolean }) {
+  return (
+    <View style={{ marginTop: compacta ? 0 : 10 }} wrap={false}>
+      <Secao titulo="Peças" />
+      <View style={[t.cab, { fontSize: 7.5 }]}>
+        <Text style={{ width: 28 }}>Peça</Text><Text style={{ width: compacta ? 90 : 150 }}>Tipo</Text>
+        <Text style={{ flex: 1 }}>Descrição</Text><Text style={{ width: compacta ? 40 : 70, textAlign: 'right' }}>Duração</Text>
+      </View>
+      {pecas.map((p, i) => (
+        <View key={i} style={[t.lin, { fontSize: 8.5 }]}>
+          <Text style={{ width: 28, fontFamily: 'Helvetica-Bold' }}>{p.peca}</Text><Text style={{ width: compacta ? 90 : 150 }}>{p.tipo}</Text>
+          <Text style={{ flex: 1 }}>{p.descricao}</Text><Text style={{ width: compacta ? 40 : 70, textAlign: 'right' }}>{p.duracao ? `${p.duracao}"` : ''}</Text>
+        </View>
+      ))}
+    </View>
+  )
+}
+
+/** Grade dia a dia (como na tela): 1 coluna por dia com a letra da semana; fim de semana sombreado. */
+function MapaVeiculacao({ p }: { p: MapaPeriodo }) {
+  const dia = { width: 9.6, textAlign: 'center' as const }
+  return (
+    <View style={{ marginTop: 10 }} wrap={false}>
+      <Secao titulo={`Veiculação · ${p.titulo}`} />
+      <View style={[t.cab, { fontSize: 5.5 }]}>
+        <Text style={{ width: 16 }}>Peça</Text><Text style={{ width: 42 }}>Programa</Text>
+        {p.dias.map(x => (
+          <View key={x.n} style={[dia, x.sem === 'D' ? { backgroundColor: '#f3f4f6' } : {}]}>
+            <Text>{x.n}</Text><Text style={{ fontFamily: 'Helvetica' }}>{x.sem}</Text>
+          </View>
+        ))}
+        <Text style={{ width: 20, textAlign: 'right' }}>Exib.</Text><Text style={{ width: 34, textAlign: 'right' }}>Unit.</Text>
+        <Text style={{ width: 18, textAlign: 'right' }}>Desc</Text><Text style={{ flex: 1, textAlign: 'right' }}>Total</Text>
+      </View>
+      {p.itens.map((it, i) => (
+        <View key={i} style={[t.lin, { fontSize: 6.5 }]}>
+          <Text style={{ width: 16, fontFamily: 'Helvetica-Bold' }}>{it.peca}</Text>
+          <Text style={{ width: 42 }}>{it.programa}</Text>
+          {it.porDia.map((v, j) => (
+            <Text key={j} style={[dia, p.dias[j].sem === 'D' ? { backgroundColor: '#f3f4f6' } : {}, ...(v ? [{ fontFamily: 'Helvetica-Bold' }] : [])]}>{v ?? ''}</Text>
+          ))}
+          <Text style={{ width: 20, textAlign: 'right' }}>{it.exib}</Text>
+          <Text style={{ width: 34, textAlign: 'right' }}>{brlUnit(it.unitario).replace('R$ ', '')}</Text>
+          <Text style={{ width: 18, textAlign: 'right' }}>{it.desconto ? `${String(it.desconto).replace('.', ',')}%` : ''}</Text>
+          <Text style={{ flex: 1, textAlign: 'right' }}>{brl(it.total).replace('R$ ', '')}</Text>
+        </View>
+      ))}
+      <View style={[t.lin, { fontSize: 7, borderBottomWidth: 0 }]}>
+        <Text style={{ flex: 1, color: CINZA }}>{`${p.exib} exibições no mês`}</Text>
+        <Text style={{ fontFamily: 'Helvetica-Bold' }}>Total do período: {brl(p.total)}</Text>
+      </View>
+    </View>
+  )
+}
+
+function TabelaInsercoes({ linhas }: { linhas: MidiaDocData['insercoes'] }) {
+  const c = { fmt: 90, mes: 60, ed: 32, ins: 28, abr: 50, db: 48, val: 56, desc: 26 }
+  return (
+    <View style={{ marginTop: 10 }} wrap={false}>
+      <Secao titulo="Inserções" />
+      <View style={[t.cab, { fontSize: 6.5 }]}>
+        <Text style={{ width: c.fmt }}>Formato</Text><Text style={{ width: c.mes }}>Mês</Text><Text style={{ width: c.ed }}>Edição</Text>
+        <Text style={{ width: c.ins, textAlign: 'right' }}>Ins.</Text><Text style={{ width: c.abr, paddingLeft: 6 }}>Abrang.</Text>
+        <Text style={{ flex: 1 }}>Determinação</Text><Text style={{ width: c.db }}>Data base</Text>
+        <Text style={{ width: c.val, textAlign: 'right' }}>Valor</Text><Text style={{ width: c.desc, textAlign: 'right' }}>Desc</Text>
+        <Text style={{ width: c.val, textAlign: 'right' }}>Total</Text>
+      </View>
+      {linhas.map((r, i) => (
+        <View key={i} style={[t.lin, { fontSize: 7.5 }]}>
+          <Text style={{ width: c.fmt }}>{r.formato}</Text><Text style={{ width: c.mes }}>{r.mesAno}</Text><Text style={{ width: c.ed }}>{r.edicao}</Text>
+          <Text style={{ width: c.ins, textAlign: 'right' }}>{r.insercoes}</Text><Text style={{ width: c.abr, paddingLeft: 6 }}>{r.abrangencia}</Text>
+          <Text style={{ flex: 1 }}>{r.determinacao}</Text><Text style={{ width: c.db }}>{dataBR(r.dataBase)}</Text>
+          <Text style={{ width: c.val, textAlign: 'right' }}>{brl(r.valor).replace('R$ ', '')}</Text>
+          <Text style={{ width: c.desc, textAlign: 'right' }}>{r.desconto ? `${String(r.desconto).replace('.', ',')}%` : ''}</Text>
+          <Text style={{ width: c.val, textAlign: 'right' }}>{brl(r.total).replace('R$ ', '')}</Text>
+        </View>
+      ))}
+    </View>
   )
 }
