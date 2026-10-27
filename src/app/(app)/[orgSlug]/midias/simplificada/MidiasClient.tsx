@@ -1,14 +1,15 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Archive, ArchiveRestore, Megaphone, Pencil, Download, Copy, Search, X } from 'lucide-react'
+import { Plus, Archive, ArchiveRestore, Megaphone, Pencil, Download, Copy, Search, X, Bookmark } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Select, MultiSelect } from '@/components/ui/Select'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { setMidiaSituacao, setMidiaArchived, duplicarMidia } from '@/app/actions/midia'
+import { setViewPrefs } from '@/app/actions/prefs'
 import {
   MIDIA_TIPO_OPTIONS, MIDIA_SITUACAO_OPTIONS, MIDIA_SITUACAO_COLORS, labelOf, formatBRL,
 } from '@/lib/midia'
@@ -29,6 +30,23 @@ const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').to
 const ddmm = (d: string | null | undefined) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '')
 const valorDe = (m: MidiaRow) => m.valor + (m.producao?.total ?? 0)
 const comissaoDe = (m: MidiaRow) => m.valor * (m.desconto_pct / 100) + (m.producao?.comissao ?? 0)
+/**
+ * O filtro que volta ao abrir a tela e o que se salva com nome. A busca fica de
+ * fora: é de momento ("cadê a 2604?"), não um recorte que se repete.
+ */
+interface Filtro { clientes: string[]; veiculos: string[]; situacoes: string[]; de: string; ate: string }
+interface FiltroSalvo extends Filtro { id: string; nome: string }
+export interface PrefsLiberacao { ultimo?: Partial<Filtro>; salvos?: FiltroSalvo[] }
+const VAZIO: Filtro = { clientes: [], veiculos: [], situacoes: [], de: '', ate: '' }
+const lerFiltro = (f?: Partial<Filtro> | null): Filtro => ({
+  clientes: Array.isArray(f?.clientes) ? f.clientes : [],
+  veiculos: Array.isArray(f?.veiculos) ? f.veiculos : [],
+  situacoes: Array.isArray(f?.situacoes) ? f.situacoes : [],
+  de: typeof f?.de === 'string' ? f.de : '',
+  ate: typeof f?.ate === 'string' ? f.ate : '',
+})
+const chaveDe = (f: Filtro) => JSON.stringify([[...f.clientes].sort(), [...f.veiculos].sort(), [...f.situacoes].sort(), f.de, f.ate])
+
 const opcoesDe = (lista: string[]) =>
   [...new Set(lista.filter(v => v && v !== '—'))].sort((a, b) => a.localeCompare(b, 'pt-BR'))
     .map(v => ({ value: v, label: v }))
@@ -41,6 +59,8 @@ export function MidiasClient({
   addLabel = 'Adicionar Mídia Simplificada',
   addOptions,
   editHrefFor,
+  prefs,
+  prefsView,
 }: {
   orgSlug: string; midias: MidiaRow[]; archivedView: boolean
   basePath?: string; title?: string; subtitle?: string; addLabel?: string
@@ -48,6 +68,10 @@ export function MidiasClient({
   addOptions?: { label: string; href: string }[]
   /** Link de edição por linha (ex.: Jornal vai pra rota diferente). Default base/id. */
   editHrefFor?: (m: MidiaRow) => string
+  /** Último filtro + filtros salvos da pessoa (user_view_prefs), lidos no servidor. */
+  prefs?: Record<string, unknown> | null
+  /** Chave da tela em user_view_prefs — uma por tipo de liberação. */
+  prefsView?: string
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -56,12 +80,27 @@ export function MidiasClient({
 
   // Busca + filtros + período para ACHAR uma liberação (Rafael, 27/10). Tudo no
   // navegador: são dezenas de linhas por tela (medido: 50 na maior), não milhares.
+  // O filtro da última visita volta (no banco, segue a pessoa entre máquinas).
+  const inicial = prefs as PrefsLiberacao | null | undefined
   const [busca, setBusca] = useState('')
-  const [clientes, setClientes] = useState<string[]>([])
-  const [veiculos, setVeiculos] = useState<string[]>([])
-  const [situacoes, setSituacoes] = useState<string[]>([])
-  const [de, setDe] = useState('')
-  const [ate, setAte] = useState('')
+  const [filtro, setFiltro] = useState<Filtro>(() => lerFiltro(inicial?.ultimo))
+  const [salvos, setSalvos] = useState<FiltroSalvo[]>(() =>
+    (Array.isArray(inicial?.salvos) ? inicial.salvos : []).map(f => ({ ...lerFiltro(f), id: f.id, nome: f.nome })))
+  const { clientes, veiculos, situacoes, de, ate } = filtro
+  const muda = (p: Partial<Filtro>) => setFiltro(f => ({ ...f, ...p }))
+
+  // Grava com folga de 600 ms: marcar três clientes seguidos vira uma escrita só.
+  const gravado = useRef(JSON.stringify({ ultimo: filtro, salvos }))
+  useEffect(() => {
+    if (!prefsView) return
+    const corpo = JSON.stringify({ ultimo: filtro, salvos })
+    if (corpo === gravado.current) return
+    const t = setTimeout(() => {
+      gravado.current = corpo
+      setViewPrefs(orgSlug, prefsView, { ultimo: filtro, salvos }).catch(() => {})
+    }, 600)
+    return () => clearTimeout(t)
+  }, [filtro, salvos, orgSlug, prefsView])
   const opCliente = useMemo(() => opcoesDe(midias.map(m => m.cliente)), [midias])
   const opVeiculo = useMemo(() => opcoesDe(midias.map(m => m.veiculo)), [midias])
   const opSituacao = useMemo(() => {
@@ -69,7 +108,9 @@ export function MidiasClient({
     return MIDIA_SITUACAO_OPTIONS.filter(o => tem.has(o.value))
   }, [midias])
 
-  const filtrando = !!busca.trim() || clientes.length > 0 || veiculos.length > 0 || situacoes.length > 0 || !!de || !!ate
+  const temFiltro = chaveDe(filtro) !== chaveDe(VAZIO)
+  const filtrando = !!busca.trim() || temFiltro
+  const ativo = salvos.find(f => chaveDe(f) === chaveDe(filtro))
   const lista = useMemo(() => {
     const q = norm(busca.trim())
     return midias.filter(m => {
@@ -85,8 +126,11 @@ export function MidiasClient({
     })
   }, [midias, busca, clientes, veiculos, situacoes, de, ate])
 
-  function limpar() {
-    setBusca(''); setClientes([]); setVeiculos([]); setSituacoes([]); setDe(''); setAte('')
+  function limpar() { setBusca(''); setFiltro(VAZIO) }
+
+  function salvarFiltro(nome: string) {
+    setSalvos(l => [...l, { ...filtro, id: crypto.randomUUID(), nome }])
+    toast.success(`Filtro "${nome}" salvo.`)
   }
 
   function changeSituacao(id: string, situacao: string) {
@@ -144,10 +188,11 @@ export function MidiasClient({
               placeholder="Buscar por nº, título, cliente ou veículo"
               className="w-full pl-9 pr-3 py-2 text-sm bg-gray-100 border border-transparent rounded-xl text-gray-800 placeholder:text-gray-400 focus:bg-white focus:border-orange-300 focus:outline-none transition-colors" />
           </label>
-          <MultiSelect size="sm" values={clientes} onChange={setClientes} options={opCliente} allLabel="Todos os clientes" />
-          <MultiSelect size="sm" values={veiculos} onChange={setVeiculos} options={opVeiculo} allLabel="Todos os veículos" />
-          <MultiSelect size="sm" values={situacoes} onChange={setSituacoes} options={opSituacao} allLabel="Todas as situações" />
-          <DatePicker startDate={de} endDate={ate} onStartChange={setDe} onEndChange={setAte} placeholder="Período de veiculação" />
+          <MultiSelect size="sm" values={clientes} onChange={v => muda({ clientes: v })} options={opCliente} allLabel="Todos os clientes" />
+          <MultiSelect size="sm" values={veiculos} onChange={v => muda({ veiculos: v })} options={opVeiculo} allLabel="Todos os veículos" />
+          <MultiSelect size="sm" values={situacoes} onChange={v => muda({ situacoes: v })} options={opSituacao} allLabel="Todas as situações" />
+          <DatePicker startDate={de} endDate={ate} onStartChange={v => muda({ de: v })} onEndChange={v => muda({ ate: v })} placeholder="Período de veiculação" />
+          {prefsView && temFiltro && !ativo && <SalvarFiltro onSalvar={salvarFiltro} />}
           {filtrando && (
             <button type="button" onClick={limpar}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors active:scale-[0.97]">
@@ -157,6 +202,28 @@ export function MidiasClient({
           {filtrando && (
             <span className="ml-auto text-xs text-gray-500 tabular-nums">{lista.length} de {midias.length}</span>
           )}
+        </div>
+      )}
+
+      {/* Filtros salvos: um clique aplica; o aceso é o que está valendo agora. */}
+      {midias.length > 0 && salvos.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5" aria-label="Filtros salvos">
+          <span className="text-[11px] font-medium text-gray-400 mr-0.5">Salvos</span>
+          {salvos.map(f => (
+            <span key={f.id}
+              className={cn('inline-flex items-center gap-0.5 rounded-full border pl-3 pr-1 py-0.5 text-xs transition-colors',
+                ativo?.id === f.id ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50')}>
+              <button type="button" onClick={() => setFiltro(ativo?.id === f.id ? VAZIO : lerFiltro(f))}
+                aria-pressed={ativo?.id === f.id} className="max-w-[12rem] truncate py-0.5" title={f.nome}>
+                {f.nome}
+              </button>
+              <button type="button" onClick={() => setSalvos(l => l.filter(x => x.id !== f.id))}
+                title={`Excluir o filtro "${f.nome}"`} aria-label={`Excluir o filtro ${f.nome}`}
+                className="p-0.5 rounded-full text-gray-300 hover:text-red-500 hover:bg-white transition-colors">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
         </div>
       )}
 
@@ -277,6 +344,51 @@ export function MidiasClient({
           <Megaphone className="w-10 h-10 text-gray-300 mx-auto mb-3" />
           <h3 className="text-gray-900 font-medium">{archivedView ? 'Nenhuma mídia arquivada' : 'Nenhuma mídia ainda'}</h3>
           <p className="text-gray-500 text-sm mt-1">{archivedView ? 'Mídias arquivadas aparecem aqui.' : 'Adicione a primeira liberação de mídia.'}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** "Salvar filtro": pede só o nome. Enter salva, Esc ou clique fora fecha. */
+function SalvarFiltro({ onSalvar }: { onSalvar: (nome: string) => void }) {
+  const [aberto, setAberto] = useState(false)
+  const [nome, setNome] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!aberto) return
+    const fora = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false) }
+    document.addEventListener('mousedown', fora)
+    return () => document.removeEventListener('mousedown', fora)
+  }, [aberto])
+
+  function salvar() {
+    const n = nome.trim()
+    if (!n) return
+    onSalvar(n); setNome(''); setAberto(false)
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setAberto(a => !a)} aria-expanded={aberto}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors active:scale-[0.97]">
+        <Bookmark className="w-3.5 h-3.5" aria-hidden /> Salvar filtro
+      </button>
+      {aberto && (
+        <div className="pop-in absolute left-0 top-full mt-1.5 z-50 w-60 bg-white rounded-xl border border-gray-200 shadow-lg p-2">
+          <input autoFocus value={nome} onChange={e => setNome(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') salvar(); if (e.key === 'Escape') setAberto(false) }}
+            placeholder="Nome (ex.: Outdoor KSBIG setembro)"
+            className="w-full px-2.5 py-1.5 bg-gray-100 border border-transparent rounded-xl text-sm focus:bg-white focus:border-orange-300 focus:outline-none transition-colors" />
+          <div className="flex justify-end gap-2 mt-2">
+            <button type="button" onClick={() => setAberto(false)}
+              className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Cancelar</button>
+            <button type="button" onClick={salvar} disabled={!nome.trim()}
+              className="text-xs font-medium px-3 py-1 rounded-lg bg-orange-600 text-[#fff] hover:bg-orange-700 disabled:opacity-50 transition-colors">
+              Salvar
+            </button>
+          </div>
         </div>
       )}
     </div>

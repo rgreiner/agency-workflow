@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { filtrarPorAba, producaoDe } from '@/lib/midia'
+import { loadViewPrefs } from '@/app/actions/prefs'
 import { MidiasClient, type MidiaRow } from '../simplificada/MidiasClient'
 
 export default async function MidiasExternasPage({
@@ -39,6 +40,8 @@ export default async function MidiasExternasPage({
 
   return (
     <MidiasClient
+      prefs={await loadViewPrefs(orgSlug, 'liberacao:externas')}
+      prefsView="liberacao:externas"
       orgSlug={orgSlug}
       midias={midias}
       archivedView={archivedView}

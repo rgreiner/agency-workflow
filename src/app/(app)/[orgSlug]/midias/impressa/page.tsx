@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { filtrarPorAba } from '@/lib/midia'
+import { loadViewPrefs } from '@/app/actions/prefs'
 import { MidiasClient, type MidiaRow } from '../simplificada/MidiasClient'
 
 export default async function MidiasImpressaPage({
@@ -38,6 +39,8 @@ export default async function MidiasImpressaPage({
 
   return (
     <MidiasClient
+      prefs={await loadViewPrefs(orgSlug, 'liberacao:impressa')}
+      prefsView="liberacao:impressa"
       orgSlug={orgSlug}
       midias={midias}
       archivedView={archivedView}

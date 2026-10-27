@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { filtrarPorAba } from '@/lib/midia'
+import { loadViewPrefs } from '@/app/actions/prefs'
 import { MidiasClient, type MidiaRow } from './MidiasClient'
 
 export default async function MidiasSimplificadaPage({
@@ -46,6 +47,8 @@ export default async function MidiasSimplificadaPage({
 
   return (
     <MidiasClient
+      prefs={await loadViewPrefs(orgSlug, 'liberacao:simplificada')}
+      prefsView="liberacao:simplificada"
       orgSlug={orgSlug} midias={midias} archivedView={archivedView}
       title="Liberação de mídias — Simplificada"
       subtitle="Google, Meta, carro de som e afins (série MS)"
