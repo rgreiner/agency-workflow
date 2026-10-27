@@ -21,7 +21,7 @@ export default async function MidiasExternasPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const baseQ = (supabase as any)
     .from('midias')
-    .select('id, numero, serie, titulo, tipo, valor, desconto_pct, faturamento, situacao, archived, detalhe, workspaces(name), veiculos(name)')
+    .select('id, numero, serie, titulo, tipo, valor, desconto_pct, faturamento, situacao, archived, primeira_veiculacao, ultima_veiculacao, detalhe, workspaces(name), veiculos(name)')
     .eq('org_id', org.id).eq('tipo', 'externa')
   const { data: raw } = await filtrarPorAba(baseQ, archivedView)
     .order('numero', { ascending: false })
@@ -30,7 +30,7 @@ export default async function MidiasExternasPage({
   const midias: MidiaRow[] = (raw ?? []).map((m: any) => ({
     id: m.id, numero: m.numero, serie: m.serie, titulo: m.titulo, tipo: m.tipo,
     valor: Number(m.valor ?? 0), desconto_pct: Number(m.desconto_pct ?? 0),
-    faturamento: m.faturamento, situacao: m.situacao, archived: m.archived,
+    faturamento: m.faturamento, situacao: m.situacao, archived: m.archived, inicio: m.primeira_veiculacao ?? null, fim: m.ultima_veiculacao ?? null,
     cliente: m.workspaces?.name ?? '—', veiculo: m.veiculos?.name ?? '—',
     // Lona/adesivo: a produção fica em `detalhe`, fora de `valor` — sem isto a
     // MX só de produção aparecia como R$ 0,00 na lista.

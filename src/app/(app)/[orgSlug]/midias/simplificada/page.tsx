@@ -21,7 +21,7 @@ export default async function MidiasSimplificadaPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const baseQ = (supabase as any)
     .from('midias')
-    .select('id, numero, serie, titulo, tipo, valor, desconto_pct, faturamento, situacao, archived, workspaces(name), veiculos(name)')
+    .select('id, numero, serie, titulo, tipo, valor, desconto_pct, faturamento, situacao, archived, primeira_veiculacao, ultima_veiculacao, workspaces(name), veiculos(name)')
     // Era a ÚNICA lista sem filtro de tipo — mostrava toda mídia da org, inclusive
     // as externas. Agora é categoria própria como as outras abas.
     .eq('org_id', org.id).eq('tipo', 'simplificada')
@@ -39,7 +39,7 @@ export default async function MidiasSimplificadaPage({
     desconto_pct: Number(m.desconto_pct ?? 0),
     faturamento: m.faturamento,
     situacao: m.situacao,
-    archived: m.archived,
+    archived: m.archived, inicio: m.primeira_veiculacao ?? null, fim: m.ultima_veiculacao ?? null,
     cliente: m.workspaces?.name ?? '—',
     veiculo: m.veiculos?.name ?? '—',
   }))
