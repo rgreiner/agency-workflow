@@ -799,3 +799,119 @@ export async function recebimentosComparados(a: AgenteFlow) {
   if (error) throw new ErroAgente(error.message)
   return data
 }
+
+// ── Consulta financeira ampla (assistente financeira do Rafael) ────────────────
+// Só leitura, com a RLS de financeiro da usuária do agente. Usada no chat com o
+// Rafael ("quais cobranças estão atrasadas?") — nunca no atendimento a contato.
+
+const hojeBRT = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+const somaDias = (iso: string, n: number) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10) }
+const doc = (l: { doc_serie?: string | null; doc_numero?: number | null }) => [l.doc_serie, l.doc_numero].filter(Boolean).join(' ') || null
+const LANC = 'id, doc_serie, doc_numero, tipo, contato_tipo, contato_nome, descricao, valor, vencimento, situacao, origem_tipo, data_liquidacao, categoria, anexos'
+
+type Linha = { id: string; doc_serie: string | null; doc_numero: number | null; tipo: string; contato_tipo: string | null; contato_nome: string | null
+  descricao: string | null; valor: number; vencimento: string | null; situacao: string; origem_tipo: string | null; data_liquidacao: string | null
+  categoria: string | null; anexos: Anexo[] | null }
+
+const item = (l: Linha, hoje: string) => ({
+  documento: doc(l), contato: l.contato_nome ?? '(sem contato)', contato_tipo: l.contato_tipo, descricao: l.descricao,
+  valor: Math.abs(Number(l.valor)), vencimento: l.vencimento, situacao: l.situacao,
+  dias_atraso: l.vencimento && l.vencimento < hoje && l.situacao === 'em_aberto'
+    ? Math.round((Date.parse(hoje) - Date.parse(l.vencimento)) / 86_400_000) : 0,
+  categoria: l.categoria, liquidado_em: l.data_liquidacao,
+})
+
+export async function financeiroConsulta(a: AgenteFlow, consulta: string, p: Record<string, unknown>) {
+  const hoje = hojeBRT()
+  const texto = typeof p.texto === 'string' ? p.texto.trim().replace(/[%_,()]/g, ' ') : ''
+  const dias = Math.min(Math.max(Number(p.dias) || 30, 1), 180)
+
+  if (consulta === 'a_receber' || consulta === 'a_pagar') {
+    const tipo = consulta === 'a_receber' ? 'entrada' : 'saida'
+    const filtro = (p.situacao as string) || 'todos'   // vencidos | a_vencer | todos
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- builder reatribuído estoura a inferência do supabase-js
+    let q: any = a.supabase.from('lancamentos_doc').select(LANC).eq('org_id', a.orgId).eq('tipo', tipo)
+      .eq('situacao', 'em_aberto').is('transferencia_id', null).not('vencimento', 'is', null)
+    if (filtro === 'vencidos') q = q.lt('vencimento', hoje)
+    else if (filtro === 'a_vencer') q = q.gte('vencimento', hoje).lte('vencimento', somaDias(hoje, dias))
+    else q = q.lte('vencimento', somaDias(hoje, dias))
+    // a receber: "clientes" = cliente; "comissoes" = comissão de fornecedor/veículo (PP/MX)
+    if (p.origem === 'clientes') q = q.eq('contato_tipo', 'cliente')
+    else if (p.origem === 'comissoes') q = q.in('contato_tipo', ['fornecedor', 'veiculo'])
+    if (!p.incluir_sem_contato) q = q.not('contato_nome', 'is', null)
+    if (texto) q = q.or(`contato_nome.ilike.%${texto}%,descricao.ilike.%${texto}%`)
+    const { data, error } = await q.order('vencimento').limit(200)
+    if (error) throw new ErroAgente(error.message)
+    const itens = ((data ?? []) as unknown as Linha[]).map(l => item(l, hoje))
+    const vencidos = itens.filter(i => i.dias_atraso > 0)
+    const soma = (xs: { valor: number }[]) => Math.round(xs.reduce((s, x) => s + x.valor, 0) * 100) / 100
+    return {
+      hoje, filtro, total: { n: itens.length, valor: soma(itens) },
+      vencidos: { n: vencidos.length, valor: soma(vencidos) },
+      a_vencer: { n: itens.length - vencidos.length, valor: soma(itens.filter(i => i.dias_atraso === 0)) },
+      itens: itens.slice(0, 60), cortado: itens.length > 60,
+    }
+  }
+
+  if (consulta === 'caixa') {
+    const [contas, resumo, btg] = await Promise.all([
+      a.supabase.from('contas_saldo').select('nome, tipo, saldo_atual, saldo_banco, saldo_banco_data, ativo').eq('org_id', a.orgId),
+      a.supabase.rpc('fin_resumo_mesa', { p_org: a.orgId }),
+      a.supabase.rpc('fin_btg_conciliado', { p_org: a.orgId }),
+    ])
+    if (contas.error) throw new ErroAgente(contas.error.message)
+    return {
+      hoje,
+      contas: ((contas.data ?? []) as { nome: string; tipo: string; saldo_atual: number; saldo_banco: number | null; saldo_banco_data: string | null; ativo: boolean }[])
+        .filter(c => c.ativo !== false).map(c => ({ conta: c.nome, saldo_flow: Number(c.saldo_atual), saldo_banco: c.saldo_banco, extrato_ate: c.saldo_banco_data })),
+      resumo: resumo.data, btg: btg.data,
+    }
+  }
+
+  if (consulta === 'realizado') {
+    const de = /^\d{4}-\d{2}-\d{2}$/.test(String(p.de)) ? String(p.de) : `${hoje.slice(0, 7)}-01`
+    const ate = /^\d{4}-\d{2}-\d{2}$/.test(String(p.ate)) ? String(p.ate) : hoje
+    const { data, error } = await a.supabase.from('lancamentos_doc').select(LANC).eq('org_id', a.orgId)
+      .in('situacao', ['recebido', 'pago']).is('transferencia_id', null).gte('data_liquidacao', de).lte('data_liquidacao', ate)
+      .order('data_liquidacao').limit(1000)
+    if (error) throw new ErroAgente(error.message)
+    const ls = (data ?? []) as unknown as Linha[]
+    const agrupa = (tipo: string) => {
+      const xs = ls.filter(l => l.tipo === tipo)
+      const por = new Map<string, number>()
+      for (const l of xs) { const k = l.contato_nome ?? l.categoria ?? l.descricao ?? '—'; por.set(k, (por.get(k) ?? 0) + Math.abs(Number(l.valor))) }
+      return {
+        total: Math.round(xs.reduce((s, l) => s + Math.abs(Number(l.valor)), 0) * 100) / 100, n: xs.length,
+        maiores: [...por].sort((x, y) => y[1] - x[1]).slice(0, 10).map(([quem, valor]) => ({ quem, valor: Math.round(valor * 100) / 100 })),
+      }
+    }
+    return { de, ate, recebido: agrupa('entrada'), pago: agrupa('saida') }
+  }
+
+  if (consulta === 'buscar') {
+    if (texto.length < 2) throw new ErroAgente('informe o que procurar (documento, cliente, fornecedor ou descrição)')
+    const m = /^([A-Za-z]{1,4})\s*0*(\d{1,7})$/.exec(texto)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- builder reatribuído estoura a inferência do supabase-js
+    let q: any = a.supabase.from('lancamentos_doc').select(LANC).eq('org_id', a.orgId).is('transferencia_id', null)
+    q = m ? q.ilike('doc_serie', m[1]).eq('doc_numero', Number(m[2]))
+      : q.or(`contato_nome.ilike.%${texto}%,descricao.ilike.%${texto}%`)
+    const { data, error } = await q.order('vencimento', { ascending: false }).limit(25)
+    if (error) throw new ErroAgente(error.message)
+    return ((data ?? []) as unknown as Linha[]).map(l => ({
+      ...item(l, hoje), tipo: l.tipo === 'entrada' ? 'a receber' : 'a pagar',
+      anexos: (l.anexos ?? []).map(x => `${x.tipo ?? 'Outro'}${x.numero ? ` ${x.numero}` : ''}${(x as { emitente?: string }).emitente ? ` (${(x as { emitente?: string }).emitente})` : ''}`),
+    }))
+  }
+
+  if (consulta === 'nf_pendentes') {
+    // PP/MX (comissão a receber de fornecedor/veículo) em aberto sem a NF do fornecedor anexada
+    const { data, error } = await a.supabase.from('lancamentos_doc').select(LANC).eq('org_id', a.orgId)
+      .eq('tipo', 'entrada').eq('situacao', 'em_aberto').in('origem_tipo', ['producao', 'midia'])
+      .in('contato_tipo', ['fornecedor', 'veiculo']).order('vencimento').limit(300)
+    if (error) throw new ErroAgente(error.message)
+    const sem = ((data ?? []) as unknown as Linha[]).filter(l => !(l.anexos ?? []).some(x => x.tipo === 'NF' && (x as { emitente?: string }).emitente === 'fornecedor'))
+    return { n: sem.length, itens: sem.slice(0, 60).map(l => item(l, hoje)) }
+  }
+
+  throw new ErroAgente('consulta desconhecida (a_receber, a_pagar, caixa, realizado, buscar, nf_pendentes)')
+}
