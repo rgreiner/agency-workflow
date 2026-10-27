@@ -8,7 +8,7 @@
  */
 import { NextResponse } from 'next/server'
 import { autenticarAgente } from '@/lib/agente/auth'
-import { ErroAgente, agenda, buscarContatos, titulosDetalhe, clientesSemFinanceiro, comissoesNf, comissaoDocumentos, reguaComissao, notasFiscais, cancelarNotaFiscal, rescisoes, btgConciliado, clienteDoTitulo, empresa, anexarDocumento, anotar, atualizarDespesa, despesasAbertas, lancarDespesa, lerDespesa, opcoesDespesa, cobranca, documentos, documentosFornecedor, identificar, nfFornecedor, prorrogar, registrarEnvio, registrarEnvioAgente, regua, titulos, verificar } from '@/lib/agente/operacoes'
+import { ErroAgente, agenda, buscarContatos, titulosDetalhe, clientesSemFinanceiro, comissoesNf, comissaoDocumentos, reguaComissao, notasFiscais, cancelarNotaFiscal, rescisoes, btgConciliado, desfazerEnvio, clienteDoTitulo, empresa, anexarDocumento, anotar, atualizarDespesa, despesasAbertas, lancarDespesa, lerDespesa, opcoesDespesa, cobranca, documentos, documentosFornecedor, identificar, nfFornecedor, prorrogar, registrarEnvio, registrarEnvioAgente, regua, titulos, verificar } from '@/lib/agente/operacoes'
 import { logSystemError } from '@/lib/system-error'
 
 export const runtime = 'nodejs'
@@ -38,6 +38,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ operaca
       case 'regua': dados = await regua(agente); break
       case 'documentos': dados = await documentos(agente, base); break
       case 'registrar-envio': dados = await registrarEnvio(agente, str(b.titulo_id), str(b.bucket), str(b.telefone)); break
+      case 'desfazer-envio': dados = await desfazerEnvio(agente, str(b.titulo_id), str(b.bucket)); break
       case 'nf-fornecedor': dados = await nfFornecedor(agente); break
       case 'registrar-envio-agente': dados = await registrarEnvioAgente(agente, str(b.titulo_id), str(b.bucket), str(b.canal), str(b.destino)); break
       case 'documentos-fornecedor': dados = await documentosFornecedor(agente, str(b.contato_tipo), str(b.contato_id)); break

@@ -689,3 +689,11 @@ export async function btgConciliado(a: AgenteFlow) {
   if (error) throw new ErroAgente(error.message)
   return data as { ok: boolean; motivo: string | null; extrato_ate: string | null; exigido_ate: string; pendentes: number }
 }
+
+/** Envio que a Meta não entregou: tira o degrau do histórico para a régua refazer (mig. 377). */
+export async function desfazerEnvio(a: AgenteFlow, tituloId: string, bucket: string) {
+  await lancamento(a, tituloId)
+  const { data, error } = await a.supabase.rpc('fin_desfazer_envio_agente', { p_lancamento_id: tituloId, p_bucket: bucket })
+  if (error) throw new ErroAgente(error.message)
+  return data as { ok: true; removidos: number }
+}
