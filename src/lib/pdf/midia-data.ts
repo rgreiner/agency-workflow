@@ -40,7 +40,8 @@ export interface MidiaDocData {
   pares: { label: string; valor: string }[]
   localizacoes: { endereco: string; cidade: string }[]
   producao: { mostrar: boolean; tipo: string; pedido: string; qtd: number; unitario: number; total: number; comissao: number }
-  exibicao: { custo: number; descPct: number; desconto: number }
+  /** custo = bruto (antes da negociação); negociacao = desconto sobre o total; liquido = valor − comissão. */
+  exibicao: { custo: number; negociacao: number; descPct: number; desconto: number; liquido: number }
   precos: { prazoLabel: string; faturamentoLabel: string; valor: number }
   totais: { veiculacao: number; producao: number; total: number; comissaoVeiculacao: number; comissaoProducao: number; comissoes: number }
   legal: { titulo: string; itens: { text: string; highlight?: boolean }[]; textoProprio: string }
@@ -184,8 +185,11 @@ export async function loadMidiaDoc(supabase: any, orgId: string, midiaId: string
       comissao: comissaoProducao,
     },
     exibicao: {
-      custo: parseMoney(String(det.custo ?? '')) || valor,
+      // Eletrônica grava número; Externa grava texto pt-BR ("3.000,16").
+      custo: (typeof det.custo === 'number' ? det.custo : parseMoney(String(det.custo ?? ''))) || valor,
+      negociacao: Number(det.negociacao_valor) > 0 ? Number(det.negociacao_valor) : 0,
       descPct, desconto: comissaoVeiculacao,
+      liquido: Math.round((valor - comissaoVeiculacao) * 100) / 100,
     },
     precos: {
       prazoLabel: (() => {

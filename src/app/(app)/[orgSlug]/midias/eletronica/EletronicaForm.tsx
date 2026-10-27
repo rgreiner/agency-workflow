@@ -23,6 +23,8 @@ export interface EletronicaValues {
   primeira_veiculacao: string; ultima_veiculacao: string; contato: string; responsavel_id: string; situacao: string
   observacao: string; texto_legal: string
   pecas: PecaEl[]; periodos: Periodo[]
+  /** Desconto negociado sobre o TOTAL (ex.: RPC): em R$, o que vale; o % é só a outra forma de digitar. */
+  negociacao_valor: string
 }
 
 const MESES = [
@@ -52,7 +54,7 @@ function emptyValues(today: string, responsavelId: string): EletronicaValues {
     praca: '', abrangencia: 'estadual',
     desconto_pct: '20', faturamento: 'valor_bruto', prazo: '15_dfm', data_base: today, dias_agencia: '7',
     primeira_veiculacao: '', ultima_veiculacao: '', contato: '', responsavel_id: responsavelId, situacao: 'em_aberto',
-    observacao: '', texto_legal: '', pecas: [newPeca()], periodos: [newPeriodo(today)],
+    observacao: '', texto_legal: '', pecas: [newPeca()], periodos: [newPeriodo(today)], negociacao_valor: '',
   }
 }
 
@@ -101,8 +103,15 @@ export function EletronicaForm({
   const addItem = (pi: number) => setForm(f => ({ ...f, periodos: f.periodos.map((p, idx) => idx === pi ? { ...p, itens: [...p.itens, newItem()] } : p) }))
   const delItem = (pi: number, ii: number) => setForm(f => ({ ...f, periodos: f.periodos.map((p, idx) => idx === pi ? { ...p, itens: p.itens.filter((_, jdx) => jdx !== ii) } : p) }))
 
-  const valor = useMemo(() => form.periodos.reduce((s, p) => s + totalPeriodo(p), 0), [form.periodos])
+  // Bruto = soma dos períodos; o desconto de negociação sai do TOTAL e a comissão da
+  // agência incide sobre o negociado (disposição da RPC: bruto − negociação − agência = líquido).
+  const bruto = useMemo(() => form.periodos.reduce((s, p) => s + totalPeriodo(p), 0), [form.periodos])
+  const negociacao = Math.min(Math.max(parseMoney(form.negociacao_valor), 0), bruto)
+  const valor = Math.round((bruto - negociacao) * 100) / 100
   const comissao = valor * (parseMoney(form.desconto_pct) / 100)
+  const negociacaoPct = bruto > 0 ? (negociacao / bruto) * 100 : 0
+  const [pctDigitado, setPctDigitado] = useState<string | null>(null)
+  const fmtNum = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const pagador = FATURAMENTO_PAGADOR[form.faturamento] ?? 'cliente'
   const pecaOptions = form.pecas.map(p => ({ value: p.peca, label: p.peca || '—' }))
 
@@ -135,7 +144,12 @@ export function EletronicaForm({
     fd.set('valor', String(valor))
     fd.set('desconto_pct', String(parseMoney(form.desconto_pct)))
     fd.set('redirect_to', redirectTo)
-    fd.set('detalhe', JSON.stringify({ pecas: form.pecas, periodos: form.periodos }))
+    fd.set('detalhe', JSON.stringify({
+      pecas: form.pecas, periodos: form.periodos,
+      // O PDF mostra a cascata: custo (bruto) − negociação = valor; sem negociação, custo = valor.
+      // NÚMEROS, não texto: parseMoney apaga o ponto e leria "3000.16" como 300.016.
+      custo: Math.round(bruto * 100) / 100, negociacao_valor: Math.round(negociacao * 100) / 100,
+    }))
 
     startTransition(async () => {
       const res = await onSubmit(fd)
@@ -272,6 +286,31 @@ export function EletronicaForm({
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Preços</h3>
             <span className="text-sm">Valor: <strong className="text-gray-900">{formatBRL(valor)}</strong></span>
+          </div>
+          {/* Desconto negociado sobre o total: digita em % ou em R$ — um preenche o outro. */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4 pb-4 border-b border-gray-100">
+            <div>
+              <label className={labelCls}>Desconto de negociação (%)</label>
+              <input inputMode="decimal" placeholder="0,00"
+                value={pctDigitado ?? (negociacao > 0 ? fmtNum(negociacaoPct) : '')}
+                onChange={e => {
+                  setPctDigitado(e.target.value)
+                  const pct = Math.min(Math.max(parseMoney(e.target.value), 0), 100)
+                  set('negociacao_valor', pct > 0 ? fmtNum(Math.round(bruto * pct) / 100) : '')
+                }}
+                onBlur={() => setPctDigitado(null)}
+                className={cn(inputCls, 'text-right tabular-nums')} />
+            </div>
+            <div>
+              <label className={labelCls}>Desconto de negociação (R$)</label>
+              <input inputMode="decimal" placeholder="0,00" value={form.negociacao_valor}
+                onChange={e => { setPctDigitado(null); set('negociacao_valor', e.target.value) }}
+                className={cn(inputCls, 'text-right tabular-nums')} />
+            </div>
+            <div className="flex flex-col justify-end text-sm text-gray-600 tabular-nums">
+              <span>Bruto <strong className="text-gray-900">{formatBRL(bruto)}</strong></span>
+              {negociacao > 0 && <span>Negociado <strong className="text-gray-900">{formatBRL(valor)}</strong></span>}
+            </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div><label className={labelCls}>Desconto Padrão Agência (%)</label><input inputMode="decimal" value={form.desconto_pct} onChange={e => set('desconto_pct', e.target.value)} className={inputCls} /></div>

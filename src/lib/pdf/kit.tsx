@@ -117,8 +117,8 @@ export function Rodape({ identificacao, geradoEm }: { identificacao: string; ger
   )
 }
 
-export function FolhaA4({ children }: { children: React.ReactNode }) {
-  return <Document><Page size="A4" style={s.page}>{children}</Page></Document>
+export function FolhaA4({ children, paisagem = false }: { children: React.ReactNode; paisagem?: boolean }) {
+  return <Document><Page size="A4" orientation={paisagem ? 'landscape' : 'portrait'} style={s.page}>{children}</Page></Document>
 }
 
 export const brl = (v: number) =>

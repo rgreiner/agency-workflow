@@ -25,7 +25,7 @@ export default async function EditarEletronicaPage({
   const { data: m } = await (supabase as any).from('midias').select('*').eq('id', midiaId).single()
   if (!m) notFound()
 
-  const det = (m.detalhe ?? {}) as { pecas?: PecaEl[]; periodos?: Periodo[] }
+  const det = (m.detalhe ?? {}) as { pecas?: PecaEl[]; periodos?: Periodo[]; negociacao_valor?: string }
 
   const initial: EletronicaValues = {
     workspace_id: s(m.workspace_id), campaign_id: s(m.campaign_id), veiculo_id: s(m.veiculo_id),
@@ -39,6 +39,7 @@ export default async function EditarEletronicaPage({
     observacao: s(m.observacao), texto_legal: s(m.texto_legal),
     pecas: Array.isArray(det.pecas) ? det.pecas : [],
     periodos: Array.isArray(det.periodos) ? det.periodos : [],
+    negociacao_valor: Number(det.negociacao_valor) > 0 ? num2br(Number(det.negociacao_valor)) : '',
   }
 
   return (
