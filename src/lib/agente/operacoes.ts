@@ -697,3 +697,43 @@ export async function desfazerEnvio(a: AgenteFlow, tituloId: string, bucket: str
   if (error) throw new ErroAgente(error.message)
   return data as { ok: true; removidos: number }
 }
+
+// ── Folha: fechamento do ponto conduzido pela agente (mig. 378) ─────────────
+
+/** Ciclo que acabou de terminar: quem falta fechar, aprovações de ponto pendentes, dias úteis do mês por pessoa. Sem CPF nem salário. */
+export async function folhaSituacao(a: AgenteFlow) {
+  const { data, error } = await a.supabase.rpc('fin_folha_situacao', { p_org: a.orgId })
+  if (error) throw new ErroAgente(error.message)
+  return data
+}
+
+/** Fecha o ciclo das pessoas escolhidas (sócio/estagiário: sem envio). Só depois do Sim do Rafael. */
+export async function folhaFechar(a: AgenteFlow, competencia: string, pessoas: string[], semEnvio: boolean) {
+  if (!/^\d{4}-\d{2}$/.test(competencia)) throw new ErroAgente('competência inválida')
+  if (!pessoas.length) throw new ErroAgente('nenhuma pessoa para fechar')
+  const { data, error } = await a.supabase.rpc('rh_fechar_ciclo', {
+    p_org_id: a.orgId, p_competencia: `${competencia}-01`, p_pessoas: pessoas.map((id) => ({ id })),
+  })
+  if (error) throw new ErroAgente(error.message)
+  const runId = (data as { run_id: string }).run_id
+  if (semEnvio) {
+    const { error: e2 } = await a.supabase.rpc('rh_fechamento_sem_envio', { p_run: runId, p_sem_envio: true })
+    if (e2) throw new ErroAgente(e2.message)
+  }
+  return { run_id: runId }
+}
+
+/** Envia à contabilidade o pacote do fechamento (o mesmo da tela). O CPF fica aqui dentro: a resposta não leva. */
+export async function folhaEnviar(a: AgenteFlow, runId: string, dados: { vr: number | null; vt: number | null; corpo: string }) {
+  const { data, error } = await a.supabase.rpc('fin_folha_pacote', { p_run: runId })
+  if (error) throw new ErroAgente(error.message)
+  const p = data as { org_id: string; id: string; competencia: string; ini: string; fim: string; status: string; enviado_em: string | null; sem_envio: boolean
+    linhas: import('@/app/actions/rh-fechamento').RunRhLinha[]; destinatarios: string[] | null; logo_url: string | null }
+  if (p.org_id !== a.orgId) throw new ErroAgente('fechamento de outra organização', 403)
+  if (p.sem_envio) throw new ErroAgente('ciclo interno (sem envio)')
+  const { enviarPacoteFechamento } = await import('@/lib/rh/envio-fechamento')
+  const r = await enviarPacoteFechamento(a.supabase, a.orgId, a.userId,
+    { run: p, linhas: p.linhas, destinatarios: p.destinatarios ?? [], logoUrl: p.logo_url }, dados)
+  if (r.error) throw new ErroAgente(r.error)
+  return { ok: true as const, destinatarios: r.destinatarios ?? [] }
+}
