@@ -1129,6 +1129,6 @@ export async function cadastroMarcarEnvio(a: AgenteFlow, conviteId: string, cana
 export async function cadastroConvites(a: AgenteFlow) {
   const { data, error } = await a.supabase.rpc('fin_cadastro_convites', { p_org: a.orgId })
   if (error) throw new ErroAgente(error.message)
-  return (data as { convite_id: string; fornecedor_id: string; nome: string; token: string; enviado_em: string | null; canais: string[]; lembrete_em: string | null; aberto_em: string | null; respondido_em: string | null; lembrar: boolean }[])
+  return (data as { convite_id: string; fornecedor_id: string; nome: string; token: string; email: string | null; whatsapp: string | null; contato_nome: string | null; enviado_em: string | null; canais: string[]; lembrete_em: string | null; aberto_em: string | null; respondido_em: string | null; lembrar: boolean }[])
     .map(c => ({ ...c, link: `${SITE()}/cadastro-fornecedor/${c.token}` }))
 }

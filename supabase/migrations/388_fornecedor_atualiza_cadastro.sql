@@ -163,6 +163,16 @@ begin
   if not fin_agente_folha(p_org) then raise exception 'Acesso negado' using errcode = '42501'; end if;
   select coalesce(jsonb_agg(jsonb_build_object(
            'convite_id', c.id, 'fornecedor_id', c.fornecedor_id, 'nome', f.name, 'token', c.token,
+           -- Contato para o envio e o lembrete: e-mail comercial primeiro; WhatsApp só celular.
+           'email', (select lower(btrim(e->>'email')) from jsonb_array_elements(coalesce(f.emails, '[]')) with ordinality x(e, i)
+                      where coalesce(e->>'email', '') ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+                      order by (coalesce(e->>'tipo', '') ~* 'comerc|vend|orc') desc, i limit 1),
+           'whatsapp', (select regexp_replace(t->>'numero', '\D', '', 'g') from jsonb_array_elements(coalesce(f.telefones, '[]')) with ordinality x(t, i)
+                         where regexp_replace(coalesce(t->>'numero', ''), '\D', '', 'g') ~ '^\d{10,13}$'
+                           and regexp_replace(t->>'numero', '\D', '', 'g') !~ '^(55)?\d{2}[2-5]\d{7}$'
+                         order by (coalesce(t->>'tipo', '') ~* 'whats|comerc|cel') desc, i limit 1),
+           'contato_nome', nullif(btrim(split_part(coalesce((select t->>'tipo' from jsonb_array_elements(coalesce(f.telefones, '[]')) t
+                                                             where coalesce(t->>'tipo', '') like '%|%' limit 1), ''), '|', 2)), ''),
            'enviado_em', c.enviado_em, 'canais', c.canais, 'lembrete_em', c.lembrete_em,
            'aberto_em', c.aberto_em, 'respondido_em', c.respondido_em,
            'lembrar', c.enviado_em is not null and c.respondido_em is null and c.lembrete_em is null
