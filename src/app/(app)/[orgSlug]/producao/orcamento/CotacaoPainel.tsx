@@ -7,6 +7,7 @@ import {
   Send, Mail, Link2, FileUp, Loader2, Paperclip, X, Upload, ChevronDown, ChevronRight, ArrowDownToLine, Lock, LockOpen, UserPlus, Search, Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { palavras, perfil, type HistoricoCotacao } from '@/lib/cotacao-historico'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { MultiSelect } from '@/components/ui/Select'
 import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon'
@@ -54,35 +55,42 @@ const STATUS: Record<ConviteStatus, { label: string; cls: string }> = {
 const ORDEM: ConviteStatus[] = ['respondeu', 'abriu', 'enviado', 'nao_enviado', 'recusou']
 const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim()
 
-/** Palavras que dizem o QUE é o item ("canecas de porcelana" → caneca, porcelana): sem plural, sem palavra curta. */
-const PALAVRAS_VAZIAS = new Set(['para', 'com', 'sem', 'tamanho', 'cores', 'personalizado', 'personalizada', 'impressao', 'unidade', 'unidades', 'modelo', 'tipo'])
-const palavras = (s: string) => norm(s).split(/[^a-z0-9]+/)
-  .filter(w => w.length >= 4 && !PALAVRAS_VAZIAS.has(w))
-  .map(w => w.replace(/(oes|aes)$/, 'ao').replace(/s$/, ''))
-
 /**
- * Fornecedores sugeridos para os itens da cotação: o tipo e os produtos que ELE
- * marcou no cadastro (link de cadastro, mig. 388) batendo com as palavras dos itens.
+ * Fornecedores sugeridos para os itens da cotação. Entra quem tem o tipo/produtos do
+ * cadastro batendo com os itens OU já cotou/vendeu item parecido; a ordem pesa quem
+ * responde, quem foi escolhido e quem teve o melhor preço nesses itens (mig. 389).
  * Só sugere — quem escolhe é a pessoa.
  */
-function sugerir(fornecedores: FornecedorCotacaoOpt[], textoItens: string): { f: FornecedorCotacaoOpt; motivo: string }[] {
-  const alvo = new Set(palavras(textoItens))
+function sugerir(fornecedores: FornecedorCotacaoOpt[], itens: { nome: string; descricao: string }[], historico: HistoricoCotacao | null) {
+  const alvo = new Set(itens.flatMap(it => palavras(`${it.nome} ${it.descricao}`)))
   if (!alvo.size) return []
-  return fornecedores.map(f => {
-    const termos = [f.tipo ?? '', ...f.tags].filter(Boolean)
-    const bate = termos.filter(t => palavras(t).some(w => alvo.has(w)))
-    return { f, bate, contato: !!(f.email || f.telefone) }
+  return fornecedores.filter(f => f.email || f.telefone).map(f => {
+    const bate = [f.tipo ?? '', ...f.tags].filter(t => t && palavras(t).some(w => alvo.has(w)))
+    const pf = perfil(historico, f.id, itens)
+    const taxa = pf.convidados ? pf.responderam / pf.convidados : 0.5
+    const score = (bate.length ? 3 : 0) + Math.min(pf.parecidos, 3) * 1.5 + pf.maisBaratoParecidos * 2
+      + Math.min(pf.escolhidos + pf.pedidos, 5) * 0.8 + (pf.convidados ? taxa * 2 : 0)
+    const motivo = [
+      bate.length ? bate.slice(0, 2).join(', ') : '',
+      pf.parecidos ? `${pf.parecidos} item(ns) parecido(s)` : '',
+      pf.maisBaratoParecidos ? `${pf.maisBaratoParecidos}× melhor preço` : '',
+      pf.escolhidos + pf.pedidos ? `${pf.escolhidos + pf.pedidos}× escolhido` : '',
+      pf.convidados ? `respondeu ${pf.responderam}/${pf.convidados}` : '',
+    ].filter(Boolean).join(' · ')
+    return { f, score, entra: bate.length > 0 || pf.parecidos > 0, motivo }
   })
-    .filter(x => x.bate.length > 0 && x.contato)
-    .sort((a, b) => b.bate.length - a.bate.length || a.f.name.localeCompare(b.f.name, 'pt-BR'))
+    .filter(x => x.entra)
+    .sort((a, b) => b.score - a.score || a.f.name.localeCompare(b.f.name, 'pt-BR'))
     .slice(0, 12)
-    .map(x => ({ f: x.f, motivo: x.bate.slice(0, 3).join(', ') }))
 }
+
 const hojeMais = (dias: number) => { const d = new Date(); d.setDate(d.getDate() + dias); return d.toLocaleDateString('en-CA') }
 
 export function CotacaoPainel({
-  orgSlug, orcamentoId, titulo, agencia, itens, itensSalvos, cotacoes, fornecedores, onAplicar, onEscolher, onImportado, abrir,
+  orgSlug, orcamentoId, titulo, agencia, itens, itensSalvos, cotacoes, fornecedores, onAplicar, onEscolher, onImportado, abrir, historico = null,
 }: {
+  /** Histórico de cotações e compras (mig. 389): pesa a sugestão de fornecedores. */
+  historico?: HistoricoCotacao | null
   orgSlug: string; orcamentoId: string; titulo: string; agencia: string
   /** Itens do formulário agora (para trazer resposta e para montar o pedido). */
   itens: (ItemOrcBase & { descricao: string; imagem?: string })[]
@@ -176,7 +184,7 @@ export function CotacaoPainel({
 
       {modal && (
         <ModalEnvio
-          orgSlug={orgSlug} orcamentoId={orcamentoId} itens={itens} fornecedores={fornecedores}
+          orgSlug={orgSlug} orcamentoId={orcamentoId} itens={itens} fornecedores={fornecedores} historico={historico}
           modo={modal.modo} cotacaoId={modal.modo === 'adicionar' ? modal.cotacaoId : null}
           jaConvidados={modal.modo === 'adicionar' ? new Set(cotacoes.find(c => c.id === modal.cotacaoId)?.convites.map(v => v.fornecedor_id)) : new Set()}
           onClose={() => setModal(null)}
@@ -362,8 +370,8 @@ function LinhaConvite({ v, c, orgSlug, titulo, agencia, itens, onAplicar }: {
   )
 }
 
-function ModalEnvio({ orgSlug, orcamentoId, itens, fornecedores, modo, cotacaoId, jaConvidados, onClose }: {
-  orgSlug: string; orcamentoId: string
+function ModalEnvio({ orgSlug, orcamentoId, itens, fornecedores, historico, modo, cotacaoId, jaConvidados, onClose }: {
+  orgSlug: string; orcamentoId: string; historico: HistoricoCotacao | null
   itens: (ItemOrcBase & { descricao: string; imagem?: string })[]
   fornecedores: FornecedorCotacaoOpt[]
   modo: 'nova' | 'adicionar'; cotacaoId: string | null; jaConvidados: Set<string>
@@ -402,7 +410,7 @@ function ModalEnvio({ orgSlug, orcamentoId, itens, fornecedores, modo, cotacaoId
   }, [disponiveis, tipos, tagsFiltro, busca])
   const filtrando = tipos.length > 0 || tagsFiltro.length > 0 || busca.trim().length > 0
   const sugeridos = useMemo(() => sugerir(disponiveis,
-    pedido.filter(p => p.incluir).map(p => `${itens[p.idx].nome} ${itens[p.idx].descricao ?? ''}`).join(' ')), [disponiveis, pedido, itens])
+    pedido.filter(p => p.incluir).map(p => ({ nome: itens[p.idx].nome, descricao: itens[p.idx].descricao ?? '' })), historico), [disponiveis, pedido, itens, historico])
   const escolhidos = fornecedores.filter(f => sel.has(f.id))
   const semContato = escolhidos.filter(f => !f.email && !f.telefone).length
   const soZap = escolhidos.filter(f => !f.email && f.telefone).length
@@ -529,7 +537,7 @@ function ModalEnvio({ orgSlug, orcamentoId, itens, fornecedores, modo, cotacaoId
           {sugeridos.length > 0 && (
             <div className="mt-3 rounded-xl bg-orange-500/5 border border-orange-100 p-3">
               <div className="flex items-center justify-between gap-2 mb-2">
-                <p className="text-xs font-medium text-gray-700 inline-flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5 text-orange-500" /> Sugeridos pelos itens</p>
+                <p className="text-xs font-medium text-gray-700 inline-flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5 text-orange-500" /> Sugeridos pelos itens <span className="font-normal text-gray-400">· quem responde, é escolhido e tem melhor preço vem primeiro</span></p>
                 <button type="button" onClick={() => setSel(s => { const n = new Set(s); sugeridos.forEach(x => n.add(x.f.id)); return n })}
                   className="text-xs font-medium text-orange-700 hover:text-orange-800 transition-colors">Marcar todos</button>
               </div>
@@ -537,9 +545,9 @@ function ModalEnvio({ orgSlug, orcamentoId, itens, fornecedores, modo, cotacaoId
                 {sugeridos.map(({ f, motivo }) => {
                   const on = sel.has(f.id)
                   return (
-                    <button key={f.id} type="button" onClick={() => toggle(f.id)} title={`Cadastro: ${motivo}`}
+                    <button key={f.id} type="button" onClick={() => toggle(f.id)} title={motivo}
                       className={cn('px-2.5 py-1 rounded-full text-xs transition-colors active:scale-[0.97]', on ? 'bg-orange-600 text-[#fff]' : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50')}>
-                      {f.name} <span className={on ? 'text-orange-100' : 'text-gray-400'}>· {motivo}</span>
+                      {f.name}{motivo && <span className={on ? 'text-orange-100' : 'text-gray-400'}> · {motivo.split(' · ').slice(0, 2).join(' · ')}</span>}
                     </button>
                   )
                 })}

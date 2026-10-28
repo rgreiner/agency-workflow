@@ -41,7 +41,7 @@ export default async function EditarOrcamentoPage({
   // Pedido de cotação (mig. 310): rodadas deste orçamento + cadastro para escolher quem recebe.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any
-  const [{ data: cots }, { data: forns }, { data: org }, { data: quemDecidiu }, { count: contatosPortal }] = await Promise.all([
+  const [{ data: cots }, { data: forns }, { data: org }, { data: quemDecidiu }, { count: contatosPortal }, { data: historico }] = await Promise.all([
     sb.from('cotacoes')
       .select('id, created_at, prazo_resposta, encerrada, origem, mensagem, anexos, itens, convites:cotacao_convites(id, fornecedor_id, token, lembretes, email_para, email_enviado_em, whatsapp_em, aberto_em, respondido_em, recusado_em, resposta, resposta_anexos, dados_fornecedor, fornecedor:fornecedor_id(name, telefones))')
       .eq('producao_id', producaoId).order('created_at', { ascending: false }),
@@ -52,6 +52,8 @@ export default async function EditarOrcamentoPage({
       : Promise.resolve({ data: null }),
     sb.from('portal_users').select('id', { count: 'exact', head: true })
       .eq('workspace_id', p.workspace_id).eq('ativo', true).is('interno_user_id', null),
+    // Histórico de cotações e compras (mig. 389): sugestão de fornecedor e projeção de custo.
+    sb.rpc('cotacao_historico', { p_org: p.org_id }),
   ])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cotacoes: CotacaoView[] = (cots ?? []).map((c: any) => ({
@@ -90,6 +92,7 @@ export default async function EditarOrcamentoPage({
       redirectTo={`/${orgSlug}/producao/orcamento`}
       initial={initial}
       submitLabel="Salvar"
+      historico={historico ?? null}
       onSubmit={updateProducao.bind(null, orgSlug, producaoId)}
       cotacao={{ orcamentoId: producaoId, agencia: org?.name ?? '', cotacoes, fornecedores: fornecedoresCotacao, abrir: abrirImportar === '1' ? 'importar' : abrirCotacao === '1' ? 'cotacao' : undefined }}
       portalSlot={

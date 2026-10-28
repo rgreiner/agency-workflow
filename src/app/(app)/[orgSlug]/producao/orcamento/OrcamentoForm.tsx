@@ -15,6 +15,8 @@ import type { ClienteOpt, MemberOpt } from '../../midias/simplificada/MidiaForm'
 import type { FornecedorOpt } from '@/lib/midia-selectors'
 import { aplicarResposta, type CotacaoItem, type Resposta } from '@/lib/cotacao'
 import { CotacaoPainel, type CotacaoView, type FornecedorCotacaoOpt } from './CotacaoPainel'
+import { ProjecaoCusto } from './ProjecaoCusto'
+import type { HistoricoCotacao } from '@/lib/cotacao-historico'
 
 export interface Opcao {
   fornecedor_id: string; n_orc: string; pgto: string; quant: string; valor_unit: string; valor_total?: string; selecionado: boolean
@@ -62,8 +64,10 @@ function emptyValues(today: string, responsavelId: string): OrcamentoValues {
 }
 
 export function OrcamentoForm({
-  clientes, fornecedores, members, defaultResponsavelId, today, redirectTo, initial, submitLabel = 'Gravar', onSubmit, cotacao, portalSlot,
+  clientes, fornecedores, members, defaultResponsavelId, today, redirectTo, initial, submitLabel = 'Gravar', onSubmit, cotacao, portalSlot, historico = null,
 }: {
+  /** Histórico de cotações e compras (mig. 389): projeção de custo e sugestão de fornecedor. */
+  historico?: HistoricoCotacao | null
   clientes: ClienteOpt[]; fornecedores: FornecedorOpt[]; members: MemberOpt[]
   defaultResponsavelId: string; today: string; redirectTo: string
   initial?: Partial<OrcamentoValues>; submitLabel?: string
@@ -202,7 +206,7 @@ export function OrcamentoForm({
           <CotacaoPainel
             orgSlug={orgSlug} orcamentoId={cotacao.orcamentoId} titulo={form.titulo} agencia={cotacao.agencia}
             itens={form.itens} itensSalvos={assinaturaItens(form.itens) === itensGravados}
-            cotacoes={cotacao.cotacoes} fornecedores={cotacao.fornecedores} onAplicar={aplicarCotacao} onEscolher={escolherCotacao} abrir={cotacao.abrir}
+            cotacoes={cotacao.cotacoes} fornecedores={cotacao.fornecedores} historico={historico} onAplicar={aplicarCotacao} onEscolher={escolherCotacao} abrir={cotacao.abrir}
             onImportado={novos => {
               // O servidor já gravou: o formulário passa a refletir o orçamento gravado.
               const its = novos as ItemOrc[]
@@ -229,6 +233,8 @@ export function OrcamentoForm({
                   </div>
                   <label className={cn(labelCls, 'mt-2')}>Descrição</label>
                   <textarea rows={2} value={it.descricao} onChange={e => patchItem(ii, { descricao: e.target.value })} className={cn(inputCls, 'resize-y min-h-[42px]')} />
+                  <ProjecaoCusto historico={historico} nome={it.nome} descricao={it.descricao} producaoId={cotacao?.orcamentoId}
+                    quant={Math.max(...it.opcoes.map(o => parseInt(String(o.quant || '0').replace(/\D/g, ''), 10) || 0), 1)} />
                 </div>
               </div>
 

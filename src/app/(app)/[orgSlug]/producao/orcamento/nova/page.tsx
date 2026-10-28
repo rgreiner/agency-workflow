@@ -8,7 +8,10 @@ export default async function NovoOrcamentoPage({
   params: Promise<{ orgSlug: string }>
 }) {
   const { orgSlug } = await params
-  const { clientes, fornecedores, members, userId, today } = await loadProducaoSelectors(orgSlug)
+  const { supabase, orgId, clientes, fornecedores, members, userId, today } = await loadProducaoSelectors(orgSlug)
+  // Histórico de cotações e compras (mig. 389): projeção de custo por item parecido.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: historico } = await (supabase as any).rpc('cotacao_historico', { p_org: orgId })
 
   return (
     <OrcamentoForm
@@ -20,6 +23,7 @@ export default async function NovoOrcamentoPage({
       redirectTo={`/${orgSlug}/producao/orcamento`}
       submitLabel="Gravar"
       onSubmit={createProducao.bind(null, orgSlug)}
+      historico={historico ?? null}
     />
   )
 }
