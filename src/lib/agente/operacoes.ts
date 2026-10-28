@@ -1089,3 +1089,11 @@ export async function emitirNfse(a: AgenteFlow, lancamentoId: string) {
   if (r.error) throw new ErroAgente(r.error)
   return r.nota
 }
+
+/** E-mail novo de veículo/fornecedor reconhecido pela Flávia (mig. 387): só soma ao cadastro. */
+export async function adicionarEmailContato(a: AgenteFlow, tipo: string, id: string, email: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new ErroAgente('contato inválido')
+  const { data, error } = await a.supabase.rpc('fin_contato_adicionar_email', { p_org: a.orgId, p_tipo: tipo, p_id: id, p_email: email })
+  if (error) throw new ErroAgente(error.message)
+  return data as { ok: true; ja_tinha?: boolean; rotulo?: string }
+}

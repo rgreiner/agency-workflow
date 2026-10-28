@@ -8,7 +8,7 @@
  */
 import { NextResponse } from 'next/server'
 import { autenticarAgente } from '@/lib/agente/auth'
-import { ErroAgente, agenda, cancelamentos, cancelamentoAvisado, buscarContatos, titulosDetalhe, clientesSemFinanceiro, comissoesNf, comissaoDocumentos, reguaComissao, notasFiscais, cancelarNotaFiscal, rescisoes, btgConciliado, desfazerEnvio, folhaSituacao, folhaFechar, folhaEnviar, dpAgenda, contatosNomes, resumoMesa, recebimentosComparados, financeiroConsulta, registrarPromessa, renegociar, folhaLer, folhaAplicar, faturamentoFila, faturar, anexarDocumentoFila, nfseAEmitir, emitirNfse, clienteDoTitulo, empresa, anexarDocumento, anotar, atualizarDespesa, despesasAbertas, lancarDespesa, lerDespesa, opcoesDespesa, cobranca, documentos, documentosFornecedor, identificar, nfFornecedor, prorrogar, registrarEnvio, registrarEnvioAgente, regua, titulos, verificar } from '@/lib/agente/operacoes'
+import { ErroAgente, agenda, cancelamentos, cancelamentoAvisado, buscarContatos, titulosDetalhe, clientesSemFinanceiro, comissoesNf, comissaoDocumentos, reguaComissao, notasFiscais, cancelarNotaFiscal, rescisoes, btgConciliado, desfazerEnvio, folhaSituacao, folhaFechar, folhaEnviar, dpAgenda, contatosNomes, resumoMesa, recebimentosComparados, financeiroConsulta, registrarPromessa, renegociar, folhaLer, folhaAplicar, faturamentoFila, faturar, anexarDocumentoFila, nfseAEmitir, emitirNfse, adicionarEmailContato, clienteDoTitulo, empresa, anexarDocumento, anotar, atualizarDespesa, despesasAbertas, lancarDespesa, lerDespesa, opcoesDespesa, cobranca, documentos, documentosFornecedor, identificar, nfFornecedor, prorrogar, registrarEnvio, registrarEnvioAgente, regua, titulos, verificar } from '@/lib/agente/operacoes'
 import { logSystemError } from '@/lib/system-error'
 
 export const runtime = 'nodejs'
@@ -52,6 +52,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ operaca
       case 'faturar': dados = await faturar(agente, str(b.tipo), str(b.id)); break
       case 'anexar-documento-fila': dados = await anexarDocumentoFila(agente, { tipo: str(b.tipo), id: str(b.id), tipo_anexo: str(b.tipo_anexo), numero: str(b.numero), nome: str(b.nome), conteudo_base64: str(b.conteudo_base64) }); break
       case 'nfse-a-emitir': dados = await nfseAEmitir(agente); break
+      case 'adicionar-email-contato': dados = await adicionarEmailContato(agente, str(b.contato_tipo), str(b.contato_id), str(b.email)); break
       case 'emitir-nfse': dados = await emitirNfse(agente, str(b.lancamento_id)); break
       case 'folha-situacao': dados = await folhaSituacao(agente); break
       case 'folha-fechar': dados = await folhaFechar(agente, str(b.competencia), Array.isArray(b.pessoas) ? (b.pessoas as unknown[]).map(str).filter(Boolean) : [], b.sem_envio === true); break
