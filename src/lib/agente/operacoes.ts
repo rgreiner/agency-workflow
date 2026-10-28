@@ -1012,3 +1012,74 @@ export async function folhaAplicar(a: AgenteFlow, competencia: string, salarios:
   if (error) throw new ErroAgente(error.message)
   return data
 }
+
+// ── Fila do Faturamento pela Flávia (mig. 386) ──────────────────────────────
+// Decisão do Rafael (28/10): duas vezes ao dia ela confere a fila e FATURA
+// SOZINHA o que está completo; o que falta vira pendência. A NFS-e da agência
+// sai no faturamento quando a NF do veículo já veio; sem ela, no mês do vencimento.
+
+export interface ItemFila {
+  tipo: 'midia' | 'producao'; id: string; numero: number | null; documento: string | null; titulo: string | null
+  cliente_id: string | null; cliente: string | null
+  contraparte_tipo: string | null; contraparte_id: string | null; contraparte: string | null
+  valor: number; a_receber: number; quem_paga: string
+  vencimento_contraparte: string | null; vencimento_agencia: string | null
+  tem_nf: boolean; tem_boleto: boolean; numeros: string | null
+  faltas: string[]; liberado_em: string
+}
+
+export async function faturamentoFila(a: AgenteFlow) {
+  const { data, error } = await a.supabase.rpc('fin_faturamento_fila', { p_org: a.orgId })
+  if (error) throw new ErroAgente(error.message)
+  return data as ItemFila[]
+}
+
+export async function faturar(a: AgenteFlow, tipo: string, id: string) {
+  if (tipo !== 'midia' && tipo !== 'producao') throw new ErroAgente('tipo deve ser midia ou producao')
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new ErroAgente('documento inválido')
+  const { data, error } = await a.supabase.rpc('fin_faturar_agente', { p_org: a.orgId, p_tipo: tipo, p_id: id })
+  if (error) throw new ErroAgente(error.message)
+  return data as { ok: true; lancamentos: { lancamento_id: string; contato_tipo: string; contato: string; descricao: string; valor: number; vencimento: string; nf_fornecedor: boolean }[] }
+}
+
+/** NF/boleto do veículo/fornecedor para um documento ainda na fila: grava o PDF e acrescenta aos anexos dele. */
+export async function anexarDocumentoFila(a: AgenteFlow, b: { tipo: string; id: string; tipo_anexo: string; numero: string; nome: string; conteudo_base64: string }) {
+  if (b.tipo_anexo !== 'NF' && b.tipo_anexo !== 'Boleto') throw new ErroAgente('tipo_anexo deve ser NF ou Boleto')
+  if (!/^[0-9a-f-]{36}$/i.test(b.id)) throw new ErroAgente('documento inválido')
+  const url = await gravarPdf(b.conteudo_base64)
+  const { data, error } = await a.supabase.rpc('fin_anexar_documento_fila', {
+    p_org: a.orgId, p_tipo: b.tipo, p_id: b.id,
+    p_anexo: { url, nome: (b.nome || 'documento.pdf').slice(0, 200), tipo: b.tipo_anexo, numero: (b.numero || '').slice(0, 40) },
+  })
+  if (error) throw new ErroAgente(error.message)
+  return data as { ok: true; repetido?: boolean }
+}
+
+export async function nfseAEmitir(a: AgenteFlow) {
+  const { data, error } = await a.supabase.rpc('fin_nfse_a_emitir', { p_org: a.orgId })
+  if (error) throw new ErroAgente(error.message)
+  return data as { lancamento_id: string; contato_tipo: string | null; contato: string | null; documento: string | null; descricao: string; valor: number; vencimento: string; parcela_num: number | null; parcela_total: number | null; nf_fornecedor: boolean; pronto: boolean }[]
+}
+
+/**
+ * Emite a NFS-e da agência para um lançamento — o MESMO código da tela
+ * (lib/fiscal/emitir.ts). Tomador = o contato vinculado ao lançamento;
+ * descrição = a sugestão da tela ("PP 1924 | Fornecedor").
+ */
+export async function emitirNfse(a: AgenteFlow, lancamentoId: string) {
+  await lancamento(a, lancamentoId)
+  const [{ data: org }, { data: doc }, { data: lanc }, { data: cfg }] = await Promise.all([
+    a.supabase.from('organizations').select('slug').eq('id', a.orgId).single(),
+    a.supabase.from('lancamentos_doc').select('doc_serie, doc_numero').eq('id', lancamentoId).maybeSingle(),
+    a.supabase.from('lancamentos').select('contato_nome, contato_id').eq('id', lancamentoId).maybeSingle(),
+    a.supabase.from('org_nfse_config').select('descricao_padrao').eq('org_id', a.orgId).maybeSingle(),
+  ])
+  if (!org) throw new ErroAgente('organização não encontrada')
+  if (!lanc?.contato_id) throw new ErroAgente('lançamento sem contato vinculado — sem tomador não há nota')
+  const docRef = doc?.doc_serie && doc?.doc_numero ? `${doc.doc_serie} ${doc.doc_numero}` : ''
+  const descricao = (docRef && lanc.contato_nome ? `${docRef} | ${lanc.contato_nome}` : docRef) || (cfg?.descricao_padrao as string | null) || undefined
+  const { emitirNotaComo } = await import('@/lib/fiscal/emitir')
+  const r = await emitirNotaComo({ supabase: a.supabase as never, orgId: a.orgId, userId: a.userId, orgSlug: org.slug as string }, lancamentoId, { descricao })
+  if (r.error) throw new ErroAgente(r.error)
+  return r.nota
+}
