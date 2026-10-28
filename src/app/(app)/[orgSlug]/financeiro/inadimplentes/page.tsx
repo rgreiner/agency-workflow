@@ -20,7 +20,7 @@ export default async function InadimplentesPage({ params }: { params: Promise<{ 
 
   // Flow: lançamentos em aberto (a receber / a pagar não liquidados).
   const resLanc = await sb.from('lancamentos')
-    .select('id, tipo, contato_nome, descricao, categoria, vencimento, valor, valor_realizado, situacao, origem_tipo, origem_ref, workspace_id, promessa_data, promessa_obs')
+    .select('id, tipo, contato_nome, contato_tipo, contato_id, descricao, categoria, vencimento, valor, valor_realizado, situacao, origem_tipo, origem_ref, workspace_id, promessa_data, promessa_obs')
     .eq('org_id', orgId).eq('situacao', 'em_aberto')
 
   const [resClientes, resAvisos, resCfg, resAliases] = await Promise.all([
@@ -70,7 +70,7 @@ export default async function InadimplentesPage({ params }: { params: Promise<{ 
     categoria: string | null; vencimento: string | null; valor: number | string
     valor_realizado: number | string | null
     situacao: string; origem_tipo: string | null; origem_ref: string | null
-    workspace_id: string | null; promessa_data: string | null; promessa_obs: string | null
+    workspace_id: string | null; contato_tipo: string | null; contato_id: string | null; promessa_data: string | null; promessa_obs: string | null
   }
   const lanc = unwrap<LancRaw>(resLanc, 'lançamentos')
 
@@ -125,7 +125,10 @@ export default async function InadimplentesPage({ params }: { params: Promise<{ 
       lancamentoId: l.id,
       tipo: l.tipo === 'saida' ? 'saida' : 'entrada',
       contato: (l.contato_nome as string)?.trim() || 'Sem contato',
-      clienteId: aliasParaCliente.get(norm(l.contato_nome)) ?? null,
+      // Vínculo estruturado (contato = cliente do cadastro, migs. 322/323) vale primeiro;
+      // o alias de grafia fica para o que veio sem vínculo (Conta Azul).
+      clienteId: (l.contato_tipo === 'cliente' && l.contato_id && nomeDoWorkspace.has(l.contato_id) ? l.contato_id : null)
+        ?? aliasParaCliente.get(norm(l.contato_nome)) ?? null,
       centroCusto: centroDeCusto(l.workspace_id, l.contato_nome),
       descricao: l.descricao ?? null,
       categoria: l.categoria ?? null,
