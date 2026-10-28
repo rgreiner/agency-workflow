@@ -10,6 +10,8 @@
 
 export interface PrecoHistorico {
   producao_id: string; documento: string | null; situacao: string; data: string
+  /** Pedido: de qual orçamento saiu (mig. 390). Tipo do fornecedor, para calibrar por tipo. */
+  origem_orcamento_id?: string | null; tipo?: string | null
   nome: string; descricao: string; fornecedor_id: string; fornecedor: string
   quant: number; unit: number; escolhido: boolean; mais_barato: boolean
 }
@@ -18,7 +20,7 @@ export interface HistoricoCotacao { precos: PrecoHistorico[]; fornecedores: Forn
 
 const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim()
 const VAZIAS = new Set(['para', 'com', 'sem', 'dos', 'das', 'nos', 'nas', 'por', 'cor', 'tam', 'tamanho', 'cores', 'personalizado', 'personalizada', 'personalizados', 'personalizadas',
-  'impressao', 'unidade', 'unidades', 'modelo', 'tipo', 'acabamento', 'frete', 'incluso', 'regiao', 'cascavel', 'conforme', 'arte', 'entrega'])
+  'impressao', 'unidade', 'unidades', 'modelo', 'tipo', 'acabamento', 'frete', 'incluso', 'regiao', 'cascavel', 'conforme', 'arte', 'entrega', 'remessa', 'segunda', 'primeira', 'nova', 'novo', 'evento', 'logo'])
 
 /** Palavras que dizem o QUE é ("canecas de porcelana" → caneca, porcelana). */
 export function palavras(s: string): string[] {
@@ -67,9 +69,16 @@ const mediana = (xs: number[]) => {
  * ESCOLHIDO ou COMPRADO — preço de opção recusada pesa menos.
  */
 export function projetar(refs: Parecido[], quant: number): { unit: number; min: number; max: number; n: number; quantRef: number } | null {
-  if (!refs.length) return null
   const q = quant > 0 ? quant : 1
   const dist = (r: Parecido) => Math.abs(Math.log(r.quant) - Math.log(q))
+  // Quantidade 10x maior ou menor é outro produto na prática (unidade × metro, brinde × lote):
+  // sem referência nessa faixa, não há projeção — melhor nada do que um número enganoso.
+  refs = refs.filter(r => dist(r) <= Math.log(10))
+  if (!refs.length) return null
+  // Só os MAIS parecidos entram na conta (até 0,15 abaixo do melhor): "Catálogo 36x26" não
+  // deve ter o preço puxado por "Folder catálogo capa dura" se há catálogo de verdade.
+  const melhor = Math.max(...refs.map(r => r.score))
+  refs = refs.filter(r => r.score >= melhor - 0.15)
   const perto = Math.min(...refs.map(dist))
   // Faixa de quantidade "equivalente": até 2x para mais ou para menos da mais próxima.
   const faixa = refs.filter(r => dist(r) <= perto + Math.log(2))
@@ -94,4 +103,46 @@ export function perfil(h: HistoricoCotacao | null | undefined, fornecedorId: str
     maisBaratoParecidos: parecidosDele.filter(p => p.mais_barato).length,
     maisBarato: dele.filter(p => p.mais_barato).length,
   }
+}
+
+// ── Calibração (mig. 390): a projeção refeita para cada pedido já feito ──────
+
+export interface ParCalibracao { item: string; documento: string | null; tipo: string; fornecedor: string; quant: number; projetado: number; real: number; erro: number }
+export interface CalibracaoTipo { tipo: string; n: number; vies: number; erroMedio: number; fator: number | null }
+
+/**
+ * Para cada item de PEDIDO (custo real), refaz a projeção como ela teria saído no dia:
+ * só com o histórico ATÉ a data dele e sem o próprio orçamento de onde ele veio
+ * (a opção escolhida ali preveria a si mesma). Erro = real ÷ projetado − 1.
+ */
+export function calibrar(h: HistoricoCotacao | null | undefined): { pares: ParCalibracao[]; porTipo: CalibracaoTipo[] } {
+  if (!h) return { pares: [], porTipo: [] }
+  const pares: ParCalibracao[] = []
+  for (const p of h.precos.filter(x => x.situacao === 'pedido')) {
+    const fora = new Set([p.producao_id, p.origem_orcamento_id].filter(Boolean) as string[])
+    const antes = { ...h, precos: h.precos.filter(x => x.data <= p.data && !fora.has(x.producao_id) && !(x.origem_orcamento_id && fora.has(x.origem_orcamento_id))) }
+    const proj = projetar(parecidos(antes, p.nome, p.descricao), p.quant)
+    if (!proj || proj.unit <= 0) continue
+    pares.push({ item: p.nome, documento: p.documento, tipo: p.tipo || 'Sem tipo', fornecedor: p.fornecedor, quant: p.quant, projetado: proj.unit, real: p.unit, erro: p.unit / proj.unit - 1 })
+  }
+  const grupos = new Map<string, ParCalibracao[]>()
+  for (const x of pares) grupos.set(x.tipo, [...(grupos.get(x.tipo) ?? []), x])
+  const porTipo = [...grupos].map(([tipo, xs]) => {
+    const vies = mediana(xs.map(x => x.erro))
+    return {
+      tipo, n: xs.length, vies, erroMedio: mediana(xs.map(x => Math.abs(x.erro))),
+      // Só corrige quando o erro é CONSISTENTE: 5+ pedidos do tipo, viés de 5%+ e ao menos
+      // 60% deles errando para o mesmo lado e por menos de 100%. Menos que isso é ruído.
+      fator: xs.length >= 5 && Math.abs(vies) >= 0.05
+        && xs.filter(x => Math.sign(x.erro) === Math.sign(vies) && Math.abs(x.erro) < 1).length >= 0.6 * xs.length ? 1 + vies : null,
+    }
+  }).sort((a, b) => b.n - a.n)
+  return { pares, porTipo }
+}
+
+/** Tipo predominante entre as referências (o do fornecedor que mais aparece). */
+export function tipoDasRefs(refs: Parecido[]): string | null {
+  const c = new Map<string, number>()
+  for (const r of refs.slice(0, 12)) if (r.tipo) c.set(r.tipo, (c.get(r.tipo) ?? 0) + 1)
+  return [...c].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
 }

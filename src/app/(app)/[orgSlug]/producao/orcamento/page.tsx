@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { filtrarPorAba, SITUACOES_FORA_ORCAMENTO, ORCAMENTO_SITUACAO_OPTIONS, ORCAMENTO_SITUACAO_LABELS } from '@/lib/midia'
 import { ProducaoClient, type ProducaoRow } from '../ProducaoClient'
+import { PrecisaoProjecao } from './PrecisaoProjecao'
 
 export default async function OrcamentoPage({
   params,
@@ -49,7 +50,11 @@ export default async function OrcamentoPage({
     gerados: gerados[r.id] ?? [],
   }))
 
+  // Projeção × custo real (mig. 390): só na aba Ativos, abaixo da lista.
+  const { data: historico } = archivedView ? { data: null } : await sb.rpc('cotacao_historico', { p_org: org.id })
+
   return (
+    <>
     <ProducaoClient
       orgSlug={orgSlug} items={items} archivedView={archivedView}
       basePath="producao/orcamento" title="Liberação de Produção — Orçamento"
@@ -59,5 +64,7 @@ export default async function OrcamentoPage({
       situacaoLabels={ORCAMENTO_SITUACAO_LABELS}
       mostrarFiltros={false}
     />
+    {historico && <PrecisaoProjecao historico={historico} />}
+    </>
   )
 }

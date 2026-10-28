@@ -16,7 +16,7 @@ import type { FornecedorOpt } from '@/lib/midia-selectors'
 import { aplicarResposta, type CotacaoItem, type Resposta } from '@/lib/cotacao'
 import { CotacaoPainel, type CotacaoView, type FornecedorCotacaoOpt } from './CotacaoPainel'
 import { ProjecaoCusto } from './ProjecaoCusto'
-import type { HistoricoCotacao } from '@/lib/cotacao-historico'
+import { calibrar, type HistoricoCotacao } from '@/lib/cotacao-historico'
 
 export interface Opcao {
   fornecedor_id: string; n_orc: string; pgto: string; quant: string; valor_unit: string; valor_total?: string; selecionado: boolean
@@ -78,6 +78,8 @@ export function OrcamentoForm({
   portalSlot?: React.ReactNode
 }) {
   const router = useRouter()
+  // Calibração da projeção: refeita uma vez por carga (cada pedido já feito × o que a projeção diria).
+  const calibracao = useMemo(() => calibrar(historico).porTipo, [historico])
   const [form, setForm] = useState<OrcamentoValues>({
     ...emptyValues(today, defaultResponsavelId), ...initial,
     itens: (initial?.itens?.length ? initial.itens : [newItem()]).map(it => ({
@@ -233,7 +235,7 @@ export function OrcamentoForm({
                   </div>
                   <label className={cn(labelCls, 'mt-2')}>Descrição</label>
                   <textarea rows={2} value={it.descricao} onChange={e => patchItem(ii, { descricao: e.target.value })} className={cn(inputCls, 'resize-y min-h-[42px]')} />
-                  <ProjecaoCusto historico={historico} nome={it.nome} descricao={it.descricao} producaoId={cotacao?.orcamentoId}
+                  <ProjecaoCusto historico={historico} calibracao={calibracao} nome={it.nome} descricao={it.descricao} producaoId={cotacao?.orcamentoId}
                     quant={Math.max(...it.opcoes.map(o => parseInt(String(o.quant || '0').replace(/\D/g, ''), 10) || 0), 1)} />
                 </div>
               </div>
