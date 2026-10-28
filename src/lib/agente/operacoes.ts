@@ -824,7 +824,7 @@ const item = (l: Linha, hoje: string) => ({
 export async function financeiroConsulta(a: AgenteFlow, consulta: string, p: Record<string, unknown>) {
   const hoje = hojeBRT()
   const texto = typeof p.texto === 'string' ? p.texto.trim().replace(/[%_,()]/g, ' ') : ''
-  const dias = Math.min(Math.max(Number(p.dias) || 30, 1), 180)
+  const dias = p.dias === undefined || p.dias === null || p.dias === "" || Number.isNaN(Number(p.dias)) ? 30 : Math.min(Math.max(Math.round(Number(p.dias)), 0), 180)  // 0 = só hoje
 
   if (consulta === 'a_receber' || consulta === 'a_pagar') {
     const tipo = consulta === 'a_receber' ? 'entrada' : 'saida'
