@@ -976,3 +976,39 @@ export async function renegociar(a: AgenteFlow, titulos: string[], parcelas: num
   if (error) throw new ErroAgente(error.message)
   return data
 }
+
+// ── Folha da Ocvel lida pela agente (mig. 385) — o mesmo caminho da tela RH → Folha ──
+
+/**
+ * Lê o PDF da folha (geral ou recibos) com a IA da org, importa a competência no RH
+ * (sem criar ficha nova: quem não casar volta como pendente) e devolve o plano de
+ * conciliação com os lançamentos de pagamento. Não mexe no financeiro.
+ */
+export async function folhaLer(a: AgenteFlow, pdfBase64: string) {
+  const { pdfToText, extrairFolha } = await import('@/lib/ai/folha')
+  const { iaDaOrg } = await import('@/lib/ai/provedor')
+  const bytes = Buffer.from(pdfBase64, 'base64')
+  if (bytes.length < 500) throw new ErroAgente('PDF vazio')
+  const texto = await pdfToText(bytes)
+  if (texto.trim().length < 50) throw new ErroAgente('não consegui ler texto do PDF (digitalizado?)')
+  const folha = await extrairFolha(texto, await iaDaOrg(a.orgId))
+  if (!folha) throw new ErroAgente('IA da org não configurada', 503)
+  if (!folha.competencia || !folha.linhas.length) throw new ErroAgente('não reconheci a competência ou os trabalhadores neste PDF')
+  const comp = `${folha.competencia}-01`
+  const imp = await a.supabase.rpc('rh_importar_folha', { p_org_id: a.orgId, p_competencia: comp, p_linhas: folha.linhas, p_auto_criar: false })
+  if (imp.error) throw new ErroAgente(imp.error.message)
+  const plano = await a.supabase.rpc('rh_folha_plano', { p_org_id: a.orgId, p_competencia: comp })
+  if (plano.error) throw new ErroAgente(plano.error.message)
+  return { competencia: folha.competencia, importacao: imp.data, plano: plano.data }
+}
+
+/** Aplica os salários do plano nos lançamentos (vincular = valor vira o líquido; criar = lançamento novo). Só após o Sim. */
+export async function folhaAplicar(a: AgenteFlow, competencia: string, salarios: unknown[]) {
+  if (!/^\d{4}-\d{2}$/.test(competencia)) throw new ErroAgente('competência inválida')
+  const { data, error } = await a.supabase.rpc('rh_folha_aplicar', {
+    p_org_id: a.orgId, p_competencia: `${competencia}-01`, p_salarios: salarios,
+    p_inss: 0, p_venc_inss: null, p_fgts: 0, p_venc_fgts: null, p_inss_lanc: null, p_fgts_lanc: null,
+  })
+  if (error) throw new ErroAgente(error.message)
+  return data
+}
