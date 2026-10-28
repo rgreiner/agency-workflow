@@ -544,13 +544,19 @@ export async function buscarContatos(a: AgenteFlow, termo: string) {
   const t = termo.trim()
   if (t.length < 2) throw new ErroAgente('termo curto demais')
   const padrao = `%${t.replace(/[%_]/g, '')}%`
+  // CNPJ (14 dígitos): acha pelo cadastro, com ou sem máscara — é como a Flávia
+  // reconhece o emitente de uma NF que chega de um e-mail fora do cadastro.
+  const d = t.replace(/\D/g, '')
+  const filtro = d.length === 14 && d.length === t.replace(/[\s./-]/g, '').length
+    ? `tax_id.eq.${d},tax_id.eq.${d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')}`
+    : `name.ilike.${padrao},legal_name.ilike.${padrao}`
   const tipos: TipoContato[] = ['cliente', 'fornecedor', 'veiculo']
   const listas = await Promise.all(tipos.map(async tipo => {
     const extra = tipo === 'cliente' ? ', phone, finance_email' : ''
     const { data, error } = await a.supabase.from(TABELA[tipo])
       .select(`id, name, legal_name, telefones, emails${extra}`)
       .eq('org_id', a.orgId).eq('archived', false)
-      .or(`name.ilike.${padrao},legal_name.ilike.${padrao}`).limit(5)
+      .or(filtro).limit(5)
     if (error) throw new Error(error.message)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return ((data ?? []) as any[]).map(c => ({
