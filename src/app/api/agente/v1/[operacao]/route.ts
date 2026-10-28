@@ -8,7 +8,7 @@
  */
 import { NextResponse } from 'next/server'
 import { autenticarAgente } from '@/lib/agente/auth'
-import { ErroAgente, agenda, cancelamentos, cancelamentoAvisado, buscarContatos, titulosDetalhe, clientesSemFinanceiro, comissoesNf, comissaoDocumentos, reguaComissao, notasFiscais, cancelarNotaFiscal, rescisoes, btgConciliado, desfazerEnvio, folhaSituacao, folhaFechar, folhaEnviar, dpAgenda, contatosNomes, resumoMesa, recebimentosComparados, financeiroConsulta, registrarPromessa, renegociar, folhaLer, folhaAplicar, faturamentoFila, faturar, anexarDocumentoFila, nfseAEmitir, emitirNfse, adicionarEmailContato, clienteDoTitulo, empresa, anexarDocumento, anotar, atualizarDespesa, despesasAbertas, lancarDespesa, lerDespesa, opcoesDespesa, cobranca, documentos, documentosFornecedor, identificar, nfFornecedor, prorrogar, registrarEnvio, registrarEnvioAgente, regua, titulos, verificar } from '@/lib/agente/operacoes'
+import { ErroAgente, agenda, cancelamentos, cancelamentoAvisado, buscarContatos, titulosDetalhe, clientesSemFinanceiro, comissoesNf, comissaoDocumentos, reguaComissao, notasFiscais, cancelarNotaFiscal, rescisoes, btgConciliado, desfazerEnvio, folhaSituacao, folhaFechar, folhaEnviar, dpAgenda, contatosNomes, resumoMesa, recebimentosComparados, financeiroConsulta, registrarPromessa, renegociar, folhaLer, folhaAplicar, faturamentoFila, faturar, anexarDocumentoFila, nfseAEmitir, emitirNfse, adicionarEmailContato, cadastroPublico, cadastroConvitesGerar, cadastroMarcarEnvio, cadastroConvites, clienteDoTitulo, empresa, anexarDocumento, anotar, atualizarDespesa, despesasAbertas, lancarDespesa, lerDespesa, opcoesDespesa, cobranca, documentos, documentosFornecedor, identificar, nfFornecedor, prorrogar, registrarEnvio, registrarEnvioAgente, regua, titulos, verificar } from '@/lib/agente/operacoes'
 import { logSystemError } from '@/lib/system-error'
 
 export const runtime = 'nodejs'
@@ -53,6 +53,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ operaca
       case 'anexar-documento-fila': dados = await anexarDocumentoFila(agente, { tipo: str(b.tipo), id: str(b.id), tipo_anexo: str(b.tipo_anexo), numero: str(b.numero), nome: str(b.nome), conteudo_base64: str(b.conteudo_base64) }); break
       case 'nfse-a-emitir': dados = await nfseAEmitir(agente); break
       case 'adicionar-email-contato': dados = await adicionarEmailContato(agente, str(b.contato_tipo), str(b.contato_id), str(b.email)); break
+      case 'cadastro-publico': dados = await cadastroPublico(agente, Number(b.onda)); break
+      case 'cadastro-convites-gerar': dados = await cadastroConvitesGerar(agente, Array.isArray(b.ids) ? (b.ids as unknown[]).map(str) : []); break
+      case 'cadastro-marcar-envio': dados = await cadastroMarcarEnvio(agente, str(b.convite_id), str(b.canal), b.lembrete === true); break
+      case 'cadastro-convites': dados = await cadastroConvites(agente); break
       case 'emitir-nfse': dados = await emitirNfse(agente, str(b.lancamento_id)); break
       case 'folha-situacao': dados = await folhaSituacao(agente); break
       case 'folha-fechar': dados = await folhaFechar(agente, str(b.competencia), Array.isArray(b.pessoas) ? (b.pessoas as unknown[]).map(str).filter(Boolean) : [], b.sem_envio === true); break

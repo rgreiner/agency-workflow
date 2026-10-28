@@ -1097,3 +1097,38 @@ export async function adicionarEmailContato(a: AgenteFlow, tipo: string, id: str
   if (error) throw new ErroAgente(error.message)
   return data as { ok: true; ja_tinha?: boolean; rotulo?: string }
 }
+
+// ── Fornecedor atualiza o próprio cadastro (mig. 388) ───────────────────────
+
+const SITE = () => (process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.oneaone.com.br').replace(/\/$/, '')
+
+/** Público da campanha: onda 1 = trabalhou com a agência nos últimos 18 meses; 2 = o resto com contato. */
+export async function cadastroPublico(a: AgenteFlow, onda: number) {
+  const { data, error } = await a.supabase.rpc('fin_cadastro_publico', { p_org: a.orgId, p_onda: onda === 2 ? 2 : 1 })
+  if (error) throw new ErroAgente(error.message)
+  return data as { fornecedor_id: string; nome: string; tipo: string | null; email: string | null; whatsapp: string | null; contato_nome: string | null; ativo: boolean }[]
+}
+
+/** Cria/reaproveita o convite de cada fornecedor e devolve o link pronto. */
+export async function cadastroConvitesGerar(a: AgenteFlow, ids: string[]) {
+  const validos = ids.filter(id => /^[0-9a-f-]{36}$/i.test(id)).slice(0, 500)
+  const { data, error } = await a.supabase.rpc('fin_cadastro_convites_gerar', { p_org: a.orgId, p_ids: validos })
+  if (error) throw new ErroAgente(error.message)
+  return (data as { convite_id: string; fornecedor_id: string; token: string; enviado_em: string | null; respondido_em: string | null }[])
+    .map(c => ({ ...c, link: `${SITE()}/cadastro-fornecedor/${c.token}` }))
+}
+
+export async function cadastroMarcarEnvio(a: AgenteFlow, conviteId: string, canal: string, lembrete: boolean) {
+  if (!/^[0-9a-f-]{36}$/i.test(conviteId)) throw new ErroAgente('convite inválido')
+  if (canal !== 'email' && canal !== 'whatsapp') throw new ErroAgente('canal inválido')
+  const { error } = await a.supabase.rpc('fin_cadastro_marcar_envio', { p_org: a.orgId, p_convite: conviteId, p_canal: canal, p_lembrete: lembrete })
+  if (error) throw new ErroAgente(error.message)
+  return { ok: true as const }
+}
+
+export async function cadastroConvites(a: AgenteFlow) {
+  const { data, error } = await a.supabase.rpc('fin_cadastro_convites', { p_org: a.orgId })
+  if (error) throw new ErroAgente(error.message)
+  return (data as { convite_id: string; fornecedor_id: string; nome: string; token: string; enviado_em: string | null; canais: string[]; lembrete_em: string | null; aberto_em: string | null; respondido_em: string | null; lembrar: boolean }[])
+    .map(c => ({ ...c, link: `${SITE()}/cadastro-fornecedor/${c.token}` }))
+}

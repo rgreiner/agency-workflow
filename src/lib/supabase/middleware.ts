@@ -40,13 +40,15 @@ export async function updateSession(request: NextRequest) {
   // credencial (validado na página e em cada rota de /api/cotacao/<token>/…).
   // /api/cotacao/arquivo é do MEMBRO e faz a própria checagem de sessão.
   const isCotacao = path.startsWith('/cotacao/') || path.startsWith('/api/cotacao/')
+  // Cadastro do fornecedor (mig. 388): mesmo modelo da cotação — o token é a credencial.
+  const isCadastroFornecedor = path.startsWith('/cadastro-fornecedor/') || path.startsWith('/api/cadastro-fornecedor/')
   // Proposta de trabalho: o CANDIDATO abre sem conta — ele ainda não é do time.
   // O token é a credencial, validado na página e em /api/proposta/<token>.
   const isProposta = path.startsWith('/proposta/') || path.startsWith('/api/proposta/')
   // API dos funcionários digitais: o Bearer do agente é a credencial (validado em
   // cada rota), e o link de arquivo que ele manda ao cliente é assinado e expira.
   const isAgente = path.startsWith('/api/agente/')
-  const isPublic = isAuthPage || isConvite || isCron || isPortal || isRest || isPwaAsset || isSenha || isCotacao || isProposta || isAgente
+  const isPublic = isAuthPage || isConvite || isCron || isPortal || isRest || isPwaAsset || isSenha || isCotacao || isCadastroFornecedor || isProposta || isAgente
 
   if (!claims && !isPublic) {
     const url = request.nextUrl.clone()
