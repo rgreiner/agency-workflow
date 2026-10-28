@@ -5,6 +5,7 @@ import { getUsuario } from '@/lib/auth/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { parseMoney } from '@/lib/midia'
+import { calibrar, parecidos, projetar, tipoDasRefs, type HistoricoCotacao } from '@/lib/cotacao-historico'
 
 /**
  * Telas afetadas por qualquer mudança em produção. Mesma razão do equivalente
@@ -102,6 +103,25 @@ export async function gerarPedidosDoOrcamento(orgSlug: string, orcamentoId: stri
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const itens: any[] = Array.isArray(orc.detalhe?.itens) ? orc.detalhe.itens : []
 
+  // Projeção de custo CONGELADA no momento em que o orçamento vira produção (mig. 389/390):
+  // fica no item do PP ao lado do valor real, para medir depois o erro de custo e quanto a
+  // margem negociada cobriu. Sem histórico, o PP nasce igual (não trava a geração).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: hist } = await (supabase as any).rpc('cotacao_historico', { p_org: org.id })
+  const historico = (hist ?? null) as HistoricoCotacao | null
+  const calibracao = calibrar(historico).porTipo
+  const congelar = (nome: string, descricao: string, quant: number) => {
+    const refs = parecidos(historico, nome, descricao, orcamentoId)
+    const proj = projetar(refs, quant)
+    if (!proj) return null
+    const tipo = tipoDasRefs(refs)
+    const fator = calibracao.find(c => c.tipo === tipo)?.fator ?? null
+    return {
+      unit: Math.round(proj.unit * (fator ?? 1) * 10000) / 10000, sem_ajuste: proj.unit, fator,
+      min: proj.min, max: proj.max, n: proj.n, quant_ref: proj.quantRef, tipo, em: new Date().toISOString().slice(0, 10),
+    }
+  }
+
   // Agrupa por FORNECEDOR: itens cuja opção escolhida é do mesmo fornecedor viram
   // UMA PP só (com vários itens), não uma PP por item. A ordem das PPs segue a ordem
   // em que cada fornecedor aparece pela primeira vez no orçamento.
@@ -124,6 +144,9 @@ export async function gerarPedidosDoOrcamento(orgSlug: string, orcamentoId: stri
     g.itens.push({
       nome: it.nome ?? '', descricao: it.descricao ?? '', n_orc: sel.n_orc ?? '', quant: String(quant),
       valor: sel.valor_unit ?? '', ...(totalDigitado > 0 ? { valor_total: sel.valor_total } : {}),
+      // O que foi orçado (opção escolhida) e o que a projeção dizia — o valor real é o `valor` do PP, que pode mudar.
+      orcado_unit: Math.round((valor / quant) * 10000) / 10000,
+      projecao: congelar(it.nome ?? '', it.descricao ?? '', quant),
     })
     g.valor += valor
     grupos.set(sel.fornecedor_id, g)

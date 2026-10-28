@@ -12,6 +12,9 @@ export interface PrecoHistorico {
   producao_id: string; documento: string | null; situacao: string; data: string
   /** Pedido: de qual orçamento saiu (mig. 390). Tipo do fornecedor, para calibrar por tipo. */
   origem_orcamento_id?: string | null; tipo?: string | null
+  /** Pedido gerado de orçamento (mig. 391): projeção congelada no dia, opção orçada e margem (comissão + honorários). */
+  projecao?: { unit: number; n: number; em: string; fator?: number | null } | null
+  orcado_unit?: number | null; margem_pct?: number | null
   nome: string; descricao: string; fornecedor_id: string; fornecedor: string
   quant: number; unit: number; escolhido: boolean; mais_barato: boolean
 }
@@ -145,4 +148,27 @@ export function tipoDasRefs(refs: Parecido[]): string | null {
   const c = new Map<string, number>()
   for (const r of refs.slice(0, 12)) if (r.tipo) c.set(r.tipo, (c.get(r.tipo) ?? 0) + 1)
   return [...c].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+}
+
+// ── Projeção registrada na aprovação (mig. 391) ─────────────────────────────
+
+export interface Registro {
+  item: string; documento: string | null; fornecedor: string; quant: number; em: string
+  projetado: number; orcado: number | null; real: number
+  /** Real − projetado, em R$ no total do item (positivo = saiu mais caro que a projeção). */
+  desvio: number
+  /** Margem da agência no item (comissão + honorários sobre o valor real). */
+  margem: number
+}
+
+/** Itens de PP com a projeção congelada: erro de custo da época × margem negociada. */
+export function registrados(h: HistoricoCotacao | null | undefined): Registro[] {
+  return (h?.precos ?? [])
+    .filter(p => p.situacao === 'pedido' && p.projecao && p.projecao.unit > 0)
+    .map(p => ({
+      item: p.nome, documento: p.documento, fornecedor: p.fornecedor, quant: p.quant, em: p.projecao!.em,
+      projetado: p.projecao!.unit, orcado: p.orcado_unit ?? null, real: p.unit,
+      desvio: (p.unit - p.projecao!.unit) * p.quant,
+      margem: p.unit * p.quant * Number(p.margem_pct ?? 0) / 100,
+    }))
 }

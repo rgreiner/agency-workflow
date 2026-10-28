@@ -1,5 +1,5 @@
 import { formatBRL } from '@/lib/midia'
-import { calibrar, type HistoricoCotacao } from '@/lib/cotacao-historico'
+import { calibrar, registrados, type HistoricoCotacao } from '@/lib/cotacao-historico'
 
 const pct = (x: number) => `${x > 0 ? '+' : ''}${Math.round(x * 100)}%`
 
@@ -11,7 +11,10 @@ const pct = (x: number) => `${x > 0 ? '+' : ''}${Math.round(x * 100)}%`
  */
 export function PrecisaoProjecao({ historico }: { historico: HistoricoCotacao | null }) {
   const { pares, porTipo } = calibrar(historico)
-  if (!pares.length) return null
+  const regs = registrados(historico)
+  if (!pares.length && !regs.length) return null
+  const acima = regs.filter(r => r.desvio > 0)
+  const naoCobertos = acima.filter(r => r.desvio > r.margem)
   const piores = [...pares].sort((a, b) => Math.abs(b.erro) - Math.abs(a.erro)).slice(0, 5)
   return (
     <details className="mx-6 mb-6 bg-white rounded-2xl border border-gray-200 p-5 group">
@@ -47,6 +50,26 @@ export function PrecisaoProjecao({ historico }: { historico: HistoricoCotacao | 
           ))}
         </ul>
         <p className="text-[11px] text-gray-400 mt-3">Positivo = o pedido saiu mais caro que a projeção. A correção só entra quando 5+ pedidos do tipo erram para o mesmo lado.</p>
+
+        <p className="text-xs font-medium text-gray-500 mt-5 mb-1">Registrado na aprovação {regs.length ? `(${regs.length} item(ns))` : ''}</p>
+        {regs.length ? (
+          <>
+            <p className="text-xs text-gray-600 mb-2">
+              {acima.length} item(ns) saíram acima da projeção, somando {formatBRL(acima.reduce((t, r) => t + r.desvio, 0))};
+              {' '}{naoCobertos.length ? <b className="text-red-600">{naoCobertos.length} passaram da margem negociada</b> : 'a margem negociada cobriu todos'}.
+            </p>
+            <ul className="space-y-0.5 text-xs text-gray-600">
+              {[...regs].sort((a, b) => b.desvio - a.desvio).slice(0, 8).map((r, i) => (
+                <li key={i}>{r.documento ? `${r.documento} · ` : ''}<span className="text-gray-800">{r.item}</span> · {r.quant.toLocaleString('pt-BR')} un:
+                  {' '}projeção {formatBRL(r.projetado)}{r.orcado ? `, orçado ${formatBRL(r.orcado)}` : ''}, real {formatBRL(r.real)}
+                  {' '}→ <b className={r.desvio > r.margem ? 'text-red-600' : r.desvio > 0 ? 'text-amber-700' : 'text-emerald-700'}>{r.desvio >= 0 ? '+' : ''}{formatBRL(r.desvio)}</b>
+                  <span className="text-gray-400"> · margem {formatBRL(r.margem)}</span></li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p className="text-xs text-gray-400">A partir de agora, ao gerar os PPs de um orçamento a projeção do dia fica gravada no item. Aqui aparece o desvio de custo da época e se a margem (comissão + honorários) cobriu.</p>
+        )}
       </div>
     </details>
   )
