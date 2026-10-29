@@ -428,7 +428,7 @@ export async function atualizarDespesa(a: AgenteFlow, b: { titulo_id: string; va
   await lancamento(a, b.titulo_id)
   if (b.vencimento && !/^\d{4}-\d{2}-\d{2}$/.test(b.vencimento)) throw new ErroAgente('vencimento inválido (AAAA-MM-DD)')
   const anexo = b.conteudo_base64
-    ? { url: await gravarPdf(b.conteudo_base64), nome: (b.nome || 'documento.pdf').slice(0, 200), tipo: b.tipo === 'NF' ? 'NF' : b.tipo === 'Outro' ? 'Outro' : 'Boleto', numero: (b.numero || '').slice(0, 40) }
+    ? { url: await gravarPdf(b.conteudo_base64), nome: (b.nome || 'documento.pdf').slice(0, 200), tipo: b.tipo === 'NF' || b.tipo === 'Invoice' || b.tipo === 'Outro' ? b.tipo : 'Boleto', numero: (b.numero || '').slice(0, 40) }
     : null
   const { data, error } = await a.supabase.rpc('fin_atualizar_despesa_agente', {
     p_lancamento_id: b.titulo_id, p_valor: b.valor ?? null, p_vencimento: b.vencimento || null, p_anexo: anexo,

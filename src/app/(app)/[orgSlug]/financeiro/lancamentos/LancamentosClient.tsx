@@ -155,10 +155,14 @@ const temNfAgencia = (l: Lancamento, n?: NotaDoLancamento) =>
   temNotaValida(n) || l.nf_emitida || /\bNFa\s*\d/i.test(l.descricao ?? '')
   || (l.anexos ?? []).some(a => a.tipo === 'NF' && a.emitente === 'agencia')
 
-/** A despesa já tem a NF do fornecedor: anexada (de quem não é a agência) ou o número na descrição ("NFm 1361", "NF 33"). */
+/**
+ * A despesa já tem a NF do fornecedor: anexada (de quem não é a agência), o número na
+ * descrição ("NFm 1361", "NF 33") ou a INVOICE — software pago no cartão vem com invoice,
+ * não com NF brasileira, e ela vale como documento (Rafael, 29/10/2026).
+ */
 const temNfFornecedor = (l: Lancamento) =>
   /\bNF[a-z]?\s*\d/i.test((l.descricao ?? '').replace(/\bNFa\s*\d+/gi, ''))
-  || (l.anexos ?? []).some(a => a.tipo === 'NF' && a.emitente !== 'agencia')
+  || (l.anexos ?? []).some(a => a.tipo === 'Invoice' || (a.tipo === 'NF' && a.emitente !== 'agencia'))
 
 export function LancamentosClient({ orgSlug, lancamentos, importadas = [], contas, contaPadrao = '', categorias, centros, today, sugestoesContato = [], atalho, filtroCliente }: {
   /** Atalho do menu: despesas (a-pagar) ou receitas (a-receber) em aberto, das atrasadas até o fim do mês. */
@@ -1389,7 +1393,7 @@ function LancamentoModal({ orgSlug, lancamento, contas, contaPadrao = '', catego
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-medium text-gray-600 inline-flex items-center gap-1.5"><Paperclip className="w-3.5 h-3.5" /> Anexos <span className="font-normal text-gray-400">(NF, boleto, nota)</span></label>
               <div className="flex items-center gap-1.5">
-                <div className="w-28"><Select value={anexoTipo} onChange={setAnexoTipo} size="sm" options={[{ value: 'NF', label: 'NF' }, { value: 'Boleto', label: 'Boleto' }, { value: 'Guia', label: 'Guia' }, { value: 'Outro', label: 'Outro' }]} /></div>
+                <div className="w-28"><Select value={anexoTipo} onChange={setAnexoTipo} size="sm" options={[{ value: 'NF', label: 'NF' }, { value: 'Boleto', label: 'Boleto' }, { value: 'Invoice', label: 'Invoice' }, { value: 'Guia', label: 'Guia' }, { value: 'Outro', label: 'Outro' }]} /></div>
                 <input ref={fileRef} type="file" accept=".pdf,image/*" className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) onPickFile(f); e.target.value = '' }} />
                 <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
