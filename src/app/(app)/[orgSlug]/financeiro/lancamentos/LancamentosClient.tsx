@@ -20,7 +20,7 @@ import {
   type ImpactoEncerrar,
   type FinanceCategoriaGrupo, type FinanceCentro, type Anexo, type ImpactoExclusao, type LancamentoInput,
 } from '@/app/actions/financeiro'
-import { categoriaNomes, isTransferenciaCategoria } from '@/lib/finance-categorias'
+import { categoriaNomes, isTransferenciaCategoria, macroPorCategoria } from '@/lib/finance-categorias'
 import { canonizarCentro, opcoesDeCentro } from '@/lib/finance-centros'
 import { EMITENTES, EMITENTE_LABEL, chipDocumento, numeroDoNome, textoBuscavel } from '@/lib/documento-fiscal'
 import { uploadFile } from '@/lib/storage/upload-client'
@@ -135,6 +135,31 @@ const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 const semCentro = (l: Pick<Lancamento, 'centro_custo' | 'transferencia_id' | 'categoria'>) =>
   !(l.centro_custo ?? '').trim() && !l.transferencia_id && !isTransferenciaCategoria(l.categoria)
 
+// ── NF pendente (decisão do Rafael, 29/10/2026) ─────────────────────────────
+// Só RECEITA OPERACIONAL pede NF da agência (rendimento, estorno, empréstimo e
+// transferência não têm nota). Sem categoria, vale a origem: documento faturado pede.
+const MACRO_NF_AGENCIA = new Set(['receita operacional'])
+// Despesa que pede NF do fornecedor: o que se COMPRA de terceiro. Folha, impostos,
+// tarifas, passivos, empréstimos e transferências ficam de fora, e aluguel e
+// condomínio vêm com recibo/boleto, não com nota.
+const MACRO_NF_FORNECEDOR = new Set(['administrativo', 'produção', 'outros'])
+const SEM_NF_FORNECEDOR = new Set(['aluguel', 'aluguel - máquina café', 'condomínio'])
+const ehDocFaturado = (l: Lancamento) => !!l.origem_tipo && !['manual', 'transferencia'].includes(l.origem_tipo)
+
+/**
+ * A agência já tem nota neste lançamento? Nota emitida pelo Flow, NF da agência
+ * anexada, a marca antiga `nf_emitida` ou o "NFa 2081" na descrição — era assim que
+ * o número da nota da agência vinha do Conta Azul, sem o arquivo.
+ */
+const temNfAgencia = (l: Lancamento, n?: NotaDoLancamento) =>
+  temNotaValida(n) || l.nf_emitida || /\bNFa\s*\d/i.test(l.descricao ?? '')
+  || (l.anexos ?? []).some(a => a.tipo === 'NF' && a.emitente === 'agencia')
+
+/** A despesa já tem a NF do fornecedor: anexada (de quem não é a agência) ou o número na descrição ("NFm 1361", "NF 33"). */
+const temNfFornecedor = (l: Lancamento) =>
+  /\bNF[a-z]?\s*\d/i.test((l.descricao ?? '').replace(/\bNFa\s*\d+/gi, ''))
+  || (l.anexos ?? []).some(a => a.tipo === 'NF' && a.emitente !== 'agencia')
+
 export function LancamentosClient({ orgSlug, lancamentos, importadas = [], contas, contaPadrao = '', categorias, centros, today, sugestoesContato = [], atalho, filtroCliente }: {
   /** Atalho do menu: despesas (a-pagar) ou receitas (a-receber) em aberto, das atrasadas até o fim do mês. */
   atalho?: 'a-pagar' | 'a-receber'
@@ -163,10 +188,26 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
   const [tipoFilter, setTipoFilter] = useState<'todos' | 'entrada' | 'saida'>('todos')
   // Lançamento gerado pelo Faturamento nasce sem classificação (medido: 24 de 27).
   // Este filtro é o caminho pra achar e corrigir em lote, em vez de garimpar.
-  const [faltando, setFaltando] = useState<null | 'categoria' | 'centro' | 'conta' | 'nota'>(null)
+  const [faltando, setFaltando] = useState<null | 'categoria' | 'centro' | 'conta' | 'nota' | 'nf_fornecedor'>(null)
   // Notas emitidas por lançamento. Uma chamada para a lista inteira — a coluna NF
   // precisa saber de todas, e 50 consultas por linha seria absurdo.
   const [notas, setNotas] = useState<Record<string, NotaDoLancamento>>({})
+  const macroEntrada = useMemo(() => macroPorCategoria(categorias, 'entrada'), [categorias])
+  const macroSaida = useMemo(() => macroPorCategoria(categorias, 'saida'), [categorias])
+  // Pendência de NF só do que é corrigível aqui (não importado) e já devido (mês do vencimento chegou).
+  const semNfAgencia = useCallback((l: Lancamento) => {
+    if (l.tipo !== 'entrada' || l.source === 'importado' || l.transferencia_id || isTransferenciaCategoria(l.categoria)) return false
+    const macro = macroEntrada.get((l.categoria ?? '').trim().toLowerCase())
+    if (macro ? !MACRO_NF_AGENCIA.has(macro.toLowerCase()) : !ehDocFaturado(l)) return false
+    return notaDevida(l, today) && !temNfAgencia(l, notas[l.id])
+  }, [macroEntrada, notas, today])
+  const semNfFornecedor = useCallback((l: Lancamento) => {
+    if (l.tipo !== 'saida' || l.source === 'importado' || l.transferencia_id) return false
+    const cat = (l.categoria ?? '').trim().toLowerCase()
+    const macro = macroSaida.get(cat)
+    if (!macro || !MACRO_NF_FORNECEDOR.has(macro.toLowerCase()) || SEM_NF_FORNECEDOR.has(cat)) return false
+    return notaDevida(l, today) && !temNfFornecedor(l)
+  }, [macroSaida, today])
   const idsEntrada = useMemo(
     () => lancamentos.filter(l => l.tipo === 'entrada' && l.source !== 'importado').map(l => l.id),
     [lancamentos])
@@ -215,7 +256,8 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       // filtro — e da contagem, que precisa bater com a lista.
       if (faltando && l.source === 'importado') return false
       // Sem nota: só faz sentido no que a agência fatura (entrada, não importado).
-      if (faltando === 'nota' && (l.tipo !== 'entrada' || l.source === 'importado' || temNotaValida(notas[l.id]) || !notaDevida(l, today))) return false
+      if (faltando === 'nota' && !semNfAgencia(l)) return false
+      if (faltando === 'nf_fornecedor' && !semNfFornecedor(l)) return false
       if (faltando === 'categoria' && (l.categoria ?? '').trim()) return false
       if (faltando === 'centro' && !semCentro(l)) return false
       if (faltando === 'conta' && l.conta_id) return false
@@ -224,7 +266,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       if (q && !`${l.contato_nome ?? ''} ${l.descricao ?? ''} ${l.categoria ?? ''} ${l.doc_serie ?? ''} ${l.doc_numero ?? ''} ${textoBuscavel(l.anexos)}`.toLowerCase().includes(q)) return false
       return true
     })
-  }, [merged, tipoFilter, contaFilter, query, faltando, notas, today, cliente, idsCliente])
+  }, [merged, tipoFilter, contaFilter, query, faltando, cliente, idsCliente, semNfAgencia, semNfFornecedor])
 
   // Data efetiva: liquidação (se pago) ou vencimento (se em aberto).
   const effDate = (l: Lancamento) => (isPago(l.situacao) ? (l.data_liquidacao ?? l.vencimento) : l.vencimento)
@@ -340,13 +382,14 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
     return {
       // Sem nota é pendência só do que a agência fatura, e só quando a
       // competência já chegou — parcela futura não tem nota a emitir.
-      nota: conta(l => l.tipo === 'entrada' && !temNotaValida(notas[l.id]) && notaDevida(l, today)),
+      nota: conta(semNfAgencia),
+      nf_fornecedor: conta(semNfFornecedor),
       categoria: conta(l => !(l.categoria ?? '').trim()),
       centro: conta(semCentro),
       conta: conta(l => !l.conta_id),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [merged, tipoFilter, contaFilter, perStart, perEnd, notas, today])
+  }, [merged, tipoFilter, contaFilter, perStart, perEnd, semNfAgencia, semNfFornecedor])
 
   const contaFilterOptions = useMemo(() => [{ value: '', label: 'Todas as contas' }, ...contas.map(c => ({ value: c.id, label: c.nome }))], [contas])
   const hasFilters = tipoFilter !== 'todos' || !!contaFilter || !!query.trim() || !!cardFilter || !!faltando || !!cliente
@@ -417,10 +460,10 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
         {/* Pendências de classificação: o botão some só quando não existe NENHUMA em
             período algum. Ligado, ele mostra tudo — inclusive o que vence fora do
             período da tela (era o caso das parcelas de Fee de 2027). */}
-        {(['nota', 'categoria', 'centro', 'conta'] as const).map(k => {
+        {(['nota', 'nf_fornecedor', 'categoria', 'centro', 'conta'] as const).map(k => {
           const p = pendencias[k]
           if (!p.total && faltando !== k) return null
-          const rotulo = k === 'nota' ? 'Sem nota' : k === 'categoria' ? 'Sem categoria' : k === 'centro' ? 'Sem centro de custo' : 'Sem conta'
+          const rotulo = k === 'nota' ? 'Sem NF da agência' : k === 'nf_fornecedor' ? 'Sem NF do fornecedor' : k === 'categoria' ? 'Sem categoria' : k === 'centro' ? 'Sem centro de custo' : 'Sem conta'
           return (
             <button key={k} onClick={() => setFaltando(f => (f === k ? null : k))} aria-pressed={faltando === k}
               title={p.fora > 0 ? `${p.total} no total — ${p.fora} vence(m) fora de ${periodoLabel(periodo)}` : `${p.total} em ${periodoLabel(periodo)}`}
@@ -443,7 +486,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       {faltando && (
         <p className="-mt-2 mb-4 text-xs text-amber-700">
           Mostrando todos os períodos enquanto o filtro de pendência está ligado — {periodoLabel(periodo)} fica de fora da conta.
-          {faltando === 'nota' && ' Parcela de competência futura não entra: a nota dela ainda não é devida.'}
+          {(faltando === 'nota' || faltando === 'nf_fornecedor') && ' Parcela que vence em mês futuro não entra: a nota dela ainda não é devida.'}
         </p>
       )}
 
