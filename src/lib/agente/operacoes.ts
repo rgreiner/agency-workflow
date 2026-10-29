@@ -639,15 +639,25 @@ export async function comissaoDocumentos(a: AgenteFlow, tituloId: string) {
   const l = await lancamento(a, tituloId)
   const daAgencia = (l.anexos ?? []).filter(x => x.emitente === 'agencia' && x.url)
   const arquivos: { nome: string; base64: string }[] = []
+  const notasVistas = new Set<string>()
+  const pdfDaNota = async (notaId: string, nome?: string) => {
+    if (notasVistas.has(notaId)) return
+    notasVistas.add(notaId)
+    const nota = await lerNotaParaPdf(notaId, a.supabase)
+    if (nota && !nota.cancelada) arquivos.push({ nome: nome || `${nota.baseNome}.pdf`, base64: (await danfsePdf(nota)).toString('base64') })
+  }
   for (const x of daAgencia) {
     const notaId = notaIdDoAnexo(x.url!)
-    if (notaId) {
-      const nota = await lerNotaParaPdf(notaId, a.supabase)
-      if (nota && !nota.cancelada) arquivos.push({ nome: x.nome || `${nota.baseNome}.pdf`, base64: (await danfsePdf(nota)).toString('base64') })
-      continue
-    }
+    if (notaId) { await pdfDaNota(notaId, x.nome); continue }
     for (const f of await lerAnexosFaturamento([x as never])) arquivos.push({ nome: f.filename, base64: f.content.toString('base64') })
   }
+  // Só a tela de faturamento pendura a NFS-e como anexo; emitida pela tela do lançamento
+  // ou pela Flávia (emitirNfse) ela fica só em nota_fiscal — e é por lá que o
+  // fin_comissoes_nf a põe em "a enviar". Sem isto o Sim falhava com "não está no título".
+  const { data: notas, error } = await a.supabase.from('nota_fiscal').select('id')
+    .eq('org_id', a.orgId).eq('lancamento_id', tituloId).eq('status', 'autorizada').eq('ambiente', 'producao')
+  if (error) throw new Error(error.message)
+  for (const n of (notas ?? []) as { id: string }[]) await pdfDaNota(n.id)
   return { arquivos }
 }
 
