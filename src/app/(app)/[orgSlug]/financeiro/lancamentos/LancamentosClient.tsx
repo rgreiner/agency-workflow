@@ -140,10 +140,10 @@ const semCentro = (l: Pick<Lancamento, 'centro_custo' | 'transferencia_id' | 'ca
 // transferência não têm nota). Sem categoria, vale a origem: documento faturado pede.
 const MACRO_NF_AGENCIA = new Set(['receita operacional'])
 // Despesa que pede NF do fornecedor: o que se COMPRA de terceiro. Folha, impostos,
-// tarifas, passivos, empréstimos e transferências ficam de fora, e aluguel e
-// condomínio vêm com recibo/boleto, não com nota.
+// tarifas, passivos, empréstimos e transferências ficam de fora; aluguel e
+// condomínio vêm com recibo/boleto, e supermercado com cupom, não com nota.
 const MACRO_NF_FORNECEDOR = new Set(['administrativo', 'produção', 'outros'])
-const SEM_NF_FORNECEDOR = new Set(['aluguel', 'aluguel - máquina café', 'condomínio'])
+const SEM_NF_FORNECEDOR = new Set(['aluguel', 'aluguel - máquina café', 'condomínio', 'supermercado'])
 const ehDocFaturado = (l: Lancamento) => !!l.origem_tipo && !['manual', 'transferencia'].includes(l.origem_tipo)
 
 /**
