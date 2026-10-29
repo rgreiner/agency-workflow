@@ -1,11 +1,11 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import {
   AlertTriangle, ArrowRight, CalendarClock, Check, ExternalLink, Link2, Loader2, Plus,
-  RotateCcw, Trash2, Truck,
+  RefreshCw, RotateCcw, Trash2, Truck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select, MultiSelect } from '@/components/ui/Select'
@@ -14,6 +14,7 @@ import { conhecido } from '@/lib/atividade-titulo'
 import { useOrgSettings } from '@/components/providers/OrgSettingsProvider'
 import { enviarReferencia, fmtBytes, MAX_REFERENCIA_BYTES } from '@/lib/referencias-client'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { lerRascunhoEntrega, salvarRascunhoEntrega, apagarRascunhoEntrega } from '@/lib/rascunho-entrega'
 import {
   salvarEntrega, mudarSituacaoEntrega, excluirEntrega, tarefasDoCliente,
 } from '@/app/actions/midia-hub'
@@ -108,6 +109,12 @@ export function EntregasMidia({ orgSlug, entregas, clientes, veiculos, membros, 
   const [cliente, setCliente] = useState('')
   const [editando, setEditando] = useState<EntregaRow | 'nova' | null>(null)
   const cfg = useMemo(() => new Map(statusCfg.map(s => [s.valor, s])), [statusCfg])
+  // Rascunho guardado neste navegador: o botão vira "Continuar rascunho".
+  const [temRascunho, setTemRascunho] = useState(false)
+  const conferirRascunho = useCallback(() => {
+    void lerRascunhoEntrega(orgSlug).then(r => setTemRascunho(!!r))
+  }, [orgSlug])
+  useEffect(conferirRascunho, [conferirRascunho])
 
   const lista = useMemo(() => {
     let l = entregas
@@ -132,7 +139,7 @@ export function EntregasMidia({ orgSlug, entregas, clientes, veiculos, membros, 
         </div>
         <button onClick={() => setEditando('nova')}
           className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-xl bg-orange-600 text-[#fff] hover:bg-orange-700 transition-colors">
-          <Plus className="w-4 h-4" /> Nova entrega
+          <Plus className="w-4 h-4" /> {temRascunho ? 'Continuar rascunho' : 'Nova entrega'}
         </button>
       </div>
 
@@ -167,7 +174,7 @@ export function EntregasMidia({ orgSlug, entregas, clientes, veiculos, membros, 
       {editando && (
         <ModalEntrega orgSlug={orgSlug} clientes={clientes} veiculos={veiculos} membros={membros} equipes={equipes}
           entrega={editando === 'nova' ? null : editando}
-          onClose={() => setEditando(null)} />
+          onClose={() => { setEditando(null); conferirRascunho() }} />
       )}
     </div>
   )
@@ -320,18 +327,97 @@ function ModalEntrega({ orgSlug, clientes, veiculos, membros, equipes, entrega, 
   const [tarefas, setTarefas] = useState<{ id: string; titulo: string; prazo: string | null; campanha: string; campaignId: string }[]>([])
   const [campanhas, setCampanhas] = useState<{ id: string; nome: string }[]>([])
   const [carregandoTarefas, setCarregandoTarefas] = useState(false)
+  // Falha ao trazer tarefas/projetos. Quase sempre é aba aberta antes de um
+  // deploy ("Failed to find Server Action"): a chamada rejeita, e sem o catch o
+  // form ficava em "carregando…" para sempre, com "não tem projeto ativo".
+  const [erroCarga, setErroCarga] = useState(false)
+  // Trocar de cliente rápido: só a resposta do último pedido vale.
+  const pedidoCarga = useRef(0)
 
   async function trocarCliente(id: string) {
     setForm(f => ({ ...f, workspaceId: id, activityId: '', campaignId: '', responsaveis: equipes[id] ?? [] }))
+    await carregarCliente(id)
+  }
+
+  async function carregarCliente(id: string) {
+    const seq = ++pedidoCarga.current
     setTarefas([])
     setCampanhas([])
-    if (!id) return
+    setErroCarga(false)
+    if (!id) { setCarregandoTarefas(false); return }
     setCarregandoTarefas(true)
-    const r = await tarefasDoCliente(orgSlug, id)
+    try {
+      const r = await tarefasDoCliente(orgSlug, id)
+      if (seq !== pedidoCarga.current) return
+      if ('error' in r && r.error) { setErroCarga(true); toast.error(r.error); return }
+      setTarefas(r.tarefas ?? [])
+      setCampanhas(r.campanhas ?? [])
+    } catch {
+      if (seq !== pedidoCarga.current) return
+      setErroCarga(true)
+      toast.error('Não carregou as tarefas e os projetos do cliente. O Flow foi atualizado: recarregue a página. O rascunho fica salvo.')
+    } finally {
+      if (seq === pedidoCarga.current) setCarregandoTarefas(false)
+    }
+  }
+
+  // ── Rascunho (só na nova): salva sozinho enquanto digita e volta ao reabrir.
+  const [rascunhoPronto, setRascunhoPronto] = useState(!!entrega)
+  const [rascunhoDe, setRascunhoDe] = useState<number | null>(null)
+  useEffect(() => {
+    // Ao abrir para editar, já traz as tarefas do cliente para poder trocar o vínculo.
+    if (entrega) {
+      if (entrega.workspaceId) void carregarCliente(entrega.workspaceId)
+      return
+    }
+    let vivo = true
+    void lerRascunhoEntrega(orgSlug).then(async r => {
+      if (!vivo) return
+      if (r) {
+        const salvo = r.form as Partial<typeof form>
+        setForm(f => ({ ...f, ...salvo }))
+        setAnexos(r.anexos ?? [])
+        setRascunhoDe(r.salvoEm)
+        setRascunhoPronto(true)
+        if (salvo.workspaceId) await carregarCliente(salvo.workspaceId)
+      } else {
+        setRascunhoPronto(true)
+      }
+    })
+    return () => { vivo = false }
+    // Roda uma vez, ao abrir — carregarCliente muda a cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (entrega || !rascunhoPronto) return
+    const vazio = !form.workspaceId && !form.titulo.trim() && !form.pedido.trim() && !form.especificacao.trim()
+      && !form.observacao.trim() && !form.veiculoId && !form.formato.trim() && !form.prazoEnvio && anexos.length === 0
+    const t = setTimeout(() => {
+      if (vazio) void apagarRascunhoEntrega(orgSlug)
+      else void salvarRascunhoEntrega(orgSlug, { form, anexos, salvoEm: Date.now() })
+    }, 400)
+    return () => clearTimeout(t)
+  }, [entrega, rascunhoPronto, form, anexos, orgSlug])
+
+  function descartarRascunho() {
+    void apagarRascunhoEntrega(orgSlug)
+    pedidoCarga.current++
+    setForm(f => ({
+      ...f, workspaceId: '', titulo: '', veiculo: '', veiculoId: '', formato: '', especificacao: '', pedido: '',
+      responsaveis: [], prazoEnvio: '', activityId: '', campaignId: '', observacao: '',
+    }))
+    setAnexos([])
+    setTarefas([])
+    setCampanhas([])
+    setErroCarga(false)
     setCarregandoTarefas(false)
-    if ('error' in r && r.error) { toast.error(r.error); return }
-    setTarefas(r.tarefas ?? [])
-    setCampanhas(r.campanhas ?? [])
+    setRascunhoDe(null)
+  }
+
+  async function recarregarPagina() {
+    if (!entrega) await salvarRascunhoEntrega(orgSlug, { form, anexos, salvoEm: Date.now() })
+    window.location.reload()
   }
 
   const opcoesVeiculo = useMemo(() => {
@@ -378,14 +464,6 @@ function ModalEntrega({ orgSlug, clientes, veiculos, membros, equipes, entrega, 
     return ultima && campanhas.some(c => c.id === ultima) ? ultima : ''
   }
 
-  // Ao abrir para editar, já traz as tarefas do cliente para poder trocar o vínculo.
-  const [iniciado, setIniciado] = useState(false)
-  if (!iniciado && entrega?.workspaceId) {
-    setIniciado(true)
-    void trocarCliente(entrega.workspaceId).then(() =>
-      setForm(f => ({ ...f, activityId: entrega.tarefa?.id ?? '', campaignId: entrega.campaignId ?? '' })))
-  }
-
   function salvar() {
     if (!form.workspaceId) { toast.error('Escolha o cliente.'); return }
     if (!form.titulo.trim()) { toast.error('Dê um nome à entrega.'); return }
@@ -416,6 +494,7 @@ function ModalEntrega({ orgSlug, clientes, veiculos, membros, equipes, entrega, 
         responsaveis: abrindoBriefing ? form.responsaveis : null,
       })
       if ('error' in r) { toast.error(r.error); return }
+      if (!entrega) await apagarRascunhoEntrega(orgSlug)
       if (abrindoBriefing) {
         lembrarCampanha(form.workspaceId, form.campaignId)
         if (r.briefingErro) toast.warning(`Entrega salva, mas o briefing não abriu: ${r.briefingErro}`)
@@ -455,6 +534,33 @@ function ModalEntrega({ orgSlug, clientes, veiculos, membros, equipes, entrega, 
       dismissOnBackdrop={false} dismissable={!pending}>
       <ModalHeader title={entrega ? 'Editar entrega' : 'Nova entrega'} onClose={onClose} />
       <div className="space-y-3 px-6 py-5">
+        {rascunhoDe && (
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-gray-100 px-3 py-2 text-[12px] text-gray-600">
+            <span>
+              Rascunho de {new Date(rascunhoDe).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} restaurado.
+              {' '}Ele fica salvo neste navegador até você salvar a entrega.
+            </span>
+            <button type="button" onClick={descartarRascunho}
+              className="shrink-0 font-medium text-gray-500 hover:text-red-600 transition-colors">
+              Descartar
+            </button>
+          </div>
+        )}
+        {erroCarga && (
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-red-50 px-3 py-2 text-[12px] text-red-700">
+            <span>Não carregou as tarefas e os projetos deste cliente. O Flow foi atualizado: recarregue a página — o que você preencheu volta.</span>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button type="button" onClick={() => void carregarCliente(form.workspaceId)}
+                className="px-2 py-1 font-medium rounded-lg hover:bg-red-100 transition-colors">
+                Tentar de novo
+              </button>
+              <button type="button" onClick={() => void recarregarPagina()}
+                className="inline-flex items-center gap-1 px-2 py-1 font-medium rounded-lg bg-red-600 text-[#fff] hover:bg-red-700 active:scale-[0.97] transition-colors">
+                <RefreshCw className="w-3 h-3" /> Recarregar
+              </button>
+            </div>
+          </div>
+        )}
         <div className="grid sm:grid-cols-2 gap-3">
           <label className="block">
             <span className="text-[11px] text-gray-400">Cliente</span>
@@ -561,7 +667,9 @@ function ModalEntrega({ orgSlug, clientes, veiculos, membros, equipes, entrega, 
               <div className="mt-0.5">
                 <Select value={form.campaignId} onChange={v => setForm(f => ({ ...f, campaignId: v }))}
                   options={campanhas.map(c => ({ value: c.id, label: c.nome }))}
-                  placeholder={campanhas.length ? 'Escolha o projeto' : 'Este cliente não tem projeto ativo'} />
+                  placeholder={carregandoTarefas ? 'Carregando projetos…'
+                    : erroCarga ? 'Projetos não carregaram — recarregue a página'
+                    : campanhas.length ? 'Escolha o projeto' : 'Este cliente não tem projeto ativo'} />
               </div>
             </label>
             <div className="block">
