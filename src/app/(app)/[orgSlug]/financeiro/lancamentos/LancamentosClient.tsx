@@ -130,6 +130,11 @@ const parseBR = (s: string) => { const t = s.trim().replace(/\./g, '').replace('
 const inputCls = 'w-full px-3 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent'
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 
+// Transferência entre contas é zero-soma (um lado anula o outro): não tem cliente de
+// origem nem de destino, então não leva centro de custo — e não é pendência.
+const semCentro = (l: Pick<Lancamento, 'centro_custo' | 'transferencia_id' | 'categoria'>) =>
+  !(l.centro_custo ?? '').trim() && !l.transferencia_id && !isTransferenciaCategoria(l.categoria)
+
 export function LancamentosClient({ orgSlug, lancamentos, importadas = [], contas, contaPadrao = '', categorias, centros, today, sugestoesContato = [], atalho, filtroCliente }: {
   /** Atalho do menu: despesas (a-pagar) ou receitas (a-receber) em aberto, das atrasadas até o fim do mês. */
   atalho?: 'a-pagar' | 'a-receber'
@@ -212,7 +217,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       // Sem nota: só faz sentido no que a agência fatura (entrada, não importado).
       if (faltando === 'nota' && (l.tipo !== 'entrada' || l.source === 'importado' || temNotaValida(notas[l.id]) || !notaDevida(l, today))) return false
       if (faltando === 'categoria' && (l.categoria ?? '').trim()) return false
-      if (faltando === 'centro' && (l.centro_custo ?? '').trim()) return false
+      if (faltando === 'centro' && !semCentro(l)) return false
       if (faltando === 'conta' && l.conta_id) return false
       // A busca inclui os documentos: procurar por "2163" tem que achar a NF, e
       // até o nome do arquivo ficava de fora antes disso.
@@ -337,7 +342,7 @@ export function LancamentosClient({ orgSlug, lancamentos, importadas = [], conta
       // competência já chegou — parcela futura não tem nota a emitir.
       nota: conta(l => l.tipo === 'entrada' && !temNotaValida(notas[l.id]) && notaDevida(l, today)),
       categoria: conta(l => !(l.categoria ?? '').trim()),
-      centro: conta(l => !(l.centro_custo ?? '').trim()),
+      centro: conta(semCentro),
       conta: conta(l => !l.conta_id),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
