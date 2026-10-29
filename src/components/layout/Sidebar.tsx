@@ -156,6 +156,7 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
     { label: 'Contas a pagar', href: 'financeiro/lancamentos?ver=a-pagar', heading: 'A pagar' },
     { label: 'Lançar despesa', href: 'financeiro/lancar-despesa' },
     { label: 'Análise',        href: 'financeiro/analise', heading: 'Relatórios' },
+    { label: 'Planejamento',   href: 'financeiro/planejamento' },
     { label: 'Margem por cliente', href: 'financeiro/margem' },
     { label: 'Fechamento',     href: 'financeiro/fechamento' },
     { label: 'Categorias',     href: 'financeiro/categorias', heading: 'Ajustes' },
