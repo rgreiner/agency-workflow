@@ -145,9 +145,12 @@ function hojeBR(): string {
 
 async function lancamentosDoContato(a: AgenteFlow, c: ContatoFlow, abertos: boolean): Promise<LinhaLanc[]> {
   let q = a.supabase.from('lancamentos').select(SELECT_LANC).eq('org_id', a.orgId)
-  // Cliente: o vínculo novo (contato_id) ou o resolvido pelo trigger (workspace_id).
+  // Cliente: o vínculo (contato_id) manda. O workspace_id é só para entrada antiga sem
+  // vínculo — valendo sempre, o FEE cobrado da T2D num projeto da Di Napoli aparecia nas
+  // duas (financeiro de grupo via "dois faturamentos de R$ 6.200", 28/10), e conta a
+  // pagar de fornecedor do projeto entraria como título do cliente.
   q = c.tipo === 'cliente'
-    ? q.or(`and(contato_tipo.eq.cliente,contato_id.eq.${c.id}),workspace_id.eq.${c.id}`)
+    ? q.or(`and(contato_tipo.eq.cliente,contato_id.eq.${c.id}),and(contato_id.is.null,tipo.eq.entrada,workspace_id.eq.${c.id})`)
     : q.eq('contato_tipo', c.tipo).eq('contato_id', c.id)
   if (abertos) q = q.eq('situacao', 'em_aberto')
   const { data, error } = await q.order('vencimento', { ascending: !abertos }).limit(abertos ? 60 : 30)
