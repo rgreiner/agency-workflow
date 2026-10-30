@@ -669,12 +669,12 @@ export async function comissaoDocumentos(a: AgenteFlow, tituloId: string) {
   return { arquivos }
 }
 
-/** Régua da comissão em atraso com fornecedor/veículo (mig. 369): degrau de hoje e as que já são do Rafael. */
+/** Régua da comissão com fornecedor/veículo (mig. 394: D-30 … D+60): passo de hoje e as que já são do Rafael. */
 export async function reguaComissao(a: AgenteFlow) {
   const { data, error } = await a.supabase.rpc('fin_regua_comissao', { p_org: a.orgId })
   if (error) throw new ErroAgente(error.message)
   return data as {
-    a_cobrar: { titulo_id: string; documento: string | null; fornecedor: string; contato_nome: string | null; email: string; valor: number; vencimento: string; dias: number; bucket: string }[]
+    a_cobrar: { titulo_id: string; documento: string | null; fornecedor: string; contato_nome: string | null; email: string; valor: number; vencimento: string; dias: number; passo: number; bucket: string }[]
     com_rafael: { titulo_id: string; documento: string | null; fornecedor: string; valor: number; vencimento: string; dias: number; motivo: string }[]
   }
 }
