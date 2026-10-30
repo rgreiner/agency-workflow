@@ -637,7 +637,9 @@ export async function comissoesNf(a: AgenteFlow) {
  */
 export async function comissaoDocumentos(a: AgenteFlow, tituloId: string) {
   const l = await lancamento(a, tituloId)
-  const daAgencia = (l.anexos ?? []).filter(x => x.emitente === 'agencia' && x.url)
+  // Boleto sem emitente também é da agência: o que chega do fornecedor pela Flávia já vem
+  // marcado 'fornecedor' (mig. 362), e o anexado à mão costuma ficar sem o campo (ME 1578, 30/10).
+  const daAgencia = (l.anexos ?? []).filter(x => x.url && (x.emitente === 'agencia' || (x.tipo === 'Boleto' && !x.emitente)))
   const arquivos: { nome: string; base64: string }[] = []
   const notasVistas = new Set<string>()
   const pdfDaNota = async (notaId: string, nome?: string) => {
