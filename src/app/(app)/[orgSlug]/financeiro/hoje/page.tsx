@@ -57,6 +57,17 @@ export default async function HojePage({
     for (const r of rows) extras.set(r.id, r)
   }
 
+  // Baixa na mão ≠ conciliação: o "Pago" daqui é provisório até o extrato do banco
+  // chegar e a conciliação vincular o movimento (que acerta data e valor reais).
+  const conciliados = new Set<string>()
+  if (liquidados.length) {
+    const its = unwrap<{ lancamento_id: string }>(
+      await sb.from('btg_conciliacao_itens').select('lancamento_id').eq('org_id', orgId).in('lancamento_id', liquidados.map(l => l.id)),
+      'conciliação',
+    )
+    for (const i of its) conciliados.add(i.lancamento_id)
+  }
+
   const pagar = emAberto.filter(l => l.tipo === 'saida')
 
   // Boleto anexado sem código: lê a linha digitável do PDF e grava, para a próxima
@@ -119,6 +130,7 @@ export default async function HojePage({
       pagar_com: ex?.pagar_com ?? null,
       sugestao,
       boleto_url: (l.anexos ?? []).find(a => a.tipo === 'Boleto' && a.url)?.url ?? null,
+      conciliado: conciliados.has(l.id),
     }
   }
 

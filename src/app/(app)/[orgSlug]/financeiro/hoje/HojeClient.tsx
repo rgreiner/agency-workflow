@@ -23,6 +23,8 @@ export interface ItemHoje extends Lancamento {
   /** Pix do último pagamento ao mesmo contato ou do cadastro — só quando não há código. */
   sugestao: string | null
   boleto_url: string | null
+  /** Baixa já vinculada a um movimento do extrato (só faz sentido nos feitos). */
+  conciliado: boolean
 }
 
 const FORMA_LABEL: Record<string, string> = {
@@ -226,11 +228,19 @@ function Feitos({ orgSlug, titulo, itens }: { orgSlug: string; titulo: string; i
             <p className="text-sm text-gray-700 truncate">{l.contato_nome || l.descricao || '—'}</p>
             {l.contato_nome && l.descricao && <p className="text-xs text-gray-400 truncate">{l.descricao}</p>}
           </div>
+          {l.conciliado
+            ? <Etiqueta tom="ok">Conciliado</Etiqueta>
+            : <span title="Baixa feita à mão. Quando o extrato chegar, a conciliação sugere este lançamento e acerta a data e o valor do banco.">
+                <Etiqueta tom="falta">Aguardando banco</Etiqueta>
+              </span>}
           <span className="text-sm tabular-nums text-gray-600">{formatBRL(Number(l.valor_realizado ?? l.valor ?? 0))}</span>
-          <button type="button" onClick={() => desfazer(l)} disabled={pendente} title="Desfazer a baixa"
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50">
-            <RotateCcw className="w-3.5 h-3.5" />
-          </button>
+          {/* Conciliado só se desfaz na conciliação: reabrir aqui deixaria o movimento vinculado a um título em aberto. */}
+          {!l.conciliado && (
+            <button type="button" onClick={() => desfazer(l)} disabled={pendente} title="Desfazer a baixa"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50">
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          )}
         </li>
       ))}
     </Recolhivel>
