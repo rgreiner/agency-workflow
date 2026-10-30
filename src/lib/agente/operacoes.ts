@@ -842,6 +842,36 @@ const item = (l: Linha, hoje: string) => ({
   categoria: l.categoria, liquidado_em: l.data_liquidacao,
 })
 
+/**
+ * Clientes em atraso para a mesa da Flávia, um por cliente, com a promessa de cada
+ * título (promessa_data em dia segura a régua — mig. 189/359). É de onde o Rafael
+ * informa "nova data combinada", "aguardar uma semana" ou o que o cliente disse.
+ */
+export async function cobrancaClientes(a: AgenteFlow) {
+  const hoje = hojeBRT()
+  const { data, error } = await a.supabase.from('lancamentos_doc').select(LANC).eq('org_id', a.orgId).eq('tipo', 'entrada')
+    .eq('situacao', 'em_aberto').eq('contato_tipo', 'cliente').is('transferencia_id', null).lt('vencimento', hoje)
+    .not('contato_nome', 'is', null).order('vencimento').limit(300)
+  if (error) throw new ErroAgente(error.message)
+  const ls = (data ?? []) as unknown as Linha[]
+  const ids = ls.map(l => l.id)
+  const { data: pr, error: e2 } = ids.length
+    ? await a.supabase.from('lancamentos').select('id, promessa_data, promessa_obs').in('id', ids)
+    : { data: [], error: null }
+  if (e2) throw new ErroAgente(e2.message)
+  const promessa = new Map(((pr ?? []) as { id: string; promessa_data: string | null; promessa_obs: string | null }[]).map(p => [p.id, p]))
+  const porCliente = new Map<string, { cliente: string; total: number; titulos: (ReturnType<typeof item> & { promessa_data: string | null; promessa_obs: string | null })[] }>()
+  for (const l of ls) {
+    const i = item(l, hoje)
+    const p = promessa.get(l.id)
+    const g = porCliente.get(i.contato) ?? { cliente: i.contato, total: 0, titulos: [] }
+    g.titulos.push({ ...i, promessa_data: p?.promessa_data ?? null, promessa_obs: p?.promessa_obs ?? null })
+    g.total = Math.round((g.total + i.valor) * 100) / 100
+    porCliente.set(i.contato, g)
+  }
+  return { hoje, clientes: [...porCliente.values()].sort((x, y) => y.total - x.total) }
+}
+
 export async function financeiroConsulta(a: AgenteFlow, consulta: string, p: Record<string, unknown>) {
   const hoje = hojeBRT()
   const texto = typeof p.texto === 'string' ? p.texto.trim().replace(/[%_,()]/g, ' ') : ''
