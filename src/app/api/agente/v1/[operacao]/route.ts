@@ -8,7 +8,7 @@
  */
 import { NextResponse } from 'next/server'
 import { autenticarAgente } from '@/lib/agente/auth'
-import { ErroAgente, agenda, cancelamentos, cancelamentoAvisado, buscarContatos, titulosDetalhe, clientesSemFinanceiro, comissoesNf, comissaoDocumentos, reguaComissao, notasFiscais, cancelarNotaFiscal, rescisoes, btgConciliado, desfazerEnvio, folhaSituacao, folhaFechar, folhaEnviar, dpAgenda, contatosNomes, resumoMesa, recebimentosComparados, financeiroConsulta, registrarPromessa, cobrancaClientes, renegociar, folhaLer, folhaAplicar, faturamentoFila, faturar, anexarDocumentoFila, nfseAEmitir, emitirNfse, adicionarEmailContato, cadastroPublico, cadastroConvitesGerar, cadastroMarcarEnvio, cadastroConvites, clienteDoTitulo, empresa, anexarDocumento, anotar, atualizarDespesa, despesasAbertas, lancarDespesa, lerDespesa, opcoesDespesa, cobranca, documentos, documentosFornecedor, identificar, nfFornecedor, prorrogar, registrarEnvio, registrarEnvioAgente, regua, titulos, verificar } from '@/lib/agente/operacoes'
+import { ErroAgente, agenda, cancelamentos, cancelamentoAvisado, buscarContatos, titulosDetalhe, clientesSemFinanceiro, comissoesNf, comissaoDocumentos, reguaComissao, notasFiscais, cancelarNotaFiscal, rescisoes, btgConciliado, desfazerEnvio, folhaSituacao, folhaFechar, folhaEnviar, dpAgenda, contatosNomes, resumoMesa, recebimentosComparados, financeiroConsulta, registrarPromessa, cobrancaClientes, recebidosRecentes, renegociar, folhaLer, folhaAplicar, faturamentoFila, faturar, anexarDocumentoFila, nfseAEmitir, emitirNfse, adicionarEmailContato, cadastroPublico, cadastroConvitesGerar, cadastroMarcarEnvio, cadastroConvites, clienteDoTitulo, empresa, anexarDocumento, anotar, atualizarDespesa, despesasAbertas, lancarDespesa, lerDespesa, opcoesDespesa, cobranca, documentos, documentosFornecedor, identificar, nfFornecedor, prorrogar, registrarEnvio, registrarEnvioAgente, regua, titulos, verificar } from '@/lib/agente/operacoes'
 import { logSystemError } from '@/lib/system-error'
 
 export const runtime = 'nodejs'
@@ -44,6 +44,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ operaca
       case 'resumo-mesa': dados = await resumoMesa(agente); break
       case 'recebimentos-comparados': dados = await recebimentosComparados(agente); break
       case 'financeiro': dados = await financeiroConsulta(agente, str(b.consulta), (b.parametros && typeof b.parametros === 'object' ? b.parametros : {}) as Record<string, unknown>); break
+      case 'recebidos-recentes': dados = await recebidosRecentes(agente, Number(b.dias)); break
       case 'cobranca-clientes': dados = await cobrancaClientes(agente); break
       case 'promessa': dados = await registrarPromessa(agente, str(b.titulo_id), str(b.data) || null, str(b.obs) || null); break
       case 'renegociar': dados = await renegociar(agente, Array.isArray(b.titulos) ? (b.titulos as unknown[]).map(str) : [], Number(b.parcelas), str(b.primeiro_vencimento), str(b.obs) || null); break

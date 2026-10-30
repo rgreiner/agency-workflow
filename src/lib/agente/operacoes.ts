@@ -849,6 +849,58 @@ const item = (l: Linha, hoje: string) => ({
 })
 
 /**
+ * Quem atende o financeiro do cliente (mesma escolha da régua, _fin_whats_cliente):
+ * telefone marcado "financeiro", senão o 1º da lista, senão o principal. Chave = workspace.
+ */
+async function contatosFinanceiros(a: AgenteFlow, ids: (string | null)[]) {
+  const wsIds = [...new Set(ids.filter(Boolean))] as string[]
+  const { data: ws } = wsIds.length
+    ? await a.supabase.from('workspaces').select('id, name, contact_name, phone, telefones').eq('org_id', a.orgId).in('id', wsIds)
+    : { data: [] }
+  const soDig = (x: unknown) => String(x ?? '').replace(/\D/g, '')
+  return new Map(((ws ?? []) as { id: string; name: string; contact_name: string | null; phone: string | null; telefones: { tipo?: string; numero?: string }[] | null }[]).map(w => {
+    const lista = (w.telefones ?? []).filter(t => /^\d{10,13}$/.test(soDig(t.numero)))
+    const t = lista.find(x => /financ/i.test(x.tipo ?? '')) ?? lista[0]
+    const nome = (t?.tipo?.split('|')[1] ?? '').trim() || w.contact_name?.trim() || w.name
+    const tel = t ? soDig(t.numero) : /^\d{10,13}$/.test(soDig(w.phone)) ? soDig(w.phone) : null
+    return [w.id, tel ? { nome, telefone: tel } : null] as const
+  }))
+}
+
+/**
+ * Recebimentos de cliente dos últimos `dias` (pela data de liquidação), com o contato do
+ * financeiro, se o título tinha sido cobrado pela régua e se tinha data combinada — para a
+ * Flávia reagir ao pagamento (agradecer, fechar compromisso, anotar no caso).
+ */
+export async function recebidosRecentes(a: AgenteFlow, dias: number) {
+  const hoje = hojeBRT()
+  const desde = somaDias(hoje, -Math.min(Math.max(Math.round(dias) || 3, 1), 15))
+  const { data, error } = await a.supabase.from('lancamentos_doc').select(LANC).eq('org_id', a.orgId).eq('tipo', 'entrada')
+    .eq('situacao', 'recebido').eq('contato_tipo', 'cliente').is('transferencia_id', null).gte('data_liquidacao', desde)
+    .order('data_liquidacao').limit(200)
+  if (error) throw new ErroAgente(error.message)
+  const ls = (data ?? []) as unknown as Linha[]
+  if (!ls.length) return []
+  const ids = ls.map(l => l.id)
+  const [ex, av] = await Promise.all([
+    a.supabase.from('lancamentos').select('id, promessa_data, contato_id, workspace_id').in('id', ids),
+    a.supabase.from('cobranca_avisos').select('lancamento_id, bucket').in('lancamento_id', ids),
+  ])
+  if (ex.error) throw new ErroAgente(ex.error.message)
+  const extra = new Map(((ex.data ?? []) as { id: string; promessa_data: string | null; contato_id: string | null; workspace_id: string | null }[]).map(x => [x.id, x]))
+  const cobrados = new Set(((av.data ?? []) as { lancamento_id: string; bucket: string }[]).filter(x => x.bucket !== 'documentos').map(x => x.lancamento_id))
+  const contatoDe = await contatosFinanceiros(a, [...extra.values()].map(x => x.contato_id ?? x.workspace_id))
+  return ls.map(l => {
+    const x = extra.get(l.id)
+    return {
+      id: l.id, documento: doc(l), cliente: l.contato_nome ?? '(sem contato)', valor: Math.abs(Number(l.valor)),
+      vencimento: l.vencimento, liquidado_em: l.data_liquidacao, promessa_data: x?.promessa_data ?? null,
+      cobrado: cobrados.has(l.id), contato: contatoDe.get(x?.contato_id ?? x?.workspace_id ?? '') ?? null,
+    }
+  })
+}
+
+/**
  * Clientes em atraso para a mesa da Flávia, um por cliente, com a promessa de cada
  * título (promessa_data em dia segura a régua — mig. 189/359). É de onde o Rafael
  * informa "nova data combinada", "aguardar uma semana" ou o que o cliente disse.
@@ -866,20 +918,7 @@ export async function cobrancaClientes(a: AgenteFlow) {
     : { data: [], error: null }
   if (e2) throw new ErroAgente(e2.message)
   const promessa = new Map(((pr ?? []) as { id: string; promessa_data: string | null; promessa_obs: string | null; contato_id: string | null; workspace_id: string | null }[]).map(p => [p.id, p]))
-  // Quem atende o financeiro do cliente (mesma escolha da régua, _fin_whats_cliente): telefone
-  // marcado "financeiro", senão o 1º da lista, senão o principal. Para a Flávia avisar a data combinada.
-  const wsIds = [...new Set([...promessa.values()].map(p => p.contato_id ?? p.workspace_id).filter(Boolean))] as string[]
-  const { data: ws } = wsIds.length
-    ? await a.supabase.from('workspaces').select('id, name, contact_name, phone, telefones').in('id', wsIds)
-    : { data: [] }
-  const soDig = (x: unknown) => String(x ?? '').replace(/\D/g, '')
-  const contatoDe = new Map(((ws ?? []) as { id: string; name: string; contact_name: string | null; phone: string | null; telefones: { tipo?: string; numero?: string }[] | null }[]).map(w => {
-    const lista = (w.telefones ?? []).filter(t => /^\d{10,13}$/.test(soDig(t.numero)))
-    const t = lista.find(x => /financ/i.test(x.tipo ?? '')) ?? lista[0]
-    const nome = (t?.tipo?.split('|')[1] ?? '').trim() || w.contact_name?.trim() || w.name
-    const tel = t ? soDig(t.numero) : /^\d{10,13}$/.test(soDig(w.phone)) ? soDig(w.phone) : null
-    return [w.id, tel ? { nome, telefone: tel } : null] as const
-  }))
+  const contatoDe = await contatosFinanceiros(a, [...promessa.values()].map(p => p.contato_id ?? p.workspace_id))
   const porCliente = new Map<string, { cliente: string; total: number; contato: { nome: string; telefone: string } | null; titulos: (ReturnType<typeof item> & { promessa_data: string | null; promessa_obs: string | null })[] }>()
   for (const l of ls) {
     const i = item(l, hoje)
