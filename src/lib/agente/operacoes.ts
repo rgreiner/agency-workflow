@@ -45,6 +45,9 @@ export interface TituloFlow {
   tem_pix: boolean
   tem_boleto: boolean
   prorrogacoes: number
+  /** Data combinada com o cliente (segura a régua até ela) e o que foi combinado. */
+  promessa_data: string | null
+  promessa_obs: string | null
 }
 
 interface Anexo { url?: string; nome?: string; tipo?: string; numero?: string; emitente?: string }
@@ -135,9 +138,10 @@ async function contatoPorId(a: AgenteFlow, tipo: string, id: string): Promise<Co
 interface LinhaLanc {
   id: string; descricao: string | null; valor: number; vencimento: string | null; situacao: string
   tipo: string; anexos: Anexo[] | null; org_id: string
+  promessa_data?: string | null; promessa_obs?: string | null
 }
 
-const SELECT_LANC = 'id, descricao, valor, vencimento, situacao, tipo, anexos, org_id'
+const SELECT_LANC = 'id, descricao, valor, vencimento, situacao, tipo, anexos, org_id, promessa_data, promessa_obs'
 
 function hojeBR(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
@@ -190,6 +194,8 @@ async function montarTitulos(a: AgenteFlow, linhas: LinhaLanc[]): Promise<Titulo
       tem_pix: l.tipo === 'entrada' && l.situacao === 'em_aberto' && !!pix?.chave,
       tem_boleto: anexos.some(x => x.tipo === 'Boleto' && x.url && caminhoDoAnexo(x.url)),
       prorrogacoes: prorrog.get(l.id) ?? 0,
+      promessa_data: l.promessa_data ?? null,
+      promessa_obs: l.promessa_obs ?? null,
     }
   })
 }
