@@ -5,16 +5,16 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
-  ArrowDownCircle, ArrowUpCircle, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, FileText,
-  Landmark, Loader2, Pencil, Plus, RotateCcw, SlidersHorizontal, X,
+  ArrowDownCircle, ArrowUpCircle, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, FileText,
+  Landmark, Loader2, Pencil, Plus, RotateCcw, Send, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBRL, formatDateBR } from '@/lib/midia'
 import { DocChip } from '@/components/ui/DocChip'
 import { AutoRefresh } from '@/components/ui/AutoRefresh'
-import { liquidarLancamento, reabrirLancamento, setLancamentoPagarCom } from '@/app/actions/financeiro'
+import { marcarLancamentoEnviado, setLancamentoPagarCom } from '@/app/actions/financeiro'
 import { formatarLinha, textoParaCopiar, tipoPagarCom } from '@/lib/boleto/linha-digitavel'
-import { BaixaModal, type Lancamento, type ContaRef } from '../lancamentos/LancamentosClient'
+import type { Lancamento } from '../lancamentos/LancamentosClient'
 
 export interface ItemHoje extends Lancamento {
   /** O que falta (baixa parcial deixa o título em aberto com parte realizada). */
@@ -23,7 +23,7 @@ export interface ItemHoje extends Lancamento {
   /** Pix do último pagamento ao mesmo contato ou do cadastro — só quando não há código. */
   sugestao: string | null
   boleto_url: string | null
-  /** Baixa já vinculada a um movimento do extrato (só faz sentido nos feitos). */
+  /** Liquidado pela conciliação, não por baixa feita à mão (só faz sentido nos feitos). */
   conciliado: boolean
 }
 
@@ -52,31 +52,41 @@ function copiar(texto: string, aviso = 'Copiado') {
 /** Valor como o app do banco pede: "1234,56", sem R$ nem milhar. */
 const valorParaCopiar = (v: number) => v.toFixed(2).replace('.', ',')
 
-export function HojeClient({ orgSlug, dia, hoje, saldo, contas, contaPadrao, abertos, feitos }: {
+/**
+ * Pagamento disparado não é pagamento feito (Rafael, 30/10: "só considero pago ao
+ * conciliar"). O botão daqui marca o título como ENVIADO (mig. 397): ele sai da lista
+ * de ação e continua em aberto; quem o fecha é a conciliação, com data e valor do
+ * banco. Por isso o saldo em conta não se mexe com o clique — o fim do dia desconta
+ * o que já foi enviado e ainda não apareceu no extrato.
+ */
+export function HojeClient({ orgSlug, dia, hoje, saldo, abertos, enviados, feitos }: {
   orgSlug: string
   dia: string
   hoje: string
   saldo: number
-  contas: ContaRef[]
-  contaPadrao: string
   abertos: ItemHoje[]
+  enviados: ItemHoje[]
   feitos: ItemHoje[]
 }) {
-  const router = useRouter()
-  const [ajustar, setAjustar] = useState<ItemHoje | null>(null)
   const ehHoje = dia === hoje
+  // Marcar num dia passado ("paguei ontem e esqueci") grava aquele dia; num dia futuro, hoje.
+  const dataEnvio = dia < hoje ? dia : hoje
 
   const pagar = abertos.filter(l => l.tipo === 'saida')
   const receberDia = abertos.filter(l => l.tipo === 'entrada' && l.vencimento === dia)
   const receberAtrasado = abertos.filter(l => l.tipo === 'entrada' && (l.vencimento ?? '') < dia)
+  const enviadosPagar = enviados.filter(l => l.tipo === 'saida')
+  const avisadosReceber = enviados.filter(l => l.tipo === 'entrada')
   const pagos = feitos.filter(l => l.tipo === 'saida')
   const recebidos = feitos.filter(l => l.tipo === 'entrada')
 
   const soma = (ls: ItemHoje[]) => ls.reduce((s, l) => s + l.falta, 0)
   const totPagar = soma(pagar)
   const totReceber = soma(receberDia)
-  // Saldo de hoje já tem o que foi baixado; o fim do dia soma só o que ainda falta.
-  const fimDoDia = saldo - totPagar + totReceber
+  const totEnviado = soma(enviadosPagar)
+  const totAvisado = soma(avisadosReceber)
+  // O saldo só muda com o extrato conciliado: o enviado ainda não saiu dele.
+  const fimDoDia = saldo - totPagar - totEnviado + totReceber + totAvisado
 
   return (
     <div className="p-6 space-y-6 max-w-6xl">
@@ -107,8 +117,10 @@ export function HojeClient({ orgSlug, dia, hoje, saldo, contas, contaPadrao, abe
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Kpi rotulo="Saldo em conta" valor={saldo} icon={<Landmark className="w-3.5 h-3.5" />} />
-        <Kpi rotulo={`A pagar · ${pagar.length}`} valor={totPagar} tom="red" icon={<ArrowUpCircle className="w-3.5 h-3.5" />} />
-        <Kpi rotulo={`A receber · ${receberDia.length}`} valor={totReceber} tom="emerald" icon={<ArrowDownCircle className="w-3.5 h-3.5" />} />
+        <Kpi rotulo={`A pagar · ${pagar.length}`} valor={totPagar} tom="red" icon={<ArrowUpCircle className="w-3.5 h-3.5" />}
+          nota={totEnviado > 0 ? `+ ${formatBRL(totEnviado)} enviados, a conciliar` : undefined} />
+        <Kpi rotulo={`A receber · ${receberDia.length}`} valor={totReceber} tom="emerald" icon={<ArrowDownCircle className="w-3.5 h-3.5" />}
+          nota={totAvisado > 0 ? `+ ${formatBRL(totAvisado)} avisados, a conciliar` : undefined} />
         <Kpi rotulo="Fica no fim do dia" valor={fimDoDia} destaque />
       </div>
 
@@ -116,41 +128,35 @@ export function HojeClient({ orgSlug, dia, hoje, saldo, contas, contaPadrao, abe
         <Secao titulo="Pagar" tom="red" total={totPagar} n={pagar.length}
           vazio={ehHoje ? 'Nada para pagar hoje.' : 'Nada para pagar neste dia.'}>
           {pagar.map(l => (
-            <LinhaPagar key={l.id} orgSlug={orgSlug} l={l} dia={dia} hoje={hoje} contaPadrao={contaPadrao}
-              onAjustar={() => setAjustar(l)} />
+            <LinhaPagar key={l.id} orgSlug={orgSlug} l={l} dia={dia} dataEnvio={dataEnvio} />
           ))}
-          <Feitos orgSlug={orgSlug} titulo="Pago" itens={pagos} />
+          <Enviados orgSlug={orgSlug} titulo="Enviado · aguardando banco" itens={enviadosPagar} />
+          <Feitos titulo="Pago" itens={pagos} />
         </Secao>
 
         <Secao titulo="Receber" tom="emerald" total={totReceber} n={receberDia.length}
           vazio={ehHoje ? 'Nada vence hoje.' : 'Nada vence neste dia.'}>
           {receberDia.map(l => (
-            <LinhaReceber key={l.id} orgSlug={orgSlug} l={l} dia={dia} hoje={hoje} contaPadrao={contaPadrao}
-              onAjustar={() => setAjustar(l)} />
+            <LinhaReceber key={l.id} orgSlug={orgSlug} l={l} dia={dia} dataEnvio={dataEnvio} />
           ))}
-          <Feitos orgSlug={orgSlug} titulo="Recebido" itens={recebidos} />
+          <Enviados orgSlug={orgSlug} titulo="Cliente avisou · aguardando banco" itens={avisadosReceber} />
+          <Feitos titulo="Recebido" itens={recebidos} />
           {receberAtrasado.length > 0 && (
             <Recolhivel titulo={`Atrasados · ${receberAtrasado.length}`} valor={soma(receberAtrasado)} tom="red"
               extra={<Link href={`/${orgSlug}/financeiro/inadimplentes`} className="text-xs text-orange-600 hover:underline underline-offset-2">Inadimplentes →</Link>}>
               {receberAtrasado.map(l => (
-                <LinhaReceber key={l.id} orgSlug={orgSlug} l={l} dia={dia} hoje={hoje} contaPadrao={contaPadrao}
-                  onAjustar={() => setAjustar(l)} />
+                <LinhaReceber key={l.id} orgSlug={orgSlug} l={l} dia={dia} dataEnvio={dataEnvio} />
               ))}
             </Recolhivel>
           )}
         </Secao>
       </div>
-
-      {ajustar && (
-        <BaixaModal orgSlug={orgSlug} lancamento={ajustar} contas={contas}
-          onClose={() => { setAjustar(null); router.refresh() }} />
-      )}
     </div>
   )
 }
 
-function Kpi({ rotulo, valor, tom, icon, destaque }: {
-  rotulo: string; valor: number; tom?: 'red' | 'emerald'; icon?: React.ReactNode; destaque?: boolean
+function Kpi({ rotulo, valor, tom, icon, destaque, nota }: {
+  rotulo: string; valor: number; tom?: 'red' | 'emerald'; icon?: React.ReactNode; destaque?: boolean; nota?: string
 }) {
   return (
     <div className={cn('rounded-2xl border p-4', destaque ? 'bg-gray-50 border-gray-200' : 'bg-white border-gray-200')}>
@@ -161,6 +167,7 @@ function Kpi({ rotulo, valor, tom, icon, destaque }: {
       <p className={cn('text-lg font-semibold tabular-nums mt-1', valor < 0 ? 'text-red-600' : 'text-gray-900')}>
         {formatBRL(valor)}
       </p>
+      {nota && <p className="text-[11px] text-gray-400 tabular-nums mt-0.5">{nota}</p>}
     </div>
   )
 }
@@ -204,70 +211,90 @@ function Recolhivel({ titulo, valor, tom, extra, children, inicial = false }: {
   )
 }
 
-function Feitos({ orgSlug, titulo, itens }: { orgSlug: string; titulo: string; itens: ItemHoje[] }) {
-  const router = useRouter()
-  const [pendente, start] = useTransition()
+/** Liquidado no dia: pela conciliação (o normal) ou baixa feita à mão em Lançamentos. */
+function Feitos({ titulo, itens }: { titulo: string; itens: ItemHoje[] }) {
   if (!itens.length) return null
   const total = itens.reduce((s, l) => s + Number(l.valor_realizado ?? l.valor ?? 0), 0)
-
-  function desfazer(l: ItemHoje) {
-    start(async () => {
-      const res = await reabrirLancamento(orgSlug, l.id)
-      if (res?.error) { toast.error(res.error); return }
-      toast.success('Voltou para em aberto')
-      router.refresh()
-    })
-  }
-
   return (
     <Recolhivel titulo={`${titulo} · ${itens.length}`} valor={total}>
       {itens.map(l => (
         <li key={l.id} className="flex items-center gap-3 px-5 py-2.5">
           <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm text-gray-700 truncate">{l.contato_nome || l.descricao || '—'}</p>
-            {l.contato_nome && l.descricao && <p className="text-xs text-gray-400 truncate">{l.descricao}</p>}
-          </div>
+          <Nome l={l} />
           {l.conciliado
             ? <Etiqueta tom="ok">Conciliado</Etiqueta>
-            : <span title="Baixa feita à mão. Quando o extrato chegar, a conciliação sugere este lançamento e acerta a data e o valor do banco.">
-                <Etiqueta tom="falta">Aguardando banco</Etiqueta>
+            : <span title="Baixa feita à mão em Lançamentos, sem movimento do extrato vinculado.">
+                <Etiqueta>Baixa manual</Etiqueta>
               </span>}
           <span className="text-sm tabular-nums text-gray-600">{formatBRL(Number(l.valor_realizado ?? l.valor ?? 0))}</span>
-          {/* Conciliado só se desfaz na conciliação: reabrir aqui deixaria o movimento vinculado a um título em aberto. */}
-          {!l.conciliado && (
-            <button type="button" onClick={() => desfazer(l)} disabled={pendente} title="Desfazer a baixa"
-              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50">
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-          )}
         </li>
       ))}
     </Recolhivel>
   )
 }
 
-/** Baixa em um clique (conta do lançamento ou a favorita, data de hoje, valor cheio)
- *  com Desfazer no toast. Juros, multa ou outra conta: "Ajustar" abre o modal da baixa. */
-function useBaixa(orgSlug: string, l: ItemHoje, hoje: string, contaPadrao: string, onAjustar: () => void) {
+/** Enviado e ainda em aberto: some daqui quando a conciliação vincular o extrato. */
+function Enviados({ orgSlug, titulo, itens }: { orgSlug: string; titulo: string; itens: ItemHoje[] }) {
+  const router = useRouter()
+  const [pendente, start] = useTransition()
+  if (!itens.length) return null
+
+  function desmarcar(l: ItemHoje) {
+    start(async () => {
+      const res = await marcarLancamentoEnviado(orgSlug, l.id, null)
+      if (res?.error) { toast.error(res.error); return }
+      toast.success('Voltou para a lista')
+      router.refresh()
+    })
+  }
+
+  return (
+    <Recolhivel titulo={`${titulo} · ${itens.length}`} valor={itens.reduce((s, l) => s + l.falta, 0)}>
+      {itens.map(l => (
+        <li key={l.id} className="flex items-center gap-3 px-5 py-2.5">
+          <Clock className="w-4 h-4 text-sky-600 shrink-0" />
+          <Nome l={l} />
+          <span title="Em aberto até a conciliação vincular o movimento do extrato — aí vira pago/recebido com a data e o valor do banco.">
+            <Etiqueta tom="enviado">{l.tipo === 'saida' ? 'enviado' : 'avisado'} {formatDateBR(l.enviado_em ?? '').slice(0, 5)}</Etiqueta>
+          </span>
+          <span className="text-sm tabular-nums text-gray-600">{formatBRL(l.falta)}</span>
+          <button type="button" onClick={() => desmarcar(l)} disabled={pendente} title="Não foi enviado — voltar para a lista"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50">
+            <RotateCcw className="w-3.5 h-3.5" />
+          </button>
+        </li>
+      ))}
+    </Recolhivel>
+  )
+}
+
+function Nome({ l }: { l: ItemHoje }) {
+  return (
+    <div className="flex-1 min-w-0">
+      <p className="text-sm text-gray-700 truncate">{l.contato_nome || l.descricao || '—'}</p>
+      {l.contato_nome && l.descricao && <p className="text-xs text-gray-400 truncate">{l.descricao}</p>}
+    </div>
+  )
+}
+
+/** Marca como enviado em um clique, com Desfazer no toast. Não liquida: o título
+ *  fecha na conciliação. */
+function useEnviar(orgSlug: string, l: ItemHoje, dataEnvio: string) {
   const router = useRouter()
   const [pendente, start] = useTransition()
   const saida = l.tipo === 'saida'
 
-  function baixar() {
-    const conta = l.conta_id || contaPadrao
-    if (!conta) { onAjustar(); return }
+  function enviar() {
     start(async () => {
-      const res = await liquidarLancamento(orgSlug, l.id, {
-        data_liquidacao: hoje, conta_id: conta, forma_pagamento: l.forma_pagamento,
-      })
+      const res = await marcarLancamentoEnviado(orgSlug, l.id, dataEnvio)
       if (res?.error) { toast.error(res.error); return }
       router.refresh()
-      toast.success(`${saida ? 'Pago' : 'Recebido'}: ${l.contato_nome || l.descricao || ''} · ${formatBRL(l.falta)}`, {
+      toast.success(`${saida ? 'Enviado' : 'Avisado'}: ${l.contato_nome || l.descricao || ''} · ${formatBRL(l.falta)}`, {
+        description: `Vira ${saida ? 'pago' : 'recebido'} quando o extrato for conciliado.`,
         action: {
           label: 'Desfazer',
           onClick: async () => {
-            const r = await reabrirLancamento(orgSlug, l.id)
+            const r = await marcarLancamentoEnviado(orgSlug, l.id, null)
             if (r?.error) toast.error(r.error)
             router.refresh()
           },
@@ -275,11 +302,11 @@ function useBaixa(orgSlug: string, l: ItemHoje, hoje: string, contaPadrao: strin
       })
     })
   }
-  return { baixar, pendente }
+  return { enviar, pendente }
 }
 
-function Acoes({ l, rotulo, pendente, baixar, onAjustar }: {
-  l: ItemHoje; rotulo: string; pendente: boolean; baixar: () => void; onAjustar: () => void
+function Acoes({ l, rotulo, titulo, pendente, enviar }: {
+  l: ItemHoje; rotulo: string; titulo: string; pendente: boolean; enviar: () => void
 }) {
   return (
     <div className="text-right shrink-0">
@@ -289,13 +316,9 @@ function Acoes({ l, rotulo, pendente, baixar, onAjustar }: {
         {formatBRL(l.falta)}
       </button>
       <div className="mt-1.5 flex items-center justify-end gap-1">
-        <button type="button" onClick={onAjustar} title="Juros, multa, outra conta"
-          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
-          <SlidersHorizontal className="w-3.5 h-3.5" />
-        </button>
-        <button type="button" onClick={baixar} disabled={pendente}
+        <button type="button" onClick={enviar} disabled={pendente} title={titulo}
           className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-600 text-[#fff] hover:bg-emerald-700 transition-colors active:scale-[0.97] disabled:opacity-50">
-          {pendente ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+          {pendente ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : l.tipo === 'saida' ? <Send className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}
           {rotulo}
         </button>
       </div>
@@ -315,10 +338,8 @@ function Subtitulo({ l }: { l: ItemHoje }) {
   return <p className="text-xs text-gray-500 truncate">{texto}{parcela}</p>
 }
 
-function LinhaPagar({ orgSlug, l, dia, hoje, contaPadrao, onAjustar }: {
-  orgSlug: string; l: ItemHoje; dia: string; hoje: string; contaPadrao: string; onAjustar: () => void
-}) {
-  const { baixar, pendente } = useBaixa(orgSlug, l, hoje, contaPadrao, onAjustar)
+function LinhaPagar({ orgSlug, l, dia, dataEnvio }: { orgSlug: string; l: ItemHoje; dia: string; dataEnvio: string }) {
+  const { enviar, pendente } = useEnviar(orgSlug, l, dataEnvio)
   return (
     <li className="flex gap-3 px-5 py-3">
       <div className="flex-1 min-w-0 space-y-1.5">
@@ -331,15 +352,14 @@ function LinhaPagar({ orgSlug, l, dia, hoje, contaPadrao, onAjustar }: {
         </div>
         <ComoPagar orgSlug={orgSlug} l={l} />
       </div>
-      <Acoes l={l} rotulo="Pago" pendente={pendente} baixar={baixar} onAjustar={onAjustar} />
+      <Acoes l={l} rotulo="Enviado" titulo="Pix ou boleto disparado — fica pago quando o extrato for conciliado"
+        pendente={pendente} enviar={enviar} />
     </li>
   )
 }
 
-function LinhaReceber({ orgSlug, l, dia, hoje, contaPadrao, onAjustar }: {
-  orgSlug: string; l: ItemHoje; dia: string; hoje: string; contaPadrao: string; onAjustar: () => void
-}) {
-  const { baixar, pendente } = useBaixa(orgSlug, l, hoje, contaPadrao, onAjustar)
+function LinhaReceber({ orgSlug, l, dia, dataEnvio }: { orgSlug: string; l: ItemHoje; dia: string; dataEnvio: string }) {
+  const { enviar, pendente } = useEnviar(orgSlug, l, dataEnvio)
   const forma = l.forma_pagamento ? (FORMA_LABEL[l.forma_pagamento] ?? l.forma_pagamento) : null
   return (
     <li className="flex gap-3 px-5 py-3">
@@ -358,15 +378,17 @@ function LinhaReceber({ orgSlug, l, dia, hoje, contaPadrao, onAjustar }: {
           {l.boleto_gerado && <Etiqueta tom="ok">Boleto enviado</Etiqueta>}
         </div>
       </div>
-      <Acoes l={l} rotulo="Recebido" pendente={pendente} baixar={baixar} onAjustar={onAjustar} />
+      <Acoes l={l} rotulo="Avisou" titulo="O cliente avisou que pagou — fica recebido quando o extrato for conciliado (e a régua para de cobrar por 3 dias)"
+        pendente={pendente} enviar={enviar} />
     </li>
   )
 }
 
-function Etiqueta({ children, tom }: { children: React.ReactNode; tom?: 'ok' | 'falta' }) {
+function Etiqueta({ children, tom }: { children: React.ReactNode; tom?: 'ok' | 'falta' | 'enviado' }) {
   return (
-    <span className={cn('text-[11px] rounded-full px-2 py-0.5',
-      tom === 'ok' ? 'bg-emerald-50 text-emerald-700' : tom === 'falta' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-600')}>
+    <span className={cn('text-[11px] rounded-full px-2 py-0.5 whitespace-nowrap',
+      tom === 'ok' ? 'bg-emerald-50 text-emerald-700' : tom === 'falta' ? 'bg-amber-50 text-amber-700'
+        : tom === 'enviado' ? 'bg-sky-50 text-sky-700' : 'bg-gray-100 text-gray-600')}>
       {children}
     </span>
   )

@@ -22,6 +22,8 @@ export interface LancOption {
    *  vinculado — continua sendo candidato, senão o movimento fica órfão. */
   jaBaixado?: boolean
   dataLiquidacao?: string | null
+  /** Marcado como enviado na tela Hoje (mig. 397) — em aberto até esta conciliação. */
+  enviadoEm?: string | null
 }
 export interface ContaOpt { id: string; nome: string }
 export interface ConcItem {
@@ -441,6 +443,7 @@ function PendingRow({ orgSlug, movement, candidatos, contas, categorias }: {
                       <p className="text-xs text-gray-400">
                         venc. {l.vencimento ? formatDateBR(l.vencimento) : '—'}
                         {l.jaBaixado && l.dataLiquidacao && <span> · baixa em {formatDateBR(l.dataLiquidacao)}</span>}
+                        {l.enviadoEm && <span className="text-sky-600"> · {l.tipo === 'saida' ? 'enviado' : 'avisado'} em {formatDateBR(l.enviadoEm)}</span>}
                         {!l.jaBaixado && l.saldo < l.valor && <span className="text-blue-500"> · saldo de {formatBRL(l.valor)}</span>}
                       </p>
                     </button>

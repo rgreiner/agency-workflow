@@ -16,7 +16,7 @@ const isTransferencia = (l: Lancamento) => !!l.transferencia_id || norm(l.catego
 /** Título com baixa parcial continua em aberto: o que falta é valor − realizado. */
 const falta = (l: Lancamento) => Math.max(Number(l.valor ?? 0) - Number(l.valor_realizado ?? 0), 0)
 
-const CAMPOS = 'id, tipo, origem_tipo, origem_id, transferencia_id, doc_serie, doc_numero, doc_origem, doc_producao_tipo, parcela_num, parcela_total, contato_nome, descricao, valor, valor_realizado, vencimento, competencia, situacao, nf_emitida, boleto_gerado, revisar, conta_id, categoria, centro_custo, data_liquidacao, forma_pagamento, observacao, juros, multa, desconto, tarifa, anexos'
+const CAMPOS = 'id, tipo, origem_tipo, origem_id, transferencia_id, doc_serie, doc_numero, doc_origem, doc_producao_tipo, parcela_num, parcela_total, contato_nome, descricao, valor, valor_realizado, vencimento, competencia, situacao, nf_emitida, boleto_gerado, revisar, conta_id, categoria, centro_custo, data_liquidacao, forma_pagamento, observacao, juros, multa, desconto, tarifa, anexos, enviado_em'
 
 export default async function HojePage({
   params, searchParams,
@@ -32,22 +32,28 @@ export default async function HojePage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any
 
-  const [abertos, feitos, contasRaw] = await Promise.all([
+  const [abertos, enviadosRaw, feitos, contasRaw] = await Promise.all([
     // Em aberto até o dia: o atrasado continua sendo ação do dia.
     sb.from('lancamentos_doc').select(CAMPOS).eq('org_id', orgId)
-      .eq('situacao', 'em_aberto').lte('vencimento', dia)
+      .eq('situacao', 'em_aberto').is('enviado_em', null).lte('vencimento', dia)
       .order('vencimento', { ascending: true }),
+    // Enviado e ainda sem extrato (mig. 397): saiu da lista de ação, mas o título só
+    // fecha na conciliação. Fica à vista até o banco confirmar, seja de que dia for.
+    sb.from('lancamentos_doc').select(CAMPOS).eq('org_id', orgId)
+      .eq('situacao', 'em_aberto').not('enviado_em', 'is', null).lte('enviado_em', dia)
+      .order('enviado_em', { ascending: true }),
     sb.from('lancamentos_doc').select(CAMPOS).eq('org_id', orgId)
       .in('situacao', ['pago', 'recebido']).eq('data_liquidacao', dia),
     sb.from('contas_saldo').select('id, nome, tipo, cor, ativo, favorita, saldo_atual').eq('org_id', orgId).order('ordem', { ascending: true }),
   ])
   const emAberto = unwrap<Lancamento>(abertos, 'lançamentos em aberto').filter(l => !isTransferencia(l))
+  const enviados = unwrap<Lancamento>(enviadosRaw, 'enviados').filter(l => !isTransferencia(l))
   const liquidados = unwrap<Lancamento>(feitos, 'lançamentos do dia').filter(l => !isTransferencia(l))
   const contas = unwrap<ContaRef & { saldo_atual: number | string }>(contasRaw, 'contas').filter(c => c.ativo)
 
   // "Como pagar" e o contato do cadastro moram na tabela (a view lancamentos_doc
   // foi criada antes da coluna pagar_com e não a expõe).
-  const ids = [...emAberto, ...liquidados].map(l => l.id)
+  const ids = [...emAberto, ...enviados, ...liquidados].map(l => l.id)
   const extras = new Map<string, { pagar_com: string | null; contato_tipo: string | null; contato_id: string | null }>()
   if (ids.length) {
     const rows = unwrap<{ id: string; pagar_com: string | null; contato_tipo: string | null; contato_id: string | null }>(
@@ -57,8 +63,7 @@ export default async function HojePage({
     for (const r of rows) extras.set(r.id, r)
   }
 
-  // Baixa na mão ≠ conciliação: o "Pago" daqui é provisório até o extrato do banco
-  // chegar e a conciliação vincular o movimento (que acerta data e valor reais).
+  // Liquidado no dia: pela conciliação (data do banco) ou baixa feita à mão em Lançamentos.
   const conciliados = new Set<string>()
   if (liquidados.length) {
     const its = unwrap<{ lancamento_id: string }>(
@@ -144,9 +149,8 @@ export default async function HojePage({
       dia={dia}
       hoje={hoje}
       saldo={saldo}
-      contas={contas}
-      contaPadrao={contas.find(c => c.favorita)?.id ?? ''}
       abertos={emAberto.map(item)}
+      enviados={enviados.map(item)}
       feitos={liquidados.map(item)}
     />
   )

@@ -397,6 +397,24 @@ export async function setLancamentoPagarCom(orgSlug: string, lancamentoId: strin
   revalidatePath(`/${orgSlug}/financeiro/hoje`)
 }
 
+/** "Enviado, a conciliar" (mig. 397): o Pix/boleto foi disparado — ou o cliente avisou
+ *  que pagou —, mas o título só vira pago/recebido quando a conciliação vincular o
+ *  extrato. `data` null desmarca. */
+export async function marcarLancamentoEnviado(orgSlug: string, lancamentoId: string, data: string | null) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+  if (data && !/^\d{4}-\d{2}-\d{2}$/.test(data)) return { error: 'Data inválida' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('marcar_lancamento_enviado', {
+    p_lancamento_id: lancamentoId, p_data: data,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/hoje`)
+  revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
+}
+
 /** Documento do lançamento. `url`/`nome` vazios = número registrado antes do arquivo
  *  chegar (a NF do fornecedor costuma ser anunciada por e-mail dias antes do PDF).
  *  Campos novos são opcionais: os ~101 anexos antigos continuam válidos como estão. */

@@ -28,9 +28,11 @@ function suggestMatch(
   const pool = candidatos.filter(c => c.tipo === want && Math.abs(c.saldo - mov.valor) < 0.01)
   if (!pool.length) return null
   const movT = new Date(mov.dataMov).getTime()
+  // Título marcado como enviado (mig. 397) vem primeiro: o Pix que saiu é ele.
   const byDate = (arr: LancOption[]) =>
     arr.slice().sort((a, b) =>
-      Math.abs(new Date(a.vencimento ?? 0).getTime() - movT) - Math.abs(new Date(b.vencimento ?? 0).getTime() - movT))
+      Number(!!b.enviadoEm) - Number(!!a.enviadoEm)
+      || Math.abs(new Date(a.vencimento ?? 0).getTime() - movT) - Math.abs(new Date(b.vencimento ?? 0).getTime() - movT))
   const named = pool.filter(c => nameMatch(mov.descricao, c.contatoNome))
   if (named.length) return { lancId: byDate(named)[0].id, auto: true }
   return { lancId: byDate(pool)[0].id, auto: false }
@@ -64,7 +66,7 @@ export async function loadConciliacao(sb: any, orgId: string, contaId?: string):
     await Promise.all([
       movQ,
       sb.from('lancamentos')
-        .select('id, tipo, contato_nome, descricao, valor, valor_realizado, vencimento')
+        .select('id, tipo, contato_nome, descricao, valor, valor_realizado, vencimento, enviado_em')
         .eq('org_id', orgId).eq('situacao', 'em_aberto').order('vencimento', { ascending: true }),
       sb.from('lancamentos')
         .select('id, tipo, contato_nome, descricao, valor, valor_realizado, vencimento, data_liquidacao')
@@ -90,6 +92,7 @@ export async function loadConciliacao(sb: any, orgId: string, contaId?: string):
       valor,
       saldo: Math.round((valor - realizado) * 100) / 100,
       vencimento: (l.vencimento as string | null) ?? null,
+      enviadoEm: (l.enviado_em as string | null) ?? null,
     }
   }).filter(l => l.saldo > 0.005)
 

@@ -63,6 +63,7 @@ export interface Lancamento {
   tarifa: number | string | null
   anexos: Anexo[] | null
   origem_ref?: string | null        // (promovido do extrato) import_ref que este lançamento "assume"
+  enviado_em?: string | null        // disparado/avisado, ainda em aberto até a conciliação (mig. 397)
   // Documento que originou a cobrança (view lancamentos_doc, migration 135).
   origem_id?: string | null
   doc_serie?: string | null
@@ -676,6 +677,9 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
     : parcial
       // Continua vermelho se além de parcial estiver vencido — o atraso não some.
       ? { label: 'Parcial', cls: overdue ? 'bg-red-50 text-red-700' : 'bg-sky-50 text-sky-700' }
+      // Disparado mas sem extrato (mig. 397): não é atraso, e ainda não é pago.
+      : l.enviado_em
+        ? { label: isSaida ? 'Enviado' : 'Avisado', cls: 'bg-sky-50 text-sky-700' }
       : overdue
         ? { label: 'Atrasado', cls: 'bg-red-50 text-red-700' }
         : { label: 'Em aberto', cls: 'bg-amber-50 text-amber-700' }
@@ -821,7 +825,8 @@ function Row({ l, orgSlug, today, conta, onEdit, onBaixa, selecionado, onToggleS
       </td>
       <td className="px-3 py-2.5">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap', status.cls)}>
+          <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap', status.cls)}
+            title={!paid && l.enviado_em ? `${isSaida ? 'Enviado' : 'Cliente avisou'} em ${formatDateBR(l.enviado_em)} — vira ${isSaida ? 'pago' : 'recebido'} quando a conciliação vincular o extrato` : undefined}>
             {paid && <Check className="w-3 h-3" />}{status.label}
           </span>
           {l.revisar && <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 text-[10px] font-medium px-1.5 py-0.5" title="Documento alterado depois de lançado"><AlertTriangle className="w-2.5 h-2.5" /> alterado</span>}
