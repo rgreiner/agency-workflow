@@ -1624,7 +1624,7 @@ function LoteModal({ orgSlug, ids, contas, categorias, centros, direcao, onClose
   )
 }
 
-function BaixaModal({ orgSlug, lancamento, contas, onClose }: {
+export function BaixaModal({ orgSlug, lancamento, contas, onClose }: {
   orgSlug: string; lancamento: Lancamento; contas: ContaRef[]; onClose: () => void
 }) {
   const router = useRouter()

@@ -382,6 +382,21 @@ export async function liquidarLancamento(orgSlug: string, lancamentoId: string, 
   revalidatePath(`/${orgSlug}/financeiro/lancamentos`)
 }
 
+/** "Como pagar" do lançamento (mig. 395): linha digitável, Pix copia-e-cola ou chave. Vazio limpa. */
+export async function setLancamentoPagarCom(orgSlug: string, lancamentoId: string, pagarCom: string) {
+  const supabase = await createClient()
+  const user = await getUsuario()
+  if (!user) return { error: 'Não autenticado' }
+  if (pagarCom.length > 600) return { error: 'Código longo demais' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('set_lancamento_pagar_com', {
+    p_lancamento_id: lancamentoId, p_pagar_com: pagarCom,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/${orgSlug}/financeiro/hoje`)
+}
+
 /** Documento do lançamento. `url`/`nome` vazios = número registrado antes do arquivo
  *  chegar (a NF do fornecedor costuma ser anunciada por e-mail dias antes do PDF).
  *  Campos novos são opcionais: os ~101 anexos antigos continuam válidos como estão. */

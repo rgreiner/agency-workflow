@@ -145,6 +145,8 @@ const COMERCIAL_GROUPS: NavGroupDef[] = [
   // "A receber" segue a ordem do processo: fatura → nota → cobra o atrasado.
   { id: 'financeiro', label: 'Financeiro', icon: Wallet, finance: true, items: [
     { label: 'Painel',         href: 'financeiro/painel' },
+    // Lista de ação do dia: o que pagar (com o código ao lado) e o que entra.
+    { label: 'Hoje',           href: 'financeiro/hoje' },
     { label: 'Lançamentos',    href: 'financeiro/lancamentos' },
     { label: 'Contas',         href: 'financeiro/contas' },
     { label: 'Fluxo de caixa', href: 'financeiro/fluxo-caixa' },
