@@ -862,15 +862,30 @@ export async function cobrancaClientes(a: AgenteFlow) {
   const ls = (data ?? []) as unknown as Linha[]
   const ids = ls.map(l => l.id)
   const { data: pr, error: e2 } = ids.length
-    ? await a.supabase.from('lancamentos').select('id, promessa_data, promessa_obs').in('id', ids)
+    ? await a.supabase.from('lancamentos').select('id, promessa_data, promessa_obs, contato_id, workspace_id').in('id', ids)
     : { data: [], error: null }
   if (e2) throw new ErroAgente(e2.message)
-  const promessa = new Map(((pr ?? []) as { id: string; promessa_data: string | null; promessa_obs: string | null }[]).map(p => [p.id, p]))
-  const porCliente = new Map<string, { cliente: string; total: number; titulos: (ReturnType<typeof item> & { promessa_data: string | null; promessa_obs: string | null })[] }>()
+  const promessa = new Map(((pr ?? []) as { id: string; promessa_data: string | null; promessa_obs: string | null; contato_id: string | null; workspace_id: string | null }[]).map(p => [p.id, p]))
+  // Quem atende o financeiro do cliente (mesma escolha da régua, _fin_whats_cliente): telefone
+  // marcado "financeiro", senão o 1º da lista, senão o principal. Para a Flávia avisar a data combinada.
+  const wsIds = [...new Set([...promessa.values()].map(p => p.contato_id ?? p.workspace_id).filter(Boolean))] as string[]
+  const { data: ws } = wsIds.length
+    ? await a.supabase.from('workspaces').select('id, name, contact_name, phone, telefones').in('id', wsIds)
+    : { data: [] }
+  const soDig = (x: unknown) => String(x ?? '').replace(/\D/g, '')
+  const contatoDe = new Map(((ws ?? []) as { id: string; name: string; contact_name: string | null; phone: string | null; telefones: { tipo?: string; numero?: string }[] | null }[]).map(w => {
+    const lista = (w.telefones ?? []).filter(t => /^\d{10,13}$/.test(soDig(t.numero)))
+    const t = lista.find(x => /financ/i.test(x.tipo ?? '')) ?? lista[0]
+    const nome = (t?.tipo?.split('|')[1] ?? '').trim() || w.contact_name?.trim() || w.name
+    const tel = t ? soDig(t.numero) : /^\d{10,13}$/.test(soDig(w.phone)) ? soDig(w.phone) : null
+    return [w.id, tel ? { nome, telefone: tel } : null] as const
+  }))
+  const porCliente = new Map<string, { cliente: string; total: number; contato: { nome: string; telefone: string } | null; titulos: (ReturnType<typeof item> & { promessa_data: string | null; promessa_obs: string | null })[] }>()
   for (const l of ls) {
     const i = item(l, hoje)
     const p = promessa.get(l.id)
-    const g = porCliente.get(i.contato) ?? { cliente: i.contato, total: 0, titulos: [] }
+    const g = porCliente.get(i.contato) ?? { cliente: i.contato, total: 0, contato: null, titulos: [] }
+    g.contato ??= contatoDe.get(p?.contato_id ?? p?.workspace_id ?? '') ?? null
     g.titulos.push({ ...i, promessa_data: p?.promessa_data ?? null, promessa_obs: p?.promessa_obs ?? null })
     g.total = Math.round((g.total + i.valor) * 100) / 100
     porCliente.set(i.contato, g)
