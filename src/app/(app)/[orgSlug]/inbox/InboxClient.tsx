@@ -12,6 +12,7 @@ import {
   type NotificationItem,
 } from '@/app/actions/notifications'
 import { messageOf, timeLabel, groupByDay, NotifIcon } from '@/lib/notifications'
+import { tratarErroDePolling } from '@/lib/stale-deploy'
 import { useStatusConfig } from '@/components/ui/StatusBadge'
 import { NotifSoundToggle } from './NotifSoundToggle'
 
@@ -29,7 +30,7 @@ export function InboxClient({ orgSlug, initial }: { orgSlug: string; initial: No
     try {
       const r = await getNotifications(orgSlug, 60)
       setItems(r.items)
-    } catch { /* tenta de novo no próximo ciclo */ }
+    } catch (e) { tratarErroDePolling(e) /* aba velha recarrega; o resto tenta no próximo ciclo */ }
   }, [orgSlug])
 
   useEffect(() => {

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { toast } from 'sonner'
 import { Clock, Loader2, Coffee } from 'lucide-react'
 import { baterPonto, pontoGate } from '@/app/actions/rh-ponto'
+import { tratarErroDePolling } from '@/lib/stale-deploy'
 import { anunciarPonto } from '@/components/ponto/ponto-sync'
 import { coordenadaDaBatida } from '@/components/ponto/coordenada'
 
@@ -30,7 +31,7 @@ export function PontoGate({ orgSlug }: { orgSlug: string }) {
   } | null>(null)
   const [pending, start] = useTransition()
 
-  const carregar = useCallback(() => { pontoGate().then(setEstado) }, [])
+  const carregar = useCallback(() => { pontoGate().then(setEstado).catch(tratarErroDePolling) }, [])
 
   useEffect(() => {
     carregar()

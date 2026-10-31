@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { Clock, Loader2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { pontoEstado, baterPonto, baterEntradaRetro } from '@/app/actions/rh-ponto'
+import { tratarErroDePolling } from '@/lib/stale-deploy'
 import { PONTO_EVENT, anunciarPonto } from '@/components/ponto/ponto-sync'
 import { coordenadaDaBatida } from '@/components/ponto/coordenada'
 import { ExtraContextoModal, extraNascida, type ExtraNascida } from '@/components/ponto/ExtraContextoModal'
@@ -95,7 +96,7 @@ export function PontoPrompt({ orgSlug }: { orgSlug: string }) {
   const [pending, start] = useTransition()
 
   const carregar = useCallback(() => {
-    pontoEstado().then(e => { setEstado(e); setOculto(false) })
+    pontoEstado().then(e => { setEstado(e); setOculto(false) }).catch(tratarErroDePolling)
   }, [])
 
   useEffect(() => {

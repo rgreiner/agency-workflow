@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Search, X, Minus, Send, MessagesSquare, CheckSquare, ExternalLink } from 'lucide-react'
 import { sendChatMessage, getConversation, getChatOverview, markChatRead, touchPresence, type ChatMsg } from '@/app/actions/chat'
+import { tratarErroDePolling } from '@/lib/stale-deploy'
 import { searchActivities, type ActivitySearchResult } from '@/app/actions/search'
 import { playNotifSound } from '@/lib/notif-sound'
 
@@ -43,13 +44,17 @@ export function ChatDock({ orgId, orgSlug, meId, members }: { orgId: string; org
   const hidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden'
 
   const loadMessages = useCallback(async (peer: string) => {
-    const data = await getConversation(orgId, peer)
-    setMsgs(prev => ({ ...prev, [peer]: data }))
+    try {
+      const data = await getConversation(orgId, peer)
+      setMsgs(prev => ({ ...prev, [peer]: data }))
+    } catch (e) { tratarErroDePolling(e) }
   }, [orgId])
 
   const markRead = useCallback(async (peer: string) => {
-    await markChatRead(orgId, peer)
-    setUnread(prev => { const n = { ...prev }; delete n[peer]; return n })
+    try {
+      await markChatRead(orgId, peer)
+      setUnread(prev => { const n = { ...prev }; delete n[peer]; return n })
+    } catch (e) { tratarErroDePolling(e) }
   }, [orgId])
 
   // ── Restaura janelas abertas (persistidas) ────────────────────────────────
@@ -86,7 +91,7 @@ export function ChatDock({ orgId, orgSlug, meId, members }: { orgId: string; org
 
   // ── Heartbeat de presença ───────────────────────────────────────────────
   useEffect(() => {
-    const beat = () => { if (!hidden()) touchPresence(Date.now() - lastInput.current < INTERACAO_MS) }
+    const beat = () => { if (!hidden()) touchPresence(Date.now() - lastInput.current < INTERACAO_MS).catch(tratarErroDePolling) }
     beat()
     const t = setInterval(beat, 25_000)
     return () => clearInterval(t)
@@ -95,9 +100,11 @@ export function ChatDock({ orgId, orgSlug, meId, members }: { orgId: string; org
   // ── Presença + não-lidas ────────────────────────────────────────────────
   const loadOverview = useCallback(async () => {
     if (hidden()) return
-    const { online: on, unread: un } = await getChatOverview(orgId, memberIds)
-    setOnline(new Set(on))
-    setUnread(un)
+    try {
+      const { online: on, unread: un } = await getChatOverview(orgId, memberIds)
+      setOnline(new Set(on))
+      setUnread(un)
+    } catch (e) { tratarErroDePolling(e) }
   }, [orgId, memberIds])
 
   useEffect(() => {

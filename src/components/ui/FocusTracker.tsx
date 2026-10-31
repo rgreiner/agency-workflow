@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { registrarFoco, focoPing } from '@/app/actions/horas'
+import { tratarErroDePolling } from '@/lib/stale-deploy'
 
 /**
  * Apontamento de horas SEM apontar (migration 166).
@@ -29,10 +30,10 @@ export function FocusTracker({ activityId, origem }: {
 
     registrarFoco(activityId, origem).then(id => {
       if (vivo) focoId.current = id
-    })
+    }).catch(tratarErroDePolling)
 
     const ping = () => {
-      if (focoId.current && document.visibilityState === 'visible') focoPing(focoId.current)
+      if (focoId.current && document.visibilityState === 'visible') focoPing(focoId.current).catch(tratarErroDePolling)
     }
     const timer = setInterval(ping, 120_000)
     document.addEventListener('visibilitychange', ping)

@@ -22,6 +22,18 @@ const JANELA_MS = 15_000
  *  sessão: se o erro voltar logo após o reload é porque não era skew (aí a tela
  *  aparece em vez de entrar em loop), mas um deploy mais tarde na mesma aba ainda
  *  se recupera sozinho. */
+/**
+ * Para chamadas feitas por TIMER (setInterval de chat, inbox, ponto, foco): o
+ * error boundary só vê erro de render, e uma promessa solta nunca chega lá. Medido
+ * em 30/10/2026: 3.325 "Failed to find Server Action" em 4 h depois do deploy,
+ * todas de abas abertas antes dele, que continuaram batendo até serem fechadas.
+ * Skew → recarrega (uma vez a cada 15 s); qualquer outro erro fica quieto e o
+ * próximo ciclo tenta de novo.
+ */
+export function tratarErroDePolling(error: unknown): void {
+  if (isStaleDeployError(error)) tentarRecarregarUmaVez()
+}
+
 export function tentarRecarregarUmaVez(): boolean {
   if (typeof window === 'undefined') return false
   try {

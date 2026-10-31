@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { Inbox } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getUnreadCount } from '@/app/actions/notifications'
+import { tratarErroDePolling } from '@/lib/stale-deploy'
 import { playNotifSound } from '@/lib/notif-sound'
 import { ICONE_TOPO, ICONE_TOPO_ATIVO, ICONE_TOPO_IDLE } from './icone-topo'
 
@@ -30,7 +31,7 @@ export function InboxNavItem({ orgSlug, compact = false }: { orgSlug: string; co
       setUnread(n)
       // Espelha p/ o título da aba (TabUnreadBadge), que soma inbox + chat.
       window.dispatchEvent(new CustomEvent('flow:inbox-unread', { detail: n }))
-    } catch { /* tenta de novo no próximo ciclo */ }
+    } catch (e) { tratarErroDePolling(e) /* aba velha recarrega; o resto tenta no próximo ciclo */ }
   }, [orgSlug])
 
   // Carrega ao montar, a cada 30s, e ao navegar (ex.: após marcar lidas na página).
