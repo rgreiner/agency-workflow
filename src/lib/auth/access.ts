@@ -1,4 +1,5 @@
 import 'server-only'
+import { cache } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
 
@@ -67,6 +68,33 @@ export function computeAccess(m: MembershipRow): OperacionalAccess {
   }
 }
 
+/**
+ * Org pelo slug, uma vez por request. O layout da org e `getAccess()` faziam a
+ * mesma consulta em sequência (medido: 14 pontos de chamada, 5 páginas) — com
+ * `cache()` do React a segunda chamada na mesma request não vai ao banco.
+ */
+export const orgPorSlug = cache(async (orgSlug: string): Promise<{ id: string; name: string; slug: string } | null> => {
+  const supabase = await createClient()
+  const { data } = await supabase.from('organizations').select('id, name, slug').eq('slug', orgSlug).single()
+  return (data as { id: string; name: string; slug: string } | null) ?? null
+})
+
+/**
+ * Vínculo ATIVO da pessoa com a org (+ cargo), uma vez por request.
+ * Arquivado = sem acesso (mesma régua de is_org_member, migration 178). Sem isto a
+ * pessoa desligada ainda abria as telas — vazias, porque a RLS barra o dado, mas
+ * abria.
+ */
+export const membershipAtiva = cache(async (orgId: string, userId: string): Promise<MembershipRow | null> => {
+  const supabase = await createClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (supabase as any)
+    .from('organization_members').select(ACCESS_SELECT)
+    .eq('org_id', orgId).eq('user_id', userId).eq('arquivado', false)
+    .maybeSingle() as { data: MembershipRow | null }
+  return data ?? null
+})
+
 /** Carrega membership + cargo e computa o acesso. null se sem sessão/org/membro. */
 export async function getAccess(orgSlug: string): Promise<
   { supabase: Awaited<ReturnType<typeof createClient>>; orgId: string; userId: string; access: OperacionalAccess } | null
@@ -75,18 +103,11 @@ export async function getAccess(orgSlug: string): Promise<
   const user = await getUsuario()
   if (!user) return null
 
-  const { data: org } = await supabase.from('organizations').select('id').eq('slug', orgSlug).single()
+  const org = await orgPorSlug(orgSlug)
   if (!org) return null
 
-  // Arquivado = sem acesso (mesma régua de is_org_member, migration 178). Sem isto a
-  // pessoa desligada ainda abria as telas — vazias, porque a RLS barra o dado, mas
-  // abria.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: m } = await (supabase as any)
-    .from('organization_members').select(ACCESS_SELECT)
-    .eq('org_id', org.id).eq('user_id', user.id).eq('arquivado', false)
-    .maybeSingle() as { data: MembershipRow | null }
+  const m = await membershipAtiva(org.id, user.id)
   if (!m) return null
 
-  return { supabase, orgId: org.id as string, userId: user.id as string, access: computeAccess(m) }
+  return { supabase, orgId: org.id, userId: user.id, access: computeAccess(m) }
 }

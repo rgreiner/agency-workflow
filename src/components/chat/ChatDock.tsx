@@ -8,13 +8,17 @@
  *   · heartbeat de presença 25s   · contatos/não-lidas 12s   · conversas abertas 4s
  * As janelas abertas persistem no reload (localStorage) até fechar no X.
  * Emite 'flow:chat-unread' (total) p/ o badge da sidebar.
+ *
+ * Desde 31/10/2026 presença e não-lidas vêm do `Heartbeat` (batida única da aba,
+ * a cada 30 s) — aqui só sobra o poll de 4 s das conversas ABERTAS.
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Search, X, Minus, Send, MessagesSquare, CheckSquare, ExternalLink } from 'lucide-react'
-import { sendChatMessage, getConversation, getChatOverview, markChatRead, touchPresence, type ChatMsg } from '@/app/actions/chat'
+import { sendChatMessage, getConversation, markChatRead, type ChatMsg } from '@/app/actions/chat'
 import { tratarErroDePolling } from '@/lib/stale-deploy'
+import { aoBater } from '@/components/layout/heartbeat-events'
 import { searchActivities, type ActivitySearchResult } from '@/app/actions/search'
 import { playNotifSound } from '@/lib/notif-sound'
 
@@ -23,7 +27,6 @@ type Msg = ChatMsg & { pending?: boolean }
 
 export function ChatDock({ orgId, orgSlug, meId, members }: { orgId: string; orgSlug: string; meId: string; members: Member[] }) {
   const memberById = useMemo(() => Object.fromEntries(members.map(m => [m.id, m])), [members])
-  const memberIds = useMemo(() => members.map(m => m.id), [members])
   const STORE = `flow:chat:${orgId}:${meId}`
 
   const [panelOpen, setPanelOpen] = useState(false)
@@ -77,42 +80,13 @@ export function ChatDock({ orgId, orgSlug, meId, members }: { orgId: string; org
     try { localStorage.setItem(STORE, JSON.stringify({ windows, minimized: [...minimized] })) } catch { /* noop */ }
   }, [windows, minimized, STORE])
 
-  // ── Interação real (mouse/teclado/toque) ────────────────────────────────
-  // O histórico diário de presença (mig. 281) só conta batidas com interação nos
-  // últimos minutos — aba esquecida aberta na tela não vale como "ainda aqui".
-  const lastInput = useRef(0)
-  useEffect(() => {
-    const mark = () => { lastInput.current = Date.now() }
-    const evs: (keyof WindowEventMap)[] = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart']
-    evs.forEach(e => window.addEventListener(e, mark, { passive: true }))
-    mark()   // abrir a aba já conta
-    return () => evs.forEach(e => window.removeEventListener(e, mark))
-  }, [])
-
-  // ── Heartbeat de presença ───────────────────────────────────────────────
-  useEffect(() => {
-    const beat = () => { if (!hidden()) touchPresence(Date.now() - lastInput.current < INTERACAO_MS).catch(tratarErroDePolling) }
-    beat()
-    const t = setInterval(beat, 25_000)
-    return () => clearInterval(t)
-  }, [])
-
-  // ── Presença + não-lidas ────────────────────────────────────────────────
-  const loadOverview = useCallback(async () => {
-    if (hidden()) return
-    try {
-      const { online: on, unread: un } = await getChatOverview(orgId, memberIds)
-      setOnline(new Set(on))
-      setUnread(un)
-    } catch (e) { tratarErroDePolling(e) }
-  }, [orgId, memberIds])
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadOverview()
-    const t = setInterval(loadOverview, 12_000)
-    return () => clearInterval(t)
-  }, [loadOverview])
+  // ── Presença + não-lidas: chegam pelo Heartbeat (batida única da aba) ───
+  // A presença da PRÓPRIA pessoa também é gravada lá (com a interação real de
+  // mouse/teclado, mig. 281) — este componente não escreve mais nada sozinho.
+  useEffect(() => aoBater(b => {
+    setOnline(new Set(b.online))
+    setUnread(b.chatUnread)
+  }), [])
 
   // Total de não-lidas → badge da sidebar (+ som quando aumenta = mensagem nova)
   const prevTotal = useRef<number | null>(null)
@@ -387,7 +361,6 @@ function TaskPicker({ orgSlug, onPick, onClose }: {
 // Só http(s) vira link — nada de javascript:/data:. O texto é renderizado como nós
 // React (nunca innerHTML), então continua escapado.
 // Janela em que mouse/teclado ainda contam como "interagindo" pro histórico diário.
-const INTERACAO_MS = 5 * 60_000
 const URL_RE = /(https?:\/\/[^\s]+)/g
 const JOB_RE = /\/j\/[0-9a-f-]{8,}/i
 

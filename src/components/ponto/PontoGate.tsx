@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState, useTransition } from 'react'
 import { usePathname } from 'next/navigation'
 import { toast } from 'sonner'
 import { Clock, Loader2, Coffee } from 'lucide-react'
-import { baterPonto, pontoGate } from '@/app/actions/rh-ponto'
-import { tratarErroDePolling } from '@/lib/stale-deploy'
+import { baterPonto } from '@/app/actions/rh-ponto'
+import { aoBater, pedirBatimento } from '@/components/layout/heartbeat-events'
 import { anunciarPonto } from '@/components/ponto/ponto-sync'
 import { coordenadaDaBatida } from '@/components/ponto/coordenada'
 
@@ -19,8 +19,9 @@ import { coordenadaDaBatida } from '@/components/ponto/coordenada'
  *
  * Não cobre a própria tela de ponto — bloquear o lugar onde se resolve o
  * bloqueio seria uma armadilha.
+ *
+ * O estado chega pelo `Heartbeat` (a cada 60 s, e na hora depois de uma batida).
  */
-const POLL_MS = 60_000
 
 export function PontoGate({ orgSlug }: { orgSlug: string }) {
   const pathname = usePathname()
@@ -31,13 +32,9 @@ export function PontoGate({ orgSlug }: { orgSlug: string }) {
   } | null>(null)
   const [pending, start] = useTransition()
 
-  const carregar = useCallback(() => { pontoGate().then(setEstado).catch(tratarErroDePolling) }, [])
+  const carregar = useCallback(() => pedirBatimento({ ponto: true }), [])
 
-  useEffect(() => {
-    carregar()
-    const t = setInterval(() => { if (document.visibilityState === 'visible') carregar() }, POLL_MS)
-    return () => clearInterval(t)
-  }, [carregar])
+  useEffect(() => aoBater(b => { if (b.gate !== undefined) setEstado(b.gate ?? { exige: false }) }), [])
 
   // A tela de ponto e a de perfil ficam livres: é onde se bate o ponto e onde se
   // resolve um cadastro errado.

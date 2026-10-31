@@ -2,7 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
+import { TAG_CONFIG_ORG } from '@/lib/org-cache'
 import type { StatusOverride } from '@/types'
 import type { AgencyInfo, DocNote } from '@/lib/agency'
 
@@ -26,6 +27,7 @@ export async function upsertOrgSettings(
   })
 
   if (error) return { error: error.message }
+  updateTag(TAG_CONFIG_ORG(orgId))
   revalidatePath('/', 'layout')
 }
 

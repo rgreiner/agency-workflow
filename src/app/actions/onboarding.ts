@@ -2,7 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
+import { TAG_ONBOARDING } from '@/lib/org-cache'
 
 /** Uma etapa da trilha, do ponto de vista de quem está percorrendo. */
 export interface EtapaTrilha {
@@ -55,6 +56,7 @@ export async function marcarEtapa(orgSlug: string, etapaId: string, concluido: b
     p_etapa_id: etapaId, p_concluido: concluido,
   })
   if (error) return { error: error.message }
+  updateTag(TAG_ONBOARDING(c.orgId))
   revalidatePath(`/${orgSlug}/onboarding`)
 }
 
@@ -69,6 +71,7 @@ export async function salvarEtapa(orgSlug: string, id: string | null, data: {
     p_org_id: c.orgId, p_id: id, p_data: data,
   })
   if (error) return { error: error.message }
+  updateTag(TAG_ONBOARDING(c.orgId))
   revalidatePath(`/${orgSlug}/settings/onboarding`)
   revalidatePath(`/${orgSlug}/onboarding`)
 }
@@ -81,6 +84,7 @@ export async function excluirEtapa(orgSlug: string, id: string) {
     p_org_id: c.orgId, p_id: id,
   })
   if (error) return { error: error.message }
+  updateTag(TAG_ONBOARDING(c.orgId))
   revalidatePath(`/${orgSlug}/settings/onboarding`)
   revalidatePath(`/${orgSlug}/onboarding`)
 }

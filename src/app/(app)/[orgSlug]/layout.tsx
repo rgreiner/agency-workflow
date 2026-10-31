@@ -13,9 +13,11 @@ import { ChatDock } from '@/components/chat/ChatDock'
 import { PontoPrompt } from '@/components/ponto/PontoPrompt'
 import { PontoGate } from '@/components/ponto/PontoGate'
 import { TabUnreadBadge } from '@/components/layout/TabUnreadBadge'
-import { computeAccess, ACCESS_SELECT, type MembershipRow } from '@/lib/auth/access'
+import { computeAccess, orgPorSlug, membershipAtiva } from '@/lib/auth/access'
 import { membrosAtivos } from '@/lib/membros'
 import { porNome } from '@/lib/utils'
+import { configDaOrg, trilhaPendente, divergenciasFinanceiras } from '@/lib/org-cache'
+import { Heartbeat } from '@/components/layout/Heartbeat'
 
 export default async function OrgLayout({
   children,
@@ -38,23 +40,12 @@ export default async function OrgLayout({
   const user = await getUsuario()
   if (!user) redirect('/login')
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id, name, slug')
-    .eq('slug', orgSlug)
-    .single()
-
+  // As duas consultas abaixo têm cache por request (React cache): a página que
+  // chamar getAccess() logo depois não repete nenhuma delas.
+  const org = await orgPorSlug(orgSlug)
   if (!org) redirect('/')
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: membership } = await (supabase as any)
-    .from('organization_members')
-    .select(ACCESS_SELECT)
-    .eq('org_id', org.id)
-    .eq('user_id', user.id)
-    .eq('arquivado', false)
-    .maybeSingle() as { data: MembershipRow | null }
-
+  const membership = await membershipAtiva(org.id, user.id)
   if (!membership) redirect('/')
 
   // Acesso ao Operacional: cargo × toggles do membro (ver computeAccess).
@@ -64,19 +55,20 @@ export default async function OrgLayout({
   // Tudo daqui em diante depende só da org e do acesso — sai em PARALELO.
   // Antes eram 9 consultas em fila (cada uma esperando a anterior), refeitas a
   // cada navegação e a cada atualização automática da Lista/tarefa; medido em
-  // 16/10/2026: ~13 transações/s no banco com pouca gente usando.
+  // 16/10/2026: ~13 transações/s no banco com pouca gente usando. Desde a Onda 2
+  // da auditoria (31/10/2026), aparência/status/pauta, a trilha e as
+  // divergências vêm de cache entre requests (lib/org-cache): sobram 4 idas ao
+  // banco por navegação em vez de 9.
   /* eslint-disable @typescript-eslint/no-explicit-any */
   const sbx = supabase as any
   const [
     { data: profile },
     { data: workspacesRaw },
-    { data: rawSettings },
-    { data: trilhaRaw },
+    config,
+    onboardingPendente,
     midiaTransicao,
-    divRes,
+    financeAlertas,
     { data: membersRaw },
-    { data: statusRows },
-    { data: pautaRows },
   ] = await Promise.all([
     supabase
       .from('profiles')
@@ -91,14 +83,13 @@ export default async function OrgLayout({
       .eq('archived', false)
       .eq('campaigns.archived', false)
       .order('name'),
-    sbx
-      .from('org_settings')
-      .select('logo_url, accent_color, status_overrides')
-      .eq('org_id', org.id)
-      .single() as Promise<{ data: { logo_url: string | null; accent_color: string; status_overrides: unknown[] } | null }>,
+    // Aparência + cadastro de status (migration 168) + opções da pauta (285):
+    // cache por org, invalidado pelas actions de Configurações.
+    configDaOrg(sbx, org.id),
     // Trilha de primeiros passos: o item na sidebar só existe enquanto houver
-    // etapa pendente — quem já entendeu não fica olhando pra ele.
-    sbx.rpc('onboarding_trilha', { p_org_id: org.id }) as Promise<{ data: { concluido: boolean }[] | null }>,
+    // etapa pendente — quem já entendeu não fica olhando pra ele. Cache por
+    // pessoa, invalidado ao marcar/editar etapa.
+    trilhaPendente(sbx, org.id, user.id),
     // Telas transitórias da Mídia (migrar rotinas, vincular entregas): o item só
     // existe enquanto houver o que fazer. Só para quem opera o Hub.
     access.midiaHub
@@ -106,24 +97,10 @@ export default async function OrgLayout({
       : Promise.resolve({ migrar: 0, vincular: 0 }),
     // Contas cujo saldo no Flow não bate com o banco NA DATA DO ÚLTIMO OFX, fora o
     // que ainda está na fila de conciliação (migs. 347/348). Acende o Financeiro.
-    access.financeiro
-      ? (sbx.rpc('fin_divergencias', { p_org: org.id }) as Promise<{ data: { diferenca_real: number }[] | null }>)
-      : Promise.resolve({ data: [] as { diferenca_real: number }[] }),
+    // Cache de 60 s por org: a RPC soma o extrato inteiro conta a conta.
+    access.financeiro ? divergenciasFinanceiras(sbx, org.id) : Promise.resolve(0),
     // Membros da org (p/ o chat) — quem foi arquivado não entra.
     membrosAtivos(supabase, org.id, 'user_id, profiles!user_id(id, full_name, avatar_url)'),
-    // Cadastro de status da org (migration 168) — fonte única do app inteiro.
-    sbx
-      .from('org_status')
-      .select('valor, label, grupo, bg, txt, ordem, papel')
-      .eq('org_id', org.id)
-      .order('ordem') as Promise<{ data: import('@/types').OrgStatusRow[] | null }>,
-    // Sugestões que compõem o título da pauta (migration 285).
-    sbx
-      .from('org_pauta_opcao')
-      .select('campo, valor')
-      .eq('org_id', org.id)
-      .order('campo')
-      .order('ordem') as Promise<{ data: { campo: string; valor: string }[] | null }>,
   ])
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -133,9 +110,6 @@ export default async function OrgLayout({
     color: ws.color,
     campaigns: (ws.campaigns as unknown as { id: string; name: string }[]) ?? [],
   }))
-  const onboardingPendente = (trilhaRaw ?? []).filter(e => !e.concluido).length
-  const financeAlertas = (divRes.data ?? []).filter(d => Math.abs(Number(d.diferenca_real)) >= 0.01).length
-
   // Conversa nova não se abre com quem saiu da agência nem comigo mesmo.
   const chatMembers = ((membersRaw ?? []) as { profiles: { id: string; full_name: string | null; avatar_url: string | null } | { id: string; full_name: string | null; avatar_url: string | null }[] | null }[])
     .map(m => (Array.isArray(m.profiles) ? m.profiles[0] : m.profiles))
@@ -145,11 +119,11 @@ export default async function OrgLayout({
 
   const orgSettings = {
     orgId:           org.id,
-    logoUrl:         rawSettings?.logo_url ?? null,
-    accentColor:     rawSettings?.accent_color ?? '#ff6a00',
-    statusOverrides: (rawSettings?.status_overrides as unknown[] ?? []) as import('@/types').StatusOverride[],
-    statuses:        statusRows ?? [],
-    pauta:           pautaListasDe(pautaRows),
+    logoUrl:         config.settings?.logo_url ?? null,
+    accentColor:     config.settings?.accent_color ?? '#ff6a00',
+    statusOverrides: (config.settings?.status_overrides as unknown[] ?? []) as import('@/types').StatusOverride[],
+    statuses:        config.statuses,
+    pauta:           pautaListasDe(config.pauta),
   }
 
   const accent = orgSettings.accentColor
@@ -198,6 +172,9 @@ export default async function OrgLayout({
 
       {/* Slot da modal (intercepting route do detalhe da tarefa) */}
       {modal}
+
+      {/* O único timer da aba: inbox, chat, presença e ponto numa batida a cada 30 s */}
+      <Heartbeat orgId={org.id} memberIds={chatMembers.map(m => m.id)} />
 
       {/* Messenger interno — dock global no canto inferior direito */}
       <ChatDock orgId={org.id} orgSlug={orgSlug} meId={user.id} members={chatMembers} />

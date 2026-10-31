@@ -17,8 +17,12 @@ const OCIOSO_MS = 5 * 60_000
  * página inteira no servidor a cada 20–30 s (medido em 16/10/2026: ~13
  * transações/s no banco com pouca gente usando). Ao voltar (aba visível ou
  * primeiro movimento depois de parada), atualiza na hora para não mostrar dado velho.
+ *
+ * Padrão de 60 s (era 20 s até 31/10/2026): a tela da tarefa refaz 18 consultas
+ * mais as do layout a cada ciclo — três vezes menos refresh para a mesma
+ * sensação de "ao vivo", porque quem edita a tarefa vê a própria ação na hora.
  */
-export function AutoRefresh({ intervalMs = 20000, fastMs = 4000, fast = false }: {
+export function AutoRefresh({ intervalMs = 60000, fastMs = 4000, fast = false }: {
   intervalMs?: number
   fastMs?: number
   fast?: boolean

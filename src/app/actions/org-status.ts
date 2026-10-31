@@ -2,7 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
+import { TAG_CONFIG_ORG } from '@/lib/org-cache'
 
 /**
  * Cadastro de status da organização (migration 168) — Configurações → Aparência.
@@ -23,6 +24,7 @@ export async function salvarStatus(
     p_org: orgId, p_valor: valor, p_data: data,
   })
   if (error) return { error: error.message }
+  updateTag(TAG_CONFIG_ORG(orgId))
   revalidatePath(`/${orgSlug}`, 'layout')
   return { ok: true, valor: novo as string }
 }
@@ -37,6 +39,7 @@ export async function excluirStatus(orgSlug: string, orgId: string, valor: strin
     p_org: orgId, p_valor: valor, p_mover_para: moverPara || null,
   })
   if (error) return { error: error.message }
+  updateTag(TAG_CONFIG_ORG(orgId))
   revalidatePath(`/${orgSlug}`, 'layout')
   return { ok: true, movidas: (data as { movidas?: number })?.movidas ?? 0 }
 }
@@ -51,6 +54,7 @@ export async function reordenarStatus(orgSlug: string, orgId: string, valores: s
     p_org: orgId, p_valores: valores,
   })
   if (error) return { error: error.message }
+  updateTag(TAG_CONFIG_ORG(orgId))
   revalidatePath(`/${orgSlug}`, 'layout')
   return { ok: true }
 }

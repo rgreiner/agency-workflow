@@ -5,15 +5,15 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Inbox } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getUnreadCount } from '@/app/actions/notifications'
-import { tratarErroDePolling } from '@/lib/stale-deploy'
+import { aoBater, pedirBatimento } from './heartbeat-events'
 import { playNotifSound } from '@/lib/notif-sound'
 import { ICONE_TOPO, ICONE_TOPO_ATIVO, ICONE_TOPO_IDLE } from './icone-topo'
 
 /**
  * Item "Caixa de entrada" da sidebar. `compact` = só o ícone com o badge no
  * canto (linha de atalhos do cabeçalho); sem ele, a linha com rótulo.
- * O polling de não-lidas é um só nos dois formatos.
+ * Não consulta nada sozinho: o contador chega pelo `Heartbeat` (batida única
+ * da aba, 30 s); ao navegar, pede uma batida para refletir "marcou lidas".
  */
 export function InboxNavItem({ orgSlug, compact = false }: { orgSlug: string; compact?: boolean }) {
   const pathname = usePathname()
@@ -22,29 +22,20 @@ export function InboxNavItem({ orgSlug, compact = false }: { orgSlug: string; co
   const [unread, setUnread] = useState(0)
   const prevUnread = useRef<number | null>(null)
 
-  const load = useCallback(async () => {
-    try {
-      const n = await getUnreadCount(orgSlug)
-      // Toca o som só quando o contador AUMENTA (chegou nova) — não no 1º load.
-      if (prevUnread.current !== null && n > prevUnread.current) playNotifSound()
-      prevUnread.current = n
-      setUnread(n)
-      // Espelha p/ o título da aba (TabUnreadBadge), que soma inbox + chat.
-      window.dispatchEvent(new CustomEvent('flow:inbox-unread', { detail: n }))
-    } catch (e) { tratarErroDePolling(e) /* aba velha recarrega; o resto tenta no próximo ciclo */ }
-  }, [orgSlug])
+  const aplicar = useCallback((n: number) => {
+    // Toca o som só quando o contador AUMENTA (chegou nova) — não no 1º valor.
+    if (prevUnread.current !== null && n > prevUnread.current) playNotifSound()
+    prevUnread.current = n
+    setUnread(n)
+    // Espelha p/ o título da aba (TabUnreadBadge), que soma inbox + chat.
+    window.dispatchEvent(new CustomEvent('flow:inbox-unread', { detail: n }))
+  }, [])
 
-  // Carrega ao montar, a cada 30s, e ao navegar (ex.: após marcar lidas na página).
-  // Aba escondida não consulta (cada aba aberta consultava a cada 30 s, mesmo em
-  // segundo plano); ao voltar a ficar visível, atualiza na hora.
-  useEffect(() => {
-    load()
-    const t = setInterval(() => { if (document.visibilityState === 'visible') load() }, 30_000)
-    const aoVoltar = () => { if (document.visibilityState === 'visible') load() }
-    document.addEventListener('visibilitychange', aoVoltar)
-    return () => { clearInterval(t); document.removeEventListener('visibilitychange', aoVoltar) }
-  }, [load])
-  useEffect(() => { load() }, [pathname, load])
+  // O contador vem na batida do Heartbeat (visível a cada 30 s; ao voltar para a
+  // aba, na hora). Navegar pede uma batida (ex.: marcou lidas na página) — com a
+  // trava de rajada do próprio Heartbeat.
+  useEffect(() => aoBater(b => aplicar(b.inbox)), [aplicar])
+  useEffect(() => { pedirBatimento() }, [pathname])
 
   // A página /inbox avisa na hora ao marcar lidas (senão o badge só caía no
   // próximo poll de 30s — parecia que precisava de F5). Mesmo padrão do chat.

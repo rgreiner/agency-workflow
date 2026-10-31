@@ -2,7 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { getUsuario } from '@/lib/auth/server'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
+import { TAG_CONFIG_ORG } from '@/lib/org-cache'
 
 /**
  * Cadastro das sugestões que compõem o título da pauta (migration 285) —
@@ -38,6 +39,7 @@ export async function salvarOpcaoPauta(
     p_org: orgId, p_id: id, p_campo: campo, p_valor: valor,
   })
   if (error) return { error: error.message }
+  updateTag(TAG_CONFIG_ORG(orgId))
   revalidatePath(`/${orgSlug}`, 'layout')
   return { ok: true, id: data as string }
 }
@@ -50,6 +52,7 @@ export async function excluirOpcaoPauta(orgSlug: string, orgId: string, id: stri
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any).rpc('org_pauta_excluir', { p_org: orgId, p_id: id })
   if (error) return { error: error.message }
+  updateTag(TAG_CONFIG_ORG(orgId))
   revalidatePath(`/${orgSlug}`, 'layout')
   return { ok: true }
 }
@@ -66,6 +69,7 @@ export async function reordenarOpcoesPauta(
     p_org: orgId, p_campo: campo, p_ids: ids,
   })
   if (error) return { error: error.message }
+  updateTag(TAG_CONFIG_ORG(orgId))
   revalidatePath(`/${orgSlug}`, 'layout')
   return { ok: true }
 }
@@ -82,6 +86,7 @@ export async function ignorarSugestaoPauta(orgSlug: string, orgId: string, valor
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any).rpc('org_pauta_ignorar', { p_org: orgId, p_valor: valor })
   if (error) return { error: error.message }
+  updateTag(TAG_CONFIG_ORG(orgId))
   revalidatePath(`/${orgSlug}`, 'layout')
   return { ok: true }
 }
@@ -94,6 +99,7 @@ export async function reverIgnoradaPauta(orgSlug: string, orgId: string, valor: 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any).rpc('org_pauta_designorar', { p_org: orgId, p_valor: valor })
   if (error) return { error: error.message }
+  updateTag(TAG_CONFIG_ORG(orgId))
   revalidatePath(`/${orgSlug}`, 'layout')
   return { ok: true }
 }

@@ -4,13 +4,18 @@
  * (cookie `flow-jwt`), assinado com JWT_SECRET — o mesmo que o supabase-js
  * envia ao PostgREST.
  */
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { COOKIE_TOKEN, mintToken, opcoesCookie, verifyToken } from "./jwt";
 
 export type SessionUser = { id: string; email: string };
 
-/** Usuário logado atual (ou null). Nunca lança — falha vira null. */
-export async function getUsuario(): Promise<SessionUser | null> {
+/**
+ * Usuário logado atual (ou null). Nunca lança — falha vira null.
+ * `cache()` do React: dentro de uma mesma request (layout + página + actions
+ * chamadas por ela) o cookie é lido e o HMAC conferido uma vez só.
+ */
+export const getUsuario = cache(async (): Promise<SessionUser | null> => {
   try {
     const jar = await cookies();
     const claims = await verifyToken(jar.get(COOKIE_TOKEN)?.value);
@@ -18,7 +23,7 @@ export async function getUsuario(): Promise<SessionUser | null> {
   } catch {
     return null;
   }
-}
+});
 
 /** Inicia a sessão (grava o JWT no cookie). */
 export async function iniciarSessao(user: SessionUser): Promise<void> {

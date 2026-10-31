@@ -4,19 +4,19 @@ import { useCallback, useEffect, useState, useTransition } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { Clock, Loader2, X } from 'lucide-react'
 import { toast } from 'sonner'
-import { pontoEstado, baterPonto, baterEntradaRetro } from '@/app/actions/rh-ponto'
-import { tratarErroDePolling } from '@/lib/stale-deploy'
-import { PONTO_EVENT, anunciarPonto } from '@/components/ponto/ponto-sync'
+import { baterPonto, baterEntradaRetro } from '@/app/actions/rh-ponto'
+import type { PontoEstadoDTO } from '@/app/actions/heartbeat'
+import { aoBater, pedirBatimento } from '@/components/layout/heartbeat-events'
+import { anunciarPonto } from '@/components/ponto/ponto-sync'
 import { coordenadaDaBatida } from '@/components/ponto/coordenada'
 import { ExtraContextoModal, extraNascida, type ExtraNascida } from '@/components/ponto/ExtraContextoModal'
 
-type Estado = NonNullable<Awaited<ReturnType<typeof pontoEstado>>>
+type Estado = PontoEstadoDTO
 
 /** Quanto antes do horário da jornada o lembrete aparece. */
 const ANTECEDENCIA_MIN = 10
 /** "Mais tarde" silencia o lembrete por este tempo. */
 const SNOOZE_MIN = 15
-const POLL_MS = 5 * 60_000
 
 const min = (hhmm: string) => {
   const [h, m] = hhmm.split(':').map(Number)
@@ -95,26 +95,16 @@ export function PontoPrompt({ orgSlug }: { orgSlug: string }) {
   const [extra, setExtra] = useState<{ nascida: ExtraNascida; colaboradorId: string } | null>(null)
   const [pending, start] = useTransition()
 
-  const carregar = useCallback(() => {
-    pontoEstado().then(e => { setEstado(e); setOculto(false) }).catch(tratarErroDePolling)
-  }, [])
+  // O estado chega pelo Heartbeat: a cada 5 min, ao voltar para a aba e na hora
+  // depois de qualquer batida de ponto (card da home, tela do ponto, gate) — o
+  // Heartbeat escuta o 'flow:ponto-atualizado' e inclui o estado na batida.
+  const carregar = useCallback(() => pedirBatimento({ ponto: true }), [])
 
-  useEffect(() => {
-    carregar()
-    const t = setInterval(() => {
-      if (document.visibilityState === 'visible') carregar()
-    }, POLL_MS)
-    const onVis = () => { if (document.visibilityState === 'visible') carregar() }
-    document.addEventListener('visibilitychange', onVis)
-    // Batida feita em outro componente (card da home, tela do ponto, gate):
-    // re-consulta na hora para o lembrete sumir sem esperar o poll.
-    window.addEventListener(PONTO_EVENT, carregar)
-    return () => {
-      clearInterval(t)
-      document.removeEventListener('visibilitychange', onVis)
-      window.removeEventListener(PONTO_EVENT, carregar)
-    }
-  }, [carregar])
+  useEffect(() => aoBater(b => {
+    if (b.estado === undefined) return
+    setEstado(b.estado)
+    setOculto(false)
+  }), [])
 
   // O modal de contexto da extra vive FORA do early-return: depois de bater a
   // saída o lembrete some (decidir() = null) e o modal precisa continuar aberto.
